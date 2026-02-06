@@ -14,36 +14,45 @@ class TokenBlacklistService {
   constructor() {
     this.redisClient = null;
     this.useMemoryFallback = true;
-    this.init();
+    this.initialized = false;
+    this.initPromise = null;
   }
 
   /**
-   * Initialize Redis connection
+   * Initialize Redis connection (ensure single initialization)
    */
   async init() {
-    try {
-      if (process.env.REDIS_URL) {
-        const redis = require('redis');
-        this.redisClient = redis.createClient({
-          url: process.env.REDIS_URL
-        });
-        
-        this.redisClient.on('error', (err) => {
-          console.error('Redis Client Error:', err);
-          this.useMemoryFallback = true;
-        });
-        
-        this.redisClient.on('connect', () => {
-          console.log('Redis connected for token blacklist');
-          this.useMemoryFallback = false;
-        });
-        
-        await this.redisClient.connect();
+    if (this.initialized) return;
+    if (this.initPromise) return this.initPromise;
+
+    this.initPromise = (async () => {
+      try {
+        if (process.env.REDIS_URL) {
+          const redis = require('redis');
+          this.redisClient = redis.createClient({
+            url: process.env.REDIS_URL
+          });
+          
+          this.redisClient.on('error', (err) => {
+            console.error('Redis Client Error:', err);
+            this.useMemoryFallback = true;
+          });
+          
+          this.redisClient.on('connect', () => {
+            console.log('Redis connected for token blacklist');
+            this.useMemoryFallback = false;
+          });
+          
+          await this.redisClient.connect();
+        }
+      } catch (error) {
+        console.warn('Redis not available, using in-memory token blacklist');
+        this.useMemoryFallback = true;
       }
-    } catch (error) {
-      console.warn('Redis not available, using in-memory token blacklist');
-      this.useMemoryFallback = true;
-    }
+      this.initialized = true;
+    })();
+
+    return this.initPromise;
   }
 
   /**

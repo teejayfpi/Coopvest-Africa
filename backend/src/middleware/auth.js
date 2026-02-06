@@ -6,7 +6,7 @@
  */
 
 const jwt = require('jsonwebtoken');
-const { tokenBlacklist } = require('../services/tokenBlacklistService');
+const tokenBlacklistService = require('../services/tokenBlacklistService');
 const AuditLog = require('../models/AuditLog');
 const logger = require('../utils/logger');
 
@@ -15,6 +15,11 @@ const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
   throw new Error('FATAL: JWT_SECRET environment variable is not set!');
 }
+
+// Ensure token blacklist is initialized before middleware runs
+tokenBlacklistService.init().catch(err => {
+  logger.warn('Token blacklist initialization deferred:', err.message);
+});
 
 /**
  * Authentication middleware
@@ -35,7 +40,7 @@ const authenticate = async (req, res, next) => {
     const token = authHeader.split(' ')[1];
 
     // Check if token is blacklisted
-    const isBlacklisted = await tokenBlacklist.isBlacklisted(token);
+    const isBlacklisted = await tokenBlacklistService.isBlacklisted(token);
     if (isBlacklisted) {
       return res.status(401).json({
         success: false,
@@ -95,7 +100,7 @@ const optionalAuth = async (req, res, next) => {
     const token = authHeader.split(' ')[1];
 
     // Check if token is blacklisted
-    const isBlacklisted = await tokenBlacklist.isBlacklisted(token);
+    const isBlacklisted = await tokenBlacklistService.isBlacklisted(token);
     if (isBlacklisted) {
       return next();
     }
