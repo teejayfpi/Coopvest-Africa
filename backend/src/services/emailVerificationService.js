@@ -28,7 +28,7 @@ const createTransporter = () => {
 
   return nodemailer.createTransport({
     host: process.env.SMTP_HOST,
-    port: parseInt(process.env.SMTP_PORT),
+    port: parseInt(process.env.SMTP_PORT || '587'),
     secure: process.env.SMTP_SECURE === 'true',
     auth: {
       user: process.env.SMTP_USER,
@@ -143,8 +143,21 @@ class EmailVerificationService {
   /**
    * Send verification email to user
    */
-  async sendVerificationEmail(user, frontendUrl = process.env.FRONTEND_URL) {
+  async sendVerificationEmail(userOrEmail, frontendUrl = process.env.FRONTEND_URL) {
     try {
+      let user;
+      if (typeof userOrEmail === 'string') {
+        user = await User.findOne({ email: userOrEmail.toLowerCase() });
+      } else if (userOrEmail && userOrEmail.email && !userOrEmail.save) {
+        user = await User.findOne({ email: userOrEmail.email.toLowerCase() });
+      } else {
+        user = userOrEmail;
+      }
+
+      if (!user) {
+        return { success: false, error: 'User not found' };
+      }
+
       // Check cooldown
       const cooldownCheck = this.canResend(user);
       if (!cooldownCheck.canResend) {
@@ -295,23 +308,7 @@ class EmailVerificationService {
         return { success: false, error: 'Email already verified' };
       }
 
-      // Check cooldown before generating new token
-      const cooldownCheck = this.canResend(user);
-      if (!cooldownCheck.canResend) {
-        return {
-          success: false,
-          error: cooldownCheck.message,
-          remainingSeconds: cooldownCheck.remainingSeconds,
-          canResendAt: new Date(Date.now() + cooldownCheck.remainingSeconds * 1000).toISOString()
-        };
-      }
-
-      // Generate new token and OTP (overwrites old one)
-      const { token, otp } = user.generateEmailVerificationToken();
-      user.emailVerification.lastResendAt = new Date();
-      await user.save();
-
-      // Send verification email
+      // Send verification email (it handles cooldown and saving)
       logger.info(`Initiating resend verification email for: ${email}`);
       return await this.sendVerificationEmail(user, frontendUrl);
     } catch (error) {

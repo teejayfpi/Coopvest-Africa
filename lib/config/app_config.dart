@@ -16,7 +16,7 @@ class AppConfig {
   // For local testing on Android Emulator, use 'http://10.0.2.2:8080/api/v1'
   // For physical devices, use your machine's local IP (e.g., 'http://192.168.x.x:8080/api/v1')
   static const String apiBaseUrl = 'http://10.0.2.2:8080/api/v1';
-  static const Duration apiTimeout = Duration(seconds: 30);
+  static const Duration apiTimeout = Duration(seconds: 60);
   static const int maxRetries = 3;
 
   // Session Configuration
