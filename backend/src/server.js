@@ -195,6 +195,14 @@ app.post('/api/auth/login', authLimiter, (req, res, next) => {
   req.url = '/login';
   authRoutes(req, res, next);
 });
+app.post('/api/auth/verify-email', (req, res, next) => {
+  req.url = '/verify-otp';
+  emailVerificationRoutes(req, res, next);
+});
+app.post('/api/auth/resend-verification', (req, res, next) => {
+  req.url = '/resend-otp';
+  emailVerificationRoutes(req, res, next);
+});
 app.get('/api/user/profile', (req, res, next) => {
   req.url = '/profile';
   authRoutes(req, res, next);

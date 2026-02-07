@@ -181,6 +181,8 @@ class EmailVerificationService {
 
       const transporter = await this.getTransporter();
       
+      logger.info(`Attempting to send email to ${user.email} via ${process.env.SMTP_HOST}`);
+      
       await transporter.sendMail({
         from: `"Coopvest Africa" <${process.env.SMTP_FROM || 'noreply@coopvest.com'}>`,
         to: user.email,
@@ -189,7 +191,7 @@ class EmailVerificationService {
         text: templates.text
       });
 
-      logger.info(`Verification email sent to: ${user.email}`);
+      logger.info(`Verification email sent successfully to: ${user.email}`);
       
       return {
         success: true,
@@ -310,6 +312,7 @@ class EmailVerificationService {
       await user.save();
 
       // Send verification email
+      logger.info(`Initiating resend verification email for: ${email}`);
       return await this.sendVerificationEmail(user, frontendUrl);
     } catch (error) {
       logger.error('Resend verification email failed:', error);

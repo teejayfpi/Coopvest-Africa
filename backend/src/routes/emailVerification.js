@@ -221,12 +221,18 @@ router.get('/email-verification-status', [
  */
 router.post('/verify-otp', [
   body('email').isEmail().withMessage('Valid email is required'),
-  body('otp').isLength({ min: 6, max: 6 }).withMessage('6-digit verification code is required')
+  body('otp').optional().isLength({ min: 6, max: 6 }).withMessage('6-digit verification code is required'),
+  body('code').optional().isLength({ min: 6, max: 6 }).withMessage('6-digit verification code is required')
 ], validate, async (req, res) => {
   try {
-    const { email, otp } = req.body;
+    const { email, otp, code } = req.body;
+    const verificationCode = otp || code;
 
-    const result = await emailVerificationService.verifyOTP(email, otp);
+    if (!verificationCode) {
+      return res.status(400).json({ success: false, error: 'Verification code is required' });
+    }
+
+    const result = await emailVerificationService.verifyOTP(email, verificationCode);
 
     if (!result.success) {
       return res.status(400).json({
