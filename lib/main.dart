@@ -7,10 +7,12 @@ import 'presentation/screens/auth/welcome_screen.dart';
 import 'presentation/screens/auth/login_screen.dart';
 import 'presentation/screens/auth/register_step1_screen.dart';
 import 'presentation/screens/auth/register_step2_screen.dart';
+import 'presentation/screens/auth/google_complete_screen.dart';
 import 'presentation/screens/auth/salary_deduction_consent_screen.dart';
 import 'presentation/screens/auth/account_activation_screen.dart';
 import 'presentation/screens/auth/forgot_password_screen.dart';
 import 'presentation/screens/auth/email_verification_screen.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'presentation/screens/support/support_home_screen.dart';
 import 'presentation/screens/support/ticket_creation_screen.dart';
 import 'presentation/screens/support/ticket_list_screen.dart';
@@ -77,6 +79,10 @@ class CoopvestApp extends ConsumerWidget {
         '/account-activation': (context) => const AccountActivationScreen(),
         '/forgot-password': (context) => const ForgotPasswordScreen(),
         '/verify-email': (context) => const EmailVerificationScreen(),
+        '/google-complete': (context) {
+          final googleUser = ModalRoute.of(context)?.settings.arguments as GoogleSignInAccount?;
+          return CompleteRegistrationScreen(googleUser: googleUser!);
+        },
         
         // Support/Ticket Routes
         '/support': (context) => const SupportHomeScreen(),

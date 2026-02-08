@@ -137,17 +137,12 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
         return;
       }
 
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-      final String? idToken = googleAuth.idToken;
-
-      if (idToken != null) {
-        // Sign up with Google token
-        await ref.read(authProvider.notifier).googleSignIn(idToken);
-
-        if (mounted) {
-          // Navigate to home after successful signup
-          Navigator.of(context).pushReplacementNamed('/home');
-        }
+      if (mounted) {
+        // Navigate to complete registration screen with phone collection
+        Navigator.of(context).pushReplacementNamed(
+          '/google-complete',
+          arguments: googleUser,
+        );
       }
     } catch (e) {
       if (mounted) {
