@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/gestures.dart';
 import 'package:local_auth/local_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import '../../../config/theme_config.dart';
 import '../../../core/utils/utils.dart';
 import '../../../data/models/auth_models.dart';
@@ -28,6 +29,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _isAuthenticating = false;
 
   final LocalAuthentication _localAuth = LocalAuthentication();
+  final GoogleSignIn _googleSignIn = GoogleSignIn();
 
   @override
   void initState() {
@@ -69,6 +71,32 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(e.toString()),
+            backgroundColor: CoopvestColors.error,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _handleGoogleSignIn() async {
+    try {
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      if (googleUser == null) return;
+
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final String? idToken = googleAuth.idToken;
+
+      if (idToken != null) {
+        await ref.read(authProvider.notifier).googleSignIn(idToken);
+        if (mounted) {
+          Navigator.of(context).pushReplacementNamed('/home');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Google Sign-In failed: ${e.toString()}'),
             backgroundColor: CoopvestColors.error,
           ),
         );
@@ -313,6 +341,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 isEnabled: !_isAuthenticating,
                 width: double.infinity,
                 icon: const Icon(Icons.fingerprint),
+              ),
+              const SizedBox(height: 16),
+
+              // Google Sign-In Button
+              SecondaryButton(
+                label: 'Sign in with Google',
+                onPressed: _handleGoogleSignIn,
+                isLoading: isLoading,
+                isEnabled: !isLoading,
+                width: double.infinity,
+                icon: Image.network(
+                  'https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg',
+                  height: 24,
+                  errorBuilder: (context, error, stackTrace) => const Icon(Icons.login),
+                ),
               ),
               const SizedBox(height: 32),
 

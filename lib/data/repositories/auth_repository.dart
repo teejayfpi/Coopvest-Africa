@@ -17,6 +17,27 @@ class AuthRepository {
   AuthRepository(this._apiClient);
 
   /// Login with email and password
+  /// Login with Google
+  Future<AuthResponse> googleSignIn({
+    required String idToken,
+    String? deviceId,
+  }) async {
+    try {
+      final response = await _apiClient.post(
+        '/auth/google',
+        data: {
+          'idToken': idToken,
+          'deviceId': deviceId,
+        },
+      );
+
+      return AuthResponse.fromJson(response as Map<String, dynamic>);
+    } catch (e) {
+      logger.e('Google Sign-In error: $e');
+      rethrow;
+    }
+  }
+
   Future<AuthResponse> login({
     required String email,
     required String password,

@@ -12,6 +12,8 @@ const { User } = require('../models');
 const { authenticate } = require('../middleware/auth');
 const logger = require('../utils/logger');
 const AuditLog = require('../models/AuditLog');
+const { OAuth2Client } = require('google-auth-library');
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 const validate = (req, res, next) => {
   const errors = validationResult(req);
@@ -310,6 +312,86 @@ router.get(['/me', '/profile'], authenticate, async (req, res) => {
     res.status(401).json({
       success: false,
       error: 'Invalid token'
+    });
+  }
+});
+
+/**
+ * POST /api/v1/auth/google
+ * Google Sign-In
+ */
+router.post('/google', [
+  body('idToken').notEmpty().withMessage('Google ID Token is required')
+], validate, async (req, res) => {
+  try {
+    const { idToken } = req.body;
+    
+    // Verify Google ID Token
+    const ticket = await client.verifyIdToken({
+      idToken,
+      audience: process.env.GOOGLE_CLIENT_ID
+    });
+    
+    const payload = ticket.getPayload();
+    const { email, name, sub: googleId } = payload;
+    
+    // Find or create user
+    let user = await User.findOne({ email: email.toLowerCase() });
+    
+    if (!user) {
+      // Create new user if not exists
+      const userId = `user_${require('uuid').v4().replace(/-/g, '').substring(0, 12)}`;
+      
+      user = new User({
+        userId,
+        email: email.toLowerCase(),
+        name: name || 'Google User',
+        phone: 'N/A', // Placeholder for Google users
+        password: require('crypto').randomBytes(16).toString('hex'), // Random password
+        emailVerification: {
+          isVerified: true, // Google emails are verified
+          verifiedAt: new Date()
+        }
+      });
+      
+      await user.save();
+      
+      logger.info(`New user registered via Google: ${email}`);
+    } else {
+      // Ensure email is marked as verified if it wasn't
+      if (!user.emailVerification.isVerified) {
+        user.emailVerification.isVerified = true;
+        user.emailVerification.verifiedAt = new Date();
+        await user.save();
+      }
+    }
+    
+    if (!user.isActive) {
+      return res.status(403).json({
+        success: false,
+        error: 'Account is deactivated'
+      });
+    }
+    
+    const token = generateToken(user.userId);
+    
+    res.json({
+      success: true,
+      user: {
+        userId: user.userId,
+        email: user.email,
+        name: user.name,
+        referralCode: user.referral.myReferralCode,
+        kycVerified: user.kyc.verified,
+        emailVerified: user.emailVerification.isVerified
+      },
+      token
+    });
+  } catch (error) {
+    logger.error('Google Sign-In error:', error);
+    res.status(401).json({
+      success: false,
+      error: 'Invalid Google token'
     });
   }
 });
