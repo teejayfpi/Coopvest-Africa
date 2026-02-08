@@ -46,8 +46,12 @@ class CompleteRegistrationScreen extends ConsumerWidget {
         );
 
         if (mounted) {
-          // Navigate directly to Employment KYC (no OTP for Google users)
-          Navigator.of(context).pushReplacementNamed('/kyc-employment-details');
+          // Navigate to Salary Consent (Step 3), then KYC will follow
+          Navigator.of(context).pushReplacementNamed('/register-step3', arguments: {
+            'email': googleUser.email,
+            'name': googleUser.displayName ?? 'User',
+            'phone': phone,
+          });
         }
       } catch (e) {
         if (mounted) {
@@ -185,8 +189,12 @@ class CompleteRegistrationScreen extends ConsumerWidget {
               Center(
                 child: TextButton(
                   onPressed: () {
-                    // Optionally skip and add phone later, go directly to KYC
-                    Navigator.of(context).pushReplacementNamed('/kyc-employment-details');
+                    // Optionally skip and add phone later, go directly to Salary Consent
+                    Navigator.of(context).pushReplacementNamed('/register-step3', arguments: {
+                      'email': googleUser.email,
+                      'name': googleUser.displayName ?? 'User',
+                      'phone': '',
+                    });
                   },
                   child: Text(
                     'Add phone number later',
