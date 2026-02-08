@@ -46,8 +46,8 @@ class CompleteRegistrationScreen extends ConsumerWidget {
         );
 
         if (mounted) {
-          // Navigate to step 2 for KYC info
-          Navigator.of(context).pushReplacementNamed('/register-step2');
+          // Navigate directly to Employment KYC (no OTP for Google users)
+          Navigator.of(context).pushReplacementNamed('/kyc-employment-details');
         }
       } catch (e) {
         if (mounted) {
@@ -185,8 +185,8 @@ class CompleteRegistrationScreen extends ConsumerWidget {
               Center(
                 child: TextButton(
                   onPressed: () {
-                    // Optionally skip and add phone later
-                    Navigator.of(context).pushReplacementNamed('/register-step2');
+                    // Optionally skip and add phone later, go directly to KYC
+                    Navigator.of(context).pushReplacementNamed('/kyc-employment-details');
                   },
                   child: Text(
                     'Add phone number later',
