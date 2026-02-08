@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import '../../../config/theme_config.dart';
 import '../../../core/utils/utils.dart';
 import '../../../data/models/auth_models.dart';
@@ -9,7 +10,7 @@ import '../../widgets/common/inputs.dart';
 
 /// Complete Registration Screen
 /// Collects phone number after Google Sign-In
-class CompleteRegistrationScreen extends ConsumerWidget {
+class CompleteRegistrationScreen extends ConsumerStatefulWidget {
   final GoogleSignInAccount googleUser;
 
   const CompleteRegistrationScreen({
@@ -18,53 +19,64 @@ class CompleteRegistrationScreen extends ConsumerWidget {
   }) : super(key: key);
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final phoneController = TextEditingController();
-    String? _phoneError;
+  ConsumerState<CompleteRegistrationScreen> createState() => _CompleteRegistrationScreenState();
+}
 
-    Future<void> _completeRegistration() async {
-      final phone = phoneController.text.trim();
-      final phoneError = Validators.validatePhone(phone);
+class _CompleteRegistrationScreenState extends ConsumerState<CompleteRegistrationScreen> {
+  final phoneController = TextEditingController();
+  String? _phoneError;
 
-      if (phoneError != null) {
+  @override
+  void dispose() {
+    phoneController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _completeRegistration() async {
+    final phone = phoneController.text.trim();
+    final phoneError = Validators.validatePhone(phone);
+
+    if (phoneError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(phoneError),
+          backgroundColor: CoopvestColors.error,
+        ),
+      );
+      return;
+    }
+
+    try {
+      // Register user with Google info + phone
+      await ref.read(authProvider.notifier).register(
+        email: widget.googleUser.email,
+        password: '', // No password for Google users
+        name: widget.googleUser.displayName ?? 'User',
+        phone: phone,
+      );
+
+      if (mounted) {
+        // Navigate to Salary Consent (Step 3), then KYC will follow
+        Navigator.of(context).pushReplacementNamed('/register-step3', arguments: {
+          'email': widget.googleUser.email,
+          'name': widget.googleUser.displayName ?? 'User',
+          'phone': phone,
+        });
+      }
+    } catch (e) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(phoneError),
+            content: Text('Registration failed: ${e.toString()}'),
             backgroundColor: CoopvestColors.error,
           ),
         );
-        return;
-      }
-
-      try {
-        // Register user with Google info + phone
-        await ref.read(authProvider.notifier).register(
-          email: googleUser.email,
-          password: '', // No password for Google users
-          name: googleUser.displayName ?? 'User',
-          phone: phone,
-        );
-
-        if (mounted) {
-          // Navigate to Salary Consent (Step 3), then KYC will follow
-          Navigator.of(context).pushReplacementNamed('/register-step3', arguments: {
-            'email': googleUser.email,
-            'name': googleUser.displayName ?? 'User',
-            'phone': phone,
-          });
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Registration failed: ${e.toString()}'),
-              backgroundColor: CoopvestColors.error,
-            ),
-          );
-        }
       }
     }
+  }
 
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -89,7 +101,7 @@ class CompleteRegistrationScreen extends ConsumerWidget {
             children: [
               // Welcome message
               Text(
-                'Welcome, ${googleUser.displayName ?? 'User'}!',
+                'Welcome, ${widget.googleUser.displayName ?? 'User'}!',
                 style: CoopvestTypography.headlineMedium.copyWith(
                   color: CoopvestColors.darkGray,
                 ),
@@ -107,7 +119,7 @@ class CompleteRegistrationScreen extends ConsumerWidget {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: CoopvestColors.lightBackground,
+                  color: CoopvestColors.veryLightGray,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
@@ -115,12 +127,12 @@ class CompleteRegistrationScreen extends ConsumerWidget {
                     CircleAvatar(
                       backgroundColor: CoopvestColors.primary,
                       radius: 24,
-                      backgroundImage: googleUser.photoUrl != null
-                          ? NetworkImage(googleUser.photoUrl!)
+                      backgroundImage: widget.googleUser.photoUrl != null
+                          ? NetworkImage(widget.googleUser.photoUrl!)
                           : null,
-                      child: googleUser.photoUrl == null
+                      child: widget.googleUser.photoUrl == null
                           ? Text(
-                              (googleUser.displayName?[0] ?? 'U').toUpperCase(),
+                              (widget.googleUser.displayName?[0] ?? 'U').toUpperCase(),
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,
@@ -135,14 +147,14 @@ class CompleteRegistrationScreen extends ConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            googleUser.displayName ?? 'User',
+                            widget.googleUser.displayName ?? 'User',
                             style: CoopvestTypography.bodyLarge.copyWith(
                               color: CoopvestColors.darkGray,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
                           Text(
-                            googleUser.email,
+                            widget.googleUser.email,
                             style: CoopvestTypography.bodyMedium.copyWith(
                               color: CoopvestColors.mediumGray,
                             ),
@@ -191,8 +203,8 @@ class CompleteRegistrationScreen extends ConsumerWidget {
                   onPressed: () {
                     // Optionally skip and add phone later, go directly to Salary Consent
                     Navigator.of(context).pushReplacementNamed('/register-step3', arguments: {
-                      'email': googleUser.email,
-                      'name': googleUser.displayName ?? 'User',
+                      'email': widget.googleUser.email,
+                      'name': widget.googleUser.displayName ?? 'User',
                       'phone': '',
                     });
                   },

@@ -481,7 +481,7 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
               // Google Sign-In Button
               SecondaryButton(
                 label: _isLoadingGoogle ? 'Creating account...' : 'Sign up with Google',
-                onPressed: _isLoadingGoogle ? null : () => _handleGoogleSignup(context),
+                onPressed: () => _handleGoogleSignup(context),
                 isLoading: _isLoadingGoogle,
                 isEnabled: !_isLoadingGoogle,
                 width: double.infinity,
