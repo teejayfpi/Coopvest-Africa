@@ -106,8 +106,8 @@ class _KYCSelfieScreenState extends ConsumerState<KYCSelfieScreen> {
       await ref.read(kycProvider.notifier).submitKYC();
       
       if (mounted) {
-        // Navigate to KYC success screen
-        Navigator.of(context).pushReplacementNamed('/kyc-success');
+        // Navigate to Bank Info screen (for Google and manual users)
+        Navigator.of(context).pushReplacementNamed('/kyc-bank-info');
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
