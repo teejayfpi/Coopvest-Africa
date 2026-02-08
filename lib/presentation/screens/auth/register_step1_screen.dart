@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import '../../../config/theme_config.dart';
 import '../../../core/utils/utils.dart';
 import '../../widgets/common/buttons.dart';
@@ -32,6 +33,8 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
   String? _confirmPasswordError;
 
   double _passwordStrength = 0;
+  bool _isLoadingGoogle = false;
+  final GoogleSignIn _googleSignIn = GoogleSignIn();
 
   @override
   void initState() {
@@ -117,6 +120,50 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
           backgroundColor: CoopvestColors.error,
         ),
       );
+    }
+  }
+
+  Future<void> _handleGoogleSignup(BuildContext context) async {
+    try {
+      setState(() {
+        _isLoadingGoogle = true;
+      });
+
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      if (googleUser == null) {
+        setState(() {
+          _isLoadingGoogle = false;
+        });
+        return;
+      }
+
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final String? idToken = googleAuth.idToken;
+
+      if (idToken != null) {
+        // Sign up with Google token
+        await ref.read(authProvider.notifier).googleSignIn(idToken);
+
+        if (mounted) {
+          // Navigate to home after successful signup
+          Navigator.of(context).pushReplacementNamed('/home');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Google Sign-Up failed: ${e.toString()}'),
+            backgroundColor: CoopvestColors.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingGoogle = false;
+        });
+      }
     }
   }
 
@@ -435,6 +482,49 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
                 ),
               ),
               const SizedBox(height: 32),
+
+              // Google Sign-In Button
+              SecondaryButton(
+                label: _isLoadingGoogle ? 'Creating account...' : 'Sign up with Google',
+                onPressed: _isLoadingGoogle ? null : () => _handleGoogleSignup(context),
+                isLoading: _isLoadingGoogle,
+                isEnabled: !_isLoadingGoogle,
+                width: double.infinity,
+                icon: Image.network(
+                  'https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg',
+                  height: 24,
+                  errorBuilder: (context, error, stackTrace) => const Icon(Icons.login),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Divider
+              Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      height: 1,
+                      color: CoopvestColors.lightGray,
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Text(
+                      'or',
+                      style: CoopvestTypography.bodySmall.copyWith(
+                        color: CoopvestColors.mediumGray,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Container(
+                      height: 1,
+                      color: CoopvestColors.lightGray,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
 
               // Continue Button
               PrimaryButton(
