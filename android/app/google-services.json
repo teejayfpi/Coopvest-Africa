@@ -13,7 +13,24 @@
           "package_name": "com.coopvestafrica.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "1040576298736.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.coopvestafrica.app",
+            "certificate_hash": "SHA1_HASH_PLACEHOLDER_DEBUG"
+          }
+        },
+        {
+          "client_id": "1040576298736.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.coopvestafrica.app",
+            "certificate_hash": "SHA1_HASH_PLACEHOLDER_RELEASE"
+          }
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBqTLdRdvzUrloF09wNbvc2AQV5OvShcuw"
@@ -21,7 +38,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1040576298736.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

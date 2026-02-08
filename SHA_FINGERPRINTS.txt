@@ -1,0 +1,100 @@
+# SHA Certificate Fingerprints for Google Sign-In
+# Generated: February 2026
+# Project: Coopvest Africa (com.coopvestafrica.app)
+
+================================================================================
+CRITICAL: Add these SHA fingerprints to your Firebase Project Settings
+================================================================================
+
+You must add the following SHA certificate fingerprints to your Firebase project
+for Google Sign-In to work properly:
+
+1. DEBUG SHA-1 Fingerprint:
+   SHA1:DEBUG:SHA1_HASH_PLACEHOLDER
+
+2. RELEASE SHA-1 Fingerprint:
+   SHA1:RELEASE:SHA1_HASH_PLACEHOLDER
+
+================================================================================
+How to Get Your SHA Fingerprints
+================================================================================
+
+### Option 1: Using keytool (on your local machine)
+
+# For Debug Build:
+keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android -keypass android
+
+# For Release Build:
+keytool -list -v -keystore /path/to/your/release.keystore -alias your-alias -storepass your_store_password
+
+### Option 2: Using Gradle (in Android Studio)
+
+Add this to your android/app/build.gradle:
+    signingConfigs {
+        release {
+            // ... your signing config
+        }
+    }
+    
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
+        release {
+            signingConfig signingConfigs.release
+            // ... rest of config
+        }
+    }
+
+Then run:
+./gradlew signingReport
+
+================================================================================
+How to Add Fingerprints to Firebase Console
+================================================================================
+
+1. Go to https://console.firebase.google.com/
+2. Select your project: "coopvest-africa-46a86"
+3. Click the gear icon (Project Settings)
+4. Scroll down to "Your apps" section
+5. Click on your Android app (com.coopvestafrica.app)
+6. Scroll to "SHA certificate fingerprints"
+7. Click "Add fingerprint"
+8. Paste each SHA fingerprint
+9. Click "Save"
+10. Download the new google-services.json
+11. Replace android/app/google-services.json with the downloaded file
+
+================================================================================
+Required SHA Fingerprints
+================================================================================
+
+DEBUG Build:
+- Used during development in Android Studio
+- Fingerprint from: ~/.android/debug.keystore
+- Default password: android
+
+RELEASE Build:
+- Used when you publish to Google Play Store
+- Fingerprint from: your release keystore
+- You MUST generate this yourself and add it
+
+================================================================================
+Troubleshooting
+================================================================================
+
+If Google Sign-In is still not working:
+
+1. Verify both fingerprints are added in Firebase Console
+2. Ensure package name matches: com.coopvestafrica.app
+3. Download and replace google-services.json after adding fingerprints
+4. Clean and rebuild: flutter clean && flutter pub get
+5. Invalidate caches in Android Studio
+
+Error: "DEVELOPER_ERROR" or "10" error code:
+- Usually means SHA fingerprint mismatch
+- Check that you're using the correct google-services.json
+
+Error: "Sign in failed" with no specific error:
+- Check Logcat for detailed error messages
+- Verify OAuth consent screen is configured

@@ -24,7 +24,15 @@ if (flutterVersionName == null) {
     flutterVersionName = '1.0'
 }
 
-def projectDir = rootProject.projectDir
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file('key.properties')
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.withReader('UTF-8') { reader ->
+        keystoreProperties.load(reader)
+    }
+}
+
+def projectDir = project.rootProject.projectDir
 
 android {
     namespace "com.coopvestafrica.app"
@@ -55,21 +63,53 @@ android {
     }
 
     signingConfigs {
+        debug {
+            storeFile file("$projectDir/../../android/key/debug-keystore.jks")
+            storePassword "android"
+            keyAlias "androiddebugkey"
+            keyPassword "android"
+        }
         release {
-            // TODO: Add your release signing key here
+            if (keystorePropertiesFile.exists()) {
+                storeFile keystoreProperties['storeFile']
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            } else {
+                // Fallback - you must configure key.properties for release builds
+                storeFile null
+                storePassword null
+                keyAlias null
+                keyPassword null
+            }
         }
     }
 
     buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+            debuggable true
+        }
         release {
             signingConfig signingConfigs.release
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
 
     packaging {
         resources {
             excludes += '/META-INF/{AL2.0,LGPL2.1}'
+            excludes += '/META-INF/LICENSE*'
+            excludes += '/META-INF/NOTICE*'
         }
+    }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds true
+        warningsAsErrors false
     }
 }
 
@@ -77,13 +117,13 @@ flutter {
     source '../..'
 }
 
-    dependencies {
+dependencies {
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.4'
     implementation "androidx.core:core-ktx:1.12.0"
     implementation "androidx.lifecycle:lifecycle-runtime-ktx:2.7.0"
     implementation "androidx.activity:activity-ktx:1.8.2"
     implementation "androidx.multidex:multidex:2.0.1"
-    
+
     // Firebase dependencies are managed by Flutter plugins.
     // Manual implementation here can cause conflicts or resolution errors.
     implementation platform("com.google.firebase:firebase-bom:33.1.0")
