@@ -34,7 +34,9 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
 
   double _passwordStrength = 0;
   bool _isLoadingGoogle = false;
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    serverClientId: '1040576298736-991ja94slls4f6csarfheerlkg7bfpon.apps.googleusercontent.com',
+  );
 
   @override
   void initState() {
