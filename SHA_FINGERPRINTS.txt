@@ -6,14 +6,14 @@
 CRITICAL: Add these SHA fingerprints to your Firebase Project Settings
 ================================================================================
 
-You must add the following SHA certificate fingerprints to your Firebase project
-for Google Sign-In to work properly:
+DEBUG BUILD (for local development):
+-----------------------------------
+SHA1: 3D:30:70:7C:84:F0:9B:F7:A5:7B:0D:A2:A5:AC:5F:F9:C6:D4:FA:C4
+SHA256: 65:BF:6F:92:ED:29:10:72:CD:3F:DD:60:6F:AE:2B:9E:3F:1E:1A:4D:17:50:B8:18:1E:39:24:E9:8C:AF:56:85
 
-1. DEBUG SHA-1 Fingerprint:
-   SHA1:DEBUG:SHA1_HASH_PLACEHOLDER
-
-2. RELEASE SHA-1 Fingerprint:
-   SHA1:RELEASE:SHA1_HASH_PLACEHOLDER
+RELEASE BUILD (for production):
+-----------------------------------
+You need to generate a release keystore first.
 
 ================================================================================
 How to Get Your SHA Fingerprints
@@ -35,7 +35,7 @@ Add this to your android/app/build.gradle:
             // ... your signing config
         }
     }
-    
+
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
@@ -60,24 +60,28 @@ How to Add Fingerprints to Firebase Console
 5. Click on your Android app (com.coopvestafrica.app)
 6. Scroll to "SHA certificate fingerprints"
 7. Click "Add fingerprint"
-8. Paste each SHA fingerprint
-9. Click "Save"
-10. Download the new google-services.json
-11. Replace android/app/google-services.json with the downloaded file
+8. Add: 3D:30:70:7C:84:F0:9B:F7:A5:7B:0D:A2:A5:AC:5F:F9:C6:D4:FA:C4
+9. Add your release SHA1 fingerprint (when you generate the keystore)
+10. Click "Save"
+11. Download the new google-services.json
+12. Replace android/app/google-services.json with the downloaded file
 
 ================================================================================
-Required SHA Fingerprints
+Quick Commands
 ================================================================================
 
-DEBUG Build:
-- Used during development in Android Studio
-- Fingerprint from: ~/.android/debug.keystore
-- Default password: android
+# Generate debug SHA fingerprints
+keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android -keypass android
 
-RELEASE Build:
-- Used when you publish to Google Play Store
-- Fingerprint from: your release keystore
-- You MUST generate this yourself and add it
+# Generate release keystore
+keytool -genkeypair -v -storetype PKCS12 -keyalg RSA -keysize 2048 -validity 10000 \
+  -keystore android/app/release-keystore.jks \
+  -alias release-key \
+  -storepass YOUR_PASSWORD_HERE \
+  -keypass YOUR_PASSWORD_HERE
+
+# Get release SHA fingerprint
+keytool -list -v -keystore android/app/release-keystore.jks -alias release-key
 
 ================================================================================
 Troubleshooting
