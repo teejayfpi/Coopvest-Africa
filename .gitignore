@@ -163,6 +163,9 @@ android/key/
 *.jks
 *.keystore
 
+# Allow debug keystore for CI builds
+!android/app/debug.keystore
+
 # Generated files
 *.g.dart
 *.config.dart
