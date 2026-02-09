@@ -8,46 +8,13 @@ CRITICAL: Add these SHA fingerprints to your Firebase Project Settings
 
 DEBUG BUILD (for local development):
 -----------------------------------
-SHA1: 3D:30:70:7C:84:F0:9B:F7:A5:7B:0D:A2:A5:AC:5F:F9:C6:D4:FA:C4
-SHA256: 65:BF:6F:92:ED:29:10:72:CD:3F:DD:60:6F:AE:2B:9E:3F:1E:1A:4D:17:50:B8:18:1E:39:24:E9:8C:AF:56:85
+SHA1: F5:8A:B8:A3:86:FC:7C:33:3F:F1:E7:6C:81:42:D9:7E:0F:8B:3A:B8
+SHA256: D3:90:55:75:EB:CB:42:E3:56:57:5B:3C:73:0D:29:25:AC:1A:E9:2D:AC:D3:00:2A:96:39:6F:82:5F:77:BF:48
 
 RELEASE BUILD (for production):
 -----------------------------------
-You need to generate a release keystore first.
-
-================================================================================
-How to Get Your SHA Fingerprints
-================================================================================
-
-### Option 1: Using keytool (on your local machine)
-
-# For Debug Build:
-keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android -keypass android
-
-# For Release Build:
-keytool -list -v -keystore /path/to/your/release.keystore -alias your-alias -storepass your_store_password
-
-### Option 2: Using Gradle (in Android Studio)
-
-Add this to your android/app/build.gradle:
-    signingConfigs {
-        release {
-            // ... your signing config
-        }
-    }
-
-    buildTypes {
-        debug {
-            signingConfig signingConfigs.debug
-        }
-        release {
-            signingConfig signingConfigs.release
-            // ... rest of config
-        }
-    }
-
-Then run:
-./gradlew signingReport
+SHA1: EE:09:82:3B:41:6B:E9:F3:01:8C:D4:0F:7E:26:B1:45:99:F8:BD:62
+SHA256: BB:26:01:51:C7:3E:9B:A2:3A:34:08:8F:B8:2F:F0:C6:19:61:11:D4:3D:31:DB:80:70:55:52:60:D6:DA:DF:BF
 
 ================================================================================
 How to Add Fingerprints to Firebase Console
@@ -60,45 +27,16 @@ How to Add Fingerprints to Firebase Console
 5. Click on your Android app (com.coopvestafrica.app)
 6. Scroll to "SHA certificate fingerprints"
 7. Click "Add fingerprint"
-8. Add: 3D:30:70:7C:84:F0:9B:F7:A5:7B:0D:A2:A5:AC:5F:F9:C6:D4:FA:C4
-9. Add your release SHA1 fingerprint (when you generate the keystore)
-10. Click "Save"
-11. Download the new google-services.json
-12. Replace android/app/google-services.json with the downloaded file
-
-================================================================================
-Quick Commands
-================================================================================
-
-# Generate debug SHA fingerprints
-keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android -keypass android
-
-# Generate release keystore
-keytool -genkeypair -v -storetype PKCS12 -keyalg RSA -keysize 2048 -validity 10000 \
-  -keystore android/app/release-keystore.jks \
-  -alias release-key \
-  -storepass YOUR_PASSWORD_HERE \
-  -keypass YOUR_PASSWORD_HERE
-
-# Get release SHA fingerprint
-keytool -list -v -keystore android/app/release-keystore.jks -alias release-key
+8. Add BOTH the Debug and Release SHA1 fingerprints listed above.
+9. Click "Save"
+10. Download the new google-services.json
+11. Replace android/app/google-services.json with the downloaded file
 
 ================================================================================
 Troubleshooting
 ================================================================================
 
-If Google Sign-In is still not working:
-
-1. Verify both fingerprints are added in Firebase Console
-2. Ensure package name matches: com.coopvestafrica.app
-3. Download and replace google-services.json after adding fingerprints
-4. Clean and rebuild: flutter clean && flutter pub get
-5. Invalidate caches in Android Studio
-
-Error: "DEVELOPER_ERROR" or "10" error code:
-- Usually means SHA fingerprint mismatch
-- Check that you're using the correct google-services.json
-
-Error: "Sign in failed" with no specific error:
-- Check Logcat for detailed error messages
-- Verify OAuth consent screen is configured
+Error code 10 (ApiException: 10):
+- This is a configuration error, usually caused by a SHA-1 mismatch.
+- Ensure the SHA-1 fingerprints in Firebase EXACTLY match the ones above.
+- If you are using Google Play App Signing, you MUST also add the SHA-1 from the Google Play Console (Setup > App Integrity).
