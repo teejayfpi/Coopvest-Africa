@@ -158,9 +158,7 @@ app.*.map.json
 .env.local
 .env.*.local
 
-# Keystore files (DO NOT COMMIT - keep secure!)
-android/key/
-android/key.properties
+# Keystore files
 *.jks
 *.keystore
 
