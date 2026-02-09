@@ -17,14 +17,6 @@
         {
           "client_id": "1040576298736-991ja94slls4f6csarfheerlkg7bfpon.apps.googleusercontent.com",
           "client_type": 3
-        },
-        {
-          "client_id": "1040576298736-991ja94slls4f6csarfheerlkg7bfpon.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.coopvestafrica.app",
-            "certificate_hash": "f58ab8a386fc7c333ff1e76c8142d97e0f8b3ab8"
-          }
         }
       ],
       "api_key": [
