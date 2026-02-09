@@ -158,9 +158,9 @@ app.*.map.json
 .env.local
 .env.*.local
 
-# Keystore files
-*.jks
-*.keystore
+# Allow keystore files to be committed (user choice)
+# *.jks
+# *.keystore
 
 # Allow debug keystore for CI builds
 !android/app/debug.keystore
