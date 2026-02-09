@@ -160,6 +160,7 @@ app.*.map.json
 
 # Keystore files (DO NOT COMMIT - keep secure!)
 android/key/
+android/key.properties
 *.jks
 *.keystore
 
