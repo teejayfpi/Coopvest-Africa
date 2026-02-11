@@ -13,6 +13,10 @@ const Ticket = require('./Ticket');
 const TicketMessage = require('./TicketMessage');
 const TicketAttachment = require('./TicketAttachment');
 const Wallet = require('./Wallet');
+const SavingsGoal = require('./SavingsGoal');
+const KYC = require('./KYC');
+const Rollover = require('./Rollover');
+const InvestmentPool = require('./InvestmentPool');
 
 module.exports = {
   Referral,
@@ -23,5 +27,9 @@ module.exports = {
   Ticket,
   TicketMessage,
   TicketAttachment,
-  Wallet
+  Wallet,
+  SavingsGoal,
+  KYC,
+  Rollover,
+  InvestmentPool
 };
