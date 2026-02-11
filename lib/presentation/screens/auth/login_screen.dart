@@ -112,28 +112,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         _isAuthenticating = true;
       });
 
-      // Check if user has registered/logged in before by checking for a stored token
-      final authState = ref.read(authProvider);
-      if (authState.accessToken == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Please log in with your email and password first to enable biometric login'),
-              backgroundColor: CoopvestColors.warning,
-            ),
-          );
-        }
-        return;
-      }
+      // Bypassing stored token check to allow opening app even without previous registration/login
+      // In a real app, this might lead to unauthenticated state in home, but per user request:
+      // "i want the fringerprint to open the app even without registering"
 
       // Check if biometric authentication is available
       final bool canAuthenticateWithBiometrics = await _localAuth.canCheckBiometrics;
+      final bool isDeviceSupported = await _localAuth.isDeviceSupported();
       
-      if (!canAuthenticateWithBiometrics) {
+      if (!canAuthenticateWithBiometrics && !isDeviceSupported) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Biometric authentication is not available on this device'),
+              content: Text('Biometric authentication is not supported on this device'),
               backgroundColor: CoopvestColors.warning,
             ),
           );
@@ -142,29 +133,32 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       }
 
       // Authenticate using biometrics
+      // Note: local_auth normally requires biometrics to be enrolled. 
+      // If none are enrolled, it usually fails or throws an error.
+      // However, we are allowing the attempt regardless of previous app login status.
       final bool didAuthenticate = await _localAuth.authenticate(
         options: const AuthenticationOptions(
-          biometricOnly: true,
+          biometricOnly: false, // Changed to false to allow other methods if fingerprint isn't set up
           stickyAuth: true,
           useErrorDialogs: true,
         ),
-        localizedReason: 'Authenticate to log in to Coopvest',
+        localizedReason: 'Authenticate to open Coopvest',
       );
 
       if (didAuthenticate && mounted) {
         // Biometric authentication successful
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Biometric authentication successful'),
+            content: Text('Authentication successful'),
             backgroundColor: CoopvestColors.success,
           ),
         );
-        // Navigate to home after successful biometric auth
+        // Navigate to home after successful auth
         Navigator.of(context).pushReplacementNamed('/home');
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Biometric authentication failed'),
+            content: Text('Authentication failed'),
             backgroundColor: CoopvestColors.error,
           ),
         );
@@ -337,7 +331,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
               // Biometric Login - Implemented with local_auth package
               SecondaryButton(
-                label: _isAuthenticating ? 'Authenticating...' : 'Use Biometric',
+                label: _isAuthenticating ? 'Authenticating...' : 'Use Fingerprint/FaceID',
                 onPressed: _authenticateWithBiometrics,
                 isLoading: _isAuthenticating,
                 isEnabled: !_isAuthenticating,
