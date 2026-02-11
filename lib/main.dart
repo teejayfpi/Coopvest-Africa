@@ -181,8 +181,8 @@ class _SplashScreenState extends State<SplashScreen> {
     await Future.delayed(const Duration(seconds: 3));
 
     if (mounted) {
-      // Navigate to welcome screen for onboarding flow
-      Navigator.of(context).pushReplacementNamed('/welcome');
+      // Navigate directly to home - NO login/registration required
+      Navigator.of(context).pushReplacementNamed('/home');
     }
   }
 
