@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/theme_config.dart';
 import '../../../presentation/widgets/common/cards.dart';
+import '../kyc/kyc_employment_details_screen.dart';
+import '../support/support_home_screen.dart';
+import '../../providers/auth_provider.dart';
 
 /// Profile & Settings Screen
 class ProfileSettingsScreen extends ConsumerStatefulWidget {
@@ -221,7 +224,50 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
               )
             : const Icon(Icons.chevron_right, color: CoopvestColors.lightGray),
         onTap: () {
-          // Handle settings item tap
+          final label = item['label'] as String;
+          switch (label) {
+            case 'Edit Profile':
+              // We can reuse employment details for editing profile info
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (context) => const KYCEmploymentDetailsScreen()),
+              );
+              break;
+            case 'Security':
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Security settings coming soon')),
+              );
+              break;
+            case 'Bank Accounts':
+              Navigator.of(context).pushNamed('/kyc-bank-info');
+              break;
+            case 'Notifications':
+              Navigator.of(context).pushNamed('/notifications');
+              break;
+            case 'Help Center':
+            case 'Live Chat':
+              Navigator.of(context).pushNamed('/support');
+              break;
+            case 'Privacy Policy':
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Privacy Policy document opening...')),
+              );
+              break;
+            case 'About':
+              showAboutDialog(
+                context: context,
+                applicationName: 'Coopvest Africa',
+                applicationVersion: '1.0.0',
+                applicationIcon: const Icon(Icons.account_balance, color: CoopvestColors.primary),
+                children: const [
+                  Text('Coopvest Africa is a cooperative financial platform for savings, loans, and investments.'),
+                ],
+              );
+              break;
+            default:
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('$label feature coming soon')),
+              );
+          }
         },
       ),
     );
@@ -245,9 +291,20 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.of(context).pop();
-              // Perform logout
+              try {
+                await ref.read(authProvider.notifier).logout();
+                if (mounted) {
+                  Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Logout failed: $e'), backgroundColor: CoopvestColors.error),
+                  );
+                }
+              }
             },
             child: const Text(
               'Logout',

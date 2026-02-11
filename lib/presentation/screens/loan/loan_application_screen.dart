@@ -339,23 +339,28 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
                           final value = entry.value;
                           return DropdownMenuItem(
                             value: key,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  key,
-                                  style: CoopvestTypography.bodyMedium.copyWith(
-                                    fontWeight: FontWeight.w600,
+                            child: SizedBox(
+                              height: 48, // Fixed height to prevent overflow
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    key,
+                                    style: CoopvestTypography.bodyMedium.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 14,
+                                    ),
                                   ),
-                                ),
-                                Text(
-                                  '${value['duration']} months @ ${value['interest']}% interest',
-                                  style: CoopvestTypography.bodySmall.copyWith(
-                                    color: CoopvestColors.mediumGray,
+                                  Text(
+                                    '${value['duration']} months @ ${value['interest']}% interest',
+                                    style: CoopvestTypography.bodySmall.copyWith(
+                                      color: CoopvestColors.mediumGray,
+                                      fontSize: 11,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           );
                         }).toList(),

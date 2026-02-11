@@ -236,36 +236,6 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
             Expanded(
               child: _buildActionButton(
                 context,
-                icon: Icons.account_balance_wallet,
-                label: 'Wallet',
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => WalletDashboardScreen(userId: userId, userName: userName),
-                    ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildActionButton(
-                context,
-                icon: Icons.support_agent,
-                label: 'Support',
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => const SupportHomeScreen(),
-                    ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildActionButton(
-                context,
                 icon: Icons.request_quote,
                 label: 'Loans',
                 onTap: () {
@@ -285,6 +255,21 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
             Expanded(
               child: _buildActionButton(
                 context,
+                icon: Icons.account_balance_wallet,
+                label: 'Wallet',
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => WalletDashboardScreen(userId: userId, userName: userName),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildActionButton(
+                context,
                 icon: Icons.qr_code_scanner,
                 label: 'Scan QR',
                 onTap: () {
@@ -294,6 +279,21 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                         guarantorId: userId,
                         guarantorName: userName,
                       ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildActionButton(
+                context,
+                icon: Icons.support_agent,
+                label: 'Support',
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const SupportHomeScreen(),
                     ),
                   );
                 },
