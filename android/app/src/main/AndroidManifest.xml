@@ -61,6 +61,12 @@
 
         </activity>
 
+        <!-- Biometric Authentication Activity (for local_auth) -->
+        <activity
+            android:name="io.flutter.app.FlutterActivity"
+            android:exported="false"
+            android:theme="@style/LaunchTheme" />
+
         <!-- Google Sign-In Metadata -->
         <meta-data
             android:name="com.google.android.gms.version"
