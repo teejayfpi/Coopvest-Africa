@@ -17,6 +17,11 @@ const SavingsGoal = require('./SavingsGoal');
 const KYC = require('./KYC');
 const Rollover = require('./Rollover');
 const InvestmentPool = require('./InvestmentPool');
+const Notification = require('./Notification');
+const BankAccount = require('./BankAccount');
+const Transaction = require('./Transaction');
+const Settings = require('./Settings');
+const Watchlist = require('./Watchlist');
 
 module.exports = {
   Referral,
@@ -31,5 +36,10 @@ module.exports = {
   SavingsGoal,
   KYC,
   Rollover,
-  InvestmentPool
+  InvestmentPool,
+  Notification,
+  BankAccount,
+  Transaction,
+  Settings,
+  Watchlist
 };

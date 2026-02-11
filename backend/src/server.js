@@ -38,6 +38,12 @@ const kycRoutes = require('./routes/kyc');
 const savingsRoutes = require('./routes/savings');
 const rolloverRoutes = require('./routes/rollover');
 const investmentsRoutes = require('./routes/investments');
+const notificationRoutes = require('./routes/notifications');
+const bankAccountRoutes = require('./routes/bankAccounts');
+const transactionRoutes = require('./routes/transactions');
+const settingsRoutes = require('./routes/settings');
+const watchlistRoutes = require('./routes/watchlist');
+const analyticsRoutes = require('./routes/analytics');
 
 // Import middleware
 const errorHandler = require('./middleware/errorHandler');
@@ -199,6 +205,12 @@ app.use('/api/v1/kyc', kycRoutes);
 app.use('/api/v1/savings', savingsRoutes);
 app.use('/api/v1/rollover', rolloverRoutes);
 app.use('/api/v1/investments', investmentsRoutes);
+app.use('/api/v1/notifications', notificationRoutes);
+app.use('/api/v1/bank-accounts', bankAccountRoutes);
+app.use('/api/v1/transactions', transactionRoutes);
+app.use('/api/v1/settings', settingsRoutes);
+app.use('/api/v1/watchlist', watchlistRoutes);
+app.use('/api/v1/analytics', analyticsRoutes);
 
 // Aliases for requested endpoints
 app.post('/api/auth/login', authLimiter, (req, res, next) => {
