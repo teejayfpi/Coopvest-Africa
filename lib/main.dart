@@ -29,6 +29,7 @@ import 'presentation/screens/loan/guarantor_verification_screen.dart';
 import 'presentation/screens/loan/loan_details_screen.dart';
 import 'presentation/screens/profile/profile_settings_screen.dart';
 import 'presentation/screens/savings/savings_goals_screen.dart';
+import 'presentation/providers/theme_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -48,15 +49,14 @@ class CoopvestApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Watch theme mode provider (will implement later)
-    // final themeMode = ref.watch(themeModeProvider);
+    final themeMode = ref.watch(themeModeProvider);
 
     return MaterialApp(
       title: AppConfig.appName,
       debugShowCheckedModeBanner: false,
       theme: CoopvestTheme.lightTheme,
       darkTheme: CoopvestTheme.darkTheme,
-      themeMode: ThemeMode.system, // Will be dynamic later
+      themeMode: themeMode,
       home: const SplashScreen(),
       routes: {
         // Auth Routes

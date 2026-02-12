@@ -269,6 +269,12 @@ class _SavingsGoalsScreenState extends ConsumerState<SavingsGoalsScreen> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: AppCard(
+        onTap: () {
+          // Navigate to goal details or show deposit options
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Viewing details for: ${goal.name}')),
+          );
+        },
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

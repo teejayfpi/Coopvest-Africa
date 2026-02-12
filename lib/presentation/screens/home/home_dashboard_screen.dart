@@ -103,6 +103,13 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                         '\u20a6${(wallet?.balance ?? 0).formatNumber()}',
                         Icons.savings,
                         CoopvestColors.success,
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => WalletDashboardScreen(userId: userId, userName: userName),
+                            ),
+                          );
+                        },
                       ),
                     ),
                     const SizedBox(width: 16),
@@ -112,6 +119,13 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                         '1',
                         Icons.account_balance,
                         CoopvestColors.primary,
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => LoanDashboardScreen(userId: userId, userName: userName, userPhone: ''),
+                            ),
+                          );
+                        },
                       ),
                     ),
                   ],
@@ -125,6 +139,13 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                         '${savingsGoals.length}',
                         Icons.flag,
                         Colors.orange,
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => SavingsGoalsScreen(userId: userId),
+                            ),
+                          );
+                        },
                       ),
                     ),
                     const SizedBox(width: 16),
@@ -134,6 +155,13 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                         '\u20a6${(wallet?.pendingContributions ?? 0).formatNumber()}',
                         Icons.pending,
                         Colors.blue,
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => WalletDashboardScreen(userId: userId, userName: userName),
+                            ),
+                          );
+                        },
                       ),
                     ),
                   ],
@@ -187,8 +215,9 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
     );
   }
 
-  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
+  Widget _buildStatCard(String title, String value, IconData icon, Color color, {VoidCallback? onTap}) {
     return AppCard(
+      onTap: onTap,
       backgroundColor: color.withAlpha((255 * 0.1).toInt()),
       border: Border.all(color: color.withAlpha((255 * 0.2).toInt())),
       child: Column(

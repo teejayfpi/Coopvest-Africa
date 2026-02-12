@@ -214,7 +214,10 @@ class LoanDashboardScreen extends ConsumerWidget {
       padding: const EdgeInsets.only(bottom: 12),
       child: GestureDetector(
         onTap: () {
-          // Navigate to loan details
+          Navigator.of(context).pushNamed(
+            '/loan-details',
+            arguments: {'loanId': loan.id},
+          );
         },
         child: AppCard(
           child: Column(
