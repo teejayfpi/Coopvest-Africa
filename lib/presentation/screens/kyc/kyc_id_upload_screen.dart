@@ -492,11 +492,13 @@ class _KYCIDUploadScreenState extends ConsumerState<KYCIDUploadScreen> {
                         color: CoopvestColors.veryLightGray,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: CoopvestColors.success),
-                        image: DecorationImage(
-                          // In production, load actual image
-                          image: NetworkImage('https://placeholder.com/ID_Image'),
-                          fit: BoxFit.cover,
-                        ),
+                        // Load actual ID image from local file path
+                        image: _idImagePath != null
+                            ? DecorationImage(
+                                image: FileImage(File(_idImagePath!)),
+                                fit: BoxFit.cover,
+                              )
+                            : null,
                       ),
                     ),
                     Positioned(

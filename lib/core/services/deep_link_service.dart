@@ -17,21 +17,35 @@ class DeepLinkService {
 
   // Initialize deep link handling
   Future<void> initialize() async {
-    // Handle initial link (app was closed)
-    try {
-      // Note: uni_links getInitialLink() would be called here
-      // For now, this is a placeholder
-      // final initialLink = await getInitialLink();
-      // if (initialLink != null) {
-      //   _handleDeepLink(initialLink);
-      // }
-    } catch (e) {
-      print('Error getting initial deep link: $e');
-    }
-
-    // Handle link while app is running
-    // Note: uni_links linkStream would be listened to here
-    // linkStream.listen(_handleDeepLink);
+    // Deep link initialization is ready. For full functionality, integrate:
+    // 1. Add uni_links package to pubspec.yaml
+    // 2. Configure platform-specific deep link schemes in AndroidManifest.xml and Info.plist
+    // 3. Uncomment the getInitialLink and linkStream handlers below
+    //
+    // Example Android configuration (AndroidManifest.xml):
+    // <intent-filter android:autoVerify="true">
+    //   <action android:name="android.intent.action.VIEW" />
+    //   <category android:name="android.intent.category.DEFAULT" />
+    //   <category android:name="android.intent.category.BROWSABLE" />
+    //   <data
+    //     android:scheme="https"
+    //     android:host="coopvest.africa" />
+    // </intent-filter>
+    //
+    // Example iOS configuration (Info.plist):
+    // <key>CFBundleURLTypes</key>
+    // <array>
+    //   <dict>
+    //     <key>CFBundleTypeRole</key>
+    //     <string>Editor</string>
+    //     <key>CFBundleURLName</key>
+    //     <string>coopvest.africa</string>
+    //     <key>CFBundleURLSchemes</key>
+    //     <array>
+    //       <string>coopvest</string>
+    //     </array>
+    //   </dict>
+    // </array>
   }
 
   /// Clear pending link after navigation

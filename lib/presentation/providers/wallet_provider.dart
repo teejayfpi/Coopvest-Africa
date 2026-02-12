@@ -231,12 +231,26 @@ class WalletNotifier extends StateNotifier<WalletState> {
     required String goalName,
     required double targetAmount,
     required DateTime targetDate,
+    String? description,
   }) async {
     state = state.copyWith(status: WalletStatus.loading);
     try {
-      // Placeholder implementation
-      // The actual API call should be implemented in the repository
-      logger.e('Create savings goal: $goalName, $targetAmount, $targetDate');
+      logger.i('Creating savings goal: $goalName, target: $targetAmount, by: $targetDate');
+      // TODO: Implement actual API call when backend endpoint is available
+      // Example implementation:
+      // final response = await _apiClient.post(
+      //   '/wallet/savings-goals',
+      //   data: {
+      //     'goal_name': goalName,
+      //     'target_amount': targetAmount,
+      //     'target_date': targetDate.toIso8601String(),
+      //     'description': description,
+      //   },
+      // );
+      // return response['success'] == true;
+      
+      // For demo, simulate success
+      await Future.delayed(const Duration(seconds: 1));
       state = state.copyWith(status: WalletStatus.loaded);
       return true;
     } catch (e) {

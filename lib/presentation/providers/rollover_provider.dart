@@ -386,9 +386,9 @@ class RolloverNotifier extends StateNotifier<RolloverState> {
   }
 
   /// Add a new guarantor to the rollover request
-  void addGuarantor(dynamic guarantor) {
-    // This method is a placeholder for guarantor management
-    // The actual implementation should be handled by the API
+  void addGuarantor(GuarantorInfo guarantor) {
+    final updated = [...state.guarantors, guarantor];
+    state = state.copyWith(guarantors: updated);
   }
 
   /// Remove a guarantor from the rollover request

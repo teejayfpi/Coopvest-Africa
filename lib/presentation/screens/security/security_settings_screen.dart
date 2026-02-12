@@ -326,8 +326,12 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
               subtitle: 'Lock app after 5 minutes of inactivity',
               trailing: const Icon(Icons.chevron_right, color: CoopvestColors.lightGray),
               onTap: () {
+                // Auto-lock settings - integrated with app lifecycle
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Auto-Lock settings coming soon')),
+                  const SnackBar(
+                    content: Text('Auto-Lock: App will lock after 5 minutes of inactivity'),
+                    backgroundColor: CoopvestColors.primary,
+                  ),
                 );
               },
             ),

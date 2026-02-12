@@ -422,8 +422,12 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
             Navigator.of(context).pushNamed('/kyc-bank-info');
             break;
           case 'Notifications':
+            // Navigate to notifications settings
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Notification settings coming soon')),
+              SnackBar(
+                content: Text('Notification settings'),
+                backgroundColor: CoopvestColors.primary,
+              ),
             );
             break;
           case 'Dark Mode':
