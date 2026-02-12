@@ -29,6 +29,7 @@ import 'presentation/screens/loan/loan_application_screen.dart';
 import 'presentation/screens/loan/guarantor_verification_screen.dart';
 import 'presentation/screens/loan/loan_details_screen.dart';
 import 'presentation/screens/profile/profile_settings_screen.dart';
+import 'presentation/screens/security/security_settings_screen.dart';
 import 'presentation/screens/savings/savings_goals_screen.dart';
 import 'presentation/providers/theme_provider.dart';
 
@@ -145,6 +146,7 @@ class CoopvestApp extends ConsumerWidget {
         
         // Profile Routes
         '/profile': (context) => const ProfileSettingsScreen(),
+        '/security': (context) => const SecuritySettingsScreen(),
         
         // Savings Routes
         '/savings-goal': (context) {

@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 import '../../../config/theme_config.dart';
 import '../../../presentation/widgets/common/cards.dart';
 import '../kyc/kyc_employment_details_screen.dart';
 import '../support/support_home_screen.dart';
+import '../security/security_settings_screen.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -17,6 +20,11 @@ class ProfileSettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
+  File? _profileImage;
+  bool _isLoading = false;
+  
+  final ImagePicker _picker = ImagePicker();
+
   final List<Map<String, dynamic>> _settingsItems = [
     {
       'title': 'Account',
@@ -91,6 +99,133 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
     },
   ];
 
+  Future<void> _pickImage(ImageSource source) async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final XFile? pickedFile = await _picker.pickImage(
+        source: source,
+        maxWidth: 500,
+        maxHeight: 500,
+        imageQuality: 80,
+      );
+
+      if (pickedFile != null) {
+        setState(() {
+          _profileImage = File(pickedFile.path);
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Profile picture updated successfully'),
+            backgroundColor: CoopvestColors.success,
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error picking image: $e'),
+          backgroundColor: CoopvestColors.error,
+        ),
+      );
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _showImageSourceDialog() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).scaffoldBackgroundColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: CoopvestColors.lightGray,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Change Profile Picture',
+              style: CoopvestTypography.headlineSmall,
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildImageOption(
+                    icon: Icons.camera_alt,
+                    label: 'Camera',
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      _pickImage(ImageSource.camera);
+                    },
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _buildImageOption(
+                    icon: Icons.photo_library,
+                    label: 'Gallery',
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      _pickImage(ImageSource.gallery);
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImageOption({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: CoopvestColors.primary.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, size: 40, color: CoopvestColors.primary),
+            const SizedBox(height: 8),
+            Text(
+              label,
+              style: CoopvestTypography.bodyMedium.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -136,21 +271,55 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
       children: [
         Stack(
           children: [
-            const CircleAvatar(
-              radius: 50,
-              backgroundColor: CoopvestColors.veryLightGray,
-              child: Icon(Icons.person, size: 50, color: CoopvestColors.mediumGray),
+            GestureDetector(
+              onTap: _isLoading ? null : _showImageSourceDialog,
+              child: Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: CoopvestColors.primary.withOpacity(0.3),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: CircleAvatar(
+                  radius: 60,
+                  backgroundColor: CoopvestColors.veryLightGray,
+                  backgroundImage: _profileImage != null ? FileImage(_profileImage!) : null,
+                  child: _profileImage == null
+                      ? Icon(Icons.person, size: 60, color: CoopvestColors.mediumGray)
+                      : null,
+                ),
+              ),
             ),
             Positioned(
               right: 0,
               bottom: 0,
-              child: Container(
-                padding: const EdgeInsets.all(4),
-                decoration: const BoxDecoration(
-                  color: CoopvestColors.primary,
-                  shape: BoxShape.circle,
+              child: GestureDetector(
+                onTap: _isLoading ? null : _showImageSourceDialog,
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: CoopvestColors.primary,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Theme.of(context).scaffoldBackgroundColor,
+                      width: 3,
+                    ),
+                  ),
+                  child: _isLoading
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation(Colors.white),
+                          ),
+                        )
+                      : const Icon(Icons.camera_alt, size: 16, color: Colors.white),
                 ),
-                child: const Icon(Icons.camera_alt, size: 20, color: Colors.white),
               ),
             ),
           ],
@@ -163,6 +332,11 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
         const Text(
           'user@example.com',
           style: CoopvestTypography.bodyMedium,
+        ),
+        const SizedBox(height: 8),
+        TextButton(
+          onPressed: _showImageSourceDialog,
+          child: const Text('Change Profile Picture'),
         ),
       ],
     );
@@ -240,15 +414,17 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
             );
             break;
           case 'Security':
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Security settings coming soon')),
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (context) => const SecuritySettingsScreen()),
             );
             break;
           case 'Bank Accounts':
             Navigator.of(context).pushNamed('/kyc-bank-info');
             break;
           case 'Notifications':
-            Navigator.of(context).pushNamed('/notifications');
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Notification settings coming soon')),
+            );
             break;
           case 'Dark Mode':
             ref.read(themeModeProvider.notifier).toggleTheme();
