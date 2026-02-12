@@ -34,7 +34,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: CoopvestColors.veryLightGray,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: _isLoading ? _buildShimmerLoading() : _buildHomeContent(),
       ),
@@ -184,6 +184,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildHeader() {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -193,7 +195,7 @@ class _HomeScreenState extends State<HomeScreen> {
             Text(
               'Welcome back,',
               style: CoopvestTypography.bodyMedium.copyWith(
-                color: CoopvestColors.mediumGray,
+                color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.mediumGray,
               ),
             ),
             const SizedBox(height: 4),
@@ -330,6 +332,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildQuickActions() {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final quickActions = [
       {'icon': Icons.savings, 'label': 'Save', 'color': CoopvestColorsEnhanced.primaryGradient},
       {'icon': Icons.account_balance_wallet, 'label': 'Invest', 'color': CoopvestColorsEnhanced.accentGradient},
@@ -342,6 +345,8 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         SectionHeader(
           title: 'Quick Actions',
+          onViewAll: () {},
+          viewAllText: 'See All',
           titleGradient: CoopvestColorsEnhanced.primaryGradient,
         ),
         const SizedBox(height: 16),
@@ -356,7 +361,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   right: entry.key == quickActions.length - 1 ? 0 : 6,
                 ),
                 child: QuickActionButton(
-                  icon: action['icon'] as IconData,
+                  icon: action['icon'] as IconData? ?? Icons.help,
                   label: action['label'] as String,
                   gradientColors: action['color'] as List<Color>,
                   onTap: () {},
@@ -408,6 +413,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildRecentActivity() {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final activities = [
       {
         'icon': Icons.savings,
@@ -453,7 +459,7 @@ class _HomeScreenState extends State<HomeScreen> {
               return Column(
                 children: [
                   ActivityItem(
-                    icon: activity['icon'] as IconData,
+                    icon: activity['icon'] as IconData? ?? Icons.help,
                     title: activity['title'] as String,
                     subtitle: activity['subtitle'] as String,
                     amount: activity['amount'] as String,
@@ -463,7 +469,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   if (entry.key < activities.length - 1)
                     Divider(
-                      color: CoopvestColors.lightGray.withOpacity(0.5),
+                      color: (Theme.of(context).brightness == Brightness.dark 
+                          ? CoopvestColors.darkDivider 
+                          : CoopvestColors.lightGray).withOpacity(0.5),
                       height: 1,
                     ),
                 ],

@@ -69,7 +69,7 @@ class NotificationsScreen extends StatelessWidget {
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
-                          item['icon'] as IconData,
+                          item['icon'] as IconData? ?? Icons.notifications,
                           color: item['color'] as Color,
                           size: 20,
                         ),

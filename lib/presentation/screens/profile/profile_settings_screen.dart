@@ -208,7 +208,10 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
 
   Widget _buildSettingsItem(Map<String, dynamic> item) {
     return ListTile(
-      leading: Icon(item['icon'] as IconData, color: CoopvestColors.darkGray),
+      leading: Icon(
+        item['icon'] as IconData? ?? Icons.settings, 
+        color: CoopvestColors.darkGray
+      ),
       title: Text(
         item['label'] as String,
         style: const TextStyle(fontWeight: FontWeight.w600),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'config/app_config.dart';
 import 'config/theme_config.dart';
+import 'config/theme_enhanced.dart';
 import 'core/services/feature_service.dart';
 import 'presentation/screens/auth/welcome_screen.dart';
 import 'presentation/screens/auth/login_screen.dart';
@@ -54,8 +55,8 @@ class CoopvestApp extends ConsumerWidget {
     return MaterialApp(
       title: AppConfig.appName,
       debugShowCheckedModeBanner: false,
-      theme: CoopvestTheme.lightTheme,
-      darkTheme: CoopvestTheme.darkTheme,
+      theme: _buildLightTheme(),
+      darkTheme: _buildDarkTheme(),
       themeMode: themeMode,
       home: const SplashScreen(),
       routes: {
@@ -155,6 +156,228 @@ class CoopvestApp extends ConsumerWidget {
       },
     );
   }
+
+  ThemeData _buildLightTheme() {
+    return ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.light,
+      primaryColor: CoopvestColors.primary,
+      scaffoldBackgroundColor: CoopvestColors.scaffoldBackground,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: CoopvestColors.primary,
+        primary: CoopvestColors.primary,
+        secondary: CoopvestColors.secondary,
+        tertiary: CoopvestColors.tertiary,
+        surface: CoopvestColors.white,
+        error: CoopvestColors.error,
+        onPrimary: CoopvestColors.white,
+        onSecondary: CoopvestColors.white,
+        onSurface: CoopvestColors.darkGray,
+        onError: CoopvestColors.white,
+      ),
+      appBarTheme: const AppBarTheme(
+        backgroundColor: CoopvestColors.white,
+        foregroundColor: CoopvestColors.darkGray,
+        elevation: 0,
+        centerTitle: false,
+        titleTextStyle: CoopvestTypography.headlineLarge,
+        iconTheme: IconThemeData(color: CoopvestColors.darkGray),
+      ),
+      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+        backgroundColor: CoopvestColors.white,
+        selectedItemColor: CoopvestColors.primary,
+        unselectedItemColor: CoopvestColors.mediumGray,
+        elevation: 8,
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: CoopvestColors.primary,
+          foregroundColor: CoopvestColors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          textStyle: CoopvestTypography.labelLarge,
+          elevation: 2,
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: CoopvestColors.primary,
+          side: const BorderSide(color: CoopvestColors.lightGray),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          textStyle: CoopvestTypography.labelLarge,
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: CoopvestColors.primary,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          textStyle: CoopvestTypography.labelLarge,
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: CoopvestColors.veryLightGray,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: CoopvestColors.lightGray),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: CoopvestColors.lightGray),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: CoopvestColors.primary, width: 2),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: CoopvestColors.error),
+        ),
+        labelStyle: CoopvestTypography.bodyMedium.copyWith(
+          color: CoopvestColors.mediumGray,
+        ),
+        hintStyle: CoopvestTypography.bodyMedium.copyWith(
+          color: CoopvestColors.mediumGray,
+        ),
+      ),
+      cardTheme: CardThemeData(
+        color: CoopvestColors.white,
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(0),
+      ),
+      dividerTheme: const DividerThemeData(
+        color: CoopvestColors.lightGray,
+        thickness: 1,
+        space: 16,
+      ),
+      textTheme: const TextTheme(
+        displayLarge: CoopvestTypography.displayLarge,
+        displayMedium: CoopvestTypography.displayMedium,
+        displaySmall: CoopvestTypography.displaySmall,
+        headlineLarge: CoopvestTypography.headlineLarge,
+        headlineMedium: CoopvestTypography.headlineMedium,
+        headlineSmall: CoopvestTypography.headlineSmall,
+        bodyLarge: CoopvestTypography.bodyLarge,
+        bodyMedium: CoopvestTypography.bodyMedium,
+        bodySmall: CoopvestTypography.bodySmall,
+        labelLarge: CoopvestTypography.labelLarge,
+        labelMedium: CoopvestTypography.labelMedium,
+        labelSmall: CoopvestTypography.labelSmall,
+      ),
+    );
+  }
+
+  ThemeData _buildDarkTheme() {
+    return ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.dark,
+      primaryColor: const Color(0xFF4CAF50),
+      scaffoldBackgroundColor: CoopvestColors.darkBackground,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: Color(0xFF4CAF50),
+        primary: const Color(0xFF4CAF50),
+        secondary: const Color(0xFF66BB6A),
+        tertiary: const Color(0xFF81C784),
+        surface: CoopvestColors.darkSurface,
+        error: CoopvestColors.error,
+        onPrimary: CoopvestColors.darkBackground,
+        onSecondary: CoopvestColors.darkBackground,
+        onSurface: CoopvestColors.darkText,
+        onError: CoopvestColors.white,
+        brightness: Brightness.dark,
+      ),
+      appBarTheme: const AppBarTheme(
+        backgroundColor: CoopvestColors.darkSurface,
+        foregroundColor: CoopvestColors.darkText,
+        elevation: 0,
+        centerTitle: false,
+        titleTextStyle: CoopvestTypography.headlineLarge,
+        iconTheme: IconThemeData(color: CoopvestColors.darkText),
+      ),
+      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+        backgroundColor: CoopvestColors.darkSurface,
+        selectedItemColor: Color(0xFF4CAF50),
+        unselectedItemColor: CoopvestColors.darkTextSecondary,
+        elevation: 8,
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFF4CAF50),
+          foregroundColor: CoopvestColors.darkBackground,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          textStyle: CoopvestTypography.labelLarge,
+          elevation: 2,
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: const Color(0xFF4CAF50),
+          side: const BorderSide(color: CoopvestColors.darkDivider),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          textStyle: CoopvestTypography.labelLarge,
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: const Color(0xFF4CAF50),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          textStyle: CoopvestTypography.labelLarge,
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: CoopvestColors.darkSurface,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: CoopvestColors.darkDivider),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: CoopvestColors.darkDivider),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0xFF4CAF50), width: 2),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: CoopvestColors.error),
+        ),
+        labelStyle: CoopvestTypography.bodyMedium.copyWith(
+          color: CoopvestColors.darkTextSecondary,
+        ),
+        hintStyle: CoopvestTypography.bodyMedium.copyWith(
+          color: CoopvestColors.darkTextSecondary,
+        ),
+      ),
+      cardTheme: CardThemeData(
+        color: CoopvestColors.darkSurface,
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(0),
+      ),
+      textTheme: const TextTheme(
+        displayLarge: CoopvestTypography.displayLarge,
+        displayMedium: CoopvestTypography.displayMedium,
+        displaySmall: CoopvestTypography.displaySmall,
+        headlineLarge: CoopvestTypography.headlineLarge,
+        headlineMedium: CoopvestTypography.headlineMedium,
+        headlineSmall: CoopvestTypography.headlineSmall,
+        bodyLarge: CoopvestTypography.bodyLarge,
+        bodyMedium: CoopvestTypography.bodyMedium,
+        bodySmall: CoopvestTypography.bodySmall,
+        labelLarge: CoopvestTypography.labelLarge,
+        labelMedium: CoopvestTypography.labelMedium,
+        labelSmall: CoopvestTypography.labelSmall,
+      ),
+    );
+  }
 }
 
 /// Splash Screen - Entry point of the app
@@ -189,7 +412,7 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: CoopvestTheme.lightTheme.primaryColor,
+      backgroundColor: CoopvestColors.primary,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
