@@ -218,29 +218,35 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
   Widget _buildStatCard(String title, String value, IconData icon, Color color, {VoidCallback? onTap}) {
     return AppCard(
       onTap: onTap,
-      backgroundColor: color.withAlpha((255 * 0.1).toInt()),
-      border: Border.all(color: color.withAlpha((255 * 0.2).toInt())),
+      backgroundColor: Colors.white,
+      elevation: 4,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: color.withOpacity(0.1)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Icon(icon, color: color),
-            ],
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: color, size: 20),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           Text(
             value,
             style: CoopvestTypography.headlineSmall.copyWith(
-              color: color,
+              color: CoopvestColors.darkGray,
               fontWeight: FontWeight.bold,
             ),
           ),
+          const SizedBox(height: 2),
           Text(
             title,
             style: CoopvestTypography.bodySmall.copyWith(
               color: CoopvestColors.mediumGray,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],
@@ -720,37 +726,63 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
       icon = Icons.wb_sunny_outlined;
     } else if (hour < 17) {
       greeting = 'Good afternoon';
-      icon = Icons.wb_twilight;
+      icon = Icons.wb_sunny;
     } else {
       greeting = 'Good evening';
-      icon = Icons.nights_stay;
+      icon = Icons.nights_stay_outlined;
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(icon, color: CoopvestColors.primary, size: 24),
-            const SizedBox(width: 8),
-            Text(
-              greeting,
-              style: CoopvestTypography.headlineMedium.copyWith(
-                color: CoopvestColors.primary,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [CoopvestColors.primary, CoopvestColors.primary.withOpacity(0.8)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        const SizedBox(height: 4),
-        Text(
-          userName,
-          style: CoopvestTypography.headlineLarge.copyWith(
-            color: CoopvestColors.darkGray,
-            fontWeight: FontWeight.bold,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: CoopvestColors.primary.withOpacity(0.3),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
           ),
-        ),
-      ],
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  greeting,
+                  style: CoopvestTypography.bodyMedium.copyWith(
+                    color: Colors.white.withOpacity(0.9),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  userName,
+                  style: CoopvestTypography.headlineLarge.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: Colors.white, size: 32),
+          ),
+        ],
+      ),
     );
   }
 }

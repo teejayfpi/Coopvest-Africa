@@ -82,8 +82,23 @@ class WalletDashboardScreen extends ConsumerWidget {
   }
 
   Widget _buildBalanceCard(BuildContext context, Wallet? wallet) {
-    return AppCard(
-      backgroundColor: CoopvestColors.primary,
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [CoopvestColors.primary, Color(0xFF2E7D32)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: CoopvestColors.primary.withOpacity(0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -96,13 +111,13 @@ class WalletDashboardScreen extends ConsumerWidget {
                   Text(
                     'Total Balance',
                     style: CoopvestTypography.bodyMedium.copyWith(
-                      color: Colors.white.withAlpha((255 * 0.8).toInt()),
+                      color: Colors.white.withOpacity(0.8),
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     '₦${(wallet?.balance ?? 0).toStringAsFixed(2)}',
-                    style: CoopvestTypography.headlineLarge.copyWith(
+                    style: CoopvestTypography.displaySmall.copyWith(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
                     ),
@@ -112,23 +127,23 @@ class WalletDashboardScreen extends ConsumerWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: Colors.white.withAlpha((255 * 0.2).toInt()),
+                  color: Colors.white.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Row(
                   children: const [
-                    Icon(Icons.visibility, color: Colors.white, size: 16),
+                    Icon(Icons.visibility_off, color: Colors.white, size: 16),
                     SizedBox(width: 4),
                     Text(
-                      'Hidden',
-                      style: TextStyle(color: Colors.white),
+                      'Hide',
+                      style: TextStyle(color: Colors.white, fontSize: 12),
                     ),
                   ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 32),
           Row(
             children: [
               Expanded(
@@ -138,20 +153,23 @@ class WalletDashboardScreen extends ConsumerWidget {
                     Text(
                       'Available',
                       style: CoopvestTypography.bodySmall.copyWith(
-                        color: Colors.white.withAlpha((255 * 0.8).toInt()),
+                        color: Colors.white.withOpacity(0.8),
                       ),
                     ),
+                    const SizedBox(height: 4),
                     Text(
                       '₦${(wallet?.availableForWithdrawal ?? 0).toStringAsFixed(2)}',
                       style: const TextStyle(
                         color: Colors.white,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.bold,
                         fontSize: 18,
                       ),
                     ),
                   ],
                 ),
               ),
+              Container(width: 1, height: 40, color: Colors.white.withOpacity(0.2)),
+              const SizedBox(width: 24),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -159,14 +177,15 @@ class WalletDashboardScreen extends ConsumerWidget {
                     Text(
                       'Pending',
                       style: CoopvestTypography.bodySmall.copyWith(
-                        color: Colors.white.withAlpha((255 * 0.8).toInt()),
+                        color: Colors.white.withOpacity(0.8),
                       ),
                     ),
+                    const SizedBox(height: 4),
                     Text(
                       '₦${(wallet?.pendingContributions ?? 0).toStringAsFixed(2)}',
                       style: const TextStyle(
                         color: Colors.white,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.bold,
                         fontSize: 18,
                       ),
                     ),
@@ -249,22 +268,39 @@ class WalletDashboardScreen extends ConsumerWidget {
     required String label,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
+    return InkWell(
       onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16),
+        padding: const EdgeInsets.symmetric(vertical: 20),
         decoration: BoxDecoration(
-          color: CoopvestColors.veryLightGray,
-          borderRadius: BorderRadius.circular(12),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+          border: Border.all(color: CoopvestColors.lightGray.withOpacity(0.5)),
         ),
         child: Column(
           children: [
-            Icon(icon, color: CoopvestColors.primary, size: 28),
-            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: CoopvestColors.primary.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: CoopvestColors.primary, size: 24),
+            ),
+            const SizedBox(height: 12),
             Text(
               label,
               style: CoopvestTypography.bodyMedium.copyWith(
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.bold,
+                color: CoopvestColors.darkGray,
               ),
             ),
           ],

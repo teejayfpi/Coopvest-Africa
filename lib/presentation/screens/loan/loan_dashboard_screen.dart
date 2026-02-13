@@ -65,6 +65,9 @@ class LoanDashboardScreen extends ConsumerWidget {
                       '${_quickStats['activeLoans']}',
                       Icons.trending_up,
                       CoopvestColors.success,
+                      onTap: () {
+                        // Scroll to loan history or filter by active
+                      },
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -74,6 +77,9 @@ class LoanDashboardScreen extends ConsumerWidget {
                       '₦${(_quickStats['totalBorrowed'] as num).toDouble().toStringAsFixed(0)}',
                       Icons.account_balance,
                       CoopvestColors.primary,
+                      onTap: () {
+                        // Show total borrowed details
+                      },
                     ),
                   ),
                 ],
@@ -87,6 +93,9 @@ class LoanDashboardScreen extends ConsumerWidget {
                       '₦${(_quickStats['totalRepaid'] as num).toDouble().toStringAsFixed(0)}',
                       Icons.payments,
                       CoopvestColors.info,
+                      onTap: () {
+                        // Show repayment history
+                      },
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -96,6 +105,9 @@ class LoanDashboardScreen extends ConsumerWidget {
                       '${_quickStats['totalLoans']}',
                       Icons.description,
                       Colors.orange,
+                      onTap: () {
+                        // Show all applications
+                      },
                     ),
                   ),
                 ],
@@ -174,31 +186,38 @@ class LoanDashboardScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
+  Widget _buildStatCard(String title, String value, IconData icon, Color color, {VoidCallback? onTap}) {
     return AppCard(
-      backgroundColor: color.withAlpha((255 * 0.1).toInt()),
-      border: Border.all(color: color.withAlpha((255 * 0.2).toInt())),
+      onTap: onTap,
+      backgroundColor: Colors.white,
+      elevation: 4,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: color.withOpacity(0.1)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Icon(icon, color: color, size: 24),
-            ],
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: color, size: 20),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           Text(
             value,
             style: CoopvestTypography.headlineSmall.copyWith(
-              color: color,
+              color: CoopvestColors.darkGray,
               fontWeight: FontWeight.bold,
             ),
           ),
+          const SizedBox(height: 2),
           Text(
             title,
             style: CoopvestTypography.bodySmall.copyWith(
               color: CoopvestColors.mediumGray,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],
