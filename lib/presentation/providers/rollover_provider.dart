@@ -392,10 +392,13 @@ class RolloverNotifier extends StateNotifier<RolloverState> {
       rolloverId: '',
       guarantorId: guarantor.guarantorId,
       guarantorName: guarantor.guarantorName,
-      guarantorEmail: guarantor.guarantorEmail,
+      guarantorPhone: guarantor.guarantorPhone,
       status: GuarantorConsentStatus.pending,
-      consentedAt: null,
-      verifiedAt: null,
+      declineReason: null,
+      invitedAt: null,
+      respondedAt: null,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
     );
     final updated = [...state.guarantors, rolloverGuarantor];
     state = state.copyWith(guarantors: updated);
