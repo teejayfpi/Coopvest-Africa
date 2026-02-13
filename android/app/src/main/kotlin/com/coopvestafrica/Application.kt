@@ -4,7 +4,6 @@ import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
-import io.flutter.view.FlutterMain
 
 class Application : Application() {
 
@@ -15,7 +14,6 @@ class Application : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        FlutterMain.startInitialization(this)
         createNotificationChannel()
     }
 
