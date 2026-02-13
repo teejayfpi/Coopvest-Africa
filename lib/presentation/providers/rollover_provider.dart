@@ -387,7 +387,17 @@ class RolloverNotifier extends StateNotifier<RolloverState> {
 
   /// Add a new guarantor to the rollover request
   void addGuarantor(GuarantorInfo guarantor) {
-    final updated = [...state.guarantors, guarantor];
+    final RolloverGuarantor rolloverGuarantor = RolloverGuarantor(
+      id: '',
+      rolloverId: '',
+      guarantorId: guarantor.guarantorId,
+      guarantorName: guarantor.guarantorName,
+      guarantorEmail: guarantor.guarantorEmail,
+      status: GuarantorConsentStatus.pending,
+      consentedAt: null,
+      verifiedAt: null,
+    );
+    final updated = [...state.guarantors, rolloverGuarantor];
     state = state.copyWith(guarantors: updated);
   }
 

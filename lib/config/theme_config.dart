@@ -26,6 +26,7 @@ class CoopvestColors {
   static const Color error = Color(0xFFC62828);
   static const Color errorLight = Color(0xFFFFEBEE);
   static const Color info = Color(0xFF1565C0);
+  static const Color infoLight = Color(0xFFE3F2FD);
   static const Color scaffoldBackground = Color(0xFFFFFFFF);
 
   // Dark Mode Colors

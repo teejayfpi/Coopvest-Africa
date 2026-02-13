@@ -61,7 +61,6 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
         final bool didAuthenticate = await _localAuth.authenticate(
           options: const AuthenticationOptions(
             biometricOnly: true,
-            stickyAuthOnBiometricChangeNotRequired: true,
           ),
           localizedReason: 'Authenticate to enable biometric login',
         );
