@@ -13,7 +13,7 @@ import 'deposit_screen.dart';
 import 'withdrawal_screen.dart';
 
 /// Wallet Dashboard Screen
-class WalletDashboardScreen extends ConsumerWidget {
+class WalletDashboardScreen extends ConsumerStatefulWidget {
   final String userId;
   final String userName;
 
@@ -24,7 +24,21 @@ class WalletDashboardScreen extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<WalletDashboardScreen> createState() => _WalletDashboardScreenState();
+}
+
+class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(walletProvider.notifier).loadWallet();
+      ref.read(walletProvider.notifier).loadTransactions();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final walletState = ref.watch(walletProvider);
     final wallet = walletState.wallet;
     final savingsGoals = walletState.savingsGoals;
@@ -52,29 +66,36 @@ class WalletDashboardScreen extends ConsumerWidget {
         ],
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Balance Card
-              _buildBalanceCard(context, wallet),
-              
-              const SizedBox(height: 24),
+        child: RefreshIndicator(
+          onRefresh: () async {
+            await ref.read(walletProvider.notifier).loadWallet();
+            await ref.read(walletProvider.notifier).loadTransactions();
+          },
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Balance Card
+                _buildBalanceCard(context, wallet),
+                
+                const SizedBox(height: 24),
 
-              // Quick Actions
-              _buildQuickActions(context),
-              
-              const SizedBox(height: 24),
+                // Quick Actions
+                _buildQuickActions(context),
+                
+                const SizedBox(height: 24),
 
-              // Savings Goals Section
-              _buildSavingsGoalsSection(context, ref, savingsGoals),
-              
-              const SizedBox(height: 24),
+                // Savings Goals Section
+                _buildSavingsGoalsSection(context, ref, savingsGoals),
+                
+                const SizedBox(height: 24),
 
-              // Recent Transactions
-              _buildRecentTransactions(context, ref, recentTransactions),
-            ],
+                // Recent Transactions
+                _buildRecentTransactions(context, ref, recentTransactions),
+              ],
+            ),
           ),
         ),
       ),
@@ -220,7 +241,7 @@ class WalletDashboardScreen extends ConsumerWidget {
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (context) => DepositScreen(userId: userId),
+                      builder: (context) => DepositScreen(userId: widget.userId),
                     ),
                   );
                 },
@@ -235,7 +256,7 @@ class WalletDashboardScreen extends ConsumerWidget {
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (context) => WithdrawalScreen(userId: userId),
+                      builder: (context) => WithdrawalScreen(userId: widget.userId),
                     ),
                   );
                 },
@@ -250,7 +271,7 @@ class WalletDashboardScreen extends ConsumerWidget {
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (context) => SavingsGoalsScreen(userId: userId),
+                      builder: (context) => SavingsGoalsScreen(userId: widget.userId),
                     ),
                   );
                 },
@@ -314,8 +335,6 @@ class WalletDashboardScreen extends ConsumerWidget {
     WidgetRef ref,
     List<SavingsGoal> goals,
   ) {
-    final activeGoals = goals.where((g) => g.status == 'active').toList();
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -332,7 +351,7 @@ class WalletDashboardScreen extends ConsumerWidget {
               onPressed: () {
                 Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (context) => SavingsGoalsScreen(userId: userId),
+                    builder: (context) => SavingsGoalsScreen(userId: widget.userId),
                   ),
                 );
               },
@@ -340,110 +359,106 @@ class WalletDashboardScreen extends ConsumerWidget {
             ),
           ],
         ),
-        const SizedBox(height: 16),
-        
-        if (activeGoals.isEmpty)
-          _buildEmptyGoalsCard(context)
+        const SizedBox(height: 12),
+        if (goals.isEmpty)
+          AppCard(
+            child: Center(
+              child: Column(
+                children: [
+                  Icon(Icons.flag_outlined, color: CoopvestColors.mediumGray, size: 48),
+                  const SizedBox(height: 12),
+                  Text(
+                    'No active savings goals',
+                    style: CoopvestTypography.bodyMedium.copyWith(
+                      color: CoopvestColors.mediumGray,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  SecondaryButton(
+                    label: 'Create Goal',
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => SavingsGoalsScreen(userId: widget.userId),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          )
         else
-          ...activeGoals.take(2).map((goal) => _buildSavingsGoalCard(context, goal)),
-        
-        const SizedBox(height: 16),
-        
-        SizedBox(
-          width: double.infinity,
-          child: SecondaryButton(
-            label: '+ Create New Goal',
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => SavingsGoalsScreen(userId: userId),
-                ),
-              );
-            },
+          SizedBox(
+            height: 160,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: goals.length,
+              itemBuilder: (context, index) {
+                final goal = goals[index];
+                return Container(
+                  width: 280,
+                  margin: const EdgeInsets.only(right: 16),
+                  child: _buildGoalCard(context, goal),
+                );
+              },
+            ),
           ),
-        ),
       ],
     );
   }
 
-  Widget _buildEmptyGoalsCard(BuildContext context) {
+  Widget _buildGoalCard(BuildContext context, SavingsGoal goal) {
+    final progress = goal.currentAmount / goal.targetAmount;
+    
     return AppCard(
-      backgroundColor: CoopvestColors.veryLightGray,
-      child: Center(
-        child: Column(
-          children: [
-            Icon(Icons.savings_outlined, color: CoopvestColors.mediumGray, size: 48),
-            const SizedBox(height: 12),
-            Text(
-              'No savings goals yet',
-              style: CoopvestTypography.bodyMedium.copyWith(
-                color: CoopvestColors.mediumGray,
+      onTap: () {
+        // Show goal details
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            goal.name,
+            style: CoopvestTypography.titleSmall.copyWith(
+              color: CoopvestColors.darkGray,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '₦${goal.currentAmount.toStringAsFixed(0)}',
+                style: CoopvestTypography.bodyMedium.copyWith(
+                  color: CoopvestColors.primary,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Start saving towards your dreams',
-              style: TextStyle(color: CoopvestColors.mediumGray),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSavingsGoalCard(BuildContext context, SavingsGoal goal) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: AppCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  goal.name,
-                  style: CoopvestTypography.titleMedium.copyWith(
-                    color: CoopvestColors.darkGray,
-                  ),
+              Text(
+                '₦${goal.targetAmount.toStringAsFixed(0)}',
+                style: CoopvestTypography.bodySmall.copyWith(
+                  color: CoopvestColors.mediumGray,
                 ),
-                Text(
-                  '${goal.progressPercentage.toStringAsFixed(0)}%',
-                  style: CoopvestTypography.bodyMedium.copyWith(
-                    color: CoopvestColors.primary,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          LinearProgressIndicator(
+            value: progress,
+            backgroundColor: CoopvestColors.veryLightGray,
+            valueColor: const AlwaysStoppedAnimation<Color>(CoopvestColors.primary),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '${(progress * 100).toStringAsFixed(0)}% completed',
+            style: CoopvestTypography.bodySmall.copyWith(
+              color: CoopvestColors.mediumGray,
             ),
-            const SizedBox(height: 8),
-            LinearProgressIndicator(
-              value: goal.progressPercentage / 100,
-              backgroundColor: CoopvestColors.veryLightGray,
-              valueColor: const AlwaysStoppedAnimation<Color>(CoopvestColors.primary),
-              minHeight: 8,
-              borderRadius: BorderRadius.circular(4),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  '₦${goal.currentAmount.toStringAsFixed(0)} of ₦${goal.targetAmount.toStringAsFixed(0)}',
-                  style: CoopvestTypography.bodySmall.copyWith(
-                    color: CoopvestColors.mediumGray,
-                  ),
-                ),
-                Text(
-                  '${goal.monthsRemaining} months left',
-                  style: CoopvestTypography.bodySmall.copyWith(
-                    color: CoopvestColors.mediumGray,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -460,7 +475,7 @@ class WalletDashboardScreen extends ConsumerWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              'Recent Transactions',
+              'Recent Activity',
               style: CoopvestTypography.titleMedium.copyWith(
                 color: CoopvestColors.darkGray,
               ),
@@ -469,7 +484,7 @@ class WalletDashboardScreen extends ConsumerWidget {
               onPressed: () {
                 Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (context) => TransactionsHistoryScreen(userId: userId),
+                    builder: (context) => TransactionsHistoryScreen(userId: widget.userId),
                   ),
                 );
               },
@@ -477,90 +492,80 @@ class WalletDashboardScreen extends ConsumerWidget {
             ),
           ],
         ),
-        const SizedBox(height: 16),
-        
+        const SizedBox(height: 12),
         if (transactions.isEmpty)
-          _buildEmptyTransactionsCard()
+          AppCard(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                child: Text(
+                  'No recent activity',
+                  style: CoopvestTypography.bodyMedium.copyWith(
+                    color: CoopvestColors.mediumGray,
+                  ),
+                ),
+              ),
+            ),
+          )
         else
           ...transactions.map((txn) => _buildTransactionItem(context, txn)),
       ],
     );
   }
 
-  Widget _buildEmptyTransactionsCard() {
-    return AppCard(
-      backgroundColor: CoopvestColors.veryLightGray,
-      child: Center(
-        child: Column(
+  Widget _buildTransactionItem(BuildContext context, Transaction txn) {
+    final isCredit = txn.type == 'credit' || txn.type == 'deposit';
+    final color = isCredit ? CoopvestColors.success : CoopvestColors.error;
+    final icon = isCredit ? Icons.arrow_downward : Icons.arrow_upward;
+    
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: AppCard(
+        onTap: () {
+          // Show transaction details
+        },
+        child: Row(
           children: [
-            Icon(Icons.receipt_long, color: CoopvestColors.mediumGray, size: 48),
-            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: color, size: 20),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    txn.description,
+                    style: CoopvestTypography.bodyMedium.copyWith(
+                      color: CoopvestColors.darkGray,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Text(
+                    txn.date.toString().split(' ')[0],
+                    style: CoopvestTypography.bodySmall.copyWith(
+                      color: CoopvestColors.mediumGray,
+                    ),
+                  ),
+                ],
+              ),
+            ),
             Text(
-              'No transactions yet',
+              '${isCredit ? '+' : '-'}₦${txn.amount.toStringAsFixed(0)}',
               style: CoopvestTypography.bodyMedium.copyWith(
-                color: CoopvestColors.mediumGray,
+                color: color,
+                fontWeight: FontWeight.bold,
               ),
             ),
           ],
         ),
       ),
     );
-  }
-
-  Widget _buildTransactionItem(BuildContext context, Transaction txn) {
-    final isCredit = txn.type == 'contribution' || txn.type == 'loan_disbursement' || txn.type == 'refund';
-    
-    return AppCard(
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: isCredit 
-                  ? CoopvestColors.success.withAlpha((255 * 0.1).toInt())
-                  : CoopvestColors.error.withAlpha((255 * 0.1).toInt()),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
-              isCredit ? Icons.arrow_downward : Icons.arrow_upward,
-              color: isCredit ? CoopvestColors.success : CoopvestColors.error,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  txn.description ?? txn.type.replaceAll('_', ' ').capitalize(),
-                  style: CoopvestTypography.bodyMedium.copyWith(
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                Text(
-                  _formatDate(txn.createdAt),
-                  style: CoopvestTypography.bodySmall.copyWith(
-                    color: CoopvestColors.mediumGray,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Text(
-            '${isCredit ? '+' : '-'}₦${txn.amount.toStringAsFixed(2)}',
-            style: CoopvestTypography.bodyMedium.copyWith(
-              fontWeight: FontWeight.bold,
-              color: isCredit ? CoopvestColors.success : CoopvestColors.error,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year}';
   }
 
   void _showReceiveQRDialog(BuildContext context) {
@@ -571,39 +576,26 @@ class WalletDashboardScreen extends ConsumerWidget {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: CoopvestColors.primary.withAlpha((255 * 0.1).toInt()),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: QrImageView(
-                data: 'COOP-RECEIVE-$userId',
-                version: QrVersions.auto,
-                size: 180.0,
-                backgroundColor: Colors.white,
-              ),
+            const Text('Scan this QR code to receive funds to your wallet'),
+            const SizedBox(height: 24),
+            QrImageView(
+              data: widget.userId,
+              version: QrVersions.auto,
+              size: 200.0,
+              foregroundColor: CoopvestColors.primary,
             ),
             const SizedBox(height: 16),
             Text(
-              'Share this QR code to receive funds',
-              style: CoopvestTypography.bodyMedium.copyWith(
-                color: CoopvestColors.mediumGray,
+              'User ID: ${widget.userId}',
+              style: CoopvestTypography.bodySmall.copyWith(
+                fontWeight: FontWeight.bold,
               ),
-              textAlign: TextAlign.center,
             ),
           ],
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.pop(context),
             child: const Text('Close'),
           ),
         ],

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/theme_config.dart';
 import '../../../core/utils/utils.dart';
+import '../../../core/extensions/number_extensions.dart';
 import '../../../data/models/loan_models.dart';
 import '../../../presentation/providers/loan_provider.dart';
 import '../../../presentation/widgets/common/buttons.dart';
@@ -9,7 +10,7 @@ import '../../../presentation/widgets/common/cards.dart';
 import 'loan_application_screen.dart';
 
 /// Loan Dashboard Screen - View and manage all loan applications
-class LoanDashboardScreen extends ConsumerWidget {
+class LoanDashboardScreen extends ConsumerStatefulWidget {
   final String userId;
   final String userName;
   final String userPhone;
@@ -22,7 +23,20 @@ class LoanDashboardScreen extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<LoanDashboardScreen> createState() => _LoanDashboardScreenState();
+}
+
+class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(loanProvider.notifier).getLoans();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final loanState = ref.watch(loanProvider);
     final loans = loanState.loans;
     
@@ -51,135 +65,143 @@ class LoanDashboardScreen extends ConsumerWidget {
         ),
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Quick Stats
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildStatCard(
-                      'Active Loans',
-                      '${_quickStats['activeLoans']}',
-                      Icons.trending_up,
-                      CoopvestColors.success,
-                      onTap: () {
-                        // Scroll to loan history or filter by active
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _buildStatCard(
-                      'Total Borrowed',
-                      '₦${(_quickStats['totalBorrowed'] as num).toDouble().toStringAsFixed(0)}',
-                      Icons.account_balance,
-                      CoopvestColors.primary,
-                      onTap: () {
-                        // Show total borrowed details
-                      },
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildStatCard(
-                      'Total Repaid',
-                      '₦${(_quickStats['totalRepaid'] as num).toDouble().toStringAsFixed(0)}',
-                      Icons.payments,
-                      CoopvestColors.info,
-                      onTap: () {
-                        // Show repayment history
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _buildStatCard(
-                      'Applications',
-                      '${_quickStats['totalLoans']}',
-                      Icons.description,
-                      Colors.orange,
-                      onTap: () {
-                        // Show all applications
-                      },
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 24),
-
-              // Apply New Loan Button
-              PrimaryButton(
-                label: '+ Apply for New Loan',
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => LoanApplicationScreen(
-                        userId: userId,
-                        userName: userName,
-                        userPhone: userPhone,
-                      ),
-                    ),
-                  );
-                },
-                width: double.infinity,
-              ),
-
-              const SizedBox(height: 24),
-
-              // Loan History Section
-              Text(
-                'Loan History',
-                style: CoopvestTypography.titleMedium.copyWith(
-                  color: CoopvestColors.darkGray,
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Loan List
-              loans.isEmpty
-                  ? _buildEmptyState()
-                  : ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: loans.length,
-                      itemBuilder: (context, index) {
-                        final loan = loans[index];
-                        return _buildLoanCard(context, loan);
-                      },
-                    ),
-
-              const SizedBox(height: 24),
-
-              // How It Works Section
-              AppCard(
-                backgroundColor: CoopvestColors.veryLightGray,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+        child: RefreshIndicator(
+          onRefresh: () async {
+            await ref.read(loanProvider.notifier).getLoans();
+          },
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Quick Stats
+                Row(
                   children: [
-                    Text(
-                      'How Our Loans Work',
-                      style: CoopvestTypography.titleMedium.copyWith(
-                        color: CoopvestColors.darkGray,
+                    Expanded(
+                      child: _buildStatCard(
+                        'Active Loans',
+                        '${_quickStats['activeLoans']}',
+                        Icons.trending_up,
+                        CoopvestColors.success,
+                        onTap: () {
+                          // Scroll to loan history or filter by active
+                        },
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    _buildHowItWorksStep(1, 'Apply for a loan'),
-                    _buildHowItWorksStep(2, 'Share QR code with 3 guarantors'),
-                    _buildHowItWorksStep(3, 'Guarantors confirm their guarantee'),
-                    _buildHowItWorksStep(4, 'Loan is approved and disbursed'),
-                    _buildHowItWorksStep(5, 'Repay in monthly installments'),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildStatCard(
+                        'Total Borrowed',
+                        '₦${(_quickStats['totalBorrowed'] as num).toDouble().toStringAsFixed(0)}',
+                        Icons.account_balance,
+                        CoopvestColors.primary,
+                        onTap: () {
+                          // Show total borrowed details
+                        },
+                      ),
+                    ),
                   ],
                 ),
-              ),
-            ],
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildStatCard(
+                        'Total Repaid',
+                        '₦${(_quickStats['totalRepaid'] as num).toDouble().toStringAsFixed(0)}',
+                        Icons.payments,
+                        CoopvestColors.info,
+                        onTap: () {
+                          // Show repayment history
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildStatCard(
+                        'Applications',
+                        '${_quickStats['totalLoans']}',
+                        Icons.description,
+                        Colors.orange,
+                        onTap: () {
+                          // Show all applications
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 24),
+
+                // Apply New Loan Button
+                PrimaryButton(
+                  label: '+ Apply for New Loan',
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => LoanApplicationScreen(
+                          userId: widget.userId,
+                          userName: widget.userName,
+                          userPhone: widget.userPhone,
+                        ),
+                      ),
+                    );
+                  },
+                  width: double.infinity,
+                ),
+
+                const SizedBox(height: 24),
+
+                // Loan History Section
+                Text(
+                  'Loan History',
+                  style: CoopvestTypography.titleMedium.copyWith(
+                    color: CoopvestColors.darkGray,
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Loan List
+                loanState.isLoading && loans.isEmpty
+                    ? const Center(child: CircularProgressIndicator())
+                    : loans.isEmpty
+                        ? _buildEmptyState()
+                        : ListView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: loans.length,
+                            itemBuilder: (context, index) {
+                              final loan = loans[index];
+                              return _buildLoanCard(context, loan);
+                            },
+                          ),
+
+                const SizedBox(height: 24),
+
+                // How It Works Section
+                AppCard(
+                  backgroundColor: CoopvestColors.veryLightGray,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'How Our Loans Work',
+                        style: CoopvestTypography.titleMedium.copyWith(
+                          color: CoopvestColors.darkGray,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      _buildHowItWorksStep(1, 'Apply for a loan'),
+                      _buildHowItWorksStep(2, 'Share QR code with 3 guarantors'),
+                      _buildHowItWorksStep(3, 'Guarantors confirm their guarantee'),
+                      _buildHowItWorksStep(4, 'Loan is approved and disbursed'),
+                      _buildHowItWorksStep(5, 'Repay in monthly installments'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

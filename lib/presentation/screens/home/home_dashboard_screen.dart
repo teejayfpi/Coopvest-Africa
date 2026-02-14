@@ -33,9 +33,11 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
   @override
   void initState() {
     super.initState();
-    // Load tickets when dashboard opens
+    // Load data when dashboard opens
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(ticketProvider.notifier).loadTickets();
+      ref.read(walletProvider.notifier).loadWallet();
+      ref.read(loanProvider.notifier).getLoans();
     });
   }
 
@@ -86,6 +88,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
           onRefresh: () async {
             await ref.read(walletProvider.notifier).loadWallet();
             await ref.read(ticketProvider.notifier).loadTickets();
+            await ref.read(loanProvider.notifier).getLoans();
           },
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -116,7 +119,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                     Expanded(
                       child: _buildStatCard(
                         'Active Loans',
-                        '1',
+                        '${ref.watch(loanProvider).loans.where((l) => l.status == 'active' || l.status == 'repaying').length}',
                         Icons.account_balance,
                         CoopvestColors.primary,
                         onTap: () {
