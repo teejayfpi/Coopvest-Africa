@@ -196,32 +196,33 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
   void _showSuccessDialog() {
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: Row(
           children: const [
             Icon(Icons.check_circle, color: CoopvestColors.success),
             SizedBox(width: 8),
-            Text('Congratulations!'),
+            Text('Success!'),
           ],
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Your ${_selectedLoanType} application has been APPROVED!'),
+            Text('Your ${_selectedLoanType} application has been APPROVED!', style: const TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
             const Text(
-              'Please share the QR code with your 3 guarantors. They need to scan it to confirm their guarantee.',
+              'To complete the process, please share the QR code (now visible at the bottom of the screen) with your 3 guarantors.',
               textAlign: TextAlign.center,
             ),
           ],
         ),
         actions: [
-          TextButton(
+          PrimaryButton(
+            label: 'View QR Code',
             onPressed: () {
               Navigator.of(context).pop();
-              Navigator.of(context).pop();
+              // The QR code is already shown because _showQrCode is true
             },
-            child: const Text('OK'),
           ),
         ],
       ),
@@ -630,12 +631,15 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
                   size: 18,
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  isValidSavings 
-                      ? 'Savings: ${savingsPercentage.toStringAsFixed(1)}% of loan \u2713'
-                      : 'Savings: ${savingsPercentage.toStringAsFixed(1)}% of loan (Min 10% required)',
-                  style: CoopvestTypography.bodySmall.copyWith(
-                    color: isValidSavings ? CoopvestColors.success : CoopvestColors.error,
+                Expanded(
+                  child: Text(
+                    isValidSavings 
+                        ? 'Savings: ${savingsPercentage.toStringAsFixed(1)}% of loan \u2713'
+                        : 'Savings: ${savingsPercentage.toStringAsFixed(1)}% of loan (Min 10% required)',
+                    style: CoopvestTypography.bodySmall.copyWith(
+                      color: isValidSavings ? CoopvestColors.success : CoopvestColors.error,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
