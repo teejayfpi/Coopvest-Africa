@@ -240,7 +240,7 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
                         child: Row(
                           children: [
                             Icon(
-                              method['icon'] as IconData,
+                              (method['icon'] as IconData?) ?? Icons.payment,
                               color: isSelected ? CoopvestColors.primary : CoopvestColors.mediumGray,
                             ),
                             const SizedBox(width: 12),

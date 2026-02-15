@@ -45,7 +45,8 @@ class _KYCEmploymentDetailsScreenState
   // Pre-approved organizations
   final List<Map<String, dynamic>> _preApprovedOrganizations = [
     {
-      'category': 'Government',
+      'label': 'Government',
+      'icon': Icons.account_balance,
       'organizations': [
         'Federal Government Ministries, Departments & Agencies (MDAs)',
         'State Government MDAs',
@@ -53,7 +54,8 @@ class _KYCEmploymentDetailsScreenState
       ]
     },
     {
-      'category': 'Education',
+      'label': 'Education',
+      'icon': Icons.school,
       'organizations': [
         'Federal Universities',
         'State Universities',
@@ -65,7 +67,8 @@ class _KYCEmploymentDetailsScreenState
       ]
     },
     {
-      'category': 'Health',
+      'label': 'Health',
+      'icon': Icons.local_hospital,
       'organizations': [
         'Federal Health Institutions',
         'State Health Institutions',
@@ -73,7 +76,8 @@ class _KYCEmploymentDetailsScreenState
       ]
     },
     {
-      'category': 'Banking & Finance',
+      'label': 'Banking & Finance',
+      'icon': Icons.monetization_on,
       'organizations': [
         'Commercial Banks',
         'Microfinance Banks',
@@ -82,7 +86,8 @@ class _KYCEmploymentDetailsScreenState
       ]
     },
     {
-      'category': 'Private Sector',
+      'label': 'Private Sector',
+      'icon': Icons.business,
       'organizations': [
         'Registered Corporate Organizations',
         'Faith-Based Institutions',
@@ -579,13 +584,13 @@ class _KYCEmploymentDetailsScreenState
             Row(
               children: [
                 Icon(
-                  category['icon'] as IconData,
+                  (category['icon'] as IconData?) ?? Icons.business,
                   color: CoopvestColors.primary,
                   size: 20,
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  category['label'] as String,
+                  (category['label'] as String?) ?? 'Other',
                   style: CoopvestTypography.labelLarge.copyWith(
                     color: CoopvestColors.primary,
                     fontWeight: FontWeight.w600,
