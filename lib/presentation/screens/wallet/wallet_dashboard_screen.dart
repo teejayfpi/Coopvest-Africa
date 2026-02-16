@@ -49,6 +49,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
       appBar: AppBar(
         elevation: 0,
         title: const Text('My Wallet'),
+        automaticallyImplyLeading: false,
         actions: [
           IconButton(
             icon: const Icon(Icons.qr_code_scanner, color: CoopvestColors.primary),

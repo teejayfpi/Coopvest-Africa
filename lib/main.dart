@@ -19,6 +19,7 @@ import 'presentation/screens/support/ticket_creation_screen.dart';
 import 'presentation/screens/support/ticket_list_screen.dart';
 import 'presentation/screens/support/ticket_detail_screen.dart';
 import 'presentation/screens/home/home_dashboard_screen.dart';
+import 'presentation/screens/main_container.dart';
 import 'presentation/screens/kyc/kyc_employment_details_screen.dart';
 import 'presentation/screens/kyc/kyc_id_upload_screen.dart';
 import 'presentation/screens/kyc/kyc_selfie_screen.dart';
@@ -106,7 +107,7 @@ class CoopvestApp extends ConsumerWidget {
         '/kyc-complete': (context) => const KYCSuccessScreen(),
         
         // Home & Dashboard Routes
-        '/home': (context) => const HomeDashboardScreen(),
+        '/home': (context) => const MainContainer(),
         
         // Loan Routes
         '/loan-dashboard': (context) {

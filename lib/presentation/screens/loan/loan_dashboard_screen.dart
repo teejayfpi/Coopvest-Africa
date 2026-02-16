@@ -56,6 +56,7 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
       appBar: AppBar(
         elevation: 0,
         title: const Text('My Loans'),
+        automaticallyImplyLeading: false,
       ),
       body: SafeArea(
         child: RefreshIndicator(

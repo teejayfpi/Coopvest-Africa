@@ -60,6 +60,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
     return Scaffold(
       appBar: AppBar(
         elevation: 0,
+        title: const Text('Coopvest'),
         leading: IconButton(
           icon: Icon(Icons.notifications_none, color: iconColor),
           onPressed: () {
@@ -70,18 +71,6 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
             );
           },
         ),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.settings, color: iconColor),
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => const ProfileSettingsScreen(),
-                ),
-              );
-            },
-          ),
-        ],
       ),
       body: SafeArea(
         child: RefreshIndicator(
