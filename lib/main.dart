@@ -57,8 +57,8 @@ class CoopvestApp extends ConsumerWidget {
     return MaterialApp(
       title: AppConfig.appName,
       debugShowCheckedModeBanner: false,
-      theme: _buildLightTheme(),
-      darkTheme: _buildDarkTheme(),
+      theme: CoopvestTheme.lightTheme,
+      darkTheme: CoopvestTheme.darkTheme,
       themeMode: themeMode,
       home: const SplashScreen(),
       routes: {

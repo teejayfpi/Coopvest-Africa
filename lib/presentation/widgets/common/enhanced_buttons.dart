@@ -161,13 +161,15 @@ class SecondaryButton extends StatelessWidget {
           decoration: BoxDecoration(
             gradient: isEnabled
                 ? LinearGradient(
-                    colors: effectiveGradient.map((c) => c.withOpacity(0.1)).toList(),
+                    colors: effectiveGradient.map((c) => c.withOpacity(Theme.of(context).brightness == Brightness.dark ? 0.2 : 0.1)).toList(),
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   )
                 : null,
             border: Border.all(
-              color: isEnabled ? effectiveGradient.first.withOpacity(0.5) : CoopvestColors.mediumGray,
+              color: isEnabled 
+                  ? effectiveGradient.first.withOpacity(0.5) 
+                  : (Theme.of(context).brightness == Brightness.dark ? Colors.white10 : CoopvestColors.mediumGray),
               width: 1.5,
             ),
             borderRadius: BorderRadius.circular(borderRadius ?? CoopvestRadius.large),

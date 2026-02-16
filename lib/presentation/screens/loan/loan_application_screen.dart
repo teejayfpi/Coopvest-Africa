@@ -337,29 +337,32 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
                           contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         ),
                         icon: const Icon(Icons.keyboard_arrow_down),
+                        isExpanded: true, // Allow dropdown to take full width
                         items: _loanTypes.entries.map((entry) {
                           final key = entry.key;
                           final value = entry.value;
                           return DropdownMenuItem(
                             value: key,
-                            child: SizedBox(
-                              height: 48, // Fixed height to prevent overflow
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(minHeight: 48),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   Text(
                                     key,
+                                    overflow: TextOverflow.ellipsis,
                                     style: CoopvestTypography.bodyMedium.copyWith(
                                       fontWeight: FontWeight.w600,
-                                      fontSize: 14,
+                                      fontSize: 13,
                                     ),
                                   ),
                                   Text(
-                                    '${value['duration']} months @ ${value['interest']}% interest',
+                                    '${value['duration']}m @ ${value['interest']}% interest',
+                                    overflow: TextOverflow.ellipsis,
                                     style: CoopvestTypography.bodySmall.copyWith(
                                       color: CoopvestColors.mediumGray,
-                                      fontSize: 11,
+                                      fontSize: 10,
                                     ),
                                   ),
                                 ],

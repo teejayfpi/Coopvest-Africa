@@ -75,7 +75,7 @@ class _AppTextFieldState extends State<AppTextField> {
           widget.label,
           style: CoopvestTypography.labelLarge.copyWith(
             color: widget.enabled
-                ? CoopvestColors.darkGray
+                ? (Theme.of(context).brightness == Brightness.dark ? Colors.white : CoopvestColors.darkGray)
                 : CoopvestColors.mediumGray,
           ),
         ),
@@ -97,7 +97,7 @@ class _AppTextFieldState extends State<AppTextField> {
           onChanged: widget.onChanged,
           onTap: widget.onTap,
           style: CoopvestTypography.bodyMedium.copyWith(
-            color: CoopvestColors.darkGray,
+            color: Theme.of(context).brightness == Brightness.dark ? Colors.white : CoopvestColors.darkGray,
           ),
           decoration: InputDecoration(
             hintText: widget.hint,
@@ -122,17 +122,17 @@ class _AppTextFieldState extends State<AppTextField> {
             counterText: widget.showCounter ? null : '',
             filled: true,
             fillColor: widget.filledColor ?? (widget.enabled
-                ? CoopvestColors.veryLightGray
-                : CoopvestColors.lightGray),
+                ? (Theme.of(context).brightness == Brightness.dark ? CoopvestColors.darkSurface : CoopvestColors.veryLightGray)
+                : (Theme.of(context).brightness == Brightness.dark ? Colors.white10 : CoopvestColors.lightGray)),
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: CoopvestColors.lightGray),
+              borderSide: BorderSide(color: Theme.of(context).brightness == Brightness.dark ? CoopvestColors.darkDivider : CoopvestColors.lightGray),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: CoopvestColors.lightGray),
+              borderSide: BorderSide(color: Theme.of(context).brightness == Brightness.dark ? CoopvestColors.darkDivider : CoopvestColors.lightGray),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
@@ -195,7 +195,9 @@ class AppDropdown<T> extends StatelessWidget {
         Text(
           label,
           style: CoopvestTypography.labelLarge.copyWith(
-            color: enabled ? CoopvestColors.darkGray : CoopvestColors.mediumGray,
+            color: enabled 
+                ? (Theme.of(context).brightness == Brightness.dark ? Colors.white : CoopvestColors.darkGray) 
+                : CoopvestColors.mediumGray,
           ),
         ),
         const SizedBox(height: 8),
@@ -205,25 +207,26 @@ class AppDropdown<T> extends StatelessWidget {
           items: items,
           onChanged: enabled ? onChanged : null,
           validator: validator,
+          dropdownColor: Theme.of(context).brightness == Brightness.dark ? CoopvestColors.darkSurface : Colors.white,
           style: CoopvestTypography.bodyMedium.copyWith(
-            color: CoopvestColors.darkGray,
+            color: Theme.of(context).brightness == Brightness.dark ? Colors.white : CoopvestColors.darkGray,
           ),
           decoration: InputDecoration(
             hintText: hint,
             prefixIcon: prefixIcon,
             filled: true,
             fillColor: enabled
-                ? CoopvestColors.veryLightGray
-                : CoopvestColors.lightGray,
+                ? (Theme.of(context).brightness == Brightness.dark ? CoopvestColors.darkSurface : CoopvestColors.veryLightGray)
+                : (Theme.of(context).brightness == Brightness.dark ? Colors.white10 : CoopvestColors.lightGray),
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: CoopvestColors.lightGray),
+              borderSide: BorderSide(color: Theme.of(context).brightness == Brightness.dark ? CoopvestColors.darkDivider : CoopvestColors.lightGray),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: CoopvestColors.lightGray),
+              borderSide: BorderSide(color: Theme.of(context).brightness == Brightness.dark ? CoopvestColors.darkDivider : CoopvestColors.lightGray),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
@@ -274,7 +277,7 @@ class AppCheckbox extends StatelessWidget {
               label,
               style: CoopvestTypography.bodyMedium.copyWith(
                 color: enabled
-                    ? CoopvestColors.darkGray
+                    ? (Theme.of(context).brightness == Brightness.dark ? Colors.white : CoopvestColors.darkGray)
                     : CoopvestColors.mediumGray,
               ),
             ),
@@ -323,7 +326,7 @@ class AppRadio<T> extends StatelessWidget {
               label,
               style: CoopvestTypography.bodyMedium.copyWith(
                 color: enabled
-                    ? CoopvestColors.darkGray
+                    ? (Theme.of(context).brightness == Brightness.dark ? Colors.white : CoopvestColors.darkGray)
                     : CoopvestColors.mediumGray,
               ),
             ),

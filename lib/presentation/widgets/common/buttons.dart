@@ -39,9 +39,9 @@ class PrimaryButton extends StatelessWidget {
         style: ElevatedButton.styleFrom(
           backgroundColor: isEnabled
               ? CoopvestColors.primary
-              : CoopvestColors.lightGray,
-          foregroundColor: Colors.white,
-          disabledBackgroundColor: CoopvestColors.lightGray,
+              : (Theme.of(context).brightness == Brightness.dark ? Colors.white10 : CoopvestColors.lightGray),
+          foregroundColor: Theme.of(context).brightness == Brightness.dark ? Colors.black : Colors.white,
+          disabledBackgroundColor: Theme.of(context).brightness == Brightness.dark ? Colors.white10 : CoopvestColors.lightGray,
           disabledForegroundColor: CoopvestColors.mediumGray,
           padding: padding,
           shape: RoundedRectangleBorder(
@@ -117,7 +117,7 @@ class SecondaryButton extends StatelessWidget {
           side: BorderSide(
             color: isEnabled
                 ? CoopvestColors.primary
-                : CoopvestColors.lightGray,
+                : (Theme.of(context).brightness == Brightness.dark ? Colors.white10 : CoopvestColors.lightGray),
           ),
           padding: padding,
           shape: RoundedRectangleBorder(

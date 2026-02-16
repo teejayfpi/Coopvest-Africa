@@ -99,18 +99,21 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
   }
 
   Widget _buildBalanceCard(BuildContext context, Wallet? wallet) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [CoopvestColors.primary, Color(0xFF2E7D32)],
+        gradient: LinearGradient(
+          colors: isDarkMode 
+              ? [CoopvestColors.darkSurface, CoopvestColors.darkSurface.withOpacity(0.8)]
+              : [CoopvestColors.primary, const Color(0xFF2E7D32)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: CoopvestColors.primary.withOpacity(0.3),
+            color: (isDarkMode ? Colors.black : CoopvestColors.primary).withOpacity(0.3),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -128,14 +131,14 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
                   Text(
                     'Total Balance',
                     style: CoopvestTypography.bodyMedium.copyWith(
-                      color: Colors.white.withOpacity(0.8),
+                      color: isDarkMode ? CoopvestColors.darkTextSecondary : Colors.white.withOpacity(0.8),
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     '₦${(wallet?.balance ?? 0).toStringAsFixed(2)}',
                     style: CoopvestTypography.displaySmall.copyWith(
-                      color: Colors.white,
+                      color: isDarkMode ? CoopvestColors.darkText : Colors.white,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -144,16 +147,16 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: isDarkMode ? CoopvestColors.primary.withOpacity(0.2) : Colors.white.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
-                    Icon(Icons.visibility_off, color: Colors.white, size: 16),
-                    SizedBox(width: 4),
+                    Icon(Icons.visibility_off, color: isDarkMode ? CoopvestColors.primary : Colors.white, size: 16),
+                    const SizedBox(width: 4),
                     Text(
                       'Hide',
-                      style: TextStyle(color: Colors.white, fontSize: 12),
+                      style: TextStyle(color: isDarkMode ? CoopvestColors.primary : Colors.white, fontSize: 12),
                     ),
                   ],
                 ),
@@ -170,14 +173,14 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
                     Text(
                       'Available',
                       style: CoopvestTypography.bodySmall.copyWith(
-                        color: Colors.white.withOpacity(0.8),
+                        color: isDarkMode ? CoopvestColors.darkTextSecondary : Colors.white.withOpacity(0.8),
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       '₦${(wallet?.availableForWithdrawal ?? 0).toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: isDarkMode ? CoopvestColors.darkText : Colors.white,
                         fontWeight: FontWeight.bold,
                         fontSize: 18,
                       ),
@@ -185,7 +188,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
                   ],
                 ),
               ),
-              Container(width: 1, height: 40, color: Colors.white.withOpacity(0.2)),
+              Container(width: 1, height: 40, color: isDarkMode ? CoopvestColors.darkDivider : Colors.white.withOpacity(0.2)),
               const SizedBox(width: 24),
               Expanded(
                 child: Column(
@@ -194,14 +197,14 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
                     Text(
                       'Pending',
                       style: CoopvestTypography.bodySmall.copyWith(
-                        color: Colors.white.withOpacity(0.8),
+                        color: isDarkMode ? CoopvestColors.darkTextSecondary : Colors.white.withOpacity(0.8),
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       '₦${(wallet?.pendingContributions ?? 0).toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: isDarkMode ? CoopvestColors.darkText : Colors.white,
                         fontWeight: FontWeight.bold,
                         fontSize: 18,
                       ),
@@ -477,6 +480,14 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
                 data: widget.userId,
                 version: QrVersions.auto,
                 size: 200.0,
+                eyeStyle: QrEyeStyle(
+                  eyeShape: QrEyeShape.square,
+                  color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black,
+                ),
+                dataModuleStyle: QrDataModuleStyle(
+                  dataModuleShape: QrDataModuleShape.square,
+                  color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black,
+                ),
               ),
             ),
             const SizedBox(height: 16),

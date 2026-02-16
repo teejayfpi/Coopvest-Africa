@@ -71,13 +71,14 @@ class EnhancedCard extends StatelessWidget {
       );
     }
 
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return BoxDecoration(
-      color: backgroundColor, // Will use Theme's card color if null
+      color: backgroundColor ?? (isDarkMode ? CoopvestColors.darkSurface : Colors.white),
       borderRadius: borderRadius ?? BorderRadius.circular(CoopvestRadius.card),
-      border: border,
+      border: border ?? (isDarkMode ? BorderSide(color: CoopvestColors.darkDivider.withOpacity(0.5)) : null),
       boxShadow: elevation != null
-          ? [BoxShadow(color: CoopvestColorsEnhanced.shadowMedium, blurRadius: elevation! * 2)]
-          : CoopvestShadows.medium,
+          ? [BoxShadow(color: isDarkMode ? Colors.black26 : CoopvestColorsEnhanced.shadowMedium, blurRadius: elevation! * 2)]
+          : (isDarkMode ? CoopvestShadows.none : CoopvestShadows.medium),
     );
   }
 }

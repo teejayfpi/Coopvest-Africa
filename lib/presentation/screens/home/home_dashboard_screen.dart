@@ -264,7 +264,8 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
           physics: const NeverScrollableScrollPhysics(),
           crossAxisCount: 4,
           mainAxisSpacing: 16,
-          crossAxisSpacing: 16,
+          crossAxisSpacing: 8, // Reduced spacing to prevent overflow
+          childAspectRatio: 0.8, // Adjust aspect ratio for content
           children: [
             _buildQuickActionItem(
               context,
@@ -333,21 +334,26 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
     return GestureDetector(
       onTap: onTap,
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(10), // Reduced padding
             decoration: BoxDecoration(
               color: color.withOpacity(0.1),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(icon, color: color),
+            child: Icon(icon, color: color, size: 20), // Smaller icon
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4), // Reduced spacing
           Text(
             label,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: CoopvestTypography.bodySmall.copyWith(
               color: isDarkMode ? CoopvestColors.darkText : CoopvestColors.darkGray,
               fontWeight: FontWeight.w500,
+              fontSize: 10, // Smaller font size
             ),
           ),
         ],
@@ -488,33 +494,35 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
   }
 
   Widget _buildRolloverSection(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return AppCard(
-      backgroundColor: CoopvestColors.primary,
+      backgroundColor: isDarkMode ? CoopvestColors.darkSurface : CoopvestColors.primary,
       child: Row(
         children: [
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   'Loan Rollover',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: isDarkMode ? CoopvestColors.darkText : Colors.white,
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                SizedBox(height: 4),
+                const SizedBox(height: 4),
                 Text(
                   'Extend your loan repayment period easily.',
                   style: TextStyle(
-                    color: Colors.white70,
+                    color: isDarkMode ? CoopvestColors.darkTextSecondary : Colors.white70,
                     fontSize: 14,
                   ),
                 ),
               ],
             ),
           ),
+          const SizedBox(width: 8), // Add some spacing to prevent overflow
           ElevatedButton(
             onPressed: () {
               Navigator.of(context).push(
@@ -524,8 +532,9 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
               );
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: CoopvestColors.primary,
+              backgroundColor: isDarkMode ? CoopvestColors.primary : Colors.white,
+              foregroundColor: isDarkMode ? Colors.white : CoopvestColors.primary,
+              padding: const EdgeInsets.symmetric(horizontal: 16), // Reduce padding
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
@@ -681,6 +690,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
 
   Widget _buildTimeBasedGreeting(String userName) {
     final hour = DateTime.now().hour;
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     String greeting;
     IconData icon;
     
@@ -699,14 +709,16 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [CoopvestColors.primary, CoopvestColors.primary.withOpacity(0.8)],
+          colors: isDarkMode 
+              ? [CoopvestColors.darkSurface, CoopvestColors.darkSurface.withOpacity(0.8)]
+              : [CoopvestColors.primary, CoopvestColors.primary.withOpacity(0.8)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: CoopvestColors.primary.withOpacity(0.3),
+            color: (isDarkMode ? Colors.black : CoopvestColors.primary).withOpacity(0.3),
             blurRadius: 15,
             offset: const Offset(0, 8),
           ),
@@ -721,15 +733,15 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                 Text(
                   greeting,
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.9),
+                    color: isDarkMode ? CoopvestColors.darkTextSecondary : Colors.white.withOpacity(0.9),
                     fontWeight: FontWeight.w500,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   userName,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: isDarkMode ? CoopvestColors.darkText : Colors.white,
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
                   ),
@@ -740,10 +752,10 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
+              color: isDarkMode ? CoopvestColors.primary.withOpacity(0.2) : Colors.white.withOpacity(0.2),
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, color: Colors.white, size: 32),
+            child: Icon(icon, color: isDarkMode ? CoopvestColors.primary : Colors.white, size: 32),
           ),
         ],
       ),

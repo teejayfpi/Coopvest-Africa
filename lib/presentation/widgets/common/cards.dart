@@ -26,14 +26,15 @@ class AppCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return Container(
       margin: margin,
       child: Card(
         elevation: elevation,
-        color: backgroundColor, // Use theme color if null
+        color: backgroundColor ?? (isDarkMode ? CoopvestColors.darkSurface : Colors.white),
         shape: RoundedRectangleBorder(
           borderRadius: borderRadius ?? BorderRadius.circular(12),
-          side: border?.top ?? BorderSide.none,
+          side: border?.top ?? (isDarkMode ? BorderSide(color: CoopvestColors.darkDivider.withOpacity(0.5)) : BorderSide.none),
         ),
         child: InkWell(
           onTap: onTap,

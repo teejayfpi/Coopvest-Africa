@@ -231,6 +231,9 @@ class CoopvestGradients {
 
 /// Coopvest Shadows
 class CoopvestShadows {
+  // None
+  static List<BoxShadow> none = [];
+
   // Small shadow
   static List<BoxShadow> small = [
     BoxShadow(

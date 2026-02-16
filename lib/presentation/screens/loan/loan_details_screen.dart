@@ -20,6 +20,7 @@ class LoanDetailsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final loanState = ref.watch(loanProvider);
     final now = DateTime.now();
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final loan = loanState.loans.firstWhere(
       (l) => l.id == loanId,
       orElse: () => Loan(
@@ -94,18 +95,18 @@ class LoanDetailsScreen extends ConsumerWidget {
     final statusColor = _getStatusColor(loan.status);
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: isDarkMode ? CoopvestColors.darkBackground : Colors.white,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.white,
+        backgroundColor: isDarkMode ? CoopvestColors.darkSurface : Colors.white,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: CoopvestColors.darkGray),
+          icon: Icon(Icons.arrow_back, color: isDarkMode ? Colors.white : CoopvestColors.darkGray),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
           'Loan Details',
           style: CoopvestTypography.headlineLarge.copyWith(
-            color: CoopvestColors.darkGray,
+            color: isDarkMode ? Colors.white : CoopvestColors.darkGray,
           ),
         ),
       ),
@@ -117,9 +118,9 @@ class LoanDetailsScreen extends ConsumerWidget {
             children: [
               // Loan Status Card
               AppCard(
-                backgroundColor: statusColor.withAlpha((255 * 0.1).toInt()),
+                backgroundColor: isDarkMode ? CoopvestColors.darkSurface : statusColor.withAlpha((255 * 0.1).toInt()),
                 border: Border.all(
-                    color: statusColor.withAlpha((255 * 0.3).toInt())),
+                    color: isDarkMode ? CoopvestColors.darkDivider : statusColor.withAlpha((255 * 0.3).toInt())),
                 child: Column(
                   children: [
                     Row(
@@ -128,7 +129,7 @@ class LoanDetailsScreen extends ConsumerWidget {
                         Text(
                           loan.type,
                           style: CoopvestTypography.headlineSmall.copyWith(
-                            color: CoopvestColors.darkGray,
+                            color: isDarkMode ? Colors.white : CoopvestColors.darkGray,
                           ),
                         ),
                         Container(
@@ -152,10 +153,10 @@ class LoanDetailsScreen extends ConsumerWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        _buildDetailItem('Loan ID', loan.id),
+                        _buildDetailItem('Loan ID', loan.id, isDarkMode),
                         _buildDetailItem(
-                            'Amount', '\u20a6${loan.amount.formatNumber()}'),
-                        _buildDetailItem('Tenure', '${loan.tenure} months'),
+                            'Amount', '\u20a6${loan.amount.formatNumber()}', isDarkMode),
+                        _buildDetailItem('Tenure', '${loan.tenure} months', isDarkMode),
                       ],
                     ),
                   ],
@@ -168,7 +169,7 @@ class LoanDetailsScreen extends ConsumerWidget {
               Text(
                 'Repayment Summary',
                 style: CoopvestTypography.titleMedium.copyWith(
-                  color: CoopvestColors.darkGray,
+                  color: isDarkMode ? Colors.white : CoopvestColors.darkGray,
                 ),
               ),
               const SizedBox(height: 12),
@@ -176,15 +177,15 @@ class LoanDetailsScreen extends ConsumerWidget {
                 child: Column(
                   children: [
                     _buildSummaryRow('Monthly Repayment',
-                        '\u20a6${loan.monthlyRepayment.formatNumber()}'),
+                        '\u20a6${loan.monthlyRepayment.formatNumber()}', isDarkMode),
                     const Divider(height: 24),
                     _buildSummaryRow('Total Repayment',
-                        '\u20a6${loan.totalRepayment.formatNumber()}'),
+                        '\u20a6${loan.totalRepayment.formatNumber()}', isDarkMode),
                     const Divider(height: 24),
-                    _buildSummaryRow('Interest Rate', '${loan.interestRate}%'),
+                    _buildSummaryRow('Interest Rate', '${loan.interestRate}%', isDarkMode),
                     const Divider(height: 24),
                     _buildSummaryRow('Next Payment Due',
-                        _formatDate(loan.nextRepaymentDate)),
+                        _formatDate(loan.nextRepaymentDate), isDarkMode),
                   ],
                 ),
               ),
@@ -195,12 +196,12 @@ class LoanDetailsScreen extends ConsumerWidget {
               Text(
                 'Repayment Schedule',
                 style: CoopvestTypography.titleMedium.copyWith(
-                  color: CoopvestColors.darkGray,
+                  color: isDarkMode ? Colors.white : CoopvestColors.darkGray,
                 ),
               ),
               const SizedBox(height: 12),
               ..._repaymentSchedule
-                  .map((installment) => _buildInstallmentCard(installment)),
+                  .map((installment) => _buildInstallmentCard(installment, isDarkMode)),
 
               const SizedBox(height: 24),
 
@@ -208,7 +209,7 @@ class LoanDetailsScreen extends ConsumerWidget {
               Text(
                 'Guarantors (${loan.guarantorsConfirmed}/${loan.guarantorsRequired})',
                 style: CoopvestTypography.titleMedium.copyWith(
-                  color: CoopvestColors.darkGray,
+                  color: isDarkMode ? Colors.white : CoopvestColors.darkGray,
                 ),
               ),
               const SizedBox(height: 12),
@@ -232,14 +233,14 @@ class LoanDetailsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildDetailItem(String label, String value) {
+  Widget _buildDetailItem(String label, String value, [bool isDarkMode = false]) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
           style: CoopvestTypography.bodySmall.copyWith(
-            color: CoopvestColors.mediumGray,
+            color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.mediumGray,
           ),
         ),
         const SizedBox(height: 4),
@@ -247,35 +248,35 @@ class LoanDetailsScreen extends ConsumerWidget {
           value,
           style: CoopvestTypography.bodyMedium.copyWith(
             fontWeight: FontWeight.w600,
-            color: CoopvestColors.darkGray,
+            color: isDarkMode ? Colors.white : CoopvestColors.darkGray,
           ),
         ),
       ],
     );
   }
 
-  Widget _buildSummaryRow(String label, String value) {
+  Widget _buildSummaryRow(String label, String value, [bool isDarkMode = false]) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(
           label,
           style: CoopvestTypography.bodyMedium.copyWith(
-            color: CoopvestColors.mediumGray,
+            color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.mediumGray,
           ),
         ),
         Text(
           value,
           style: CoopvestTypography.bodyMedium.copyWith(
             fontWeight: FontWeight.w600,
-            color: CoopvestColors.darkGray,
+            color: isDarkMode ? Colors.white : CoopvestColors.darkGray,
           ),
         ),
       ],
     );
   }
 
-  Widget _buildInstallmentCard(Map<String, dynamic> installment) {
+  Widget _buildInstallmentCard(Map<String, dynamic> installment, [bool isDarkMode = false]) {
     final statusColor =
         _getInstallmentStatusColor(installment['status'] as String);
 
