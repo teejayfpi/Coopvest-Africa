@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/theme_config.dart';
 import '../../../core/utils/utils.dart' hide NumExtension;
 import '../../../core/extensions/number_extensions.dart';
-import '../../../data/models/loan_models.dart';
+import '../../../data/models/loan_models.dart' hide LoanStatus;
 import '../../../presentation/providers/loan_provider.dart';
 import '../../../presentation/widgets/common/buttons.dart';
 import '../../../presentation/widgets/common/cards.dart';
