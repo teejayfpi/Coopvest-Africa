@@ -229,7 +229,6 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Settings'),
         elevation: 0,
@@ -267,6 +266,7 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
   }
 
   Widget _buildProfileHeader() {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return Column(
       children: [
         Stack(
@@ -286,10 +286,10 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
                 ),
                 child: CircleAvatar(
                   radius: 60,
-                  backgroundColor: CoopvestColors.veryLightGray,
+                  backgroundColor: isDarkMode ? Colors.white10 : CoopvestColors.veryLightGray,
                   backgroundImage: _profileImage != null ? FileImage(_profileImage!) : null,
                   child: _profileImage == null
-                      ? Icon(Icons.person, size: 60, color: CoopvestColors.mediumGray)
+                      ? const Icon(Icons.person, size: 60, color: CoopvestColors.mediumGray)
                       : null,
                 ),
               ),
@@ -329,6 +329,7 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
           'User Name',
           style: CoopvestTypography.headlineLarge,
         ),
+        const SizedBox(height: 4),
         const Text(
           'user@example.com',
           style: CoopvestTypography.bodyMedium,
@@ -381,10 +382,11 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
   }
 
   Widget _buildSettingsItem(Map<String, dynamic> item) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return ListTile(
       leading: Icon(
         (item['icon'] as IconData?) ?? Icons.settings, 
-        color: CoopvestColors.darkGray
+        color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.darkGray
       ),
       title: Text(
         item['label'] as String,
@@ -402,7 +404,7 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
           : (item['trailing'] != null
               ? Text(
                   item['trailing'] as String,
-                  style: TextStyle(color: CoopvestColors.mediumGray),
+                  style: const TextStyle(color: CoopvestColors.mediumGray),
                 )
               : const Icon(Icons.chevron_right, color: CoopvestColors.lightGray)),
       onTap: () {
@@ -422,9 +424,8 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
             Navigator.of(context).pushNamed('/kyc-bank-info');
             break;
           case 'Notifications':
-            // Navigate to notifications settings
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
+              const SnackBar(
                 content: Text('Notification settings'),
                 backgroundColor: CoopvestColors.primary,
               ),

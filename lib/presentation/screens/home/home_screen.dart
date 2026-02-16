@@ -34,7 +34,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: _isLoading ? _buildShimmerLoading() : _buildHomeContent(),
       ),
@@ -49,9 +48,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildShimmerLoading() {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final baseColor = isDarkMode ? Colors.white10 : CoopvestColorsEnhanced.shimmerBase;
+    final highlightColor = isDarkMode ? Colors.white24 : CoopvestColorsEnhanced.shimmerHighlight;
+
     return Shimmer.fromColors(
-      baseColor: CoopvestColorsEnhanced.shimmerBase,
-      highlightColor: CoopvestColorsEnhanced.shimmerHighlight,
+      baseColor: baseColor,
+      highlightColor: highlightColor,
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(CoopvestSpacing.screenPadding),
         child: Column(
@@ -251,9 +254,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   color: Colors.white.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: Row(
+                child: const Row(
                   mainAxisSize: MainAxisSize.min,
-                  children: const [
+                  children: [
                     Icon(Icons.visibility, color: Colors.white, size: 14),
                     SizedBox(width: 4),
                     Text(
@@ -332,154 +335,188 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildQuickActions() {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    final quickActions = [
-      {'icon': Icons.savings, 'label': 'Save', 'color': CoopvestColorsEnhanced.primaryGradient},
-      {'icon': Icons.account_balance_wallet, 'label': 'Invest', 'color': CoopvestColorsEnhanced.accentGradient},
-      {'icon': Icons.swap_horiz, 'label': 'Transfer', 'color': CoopvestColorsEnhanced.purpleGradient},
-      {'icon': Icons.receipt_long, 'label': 'History', 'color': CoopvestColorsEnhanced.tealGradient},
-    ];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        SectionHeader(
-          title: 'Quick Actions',
-          onViewAll: () {},
-          viewAllText: 'See All',
-          titleGradient: CoopvestColorsEnhanced.primaryGradient,
-        ),
-        const SizedBox(height: 16),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: quickActions.asMap().entries.map((entry) {
-            final action = entry.value;
-            return Expanded(
-              child: Padding(
-                padding: EdgeInsets.only(
-                  left: entry.key == 0 ? 0 : 6,
-                  right: entry.key == quickActions.length - 1 ? 0 : 6,
-                ),
-                child: QuickActionButton(
-                  icon: action['icon'] as IconData? ?? Icons.help,
-                  label: action['label'] as String,
-                  gradientColors: action['color'] as List<Color>,
-                  onTap: () {},
-                ),
+        _buildActionItem('Deposit', Icons.add_circle_outline, CoopvestColorsEnhanced.tealGradient),
+        _buildActionItem('Transfer', Icons.swap_horiz, CoopvestColorsEnhanced.purpleGradient),
+        _buildActionItem('Loan', Icons.account_balance_wallet, CoopvestColorsEnhanced.accentGradient),
+        _buildActionItem('Bill', Icons.receipt_long, CoopvestColorsEnhanced.secondaryGradient),
+      ],
+    );
+  }
+
+  Widget _buildActionItem(String label, IconData icon, List<Color> gradient) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    return Column(
+      children: [
+        Container(
+          width: 64,
+          height: 64,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: gradient,
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(CoopvestRadius.medium),
+            boxShadow: [
+              BoxShadow(
+                color: gradient[0].withOpacity(0.3),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
               ),
-            );
-          }).toList(),
+            ],
+          ),
+          child: Icon(icon, color: Colors.white, size: 28),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          label,
+          style: CoopvestTypography.bodySmall.copyWith(
+            fontWeight: FontWeight.w600,
+            color: isDarkMode ? CoopvestColors.darkText : CoopvestColors.darkGray,
+          ),
         ),
       ],
     );
   }
 
   Widget _buildSavingsGoals() {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SectionHeader(
-          title: 'Savings Goals',
-          onViewAll: () {},
-          viewAllText: 'See All',
-          titleGradient: CoopvestColorsEnhanced.primaryGradient,
-        ),
-        const SizedBox(height: 16),
-        AppAnimations.staggeredList(
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            ProgressCard(
-              title: 'Emergency Fund',
-              progress: 0.65,
-              currentAmount: 'N\$32,500',
-              targetAmount: 'N\$50,000',
-              subtitle: '12 weeks to go',
-              gradientColors: CoopvestColorsEnhanced.successGradient,
-              onTap: () {},
+            Text(
+              'Savings Goals',
+              style: CoopvestTypography.titleLarge.copyWith(
+                fontWeight: FontWeight.bold,
+                color: isDarkMode ? CoopvestColors.darkText : CoopvestColors.darkGray,
+              ),
             ),
-            ProgressCard(
-              title: 'New Phone',
-              progress: 0.40,
-              currentAmount: 'N\$20,000',
-              targetAmount: 'N\$50,000',
-              subtitle: '8 weeks to go',
-              gradientColors: CoopvestColorsEnhanced.accentGradient,
-              onTap: () {},
+            Text(
+              'View All',
+              style: CoopvestTypography.bodySmall.copyWith(
+                color: CoopvestColors.primary,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
-          staggerDelay: const Duration(milliseconds: 150),
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          height: 140,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              _buildGoalCard('New House', 'N\$45,000 / N\$100,000', 0.45, CoopvestColorsEnhanced.primaryGradient),
+              _buildGoalCard('Education', 'N\$12,000 / N\$20,000', 0.60, CoopvestColorsEnhanced.accentGradient),
+            ],
+          ),
         ),
       ],
     );
   }
 
+  Widget _buildGoalCard(String title, String progress, double percent, List<Color> gradient) {
+    return Container(
+      width: 260,
+      margin: const EdgeInsets.only(right: 16),
+      child: EnhancedCard(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: CoopvestTypography.bodyLarge.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const Spacer(),
+            Text(
+              progress,
+              style: CoopvestTypography.bodySmall.copyWith(color: CoopvestColors.mediumGray),
+            ),
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: percent,
+                backgroundColor: CoopvestColors.veryLightGray,
+                valueColor: AlwaysStoppedAnimation<Color>(gradient[0]),
+                minHeight: 6,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildRecentActivity() {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    final activities = [
-      {
-        'icon': Icons.savings,
-        'title': 'Savings Deposit',
-        'subtitle': 'Emergency Fund',
-        'amount': '5,000',
-        'isIncome': true,
-        'date': 'Today',
-      },
-      {
-        'icon': Icons.account_balance,
-        'title': 'Bank Transfer',
-        'subtitle': 'From GTBank',
-        'amount': '10,000',
-        'isIncome': true,
-        'date': 'Yesterday',
-      },
-      {
-        'icon': Icons.shopping_cart,
-        'title': 'Purchase',
-        'subtitle': 'Market Items',
-        'amount': '2,500',
-        'isIncome': false,
-        'date': '2 days ago',
-      },
-    ];
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SectionHeader(
-          title: 'Recent Activity',
-          onViewAll: () {},
-          viewAllText: 'See All',
-          titleGradient: CoopvestColorsEnhanced.primaryGradient,
-        ),
-        const SizedBox(height: 16),
-        EnhancedCard(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: Column(
-            children: activities.asMap().entries.map((entry) {
-              final activity = entry.value;
-              return Column(
-                children: [
-                  ActivityItem(
-                    icon: activity['icon'] as IconData? ?? Icons.help,
-                    title: activity['title'] as String,
-                    subtitle: activity['subtitle'] as String,
-                    amount: activity['amount'] as String,
-                    isIncome: activity['isIncome'] as bool,
-                    date: activity['date'] as String,
-                    onTap: () {},
-                  ),
-                  if (entry.key < activities.length - 1)
-                    Divider(
-                      color: (Theme.of(context).brightness == Brightness.dark 
-                          ? CoopvestColors.darkDivider 
-                          : CoopvestColors.lightGray).withOpacity(0.5),
-                      height: 1,
-                    ),
-                ],
-              );
-            }).toList(),
+        Text(
+          'Recent Activity',
+          style: CoopvestTypography.titleLarge.copyWith(
+            fontWeight: FontWeight.bold,
+            color: isDarkMode ? CoopvestColors.darkText : CoopvestColors.darkGray,
           ),
         ),
+        const SizedBox(height: 16),
+        _buildActivityItem('Electricity Bill', '24 Oct 2023', '-N\$4,500', Icons.bolt, Colors.orange),
+        _buildActivityItem('Salary Deposit', '20 Oct 2023', '+N\$85,000', Icons.account_balance_wallet, Colors.green),
+        _buildActivityItem('Loan Repayment', '15 Oct 2023', '-N\$12,000', Icons.payment, Colors.blue),
       ],
+    );
+  }
+
+  Widget _buildActivityItem(String title, String date, String amount, IconData icon, Color color) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: EnhancedCard(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: color, size: 24),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: CoopvestTypography.bodyMedium.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    date,
+                    style: CoopvestTypography.bodySmall.copyWith(color: CoopvestColors.mediumGray),
+                  ),
+                ],
+              ),
+            ),
+            Text(
+              amount,
+              style: CoopvestTypography.bodyMedium.copyWith(
+                fontWeight: FontWeight.bold,
+                color: amount.startsWith('+') ? Colors.green : (isDarkMode ? Colors.white : CoopvestColors.darkGray),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

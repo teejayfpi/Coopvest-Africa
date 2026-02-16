@@ -53,16 +53,9 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
     };
 
     return Scaffold(
-      backgroundColor: Colors.white,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.white,
-        title: Text(
-          'My Loans',
-          style: CoopvestTypography.headlineLarge.copyWith(
-            color: CoopvestColors.darkGray,
-          ),
-        ),
+        title: const Text('My Loans'),
       ),
       body: SafeArea(
         child: RefreshIndicator(
@@ -84,9 +77,7 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
                         '${_quickStats['activeLoans']}',
                         Icons.trending_up,
                         CoopvestColors.success,
-                        onTap: () {
-                          // Scroll to loan history or filter by active
-                        },
+                        onTap: () {},
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -96,9 +87,7 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
                         '₦${(_quickStats['totalBorrowed'] as num).toDouble().toStringAsFixed(0)}',
                         Icons.account_balance,
                         CoopvestColors.primary,
-                        onTap: () {
-                          // Show total borrowed details
-                        },
+                        onTap: () {},
                       ),
                     ),
                   ],
@@ -112,9 +101,7 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
                         '₦${(_quickStats['totalRepaid'] as num).toDouble().toStringAsFixed(0)}',
                         Icons.payments,
                         CoopvestColors.info,
-                        onTap: () {
-                          // Show repayment history
-                        },
+                        onTap: () {},
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -124,9 +111,7 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
                         '${_quickStats['totalLoans']}',
                         Icons.description,
                         Colors.orange,
-                        onTap: () {
-                          // Show all applications
-                        },
+                        onTap: () {},
                       ),
                     ),
                   ],
@@ -154,11 +139,9 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
                 const SizedBox(height: 24),
 
                 // Loan History Section
-                Text(
+                const Text(
                   'Loan History',
-                  style: CoopvestTypography.titleMedium.copyWith(
-                    color: CoopvestColors.darkGray,
-                  ),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 16),
 
@@ -181,15 +164,15 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
 
                 // How It Works Section
                 AppCard(
-                  backgroundColor: CoopvestColors.veryLightGray,
+                  backgroundColor: Theme.of(context).brightness == Brightness.dark 
+                      ? CoopvestColors.darkSurface 
+                      : CoopvestColors.veryLightGray,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
+                      const Text(
                         'How Our Loans Work',
-                        style: CoopvestTypography.titleMedium.copyWith(
-                          color: CoopvestColors.darkGray,
-                        ),
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 16),
                       _buildHowItWorksStep(1, 'Apply for a loan'),
@@ -209,9 +192,9 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
   }
 
   Widget _buildStatCard(String title, String value, IconData icon, Color color, {VoidCallback? onTap}) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return AppCard(
       onTap: onTap,
-      backgroundColor: Colors.white,
       elevation: 4,
       borderRadius: BorderRadius.circular(16),
       border: Border.all(color: color.withOpacity(0.1)),
@@ -229,17 +212,14 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
           const SizedBox(height: 12),
           Text(
             value,
-            style: CoopvestTypography.headlineSmall.copyWith(
-              color: CoopvestColors.darkGray,
-              fontWeight: FontWeight.bold,
-            ),
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),
           const SizedBox(height: 2),
           Text(
             title,
-            style: CoopvestTypography.bodySmall.copyWith(
-              color: CoopvestColors.mediumGray,
-              fontWeight: FontWeight.w500,
+            style: TextStyle(
+              color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.mediumGray,
+              fontSize: 12,
             ),
           ),
         ],
@@ -250,167 +230,142 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
   Widget _buildLoanCard(BuildContext context, Loan loan) {
     final statusColor = _getStatusColor(loan.status);
     final loanType = loan.purpose != null ? '${loan.purpose}' : 'Quick Loan';
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: GestureDetector(
+      child: AppCard(
         onTap: () {
           Navigator.of(context).pushNamed(
             '/loan-details',
             arguments: {'loanId': loan.id},
           );
         },
-        child: AppCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          loanType,
-                          style: CoopvestTypography.titleMedium.copyWith(
-                            color: CoopvestColors.darkGray,
-                          ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        loanType,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        'Loan ID: ${loan.id}',
+                        style: TextStyle(
+                          color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.mediumGray,
+                          fontSize: 12,
                         ),
-                        Text(
-                          'Loan ID: ${loan.id}',
-                          style: CoopvestTypography.bodySmall.copyWith(
-                            color: CoopvestColors.mediumGray,
-                          ),
-                        ),
-                      ],
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: statusColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    loan.status,
+                    style: TextStyle(
+                      color: statusColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: statusColor.withAlpha((255 * 0.1).toInt()),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      loan.status,
-                      style: CoopvestTypography.bodySmall.copyWith(
-                        color: statusColor,
-                        fontWeight: FontWeight.w600,
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Amount',
+                      style: TextStyle(
+                        color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.mediumGray,
+                        fontSize: 12,
                       ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _buildLoanDetail('Amount', '\u20a6${loan.amount.formatNumber()}'),
-                  _buildLoanDetail('Monthly', '\u20a6${loan.monthlyRepayment.formatNumber()}'),
-                  _buildLoanDetail('Guarantors', '${loan.guarantorsAccepted}/${loan.guarantorsRequired}'),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Applied: ${_formatDate(loan.createdAt)}',
-                style: CoopvestTypography.bodySmall.copyWith(
-                  color: CoopvestColors.mediumGray,
+                    Text(
+                      '₦${loan.amount.formatNumber()}',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ],
                 ),
-              ),
-            ],
-          ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      'Date Applied',
+                      style: TextStyle(
+                        color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.mediumGray,
+                        fontSize: 12,
+                      ),
+                    ),
+                    Text(
+                      Utils.formatDate(loan.createdAt),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildLoanDetail(String label, String value) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: CoopvestTypography.bodySmall.copyWith(
-            color: CoopvestColors.mediumGray,
-          ),
-        ),
-        Text(
-          value,
-          style: CoopvestTypography.bodyMedium.copyWith(
-            fontWeight: FontWeight.w600,
-            color: CoopvestColors.darkGray,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'Active':
-        return CoopvestColors.success;
-      case 'Repaying':
-        return CoopvestColors.primary;
-      case 'Completed':
-        return CoopvestColors.info;
-      case 'Pending':
-        return Colors.orange;
-      case 'Rejected':
-        return CoopvestColors.error;
-      default:
-        return CoopvestColors.mediumGray;
-    }
-  }
-
   Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        children: [
-          Icon(
-            Icons.account_balance_wallet,
-            color: CoopvestColors.mediumGray,
-            size: 64,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'No Loan Applications',
-            style: CoopvestTypography.titleMedium.copyWith(
-              color: CoopvestColors.mediumGray,
+    return AppCard(
+      child: Center(
+        child: Column(
+          children: [
+            const Icon(Icons.description_outlined, size: 64, color: CoopvestColors.mediumGray),
+            const SizedBox(height: 16),
+            const Text(
+              'No loans found',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'You haven\'t applied for any loans yet',
-            style: CoopvestTypography.bodyMedium.copyWith(
-              color: CoopvestColors.mediumGray,
+            const SizedBox(height: 8),
+            const Text(
+              'You haven\'t applied for any loans yet.',
+              style: TextStyle(color: CoopvestColors.mediumGray),
+              textAlign: TextAlign.center,
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildHowItWorksStep(int step, String description) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 28,
-            height: 28,
-            decoration: BoxDecoration(
+            width: 24,
+            height: 24,
+            decoration: const BoxDecoration(
               color: CoopvestColors.primary,
-              borderRadius: BorderRadius.circular(14),
+              shape: BoxShape.circle,
             ),
             child: Center(
               child: Text(
                 '$step',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
               ),
             ),
           ),
@@ -418,8 +373,8 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
           Expanded(
             child: Text(
               description,
-              style: CoopvestTypography.bodyMedium.copyWith(
-                color: CoopvestColors.darkGray,
+              style: TextStyle(
+                color: isDarkMode ? CoopvestColors.darkText : CoopvestColors.darkGray,
               ),
             ),
           ),
@@ -428,7 +383,20 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
     );
   }
 
-  String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year}';
+  Color _getStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'active':
+      case 'repaying':
+      case 'completed':
+        return CoopvestColors.success;
+      case 'pending':
+      case 'processing':
+        return CoopvestColors.warning;
+      case 'rejected':
+      case 'cancelled':
+        return CoopvestColors.error;
+      default:
+        return CoopvestColors.mediumGray;
+    }
   }
 }

@@ -302,11 +302,82 @@ class CoopvestTheme {
       unselectedItemColor: CoopvestColors.darkTextSecondary,
       elevation: 8,
     ),
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: const Color(0xFF4CAF50),
+        foregroundColor: CoopvestColors.darkBackground,
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        textStyle: CoopvestTypography.labelLarge,
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: const Color(0xFF4CAF50),
+        side: const BorderSide(color: CoopvestColors.darkDivider),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        textStyle: CoopvestTypography.labelLarge,
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
+        foregroundColor: const Color(0xFF4CAF50),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        textStyle: CoopvestTypography.labelLarge,
+      ),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: Colors.white.withOpacity(0.05),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: CoopvestColors.darkDivider),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: CoopvestColors.darkDivider),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: Color(0xFF4CAF50), width: 2),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: CoopvestColors.error),
+      ),
+      labelStyle: CoopvestTypography.bodyMedium.copyWith(
+        color: CoopvestColors.darkTextSecondary,
+      ),
+      hintStyle: CoopvestTypography.bodyMedium.copyWith(
+        color: CoopvestColors.darkTextSecondary,
+      ),
+    ),
     cardTheme: CardThemeData(
       color: CoopvestColors.darkSurface,
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       margin: const EdgeInsets.all(0),
+    ),
+    dividerTheme: const DividerThemeData(
+      color: CoopvestColors.darkDivider,
+      thickness: 1,
+      space: 16,
+    ),
+    textTheme: TextTheme(
+      displayLarge: CoopvestTypography.displayLarge.copyWith(color: CoopvestColors.darkText),
+      displayMedium: CoopvestTypography.displayMedium.copyWith(color: CoopvestColors.darkText),
+      displaySmall: CoopvestTypography.displaySmall.copyWith(color: CoopvestColors.darkText),
+      headlineLarge: CoopvestTypography.headlineLarge.copyWith(color: CoopvestColors.darkText),
+      headlineMedium: CoopvestTypography.headlineMedium.copyWith(color: CoopvestColors.darkText),
+      headlineSmall: CoopvestTypography.headlineSmall.copyWith(color: CoopvestColors.darkText),
+      bodyLarge: CoopvestTypography.bodyLarge.copyWith(color: CoopvestColors.darkText),
+      bodyMedium: CoopvestTypography.bodyMedium.copyWith(color: CoopvestColors.darkText),
+      bodySmall: CoopvestTypography.bodySmall.copyWith(color: CoopvestColors.darkTextSecondary),
+      labelLarge: CoopvestTypography.labelLarge.copyWith(color: CoopvestColors.darkText),
+      labelMedium: CoopvestTypography.labelMedium.copyWith(color: CoopvestColors.darkText),
+      labelSmall: CoopvestTypography.labelSmall.copyWith(color: CoopvestColors.darkTextSecondary),
     ),
   );
 }

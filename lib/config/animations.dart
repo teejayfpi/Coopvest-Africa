@@ -410,10 +410,16 @@ class _AnimatedStaggeredListState extends State<AnimatedStaggeredList> with Tick
       );
     }).toList();
 
-    Future.forEach<_controllers.isEmpty ? dynamic : dynamic>(_controllers.asMap().entries, (controllerEntry) async {
-      await Future.delayed(widget.staggerDelay * controllerEntry.key);
-      controllerEntry.value.forward();
-    });
+    _startAnimations();
+  }
+
+  Future<void> _startAnimations() async {
+    for (int i = 0; i < _controllers.length; i++) {
+      await Future.delayed(widget.staggerDelay);
+      if (mounted) {
+        _controllers[i].forward();
+      }
+    }
   }
 
   @override
@@ -525,14 +531,22 @@ class _ShimmerLoadingState extends State<ShimmerLoading> with SingleTickerProvid
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    
     return ShaderMask(
       shaderCallback: (bounds) {
         return LinearGradient(
-          colors: const [
-            Color(0xFFE0E0E0),
-            Color(0xFFF5F5F5),
-            Color(0xFFE0E0E0),
-          ],
+          colors: isDarkMode 
+            ? const [
+                Colors.white10,
+                Colors.white24,
+                Colors.white10,
+              ]
+            : const [
+                Color(0xFFE0E0E0),
+                Color(0xFFF5F5F5),
+                Color(0xFFE0E0E0),
+              ],
           stops: const [0.0, 0.5, 1.0],
           begin: Alignment.topLeft,
           end: Alignment.topRight,

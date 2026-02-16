@@ -33,13 +33,13 @@ class EnhancedCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget card = Container(
+    return Container(
       margin: margin,
-      decoration: _getDecoration(),
+      decoration: _getDecoration(context),
       child: ClipRRect(
         borderRadius: borderRadius ?? BorderRadius.circular(CoopvestRadius.card),
         child: Material(
-          color: useGradient || useGlass ? Colors.transparent : backgroundColor ?? CoopvestColors.white,
+          color: useGradient || useGlass ? Colors.transparent : backgroundColor,
           child: InkWell(
             onTap: onTap,
             borderRadius: borderRadius ?? BorderRadius.circular(CoopvestRadius.card),
@@ -51,11 +51,9 @@ class EnhancedCard extends StatelessWidget {
         ),
       ),
     );
-
-    return card;
   }
 
-  BoxDecoration _getDecoration() {
+  BoxDecoration _getDecoration(BuildContext context) {
     if (useGlass) {
       return GlassConfig.lightGlass();
     }
@@ -74,7 +72,7 @@ class EnhancedCard extends StatelessWidget {
     }
 
     return BoxDecoration(
-      color: backgroundColor ?? CoopvestColors.white,
+      color: backgroundColor, // Will use Theme's card color if null
       borderRadius: borderRadius ?? BorderRadius.circular(CoopvestRadius.card),
       border: border,
       boxShadow: elevation != null
@@ -176,6 +174,7 @@ class CompactStatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return EnhancedCard(
       onTap: onTap,
       child: Column(
@@ -207,7 +206,7 @@ class CompactStatCard extends StatelessWidget {
           Text(
             title,
             style: CoopvestTypography.bodySmall.copyWith(
-              color: CoopvestColors.mediumGray,
+              color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.mediumGray,
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -239,6 +238,7 @@ class QuickActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -251,7 +251,7 @@ class QuickActionButton extends StatelessWidget {
                   end: Alignment.bottomRight,
                 )
               : null,
-          color: gradientColors == null ? CoopvestColors.veryLightGray : null,
+          color: gradientColors == null ? (isDarkMode ? Colors.white10 : CoopvestColors.veryLightGray) : null,
           borderRadius: BorderRadius.circular(CoopvestRadius.large),
           boxShadow: gradientColors != null ? CoopvestShadows.coloredPrimary : null,
         ),
@@ -276,7 +276,7 @@ class QuickActionButton extends StatelessWidget {
               label,
               style: CoopvestTypography.bodyMedium.copyWith(
                 fontWeight: FontWeight.w600,
-                color: gradientColors != null ? Colors.white : CoopvestColors.darkGray,
+                color: gradientColors != null ? Colors.white : (isDarkMode ? CoopvestColors.darkText : CoopvestColors.darkGray),
               ),
               textAlign: TextAlign.center,
               maxLines: 1,
@@ -306,6 +306,7 @@ class SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -321,13 +322,14 @@ class SectionHeader extends StatelessWidget {
                   style: CoopvestTypography.titleMedium.copyWith(
                     fontWeight: FontWeight.bold,
                     fontSize: 18,
+                    color: Colors.white,
                   ),
                 ),
               )
             : Text(
                 title,
                 style: CoopvestTypography.titleMedium.copyWith(
-                  color: CoopvestColors.darkGray,
+                  color: isDarkMode ? CoopvestColors.darkText : CoopvestColors.darkGray,
                   fontWeight: FontWeight.bold,
                   fontSize: 18,
                 ),
@@ -337,334 +339,13 @@ class SectionHeader extends StatelessWidget {
             onPressed: onViewAll,
             child: Text(
               viewAllText!,
-              style: CoopvestTypography.labelLarge.copyWith(
+              style: CoopvestTypography.labelMedium.copyWith(
                 color: CoopvestColors.primary,
+                fontWeight: FontWeight.bold,
               ),
             ),
           ),
       ],
-    );
-  }
-}
-
-/// Progress Card for goals and savings
-class ProgressCard extends StatelessWidget {
-  final String title;
-  final double progress;
-  final String currentAmount;
-  final String targetAmount;
-  final String? subtitle;
-  final VoidCallback? onTap;
-  final List<Color> gradientColors;
-
-  const ProgressCard({
-    Key? key,
-    required this.title,
-    required this.progress,
-    required this.currentAmount,
-    required this.targetAmount,
-    this.subtitle,
-    this.onTap,
-    this.gradientColors = CoopvestColorsEnhanced.primaryGradient,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return EnhancedCard(
-      onTap: onTap,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(
-                  title,
-                  style: CoopvestTypography.bodyLarge.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: gradientColors,
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  '\${(progress * 100).toStringAsFixed(0)}%',
-                  style: CoopvestTypography.labelSmall.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: LinearProgressIndicator(
-              value: progress.clamp(0, 1),
-              minHeight: 10,
-              backgroundColor: CoopvestColors.veryLightGray,
-              valueColor: AlwaysStoppedAnimation<Color>(
-                gradientColors.first,
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                currentAmount,
-                style: CoopvestTypography.bodyMedium.copyWith(
-                  color: CoopvestColors.primary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              Text(
-                'of \$targetAmount',
-                style: CoopvestTypography.bodySmall.copyWith(
-                  color: CoopvestColors.mediumGray,
-                ),
-              ),
-            ],
-          ),
-          if (subtitle != null) ...[
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(
-                  Icons.timer,
-                  size: 14,
-                  color: CoopvestColors.mediumGray,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  subtitle!,
-                  style: CoopvestTypography.bodySmall.copyWith(
-                    color: CoopvestColors.mediumGray,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-/// Info Row for displaying key-value pairs
-class InfoRow extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-  final Color? iconColor;
-  final VoidCallback? onTap;
-  final bool showArrow;
-
-  const InfoRow({
-    Key? key,
-    required this.icon,
-    required this.label,
-    required this.value,
-    this.iconColor,
-    this.onTap,
-    this.showArrow = false,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: (iconColor ?? CoopvestColors.primary).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(CoopvestRadius.small),
-              ),
-              child: Icon(
-                icon,
-                color: iconColor ?? CoopvestColors.primary,
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: CoopvestTypography.bodySmall.copyWith(
-                      color: CoopvestColors.mediumGray,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    value,
-                    style: CoopvestTypography.bodyMedium.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (showArrow)
-              Icon(
-                Icons.chevron_right,
-                color: CoopvestColors.mediumGray,
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Status Badge with gradient
-class StatusBadge extends StatelessWidget {
-  final String text;
-  final List<Color> gradientColors;
-  final TextStyle? textStyle;
-
-  const StatusBadge({
-    Key? key,
-    required this.text,
-    this.gradientColors = CoopvestColorsEnhanced.successGradient,
-    this.textStyle,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: gradientColors,
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        text.toUpperCase(),
-        style: textStyle ??
-            CoopvestTypography.labelSmall.copyWith(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 0.5,
-            ),
-      ),
-    );
-  }
-}
-
-/// Activity Item with icon and styling
-class ActivityItem extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final String amount;
-  final bool isIncome;
-  final String date;
-  final VoidCallback? onTap;
-
-  const ActivityItem({
-    Key? key,
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.amount,
-    required this.isIncome,
-    required this.date,
-    this.onTap,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    final color = isIncome ? CoopvestColors.success : CoopvestColors.error;
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Row(
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(CoopvestRadius.medium),
-              ),
-              child: Icon(
-                icon,
-                color: color,
-                size: 22,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: CoopvestTypography.bodyMedium.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: CoopvestTypography.bodySmall.copyWith(
-                      color: CoopvestColors.mediumGray,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  '\${isIncome ? '+' : '-'}N\$amount',
-                  style: CoopvestTypography.bodyMedium.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: color,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  date,
-                  style: CoopvestTypography.bodySmall.copyWith(
-                    color: CoopvestColors.mediumGray,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

@@ -9,13 +9,12 @@ import '../../../data/models/ticket_models.dart' as models;
 import '../../../presentation/providers/auth_provider.dart';
 import '../../../presentation/providers/wallet_provider.dart';
 import '../../../presentation/providers/ticket_provider.dart';
+import '../../../presentation/providers/loan_provider.dart';
 import '../../../presentation/widgets/common/cards.dart';
 import '../loan/loan_dashboard_screen.dart';
 import '../wallet/wallet_dashboard_screen.dart';
 import '../savings/savings_goals_screen.dart';
 import '../rollover/rollover_eligibility_screen.dart';
-import '../loan/qr_scanner_screen.dart';
-import '../support/support_home_screen.dart';
 import '../support/ticket_list_screen.dart';
 import '../support/ticket_detail_screen.dart';
 import '../profile/profile_settings_screen.dart';
@@ -54,14 +53,15 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
 
     final ticketState = ref.watch(ticketProvider);
     final recentTickets = ticketState.tickets.take(2).toList();
+    
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final iconColor = isDarkMode ? Colors.white : CoopvestColors.darkGray;
 
     return Scaffold(
-      backgroundColor: Colors.white,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.white,
         leading: IconButton(
-          icon: const Icon(Icons.notifications_none, color: CoopvestColors.darkGray),
+          icon: Icon(Icons.notifications_none, color: iconColor),
           onPressed: () {
             Navigator.of(context).push(
               MaterialPageRoute(
@@ -72,7 +72,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.settings, color: CoopvestColors.darkGray),
+            icon: Icon(Icons.settings, color: iconColor),
             onPressed: () {
               Navigator.of(context).push(
                 MaterialPageRoute(
@@ -219,9 +219,9 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
   }
 
   Widget _buildStatCard(String title, String value, IconData icon, Color color, {VoidCallback? onTap}) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return AppCard(
       onTap: onTap,
-      backgroundColor: Colors.white,
       elevation: 4,
       borderRadius: BorderRadius.circular(16),
       border: Border.all(color: color.withOpacity(0.1)),
@@ -240,7 +240,6 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
           Text(
             value,
             style: CoopvestTypography.headlineSmall.copyWith(
-              color: CoopvestColors.darkGray,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -248,7 +247,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
           Text(
             title,
             style: CoopvestTypography.bodySmall.copyWith(
-              color: CoopvestColors.mediumGray,
+              color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.mediumGray,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -261,81 +260,51 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
+        const Text(
           'Quick Actions',
-          style: CoopvestTypography.titleMedium.copyWith(
-            color: CoopvestColors.darkGray,
+          style: TextStyle(
+            fontSize: 18,
             fontWeight: FontWeight.bold,
           ),
         ),
         const SizedBox(height: 16),
-        Row(
+        GridView.count(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisCount: 4,
+          mainAxisSpacing: 16,
+          crossAxisSpacing: 16,
           children: [
-            Expanded(
-              child: _buildActionButton(
-                context,
-                icon: Icons.request_quote,
-                label: 'Loans',
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => LoanDashboardScreen(
-                        userId: userId, 
-                        userName: userName, 
-                        userPhone: '',
-                      ),
-                    ),
-                  );
-                },
-              ),
+            _buildQuickActionItem(
+              context,
+              'Deposit',
+              Icons.add_circle_outline,
+              Colors.green,
+              () => Navigator.of(context).pushNamed('/deposit'),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildActionButton(
-                context,
-                icon: Icons.account_balance_wallet,
-                label: 'Wallet',
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => WalletDashboardScreen(userId: userId, userName: userName),
-                    ),
-                  );
-                },
-              ),
+            _buildQuickActionItem(
+              context,
+              'Withdraw',
+              Icons.remove_circle_outline,
+              Colors.red,
+              () => Navigator.of(context).pushNamed('/withdrawal'),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildActionButton(
-                context,
-                icon: Icons.qr_code_scanner,
-                label: 'Scan QR',
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => QRScannerScreen(
-                        guarantorId: userId,
-                        guarantorName: userName,
-                      ),
-                    ),
-                  );
-                },
-              ),
+            _buildQuickActionItem(
+              context,
+              'Loans',
+              Icons.account_balance_wallet_outlined,
+              Colors.blue,
+              () => Navigator.of(context).pushNamed('/loan-dashboard', arguments: {
+                'userId': userId,
+                'userName': userName,
+              }),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildActionButton(
-                context,
-                icon: Icons.support_agent,
-                label: 'Support',
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => const SupportHomeScreen(),
-                    ),
-                  );
-                },
-              ),
+            _buildQuickActionItem(
+              context,
+              'Support',
+              Icons.help_outline,
+              Colors.orange,
+              () => Navigator.of(context).pushNamed('/support'),
             ),
           ],
         ),
@@ -343,86 +312,32 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
     );
   }
 
-  Widget _buildActionButton(
-    BuildContext context, {
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) {
+  Widget _buildQuickActionItem(
+    BuildContext context,
+    String label,
+    IconData icon,
+    Color color,
+    VoidCallback onTap,
+  ) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        decoration: BoxDecoration(
-          color: CoopvestColors.veryLightGray,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: CoopvestColors.primary, size: 28),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              style: CoopvestTypography.bodyMedium.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSectionHeader(String title, VoidCallback onViewAll) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          title,
-          style: CoopvestTypography.titleMedium.copyWith(
-            color: CoopvestColors.darkGray,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        TextButton(
-          onPressed: onViewAll,
-          child: const Text('View All'),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildEmptyTicketsCard(BuildContext context) {
-    return AppCard(
       child: Column(
         children: [
-          const Icon(Icons.support_agent, size: 48, color: CoopvestColors.mediumGray),
-          const SizedBox(height: 12),
-          Text(
-            'No active support tickets',
-            style: CoopvestTypography.bodyMedium.copyWith(
-              color: CoopvestColors.mediumGray,
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
             ),
+            child: Icon(icon, color: color),
           ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => const SupportHomeScreen(),
-                  ),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: CoopvestColors.primary,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              child: const Text('Get Help'),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: CoopvestTypography.bodySmall.copyWith(
+              color: isDarkMode ? CoopvestColors.darkText : CoopvestColors.darkGray,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],
@@ -430,100 +345,136 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
     );
   }
 
-  Widget _buildTicketItem(BuildContext context, models.Ticket ticket) {
-    Color statusColor;
-    switch (ticket.status) {
-      case 'open':
-        statusColor = Colors.blue;
-        break;
-      case 'in_progress':
-        statusColor = Colors.orange;
-        break;
-      case 'resolved':
-        statusColor = Colors.green;
-        break;
-      default:
-        statusColor = Colors.grey;
-    }
+  Widget _buildSectionHeader(String title, VoidCallback onSeeAll) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        TextButton(
+          onPressed: onSeeAll,
+          child: const Text('See All'),
+        ),
+      ],
+    );
+  }
 
+  Widget _buildEmptyTicketsCard(BuildContext context) {
+    return AppCard(
+      child: Center(
+        child: Column(
+          children: [
+            const Icon(Icons.confirmation_number_outlined, size: 48, color: CoopvestColors.mediumGray),
+            const SizedBox(height: 12),
+            const Text(
+              'No active tickets',
+              style: TextStyle(color: CoopvestColors.mediumGray),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pushNamed('/create-ticket'),
+              child: const Text('Create Ticket'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTicketItem(BuildContext context, models.Ticket ticket) {
+    final statusColor = _getTicketStatusColor(ticket.status);
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: InkWell(
-        onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => TicketDetailScreen(ticketId: ticket.ticketId),
+      child: AppCard(
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => TicketDetailScreen(ticketId: ticket.id),
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: statusColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(Icons.confirmation_number_outlined, color: statusColor),
             ),
-          );
-        },
-        child: AppCard(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: statusColor.withAlpha((255 * 0.1).toInt()),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(Icons.confirmation_number, color: statusColor),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      ticket.title,
-                      style: CoopvestTypography.bodyLarge.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: CoopvestColors.darkGray,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      'ID: ${ticket.ticketId}',
-                      style: CoopvestTypography.bodySmall.copyWith(
-                        color: CoopvestColors.mediumGray,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: statusColor.withAlpha((255 * 0.1).toInt()),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      ticket.status.toUpperCase(),
-                      style: TextStyle(
-                        color: statusColor,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
                   Text(
-                    DateFormat('MMM d').format(ticket.createdAt),
-                    style: CoopvestTypography.bodySmall.copyWith(
-                      color: CoopvestColors.mediumGray,
+                    ticket.subject,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    ticket.category,
+                    style: TextStyle(
+                      color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.mediumGray,
+                      fontSize: 12,
                     ),
                   ),
                 ],
               ),
-            ],
-          ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: statusColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    ticket.status.toUpperCase(),
+                    style: TextStyle(
+                      color: statusColor,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  DateFormat('MMM d').format(ticket.createdAt),
+                  style: TextStyle(
+                    color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.mediumGray,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
+  }
+
+  Color _getTicketStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'open':
+        return Colors.blue;
+      case 'in_progress':
+        return Colors.orange;
+      case 'resolved':
+        return Colors.green;
+      case 'closed':
+        return Colors.grey;
+      default:
+        return Colors.blue;
+    }
   }
 
   Widget _buildRolloverSection(BuildContext context) {
@@ -577,6 +528,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
   }
 
   Widget _buildGoalProgressCard(BuildContext context, SavingsGoal goal) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: AppCard(
@@ -588,13 +540,11 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
               children: [
                 Text(
                   goal.name,
-                  style: CoopvestTypography.bodyLarge.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
                 Text(
                   '${goal.progressPercentage.toStringAsFixed(0)}%',
-                  style: CoopvestTypography.bodyMedium.copyWith(
+                  style: const TextStyle(
                     color: CoopvestColors.primary,
                     fontWeight: FontWeight.bold,
                   ),
@@ -604,7 +554,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
             const SizedBox(height: 12),
             LinearProgressIndicator(
               value: goal.progressPercentage / 100,
-              backgroundColor: CoopvestColors.veryLightGray,
+              backgroundColor: isDarkMode ? Colors.white10 : CoopvestColors.veryLightGray,
               valueColor: const AlwaysStoppedAnimation<Color>(CoopvestColors.primary),
               minHeight: 8,
               borderRadius: BorderRadius.circular(4),
@@ -615,14 +565,16 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
               children: [
                 Text(
                   '\u20a6${goal.currentAmount.formatNumber()} of \u20a6${goal.targetAmount.formatNumber()}',
-                  style: CoopvestTypography.bodySmall.copyWith(
-                    color: CoopvestColors.mediumGray,
+                  style: TextStyle(
+                    color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.mediumGray,
+                    fontSize: 12,
                   ),
                 ),
                 Text(
                   '${goal.monthsRemaining} months left',
-                  style: CoopvestTypography.bodySmall.copyWith(
-                    color: CoopvestColors.mediumGray,
+                  style: TextStyle(
+                    color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.mediumGray,
+                    fontSize: 12,
                   ),
                 ),
               ],
@@ -636,6 +588,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
   Widget _buildActivityItem(BuildContext context, Transaction txn) {
     IconData icon;
     Color color;
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     
     switch (txn.type) {
       case 'contribution':
@@ -663,7 +616,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: color.withAlpha((255 * 0.1).toInt()),
+              color: color.withOpacity(0.1),
               shape: BoxShape.circle,
             ),
             child: Icon(icon, color: color, size: 20),
@@ -675,14 +628,13 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
               children: [
                 Text(
                   txn.description ?? txn.type.capitalize(),
-                  style: CoopvestTypography.bodyMedium.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
                 Text(
                   DateFormat('MMM d, yyyy').format(txn.createdAt),
-                  style: CoopvestTypography.bodySmall.copyWith(
-                    color: CoopvestColors.mediumGray,
+                  style: TextStyle(
+                    color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.mediumGray,
+                    fontSize: 12,
                   ),
                 ),
               ],
@@ -690,7 +642,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
           ),
           Text(
             '${txn.type == 'withdrawal' ? '-' : '+'}\u20a6${txn.amount.formatNumber()}',
-            style: CoopvestTypography.bodyMedium.copyWith(
+            style: TextStyle(
               fontWeight: FontWeight.bold,
               color: txn.type == 'withdrawal' ? CoopvestColors.error : CoopvestColors.success,
             ),
@@ -707,11 +659,9 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
           children: [
             const Icon(Icons.history, size: 48, color: CoopvestColors.mediumGray),
             const SizedBox(height: 12),
-            Text(
+            const Text(
               'No recent activity',
-              style: CoopvestTypography.bodyMedium.copyWith(
-                color: CoopvestColors.mediumGray,
-              ),
+              style: TextStyle(color: CoopvestColors.mediumGray),
             ),
           ],
         ),
@@ -760,7 +710,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
               children: [
                 Text(
                   greeting,
-                  style: CoopvestTypography.bodyMedium.copyWith(
+                  style: TextStyle(
                     color: Colors.white.withOpacity(0.9),
                     fontWeight: FontWeight.w500,
                   ),
@@ -768,8 +718,9 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                 const SizedBox(height: 4),
                 Text(
                   userName,
-                  style: CoopvestTypography.headlineLarge.copyWith(
+                  style: const TextStyle(
                     color: Colors.white,
+                    fontSize: 24,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
