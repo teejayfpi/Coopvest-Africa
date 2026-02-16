@@ -61,6 +61,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
       appBar: AppBar(
         elevation: 0,
         title: const Text('Coopvest'),
+        automaticallyImplyLeading: false,
         leading: IconButton(
           icon: Icon(Icons.notifications_none, color: iconColor),
           onPressed: () {
@@ -384,7 +385,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
       child: AppCard(
         onTap: () => Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (context) => TicketDetailScreen(ticketId: ticket.id),
+            builder: (context) => TicketDetailScreen(ticketId: ticket.ticketId),
           ),
         ),
         child: Row(
@@ -404,7 +405,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    ticket.subject,
+                    ticket.title,
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   Text(

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../../config/theme_config.dart';
 import '../../../core/utils/utils.dart';
@@ -294,7 +295,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
               color: CoopvestColors.primary.withOpacity(0.1),
               shape: BoxShape.circle,
             ),
-            child: const Icon(icon, color: CoopvestColors.primary),
+            child: Icon(icon, color: CoopvestColors.primary),
           ),
           const SizedBox(height: 12),
           Text(

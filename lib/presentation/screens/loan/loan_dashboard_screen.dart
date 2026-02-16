@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/theme_config.dart';
-import '../../../core/utils/utils.dart';
+import '../../../core/utils/utils.dart' hide NumExtension;
 import '../../../core/extensions/number_extensions.dart';
 import '../../../data/models/loan_models.dart';
 import '../../../presentation/providers/loan_provider.dart';
@@ -147,7 +147,7 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
                 const SizedBox(height: 16),
 
                 // Loan List
-                loanState.isLoading && loans.isEmpty
+                loanState.status == LoanStatus.loading && loans.isEmpty
                     ? const Center(child: CircularProgressIndicator())
                     : loans.isEmpty
                         ? _buildEmptyState()
@@ -314,7 +314,7 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
                       ),
                     ),
                     Text(
-                      Utils.formatDate(loan.createdAt),
+                      Formatters.formatDate(loan.createdAt),
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ],
