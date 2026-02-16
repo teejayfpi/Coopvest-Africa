@@ -15,6 +15,7 @@ import '../loan/loan_dashboard_screen.dart';
 import '../wallet/wallet_dashboard_screen.dart';
 import '../savings/savings_goals_screen.dart';
 import '../rollover/rollover_eligibility_screen.dart';
+import '../support/support_home_screen.dart';
 import '../support/ticket_list_screen.dart';
 import '../support/ticket_detail_screen.dart';
 import '../profile/profile_settings_screen.dart';
@@ -267,34 +268,53 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
           children: [
             _buildQuickActionItem(
               context,
-              'Deposit',
-              Icons.add_circle_outline,
-              Colors.green,
-              () => Navigator.of(context).pushNamed('/deposit'),
-            ),
-            _buildQuickActionItem(
-              context,
-              'Withdraw',
-              Icons.remove_circle_outline,
-              Colors.red,
-              () => Navigator.of(context).pushNamed('/withdrawal'),
-            ),
-            _buildQuickActionItem(
-              context,
               'Loans',
               Icons.account_balance_wallet_outlined,
               Colors.blue,
-              () => Navigator.of(context).pushNamed('/loan-dashboard', arguments: {
-                'userId': userId,
-                'userName': userName,
-              }),
+              () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => LoanDashboardScreen(
+                      userId: userId,
+                      userName: userName,
+                      userPhone: '',
+                    ),
+                  ),
+                );
+              },
+            ),
+            _buildQuickActionItem(
+              context,
+              'Deposit',
+              Icons.add_circle_outline,
+              Colors.green,
+              () {
+                // Navigate to deposit screen
+                Navigator.of(context).pushNamed('/deposit');
+              },
+            ),
+            _buildQuickActionItem(
+              context,
+              'Withdrawal',
+              Icons.remove_circle_outline,
+              Colors.red,
+              () {
+                // Navigate to withdrawal screen
+                Navigator.of(context).pushNamed('/withdrawal');
+              },
             ),
             _buildQuickActionItem(
               context,
               'Support',
               Icons.help_outline,
               Colors.orange,
-              () => Navigator.of(context).pushNamed('/support'),
+              () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const SupportHomeScreen(),
+                  ),
+                );
+              },
             ),
           ],
         ),

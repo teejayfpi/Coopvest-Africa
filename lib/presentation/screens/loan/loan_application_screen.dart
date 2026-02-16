@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -280,20 +281,21 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
     final loanInfo = _loanTypes[_selectedLoanType]!;
     final minAmount = (loanInfo['minAmount'] as num).toDouble();
     final maxAmount = (loanInfo['maxAmount'] as num).toDouble();
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: isDarkMode ? CoopvestColors.darkBackground : Colors.white,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.white,
+        backgroundColor: isDarkMode ? CoopvestColors.darkSurface : Colors.white,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: CoopvestColors.darkGray),
+          icon: Icon(Icons.arrow_back, color: isDarkMode ? Colors.white : CoopvestColors.darkGray),
           onPressed: _goBack,
         ),
         title: Text(
           'Apply for Loan',
           style: CoopvestTypography.headlineLarge.copyWith(
-            color: CoopvestColors.darkGray,
+            color: isDarkMode ? Colors.white : CoopvestColors.darkGray,
           ),
         ),
       ),
@@ -388,12 +390,14 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                             decoration: BoxDecoration(
-                              color: CoopvestColors.veryLightGray,
+                              color: isDarkMode ? CoopvestColors.darkSurface : CoopvestColors.veryLightGray,
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
                               'Min: \u20a6${minAmount.toStringAsFixed(0)}',
-                              style: CoopvestTypography.bodySmall,
+                              style: CoopvestTypography.bodySmall.copyWith(
+                                color: isDarkMode ? CoopvestColors.darkText : CoopvestColors.darkGray,
+                              ),
                             ),
                           ),
                         ),
@@ -402,12 +406,14 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                             decoration: BoxDecoration(
-                              color: CoopvestColors.veryLightGray,
+                              color: isDarkMode ? CoopvestColors.darkSurface : CoopvestColors.veryLightGray,
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
                               'Max: \u20a6${maxAmount.toStringAsFixed(0)}',
-                              style: CoopvestTypography.bodySmall,
+                              style: CoopvestTypography.bodySmall.copyWith(
+                                color: isDarkMode ? CoopvestColors.darkText : CoopvestColors.darkGray,
+                              ),
                             ),
                           ),
                         ),

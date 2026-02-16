@@ -7,6 +7,8 @@ class NotificationsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    
     // Mock notifications
     final List<Map<String, dynamic>> notifications = [
       {
@@ -33,18 +35,18 @@ class NotificationsScreen extends StatelessWidget {
     ];
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: isDarkMode ? CoopvestColors.darkBackground : Colors.white,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.white,
+        backgroundColor: isDarkMode ? CoopvestColors.darkSurface : Colors.white,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: CoopvestColors.darkGray),
+          icon: Icon(Icons.arrow_back, color: isDarkMode ? Colors.white : CoopvestColors.darkGray),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: const Text(
+        title: Text(
           'Notifications',
           style: TextStyle(
-            color: CoopvestColors.darkGray,
+            color: isDarkMode ? Colors.white : CoopvestColors.darkGray,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -81,17 +83,17 @@ class NotificationsScreen extends StatelessWidget {
                           children: [
                             Text(
                               item['title'] as String,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 16,
-                                color: CoopvestColors.darkGray,
+                                color: isDarkMode ? CoopvestColors.darkText : CoopvestColors.darkGray,
                               ),
                             ),
                             const SizedBox(height: 4),
                             Text(
                               item['body'] as String,
                               style: TextStyle(
-                                color: CoopvestColors.mediumGray,
+                                color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.mediumGray,
                                 fontSize: 14,
                               ),
                             ),
@@ -99,7 +101,7 @@ class NotificationsScreen extends StatelessWidget {
                             Text(
                               item['time'] as String,
                               style: TextStyle(
-                                color: CoopvestColors.lightGray,
+                                color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.lightGray,
                                 fontSize: 12,
                               ),
                             ),

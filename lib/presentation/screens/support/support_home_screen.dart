@@ -11,19 +11,21 @@ class SupportHomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: isDarkMode ? CoopvestColors.darkBackground : Colors.white,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.white,
+        backgroundColor: isDarkMode ? CoopvestColors.darkSurface : Colors.white,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: CoopvestColors.darkGray),
+          icon: Icon(Icons.arrow_back, color: isDarkMode ? Colors.white : CoopvestColors.darkGray),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: const Text(
+        title: Text(
           'Support Center',
           style: TextStyle(
-            color: CoopvestColors.darkGray,
+            color: isDarkMode ? Colors.white : CoopvestColors.darkGray,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -93,12 +95,12 @@ class SupportHomeScreen extends ConsumerWidget {
               const SizedBox(height: 32),
 
               // Quick Actions
-              const Text(
+              Text(
                 'Quick Actions',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
-                  color: CoopvestColors.darkGray,
+                  color: isDarkMode ? CoopvestColors.darkText : CoopvestColors.darkGray,
                 ),
               ),
               const SizedBox(height: 16),
@@ -167,12 +169,12 @@ class SupportHomeScreen extends ConsumerWidget {
               const SizedBox(height: 32),
 
               // Help Topics
-              const Text(
+              Text(
                 'Common Help Topics',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
-                  color: CoopvestColors.darkGray,
+                  color: isDarkMode ? CoopvestColors.darkText : CoopvestColors.darkGray,
                 ),
               ),
               const SizedBox(height: 16),
@@ -254,25 +256,25 @@ class SupportHomeScreen extends ConsumerWidget {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.grey[100],
+                  color: isDarkMode ? CoopvestColors.darkSurface : Colors.grey[100],
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
                   children: [
                     Icon(
                       Icons.info_outline,
-                      color: CoopvestColors.mediumGray,
+                      color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.mediumGray,
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
+                          Text(
                             'Response Time',
                             style: TextStyle(
                               fontWeight: FontWeight.w600,
-                              color: CoopvestColors.darkGray,
+                              color: isDarkMode ? CoopvestColors.darkText : CoopvestColors.darkGray,
                             ),
                           ),
                           const SizedBox(height: 4),
@@ -280,7 +282,7 @@ class SupportHomeScreen extends ConsumerWidget {
                             'We typically respond within 24 hours on business days.',
                             style: TextStyle(
                               fontSize: 13,
-                              color: CoopvestColors.mediumGray,
+                              color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.mediumGray,
                             ),
                           ),
                         ],
@@ -302,57 +304,62 @@ class SupportHomeScreen extends ConsumerWidget {
     required String description,
     required VoidCallback onTap,
   }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          border: Border.all(color: CoopvestColors.lightGray),
+    return Builder(
+      builder: (context) {
+        final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+        return InkWell(
+          onTap: onTap,
           borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: CoopvestColors.primaryLight.withAlpha((255 * 0.1).toInt()),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: CoopvestColors.primary),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              border: Border.all(color: isDarkMode ? CoopvestColors.darkDivider : CoopvestColors.lightGray),
+              borderRadius: BorderRadius.circular(12),
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: CoopvestColors.darkGray,
-                    ),
+            child: Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: CoopvestColors.primaryLight.withAlpha((255 * 0.1).toInt()),
+                    shape: BoxShape.circle,
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    description,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: CoopvestColors.mediumGray,
-                    ),
+                  child: Icon(icon, color: CoopvestColors.primary),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: isDarkMode ? CoopvestColors.darkText : CoopvestColors.darkGray,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        description,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.mediumGray,
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+                Icon(
+                  Icons.arrow_forward_ios,
+                  size: 16,
+                  color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.mediumGray,
+                ),
+              ],
             ),
-            Icon(
-              Icons.arrow_forward_ios,
-              size: 16,
-              color: CoopvestColors.mediumGray,
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      }
     );
   }
 
