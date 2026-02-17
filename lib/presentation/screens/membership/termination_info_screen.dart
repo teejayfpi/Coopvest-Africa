@@ -69,7 +69,6 @@ class TerminationInfoScreen extends ConsumerWidget {
                     ),
                   );
                 },
-                backgroundColor: CoopvestColors.error,
               )
             else
               SecondaryButton(

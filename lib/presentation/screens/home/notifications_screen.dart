@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../config/theme_config.dart';
+import '../../../config/theme_extension.dart';
 import '../../widgets/common/cards.dart';
 
 class NotificationsScreen extends StatelessWidget {
@@ -7,8 +8,6 @@ class NotificationsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    
     // Mock notifications
     final List<Map<String, dynamic>> notifications = [
       {
@@ -35,24 +34,23 @@ class NotificationsScreen extends StatelessWidget {
     ];
 
     return Scaffold(
-      backgroundColor: isDarkMode ? CoopvestColors.darkBackground : Colors.white,
+      backgroundColor: context.scaffoldBackground,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: isDarkMode ? CoopvestColors.darkSurface : Colors.white,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: isDarkMode ? Colors.white : CoopvestColors.darkGray),
+          icon: Icon(Icons.arrow_back, color: context.iconPrimary),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
           'Notifications',
           style: TextStyle(
-            color: isDarkMode ? Colors.white : CoopvestColors.darkGray,
+            color: context.textPrimary,
             fontWeight: FontWeight.w600,
           ),
         ),
       ),
       body: notifications.isEmpty
-          ? _buildEmptyState()
+          ? _buildEmptyState(context)
           : ListView.separated(
               padding: const EdgeInsets.all(24),
               itemCount: notifications.length,
@@ -86,14 +84,14 @@ class NotificationsScreen extends StatelessWidget {
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 16,
-                                color: isDarkMode ? CoopvestColors.darkText : CoopvestColors.darkGray,
+                                color: context.textPrimary,
                               ),
                             ),
                             const SizedBox(height: 4),
                             Text(
                               item['body'] as String,
                               style: TextStyle(
-                                color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.mediumGray,
+                                color: context.textSecondary,
                                 fontSize: 14,
                               ),
                             ),
@@ -101,7 +99,7 @@ class NotificationsScreen extends StatelessWidget {
                             Text(
                               item['time'] as String,
                               style: TextStyle(
-                                color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.lightGray,
+                                color: context.textSecondary,
                                 fontSize: 12,
                               ),
                             ),
@@ -116,21 +114,21 @@ class NotificationsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(BuildContext context) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(
+          Icon(
             Icons.notifications_off_outlined,
             size: 64,
-            color: CoopvestColors.lightGray,
+            color: context.textSecondary,
           ),
           const SizedBox(height: 16),
           Text(
             'No notifications yet',
             style: TextStyle(
-              color: CoopvestColors.mediumGray,
+              color: context.textSecondary,
               fontSize: 16,
             ),
           ),

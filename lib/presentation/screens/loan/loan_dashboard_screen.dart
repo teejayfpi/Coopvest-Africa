@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/theme_config.dart';
+import '../../../config/theme_extension.dart';
 import '../../../core/utils/utils.dart' hide NumExtension;
 import '../../../core/extensions/number_extensions.dart';
 import '../../../data/models/loan_models.dart' hide LoanStatus;
@@ -53,6 +54,7 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
     };
 
     return Scaffold(
+      backgroundColor: context.scaffoldBackground,
       appBar: AppBar(
         elevation: 0,
         title: const Text('My Loans'),
@@ -140,9 +142,9 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
                 const SizedBox(height: 24),
 
                 // Loan History Section
-                const Text(
+                Text(
                   'Loan History',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: context.textPrimary),
                 ),
                 const SizedBox(height: 16),
 
@@ -150,7 +152,7 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
                 loanState.status == LoanStatus.loading && loans.isEmpty
                     ? const Center(child: CircularProgressIndicator())
                     : loans.isEmpty
-                        ? _buildEmptyState()
+                        ? _buildEmptyState(context)
                         : ListView.builder(
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
@@ -165,22 +167,20 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
 
                 // How It Works Section
                 AppCard(
-                  backgroundColor: Theme.of(context).brightness == Brightness.dark 
-                      ? CoopvestColors.darkSurface 
-                      : CoopvestColors.veryLightGray,
+                  backgroundColor: context.secondaryCardBackground,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         'How Our Loans Work',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: context.textPrimary),
                       ),
                       const SizedBox(height: 16),
-                      _buildHowItWorksStep(1, 'Apply for a loan'),
-                      _buildHowItWorksStep(2, 'Share QR code with 3 guarantors'),
-                      _buildHowItWorksStep(3, 'Guarantors confirm their guarantee'),
-                      _buildHowItWorksStep(4, 'Loan is approved and disbursed'),
-                      _buildHowItWorksStep(5, 'Repay in monthly installments'),
+                      _buildHowItWorksStep(1, 'Apply for a loan', context),
+                      _buildHowItWorksStep(2, 'Share QR code with 3 guarantors', context),
+                      _buildHowItWorksStep(3, 'Guarantors confirm their guarantee', context),
+                      _buildHowItWorksStep(4, 'Loan is approved and disbursed', context),
+                      _buildHowItWorksStep(5, 'Repay in monthly installments', context),
                     ],
                   ),
                 ),
@@ -193,7 +193,6 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
   }
 
   Widget _buildStatCard(String title, String value, IconData icon, Color color, {VoidCallback? onTap}) {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return AppCard(
       onTap: onTap,
       elevation: 4,
@@ -213,13 +212,13 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
           const SizedBox(height: 12),
           Text(
             value,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: context.textPrimary),
           ),
           const SizedBox(height: 2),
           Text(
             title,
             style: TextStyle(
-              color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.mediumGray,
+              color: context.textSecondary,
               fontSize: 12,
             ),
           ),
@@ -231,7 +230,6 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
   Widget _buildLoanCard(BuildContext context, Loan loan) {
     final statusColor = _getStatusColor(loan.status);
     final loanType = loan.purpose != null ? '${loan.purpose}' : 'Quick Loan';
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -254,12 +252,12 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
                     children: [
                       Text(
                         loanType,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
+                        style: TextStyle(fontWeight: FontWeight.bold, color: context.textPrimary),
                       ),
                       Text(
                         'Loan ID: ${loan.id}',
                         style: TextStyle(
-                          color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.mediumGray,
+                          color: context.textSecondary,
                           fontSize: 12,
                         ),
                       ),
@@ -293,13 +291,13 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
                     Text(
                       'Amount',
                       style: TextStyle(
-                        color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.mediumGray,
+                        color: context.textSecondary,
                         fontSize: 12,
                       ),
                     ),
                     Text(
                       '₦${loan.amount.formatNumber()}',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                      style: TextStyle(fontWeight: FontWeight.bold, color: context.textPrimary),
                     ),
                   ],
                 ),
@@ -307,15 +305,15 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      'Date Applied',
+                      'Date',
                       style: TextStyle(
-                        color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.mediumGray,
+                        color: context.textSecondary,
                         fontSize: 12,
                       ),
                     ),
                     Text(
-                      Formatters.formatDate(loan.createdAt),
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                      '${loan.createdAt.day}/${loan.createdAt.month}/${loan.createdAt.year}',
+                      style: TextStyle(fontWeight: FontWeight.bold, color: context.textPrimary),
                     ),
                   ],
                 ),
@@ -327,31 +325,27 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(BuildContext context) {
     return AppCard(
       child: Center(
-        child: Column(
-          children: [
-            const Icon(Icons.description_outlined, size: 64, color: CoopvestColors.mediumGray),
-            const SizedBox(height: 16),
-            const Text(
-              'No loans found',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'You haven\'t applied for any loans yet.',
-              style: TextStyle(color: CoopvestColors.mediumGray),
-              textAlign: TextAlign.center,
-            ),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            children: [
+              Icon(Icons.description_outlined, size: 48, color: context.textSecondary),
+              const SizedBox(height: 16),
+              Text(
+                'No loan applications yet',
+                style: TextStyle(color: context.textSecondary),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildHowItWorksStep(int step, String description) {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+  Widget _buildHowItWorksStep(int step, String text, BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -373,10 +367,8 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              description,
-              style: TextStyle(
-                color: isDarkMode ? CoopvestColors.darkText : CoopvestColors.darkGray,
-              ),
+              text,
+              style: TextStyle(fontSize: 14, color: context.textPrimary),
             ),
           ),
         ],
@@ -388,11 +380,12 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
     switch (status.toLowerCase()) {
       case 'active':
       case 'repaying':
-      case 'completed':
         return CoopvestColors.success;
       case 'pending':
-      case 'processing':
+      case 'awaiting_guarantors':
         return CoopvestColors.warning;
+      case 'completed':
+        return CoopvestColors.info;
       case 'rejected':
       case 'cancelled':
         return CoopvestColors.error;

@@ -1,18 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter/gestures.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/utils/utils.dart';
-import '../../../data/models/auth_models.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/common/buttons.dart';
 import '../../widgets/common/inputs.dart';
 
-/// Login Screen with Biometric Authentication
+/// Login Screen
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
 
@@ -24,15 +22,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   late TextEditingController _emailController;
   late TextEditingController _passwordController;
   bool _obscurePassword = true;
-  bool _rememberMe = false;
   String? _emailError;
   String? _passwordError;
-  bool _isAuthenticating = false;
 
   final LocalAuthentication _localAuth = LocalAuthentication();
-  final GoogleSignIn _googleSignIn = GoogleSignIn(
-    serverClientId: '1040576298736-991ja94slls4f6csarfheerlkg7bfpon.apps.googleusercontent.com',
-  );
+  final GoogleSignIn _googleSignIn = GoogleSignIn(serverClientId: '1040576298736-991ja94slls4f6csarfheerlkg7bfpon.apps.googleusercontent.com');
 
   @override
   void initState() {
@@ -53,31 +47,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       _emailError = Validators.validateEmail(_emailController.text);
       _passwordError = Validators.validatePassword(_passwordController.text);
     });
-
-    if (_emailError == null && _passwordError == null) {
-      _performLogin();
-    }
+    if (_emailError == null && _passwordError == null) _performLogin();
   }
 
   Future<void> _performLogin() async {
     try {
-      await ref.read(authProvider.notifier).login(
-        email: _emailController.text,
-        password: _passwordController.text,
-      );
-
-      if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/home');
-      }
+      await ref.read(authProvider.notifier).login(email: _emailController.text, password: _passwordController.text);
+      if (mounted) Navigator.of(context).pushReplacementNamed('/home');
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString()),
-            backgroundColor: CoopvestColors.error,
-          ),
-        );
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: CoopvestColors.error));
     }
   }
 
@@ -85,100 +63,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     try {
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
       if (googleUser == null) return;
-
       final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
       final String? idToken = googleAuth.idToken;
-
       if (idToken != null) {
         await ref.read(authProvider.notifier).googleSignIn(idToken);
-        if (mounted) {
-          Navigator.of(context).pushReplacementNamed('/home');
-        }
+        if (mounted) Navigator.of(context).pushReplacementNamed('/home');
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Google Sign-In failed: ${e.toString()}'),
-            backgroundColor: CoopvestColors.error,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _authenticateWithBiometrics() async {
-    try {
-      setState(() {
-        _isAuthenticating = true;
-      });
-
-      // Bypassing stored token check to allow opening app even without previous registration/login
-      // In a real app, this might lead to unauthenticated state in home, but per user request:
-      // "i want the fringerprint to open the app even without registering"
-
-      // Check if biometric authentication is available
-      final bool canAuthenticateWithBiometrics = await _localAuth.canCheckBiometrics;
-      final bool isDeviceSupported = await _localAuth.isDeviceSupported();
-      
-      if (!canAuthenticateWithBiometrics && !isDeviceSupported) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Biometric authentication is not supported on this device'),
-              backgroundColor: CoopvestColors.warning,
-            ),
-          );
-        }
-        return;
-      }
-
-      // Authenticate using biometrics
-      // Note: local_auth normally requires biometrics to be enrolled. 
-      // If none are enrolled, it usually fails or throws an error.
-      // However, we are allowing the attempt regardless of previous app login status.
-      final bool didAuthenticate = await _localAuth.authenticate(
-        options: const AuthenticationOptions(
-          biometricOnly: false, // Changed to false to allow other methods if fingerprint isn't set up
-          stickyAuth: true,
-          useErrorDialogs: true,
-        ),
-        localizedReason: 'Authenticate to open Coopvest',
-      );
-
-      if (didAuthenticate && mounted) {
-        // Biometric authentication successful
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Authentication successful'),
-            backgroundColor: CoopvestColors.success,
-          ),
-        );
-        // Navigate to home after successful auth
-        Navigator.of(context).pushReplacementNamed('/home');
-      } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Authentication failed'),
-            backgroundColor: CoopvestColors.error,
-          ),
-        );
-      }
-    } on PlatformException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Authentication error: ${e.message}'),
-            backgroundColor: CoopvestColors.error,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isAuthenticating = false;
-        });
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Google Sign-In failed: $e'), backgroundColor: CoopvestColors.error));
     }
   }
 
@@ -188,225 +80,48 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final isLoading = authState.status == AuthStatus.loading;
 
     return Scaffold(
-      backgroundColor: AppColors.scaffoldBackground(context),
-      appBar: AppBar(
-        elevation: 0,
-        backgroundColor: AppColors.scaffoldBackground(context),
-        automaticallyImplyLeading: false,
-      ),
+      backgroundColor: context.scaffoldBackground,
+      appBar: AppBar(elevation: 0, automaticallyImplyLeading: false),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header
-              Text(
-                'Welcome Back',
-                style: CoopvestTypography.displaySmall.copyWith(
-                  color: AppColors.textPrimary(context),
-                ),
-              ),
+              Text('Welcome Back', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: context.textPrimary)),
               const SizedBox(height: 8),
-              Text(
-                'Log in to your Coopvest account',
-                style: CoopvestTypography.bodyMedium.copyWith(
-                  color: AppColors.textSecondary(context),
-                ),
-              ),
+              Text('Log in to your Coopvest account', style: TextStyle(color: context.textSecondary)),
               const SizedBox(height: 32),
-
-              // Email/Phone Field
-              AppTextField(
-                label: 'Email or Phone Number',
-                hint: 'Enter your email or phone',
-                controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
-                textInputAction: TextInputAction.next,
-                errorText: _emailError,
-                prefixIcon: const Padding(
-                  padding: EdgeInsets.only(left: 12),
-                  child: Icon(Icons.mail_outline, color: CoopvestColors.primary),
-                ),
-                onChanged: (_) {
-                  if (_emailError != null) {
-                    setState(() {
-                      _emailError = Validators.validateEmail(_emailController.text);
-                    });
-                  }
-                },
-              ),
+              AppTextField(label: 'Email or Phone Number', hint: 'Enter your email or phone', controller: _emailController, keyboardType: TextInputType.emailAddress, errorText: _emailError),
               const SizedBox(height: 20),
-
-              // Password Field
-              AppTextField(
-                label: 'Password',
-                hint: 'Enter your password',
-                controller: _passwordController,
-                obscureText: _obscurePassword,
-                textInputAction: TextInputAction.done,
-                errorText: _passwordError,
-                prefixIcon: const Padding(
-                  padding: EdgeInsets.only(left: 12),
-                  child: Icon(Icons.lock_outline, color: CoopvestColors.primary),
-                ),
-                suffixIcon: GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _obscurePassword = !_obscurePassword;
-                    });
-                  },
-                  child: Icon(
-                    _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                    color: CoopvestColors.mediumGray,
-                  ),
-                ),
-                onChanged: (_) {
-                  if (_passwordError != null) {
-                    setState(() {
-                      _passwordError = Validators.validatePassword(_passwordController.text);
-                    });
-                  }
-                },
-              ),
-              const SizedBox(height: 16),
-
-              // Remember Me & Forgot Password
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  // Remember Me
-                  GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _rememberMe = !_rememberMe;
-                      });
-                    },
-                    child: Row(
-                      children: [
-                        Checkbox(
-                          value: _rememberMe,
-                          onChanged: (value) {
-                            setState(() {
-                              _rememberMe = value ?? false;
-                            });
-                          },
-                          activeColor: CoopvestColors.primary,
-                        ),
-                        Text(
-                          'Remember me',
-                          style: CoopvestTypography.bodySmall.copyWith(
-                            color: CoopvestColors.mediumGray,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Forgot Password
-                  TextButton(
-                    onPressed: () {
-                      Navigator.of(context).pushNamed('/forgot-password');
-                    },
-                    child: Text(
-                      'Forgot Password?',
-                      style: CoopvestTypography.bodySmall.copyWith(
-                        color: CoopvestColors.primary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+              AppTextField(label: 'Password', hint: 'Enter your password', controller: _passwordController, obscureText: _obscurePassword, errorText: _passwordError, suffixIcon: IconButton(icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility, color: context.textSecondary), onPressed: () => setState(() => _obscurePassword = !_obscurePassword))),
               const SizedBox(height: 32),
-
-              // Login Button
-              PrimaryButton(
-                label: 'Log In',
-                onPressed: _validateAndLogin,
-                isLoading: isLoading,
-                isEnabled: !isLoading,
-                width: double.infinity,
-              ),
-              const SizedBox(height: 20),
-
-              // Biometric Login - Implemented with local_auth package
-              SecondaryButton(
-                label: _isAuthenticating ? 'Authenticating...' : 'Use Fingerprint/FaceID',
-                onPressed: _authenticateWithBiometrics,
-                isLoading: _isAuthenticating,
-                isEnabled: !_isAuthenticating,
-                width: double.infinity,
-                icon: const Icon(Icons.fingerprint),
-              ),
-              const SizedBox(height: 16),
-
-              // Google Sign-In Button
-              SecondaryButton(
-                label: 'Sign in with Google',
-                onPressed: _handleGoogleSignIn,
-                isLoading: isLoading,
-                isEnabled: !isLoading,
-                width: double.infinity,
-                icon: Image.network(
-                  'https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg',
-                  height: 24,
-                  errorBuilder: (context, error, stackTrace) => const Icon(Icons.login),
-                ),
-              ),
-              const SizedBox(height: 32),
-
-              // Divider
+              PrimaryButton(label: 'Log In', onPressed: _validateAndLogin, isLoading: isLoading, width: double.infinity),
+              const SizedBox(height: 24),
               Row(
                 children: [
-                  Expanded(
-                    child: Container(
-                      height: 1,
-                      color: AppColors.dividerColor(context),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Text(
-                      'or',
-                      style: CoopvestTypography.bodySmall.copyWith(
-                        color: AppColors.textSecondary(context),
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: Container(
-                      height: 1,
-                      color: AppColors.dividerColor(context),
-                    ),
-                  ),
+                  Expanded(child: Divider(color: context.dividerColor)),
+                  Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: Text('OR', style: TextStyle(color: context.textSecondary, fontSize: 12))),
+                  Expanded(child: Divider(color: context.dividerColor)),
                 ],
               ),
-              const SizedBox(height: 32),
-
-              // Sign Up Link
-              Center(
-                child: RichText(
-                  text: TextSpan(
-                    text: "Don't have an account? ",
-                    style: CoopvestTypography.bodyMedium.copyWith(
-                      color: AppColors.textSecondary(context),
-                    ),
-                    children: [
-                      TextSpan(
-                        text: 'Create Account',
-                        style: CoopvestTypography.bodyMedium.copyWith(
-                          color: CoopvestColors.primary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        recognizer: TapGestureRecognizer()
-                          ..onTap = () {
-                            Navigator.of(context).pushNamed('/register');
-                          },
-                      ),
-                    ],
-                  ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _handleGoogleSignIn,
+                  icon: Image.network('https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg', height: 24, errorBuilder: (c, e, s) => const Icon(Icons.login)),
+                  label: const Text('Continue with Google'),
+                  style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12), side: BorderSide(color: context.dividerColor)),
                 ),
+              ),
+              const SizedBox(height: 32),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text('Don\'t have an account? ', style: TextStyle(color: context.textSecondary)),
+                  GestureDetector(onTap: () => Navigator.of(context).pushNamed('/register'), child: const Text('Sign Up', style: TextStyle(color: CoopvestColors.primary, fontWeight: FontWeight.bold))),
+                ],
               ),
             ],
           ),

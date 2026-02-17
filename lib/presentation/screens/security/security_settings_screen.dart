@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_auth/local_auth.dart';
 import '../../../config/theme_config.dart';
+import '../../../config/theme_extension.dart';
 import '../../../presentation/providers/auth_provider.dart';
 import '../../../presentation/providers/theme_provider.dart';
 
@@ -104,19 +105,23 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Change Transaction PIN'),
+        backgroundColor: context.cardBackground,
+        title: Text('Change Transaction PIN', style: TextStyle(color: context.textPrimary)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Enter your current 4-digit PIN to proceed.'),
+            Text('Enter your current 4-digit PIN to proceed.', style: TextStyle(color: context.textSecondary)),
             const SizedBox(height: 16),
             TextField(
               keyboardType: TextInputType.number,
               maxLength: 4,
               obscureText: true,
-              decoration: const InputDecoration(
+              style: TextStyle(color: context.textPrimary),
+              decoration: InputDecoration(
                 labelText: 'Current PIN',
-                border: OutlineInputBorder(),
+                labelStyle: TextStyle(color: context.textSecondary),
+                border: const OutlineInputBorder(),
+                enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: context.dividerColor)),
               ),
             ),
             const SizedBox(height: 16),
@@ -144,19 +149,23 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Set New PIN'),
+        backgroundColor: context.cardBackground,
+        title: Text('Set New PIN', style: TextStyle(color: context.textPrimary)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Enter your new 4-digit PIN.'),
+            Text('Enter your new 4-digit PIN.', style: TextStyle(color: context.textSecondary)),
             const SizedBox(height: 16),
             TextField(
               keyboardType: TextInputType.number,
               maxLength: 4,
               obscureText: true,
-              decoration: const InputDecoration(
+              style: TextStyle(color: context.textPrimary),
+              decoration: InputDecoration(
                 labelText: 'New PIN',
-                border: OutlineInputBorder(),
+                labelStyle: TextStyle(color: context.textSecondary),
+                border: const OutlineInputBorder(),
+                enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: context.dividerColor)),
               ),
             ),
             const SizedBox(height: 16),
@@ -164,9 +173,12 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
               keyboardType: TextInputType.number,
               maxLength: 4,
               obscureText: true,
-              decoration: const InputDecoration(
+              style: TextStyle(color: context.textPrimary),
+              decoration: InputDecoration(
                 labelText: 'Confirm New PIN',
-                border: OutlineInputBorder(),
+                labelStyle: TextStyle(color: context.textSecondary),
+                border: const OutlineInputBorder(),
+                enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: context.dividerColor)),
               ),
             ),
             const SizedBox(height: 16),
@@ -199,32 +211,42 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Change Password'),
+        backgroundColor: context.cardBackground,
+        title: Text('Change Password', style: TextStyle(color: context.textPrimary)),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 obscureText: true,
-                decoration: const InputDecoration(
+                style: TextStyle(color: context.textPrimary),
+                decoration: InputDecoration(
                   labelText: 'Current Password',
-                  border: OutlineInputBorder(),
+                  labelStyle: TextStyle(color: context.textSecondary),
+                  border: const OutlineInputBorder(),
+                  enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: context.dividerColor)),
                 ),
               ),
               const SizedBox(height: 16),
               TextField(
                 obscureText: true,
-                decoration: const InputDecoration(
+                style: TextStyle(color: context.textPrimary),
+                decoration: InputDecoration(
                   labelText: 'New Password',
-                  border: OutlineInputBorder(),
+                  labelStyle: TextStyle(color: context.textSecondary),
+                  border: const OutlineInputBorder(),
+                  enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: context.dividerColor)),
                 ),
               ),
               const SizedBox(height: 16),
               TextField(
                 obscureText: true,
-                decoration: const InputDecoration(
+                style: TextStyle(color: context.textPrimary),
+                decoration: InputDecoration(
                   labelText: 'Confirm New Password',
-                  border: OutlineInputBorder(),
+                  labelStyle: TextStyle(color: context.textSecondary),
+                  border: const OutlineInputBorder(),
+                  enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: context.dividerColor)),
                 ),
               ),
               const SizedBox(height: 24),
@@ -257,7 +279,7 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: context.scaffoldBackground,
       appBar: AppBar(
         title: const Text('Security'),
         elevation: 0,
@@ -284,7 +306,7 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
                       onChanged: _isLoading ? null : _toggleBiometric,
                       activeColor: CoopvestColors.primary,
                     )
-                  : const Icon(Icons.not_interested, color: CoopvestColors.mediumGray),
+                  : Icon(Icons.not_interested, color: context.textSecondary),
             ),
             
             const SizedBox(height: 24),
@@ -323,47 +345,10 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
               icon: Icons.timer,
               title: 'Auto-Lock',
               subtitle: 'Lock app after 5 minutes of inactivity',
-              trailing: const Icon(Icons.chevron_right, color: CoopvestColors.lightGray),
-              onTap: () {
-                // Auto-lock settings - integrated with app lifecycle
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Auto-Lock: App will lock after 5 minutes of inactivity'),
-                    backgroundColor: CoopvestColors.primary,
-                  ),
-                );
-              },
-            ),
-            
-            const SizedBox(height: 32),
-            
-            // Security Tips
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: CoopvestColors.infoLight.withOpacity(0.5),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: CoopvestColors.info,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.info, color: Colors.white, size: 20),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Keep your account secure by using a strong password and enabling biometric login.',
-                      style: CoopvestTypography.bodySmall.copyWith(
-                        color: CoopvestColors.darkGray,
-                      ),
-                    ),
-                  ),
-                ],
+              trailing: Switch(
+                value: true,
+                onChanged: (val) {},
+                activeColor: CoopvestColors.primary,
               ),
             ),
           ],
@@ -375,9 +360,11 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
   Widget _buildSectionHeader(String title) {
     return Text(
       title,
-      style: CoopvestTypography.titleMedium.copyWith(
-        color: CoopvestColors.primary,
+      style: TextStyle(
+        fontSize: 14,
         fontWeight: FontWeight.bold,
+        color: CoopvestColors.primary,
+        letterSpacing: 1.2,
       ),
     );
   }
@@ -389,51 +376,34 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
     Widget? trailing,
     VoidCallback? onTap,
   }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: CoopvestColors.primary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon, color: CoopvestColors.primary, size: 22),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: CoopvestTypography.bodyLarge.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: CoopvestTypography.bodySmall.copyWith(
-                        color: CoopvestColors.mediumGray,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (trailing != null) trailing,
-              if (trailing == null && onTap != null)
-                const Icon(Icons.chevron_right, color: CoopvestColors.lightGray),
-            ],
-          ),
+    return ListTile(
+      onTap: onTap,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      tileColor: context.cardBackground,
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: CoopvestColors.primary.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(icon, color: CoopvestColors.primary),
+      ),
+      title: Text(
+        title,
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          color: context.textPrimary,
         ),
       ),
+      subtitle: Text(
+        subtitle,
+        style: TextStyle(
+          fontSize: 12,
+          color: context.textSecondary,
+        ),
+      ),
+      trailing: trailing ?? Icon(Icons.chevron_right, color: context.textSecondary),
     );
   }
 }

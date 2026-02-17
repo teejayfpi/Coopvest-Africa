@@ -2,21 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../../../config/theme_config.dart';
+import '../../../config/theme_extension.dart';
 import '../../../core/utils/utils.dart';
-import '../../../data/models/auth_models.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/common/buttons.dart';
 import '../../widgets/common/inputs.dart';
 
 /// Complete Registration Screen
-/// Collects phone number after Google Sign-In
 class CompleteRegistrationScreen extends ConsumerStatefulWidget {
   final GoogleSignInAccount googleUser;
-
-  const CompleteRegistrationScreen({
-    Key? key,
-    required this.googleUser,
-  }) : super(key: key);
+  const CompleteRegistrationScreen({Key? key, required this.googleUser}) : super(key: key);
 
   @override
   ConsumerState<CompleteRegistrationScreen> createState() => _CompleteRegistrationScreenState();
@@ -24,7 +19,6 @@ class CompleteRegistrationScreen extends ConsumerStatefulWidget {
 
 class _CompleteRegistrationScreenState extends ConsumerState<CompleteRegistrationScreen> {
   final phoneController = TextEditingController();
-  String? _phoneError;
 
   @override
   void dispose() {
@@ -35,63 +29,31 @@ class _CompleteRegistrationScreenState extends ConsumerState<CompleteRegistratio
   Future<void> _completeRegistration() async {
     final phone = phoneController.text.trim();
     final phoneError = Validators.validatePhone(phone);
-
     if (phoneError != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(phoneError),
-          backgroundColor: CoopvestColors.error,
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(phoneError), backgroundColor: CoopvestColors.error));
       return;
     }
-
     try {
-      // Register user with Google info + phone
-      await ref.read(authProvider.notifier).register(
-        email: widget.googleUser.email,
-        password: '', // No password for Google users
-        name: widget.googleUser.displayName ?? 'User',
-        phone: phone,
-      );
-
+      await ref.read(authProvider.notifier).register(email: widget.googleUser.email, password: '', name: widget.googleUser.displayName ?? 'User', phone: phone);
       if (mounted) {
-        // Navigate to Salary Consent (Step 3), then KYC will follow
-        Navigator.of(context).pushReplacementNamed('/register-step3', arguments: {
-          'email': widget.googleUser.email,
-          'name': widget.googleUser.displayName ?? 'User',
-          'phone': phone,
-        });
+        Navigator.of(context).pushReplacementNamed('/register-step3', arguments: {'email': widget.googleUser.email, 'name': widget.googleUser.displayName ?? 'User', 'phone': phone});
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Registration failed: ${e.toString()}'),
-            backgroundColor: CoopvestColors.error,
-          ),
-        );
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Registration failed: $e'), backgroundColor: CoopvestColors.error));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: context.scaffoldBackground,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.white,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: CoopvestColors.darkGray),
+          icon: Icon(Icons.arrow_back, color: context.iconPrimary),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: Text(
-          'Complete Registration',
-          style: CoopvestTypography.headlineLarge.copyWith(
-            color: CoopvestColors.darkGray,
-          ),
-        ),
+        title: Text('Complete Registration', style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold)),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -99,66 +61,28 @@ class _CompleteRegistrationScreenState extends ConsumerState<CompleteRegistratio
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Welcome message
-              Text(
-                'Welcome, ${widget.googleUser.displayName ?? 'User'}!',
-                style: CoopvestTypography.headlineMedium.copyWith(
-                  color: CoopvestColors.darkGray,
-                ),
-              ),
+              Text('Welcome, ${widget.googleUser.displayName ?? 'User'}!', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: context.textPrimary)),
               const SizedBox(height: 8),
-              Text(
-                'Almost done! Please add your phone number to complete registration.',
-                style: CoopvestTypography.bodyMedium.copyWith(
-                  color: CoopvestColors.mediumGray,
-                ),
-              ),
+              Text('Almost done! Please add your phone number to complete registration.', style: TextStyle(color: context.textSecondary)),
               const SizedBox(height: 32),
-
-              // Google account info
               Container(
                 padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: CoopvestColors.veryLightGray,
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                decoration: BoxDecoration(color: context.cardBackground, borderRadius: BorderRadius.circular(12)),
                 child: Row(
                   children: [
                     CircleAvatar(
                       backgroundColor: CoopvestColors.primary,
                       radius: 24,
-                      backgroundImage: widget.googleUser.photoUrl != null
-                          ? NetworkImage(widget.googleUser.photoUrl!)
-                          : null,
-                      child: widget.googleUser.photoUrl == null
-                          ? Text(
-                              (widget.googleUser.displayName?[0] ?? 'U').toUpperCase(),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 24,
-                              ),
-                            )
-                          : null,
+                      backgroundImage: widget.googleUser.photoUrl != null ? NetworkImage(widget.googleUser.photoUrl!) : null,
+                      child: widget.googleUser.photoUrl == null ? Text((widget.googleUser.displayName?[0] ?? 'U').toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 24)) : null,
                     ),
                     const SizedBox(width: 16),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            widget.googleUser.displayName ?? 'User',
-                            style: CoopvestTypography.bodyLarge.copyWith(
-                              color: CoopvestColors.darkGray,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          Text(
-                            widget.googleUser.email,
-                            style: CoopvestTypography.bodyMedium.copyWith(
-                              color: CoopvestColors.mediumGray,
-                            ),
-                          ),
+                          Text(widget.googleUser.displayName ?? 'User', style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold)),
+                          Text(widget.googleUser.email, style: TextStyle(color: context.textSecondary, fontSize: 12)),
                         ],
                       ),
                     ),
@@ -166,56 +90,9 @@ class _CompleteRegistrationScreenState extends ConsumerState<CompleteRegistratio
                 ),
               ),
               const SizedBox(height: 32),
-
-              // Phone number field
-              AppTextField(
-                label: 'Phone Number',
-                hint: '+234 801 234 5678',
-                controller: phoneController,
-                keyboardType: TextInputType.phone,
-                textInputAction: TextInputAction.done,
-                errorText: _phoneError,
-                prefixIcon: const Padding(
-                  padding: EdgeInsets.only(left: 12),
-                  child: Icon(Icons.phone_outlined, color: CoopvestColors.primary),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'This phone number will be used for account recovery and notifications.',
-                style: CoopvestTypography.bodySmall.copyWith(
-                  color: CoopvestColors.mediumGray,
-                ),
-              ),
+              AppTextField(label: 'Phone Number', hint: '+234 801 234 5678', controller: phoneController, keyboardType: TextInputType.phone),
               const SizedBox(height: 32),
-
-              // Complete Registration Button
-              PrimaryButton(
-                label: 'Complete Registration',
-                onPressed: _completeRegistration,
-                width: double.infinity,
-              ),
-              const SizedBox(height: 16),
-
-              // Skip for now (optional)
-              Center(
-                child: TextButton(
-                  onPressed: () {
-                    // Optionally skip and add phone later, go directly to Salary Consent
-                    Navigator.of(context).pushReplacementNamed('/register-step3', arguments: {
-                      'email': widget.googleUser.email,
-                      'name': widget.googleUser.displayName ?? 'User',
-                      'phone': '',
-                    });
-                  },
-                  child: Text(
-                    'Add phone number later',
-                    style: CoopvestTypography.bodyMedium.copyWith(
-                      color: CoopvestColors.primary,
-                    ),
-                  ),
-                ),
-              ),
+              PrimaryButton(label: 'Complete Registration', onPressed: _completeRegistration, width: double.infinity),
             ],
           ),
         ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../config/theme_config.dart';
+import '../../../config/theme_extension.dart';
 
 /// Standard Card Component
 class AppCard extends StatelessWidget {
@@ -26,15 +27,14 @@ class AppCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return Container(
       margin: margin,
       child: Card(
         elevation: elevation,
-        color: backgroundColor ?? (isDarkMode ? CoopvestColors.darkSurface : Colors.white),
+        color: backgroundColor ?? context.cardBackground,
         shape: RoundedRectangleBorder(
           borderRadius: borderRadius ?? BorderRadius.circular(12),
-          side: border?.top ?? (isDarkMode ? BorderSide(color: CoopvestColors.darkDivider.withOpacity(0.5)) : BorderSide.none),
+          side: border?.top ?? BorderSide(color: context.dividerColor.withOpacity(0.5)),
         ),
         child: InkWell(
           onTap: onTap,
@@ -207,8 +207,6 @@ class TransactionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    
     return AppCard(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       margin: const EdgeInsets.symmetric(vertical: 4),
@@ -220,7 +218,7 @@ class TransactionCard extends StatelessWidget {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: iconBackgroundColor ?? (isDarkMode ? Colors.white10 : CoopvestColors.veryLightGray),
+              color: iconBackgroundColor ?? context.secondaryCardBackground,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Center(
@@ -241,12 +239,13 @@ class TransactionCard extends StatelessWidget {
                   title,
                   style: CoopvestTypography.bodyMedium.copyWith(
                     fontWeight: FontWeight.w600,
+                    color: context.textPrimary,
                   ),
                 ),
                 Text(
                   subtitle,
                   style: CoopvestTypography.bodySmall.copyWith(
-                    color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.mediumGray,
+                    color: context.textSecondary,
                   ),
                 ),
               ],
@@ -266,7 +265,7 @@ class TransactionCard extends StatelessWidget {
               Text(
                 date,
                 style: CoopvestTypography.bodySmall.copyWith(
-                  color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.mediumGray,
+                  color: context.textSecondary,
                 ),
               ),
             ],
@@ -299,7 +298,6 @@ class LoanCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final statusColor = _getStatusColor(status);
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
     return AppCard(
       padding: const EdgeInsets.all(16),
@@ -314,7 +312,7 @@ class LoanCard extends StatelessWidget {
             children: [
               Text(
                 'Loan #$loanId',
-                style: CoopvestTypography.headlineSmall,
+                style: CoopvestTypography.headlineSmall.copyWith(color: context.textPrimary),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -338,7 +336,7 @@ class LoanCard extends StatelessWidget {
               RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
               (Match m) => '${m[1]},',
             )}',
-            style: CoopvestTypography.headlineMedium,
+            style: CoopvestTypography.headlineMedium.copyWith(color: context.textPrimary),
           ),
           const SizedBox(height: 12),
           // Details
@@ -351,13 +349,14 @@ class LoanCard extends StatelessWidget {
                   Text(
                     'Monthly Repayment',
                     style: CoopvestTypography.bodySmall.copyWith(
-                      color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.mediumGray,
+                      color: context.textSecondary,
                     ),
                   ),
                   Text(
                     '₦${monthlyRepayment.toStringAsFixed(2)}',
                     style: CoopvestTypography.bodyMedium.copyWith(
                       fontWeight: FontWeight.w600,
+                      color: context.textPrimary,
                     ),
                   ),
                 ],
@@ -368,13 +367,14 @@ class LoanCard extends StatelessWidget {
                   Text(
                     'Tenure',
                     style: CoopvestTypography.bodySmall.copyWith(
-                      color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.mediumGray,
+                      color: context.textSecondary,
                     ),
                   ),
                   Text(
                     '$tenure months',
                     style: CoopvestTypography.bodyMedium.copyWith(
                       fontWeight: FontWeight.w600,
+                      color: context.textPrimary,
                     ),
                   ),
                 ],

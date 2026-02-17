@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/theme_config.dart';
+import '../../../config/theme_extension.dart';
 import '../../../presentation/providers/kyc_provider.dart';
 import '../../../presentation/widgets/common/buttons.dart';
 import '../../../presentation/widgets/common/cards.dart';
@@ -38,13 +39,6 @@ class _KYCBasicInfoScreenState extends ConsumerState<KYCBasicInfoScreen> {
     _emailController = TextEditingController();
     _phoneController = TextEditingController();
     _dobController = TextEditingController();
-    
-    // Pre-fill if data exists
-    final submission = ref.read(kycProvider).submission;
-    if (submission != null) {
-      // Note: KYCRSubmission doesn't have firstName/lastName/email/phone fields
-      // These might be stored elsewhere or need to be added
-    }
   }
 
   @override
@@ -64,13 +58,14 @@ class _KYCBasicInfoScreenState extends ConsumerState<KYCBasicInfoScreen> {
       firstDate: DateTime(1950),
       lastDate: DateTime.now().subtract(const Duration(days: 365 * 18)),
       builder: (context, child) {
+        final isDarkMode = Theme.of(context).brightness == Brightness.dark;
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
+            colorScheme: ColorScheme.light(
               primary: CoopvestColors.primary,
               onPrimary: Colors.white,
-              surface: Colors.white,
-              onSurface: CoopvestColors.darkGray,
+              surface: isDarkMode ? CoopvestColors.darkSurface : Colors.white,
+              onSurface: isDarkMode ? Colors.white : CoopvestColors.darkGray,
             ),
           ),
           child: child!,
@@ -92,122 +87,69 @@ class _KYCBasicInfoScreenState extends ConsumerState<KYCBasicInfoScreen> {
 
   void _validateAndContinue() {
     if (_firstNameController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter your first name'),
-          backgroundColor: CoopvestColors.error,
-        ),
-      );
+      _showError('Please enter your first name');
       return;
     }
 
     if (_lastNameController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter your last name'),
-          backgroundColor: CoopvestColors.error,
-        ),
-      );
+      _showError('Please enter your last name');
       return;
     }
 
     if (_emailController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter your email address'),
-          backgroundColor: CoopvestColors.error,
-        ),
-      );
+      _showError('Please enter your email address');
       return;
     }
 
     if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(_emailController.text)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a valid email address'),
-          backgroundColor: CoopvestColors.error,
-        ),
-      );
+      _showError('Please enter a valid email address');
       return;
     }
 
     if (_phoneController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter your phone number'),
-          backgroundColor: CoopvestColors.error,
-        ),
-      );
-      return;
-    }
-
-    if (_phoneController.text.length < 10) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a valid phone number'),
-          backgroundColor: CoopvestColors.error,
-        ),
-      );
+      _showError('Please enter your phone number');
       return;
     }
 
     if (_selectedDateOfBirth == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select your date of birth'),
-          backgroundColor: CoopvestColors.error,
-        ),
-      );
+      _showError('Please select your date of birth');
       return;
     }
 
     if (_selectedGender == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select your gender'),
-          backgroundColor: CoopvestColors.error,
-        ),
-      );
+      _showError('Please select your gender');
       return;
     }
 
-    // Calculate age to ensure user is 18+
-    final age = DateTime.now().difference(_selectedDateOfBirth!).inDays ~/ 365;
-    if (age < 18) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('You must be at least 18 years old to use this app'),
-          backgroundColor: CoopvestColors.error,
-        ),
-      );
-      return;
-    }
-
-    // Navigate to next step
     Navigator.of(context).pushNamed('/kyc-personal-details');
   }
 
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: CoopvestColors.error,
+      ),
+    );
+  }
+
   void _goBack() {
-    ref.read(kycProvider.notifier).previousStep();
     Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: context.scaffoldBackground,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.white,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: CoopvestColors.darkGray),
+          icon: Icon(Icons.arrow_back, color: context.iconPrimary),
           onPressed: _goBack,
         ),
         title: Text(
           'Basic Information',
-          style: CoopvestTypography.headlineLarge.copyWith(
-            color: CoopvestColors.darkGray,
-          ),
+          style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold),
         ),
       ),
       body: SafeArea(
@@ -233,16 +175,12 @@ class _KYCBasicInfoScreenState extends ConsumerState<KYCBasicInfoScreen> {
               // Header
               Text(
                 'Let\'s Start with Your Details',
-                style: CoopvestTypography.headlineSmall.copyWith(
-                  color: CoopvestColors.darkGray,
-                ),
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: context.textPrimary),
               ),
               const SizedBox(height: 8),
               Text(
                 'Please provide your basic information to create your account',
-                style: CoopvestTypography.bodyMedium.copyWith(
-                  color: CoopvestColors.mediumGray,
-                ),
+                style: TextStyle(color: context.textSecondary),
               ),
               const SizedBox(height: 24),
 
@@ -253,12 +191,6 @@ class _KYCBasicInfoScreenState extends ConsumerState<KYCBasicInfoScreen> {
                 controller: _firstNameController,
                 keyboardType: TextInputType.name,
                 textInputAction: TextInputAction.next,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'First name is required';
-                  }
-                  return null;
-                },
               ),
               
               const SizedBox(height: 16),
@@ -270,12 +202,6 @@ class _KYCBasicInfoScreenState extends ConsumerState<KYCBasicInfoScreen> {
                 controller: _lastNameController,
                 keyboardType: TextInputType.name,
                 textInputAction: TextInputAction.next,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Last name is required';
-                  }
-                  return null;
-                },
               ),
               
               const SizedBox(height: 16),
@@ -287,15 +213,6 @@ class _KYCBasicInfoScreenState extends ConsumerState<KYCBasicInfoScreen> {
                 controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
                 textInputAction: TextInputAction.next,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Email is required';
-                  }
-                  if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
-                    return 'Please enter a valid email';
-                  }
-                  return null;
-                },
               ),
               
               const SizedBox(height: 16),
@@ -309,105 +226,67 @@ class _KYCBasicInfoScreenState extends ConsumerState<KYCBasicInfoScreen> {
                 textInputAction: TextInputAction.next,
                 maxLength: 11,
                 prefixText: '+234 ',
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Phone number is required';
-                  }
-                  return null;
-                },
               ),
               
               const SizedBox(height: 16),
 
               // Date of Birth
-              AppTextField(
-                label: 'Date of Birth *',
-                hint: 'Select your date of birth',
-                controller: _dobController,
-                readOnly: true,
+              GestureDetector(
                 onTap: _selectDateOfBirth,
-                suffixIcon: Icon(Icons.calendar_today),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Date of birth is required';
-                  }
-                  return null;
-                },
+                child: AbsorbPointer(
+                  child: AppTextField(
+                    label: 'Date of Birth *',
+                    hint: 'DD/MM/YYYY',
+                    controller: _dobController,
+                    suffixIcon: Icon(Icons.calendar_today, color: context.textSecondary),
+                  ),
+                ),
               ),
               
               const SizedBox(height: 16),
 
-              // Gender Selection
+              // Gender
               Text(
                 'Gender *',
-                style: CoopvestTypography.labelLarge.copyWith(
-                  color: CoopvestColors.darkGray,
-                ),
+                style: TextStyle(fontWeight: FontWeight.bold, color: context.textPrimary),
               ),
-              const SizedBox(height: 12),
-              
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
+              const SizedBox(height: 8),
+              Row(
                 children: _genders.map((gender) {
                   final isSelected = _selectedGender == gender['value'];
-                  return GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _selectedGender = gender['value'] as String?;
-                      });
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? CoopvestColors.primary
-                            : CoopvestColors.veryLightGray,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: isSelected
-                              ? CoopvestColors.primary
-                              : CoopvestColors.lightGray,
+                  return Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _selectedGender = gender['value'] as String;
+                        });
+                      },
+                      child: Container(
+                        margin: const EdgeInsets.only(right: 8),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        decoration: BoxDecoration(
+                          color: isSelected ? CoopvestColors.primary : context.cardBackground,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: isSelected ? CoopvestColors.primary : context.dividerColor,
+                          ),
                         ),
-                      ),
-                      child: Text(
-                        gender['label'] as String,
-                        style: CoopvestTypography.bodyMedium.copyWith(
-                          color: isSelected ? Colors.white : CoopvestColors.darkGray,
-                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                        child: Center(
+                          child: Text(
+                            gender['label'] as String,
+                            style: TextStyle(
+                              color: isSelected ? Colors.white : context.textPrimary,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
                       ),
                     ),
                   );
                 }).toList(),
               ),
-              
-              const SizedBox(height: 12),
 
-              // Age Notice
-              AppCard(
-                backgroundColor: CoopvestColors.info.withAlpha((255 * 0.1).toInt()),
-                border: Border.all(color: CoopvestColors.info.withAlpha((255 * 0.3).toInt())),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.info_outline,
-                      color: CoopvestColors.info,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'You must be at least 18 years old to create an account',
-                        style: CoopvestTypography.bodySmall.copyWith(
-                          color: CoopvestColors.darkGray,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 32),
+              const SizedBox(height: 40),
 
               // Continue Button
               PrimaryButton(
@@ -415,15 +294,7 @@ class _KYCBasicInfoScreenState extends ConsumerState<KYCBasicInfoScreen> {
                 onPressed: _validateAndContinue,
                 width: double.infinity,
               ),
-              
-              const SizedBox(height: 16),
-
-              // Back Button
-              SecondaryButton(
-                label: 'Go Back',
-                onPressed: _goBack,
-                width: double.infinity,
-              ),
+              const SizedBox(height: 24),
             ],
           ),
         ),
@@ -431,34 +302,31 @@ class _KYCBasicInfoScreenState extends ConsumerState<KYCBasicInfoScreen> {
     );
   }
 
-  Widget _buildProgressStep(int step, bool isActive) {
+  Widget _buildProgressStep(int step, bool isPending) {
     return Container(
       width: 32,
       height: 32,
       decoration: BoxDecoration(
-        color: isActive ? CoopvestColors.primary : CoopvestColors.lightGray,
-        borderRadius: BorderRadius.circular(16),
+        color: isPending ? context.dividerColor : CoopvestColors.primary,
+        shape: BoxShape.circle,
       ),
       child: Center(
-        child: isActive
-            ? const Icon(Icons.check, color: Colors.white, size: 18)
-            : Text(
-                '$step',
-                style: TextStyle(
-                  color: isActive ? Colors.white : CoopvestColors.mediumGray,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+        child: Text(
+          '$step',
+          style: TextStyle(
+            color: isPending ? context.textSecondary : Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
       ),
     );
   }
 
   Widget _buildProgressLine(int step) {
-    final isComplete = step < 4; // All steps except last are complete
     return Expanded(
       child: Container(
         height: 2,
-        color: isComplete ? CoopvestColors.primary : CoopvestColors.lightGray,
+        color: context.dividerColor,
       ),
     );
   }

@@ -1,34 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/theme_config.dart';
+import '../../../config/theme_extension.dart';
 import 'ticket_list_screen.dart';
 import 'ticket_creation_screen.dart';
 
 /// Support Home Screen
-/// Main entry point for the support system
 class SupportHomeScreen extends ConsumerWidget {
   const SupportHomeScreen({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: context.scaffoldBackground,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: Theme.of(context).appBarTheme.foregroundColor),
+          icon: Icon(Icons.arrow_back, color: context.iconPrimary),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: Text(
-          'Support Center',
-          style: TextStyle(
-            color: Theme.of(context).appBarTheme.foregroundColor,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
+        title: Text('Support Center', style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold)),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -36,56 +27,27 @@ class SupportHomeScreen extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      CoopvestColors.primary,
-                      CoopvestColors.primaryDark,
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
+                  gradient: const LinearGradient(colors: [CoopvestColors.primary, CoopvestColors.primaryDark], begin: Alignment.topLeft, end: Alignment.bottomRight),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Row(
                   children: [
                     Container(
-                      width: 60,
-                      height: 60,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withAlpha((255 * 0.2).toInt()),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.headset_mic,
-                        color: Colors.white,
-                        size: 30,
-                      ),
+                      width: 60, height: 60,
+                      decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
+                      child: const Icon(Icons.headset_mic, color: Colors.white, size: 30),
                     ),
                     const SizedBox(width: 16),
-                    Expanded(
+                    const Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          Text(
-                            'How can we help?',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
+                        children: [
+                          Text('How can we help?', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                           SizedBox(height: 4),
-                          Text(
-                            'Create a support ticket and our team will assist you.',
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: 14,
-                            ),
-                          ),
+                          Text('Create a support ticket and our team will assist you.', style: TextStyle(color: Colors.white70, fontSize: 14)),
                         ],
                       ),
                     ),
@@ -93,195 +55,47 @@ class SupportHomeScreen extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 32),
-
-              // Quick Actions
-              Text(
-                'Quick Actions',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: isDarkMode ? CoopvestColors.darkText : CoopvestColors.darkGray,
-                ),
-              ),
+              Text('Quick Actions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: context.textPrimary)),
               const SizedBox(height: 16),
-
-              // Create Ticket Button
               SizedBox(
-                width: double.infinity,
-                height: 56,
+                width: double.infinity, height: 56,
                 child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => const TicketCreationScreen(),
-                      ),
-                    );
-                  },
+                  onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const TicketCreationScreen())),
                   icon: const Icon(Icons.add, color: Colors.white),
-                  label: const Text(
-                    'Create New Ticket',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: CoopvestColors.primary,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
+                  label: const Text('Create New Ticket', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(backgroundColor: CoopvestColors.primary, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
                 ),
               ),
               const SizedBox(height: 12),
-
-              // My Tickets Button
               SizedBox(
-                width: double.infinity,
-                height: 56,
+                width: double.infinity, height: 56,
                 child: OutlinedButton.icon(
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => const TicketListScreen(),
-                      ),
-                    );
-                  },
+                  onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const TicketListScreen())),
                   icon: const Icon(Icons.inbox_outlined),
-                  label: const Text(
-                    'My Tickets',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
+                  label: const Text('My Tickets', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  style: OutlinedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
                 ),
               ),
               const SizedBox(height: 32),
-
-              // Help Topics
-              Text(
-                'Common Help Topics',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: isDarkMode ? CoopvestColors.darkText : CoopvestColors.darkGray,
-                ),
-              ),
+              Text('Common Help Topics', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: context.textPrimary)),
               const SizedBox(height: 16),
-
-              _buildHelpTopic(
-                icon: Icons.account_balance_wallet,
-                title: 'Loans & Credit',
-                description: 'Loan applications, repayments, guarantor requests',
-                onTap: () => _createTicketWithCategory(
-                  context,
-                  'loan_issue',
-                  'Loan Issue',
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              _buildHelpTopic(
-                icon: Icons.group_add,
-                title: 'Guarantor Requests',
-                description: 'Being a guarantor, consent issues',
-                onTap: () => _createTicketWithCategory(
-                  context,
-                  'guarantor_consent',
-                  'Guarantor Consent Issue',
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              _buildHelpTopic(
-                icon: Icons.share,
-                title: 'Referrals & Bonuses',
-                description: 'Referral codes, bonus tracking',
-                onTap: () => _createTicketWithCategory(
-                  context,
-                  'referral_bonus',
-                  'Referral/Bonus Issue',
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              _buildHelpTopic(
-                icon: Icons.payment,
-                title: 'Repayments',
-                description: 'Payment issues, transaction history',
-                onTap: () => _createTicketWithCategory(
-                  context,
-                  'repayment_issue',
-                  'Repayment Issue',
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              _buildHelpTopic(
-                icon: Icons.verified_user,
-                title: 'Account & KYC',
-                description: 'Profile updates, identity verification',
-                onTap: () => _createTicketWithCategory(
-                  context,
-                  'account_kyc',
-                  'Account/KYC Issue',
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              _buildHelpTopic(
-                icon: Icons.bug_report,
-                title: 'Technical Issues',
-                description: 'App bugs, login problems',
-                onTap: () => _createTicketWithCategory(
-                  context,
-                  'technical_bug',
-                  'Technical Bug Report',
-                ),
-              ),
-
+              _buildHelpTopic(context, Icons.account_balance_wallet, 'Loans & Credit', 'Loan applications, repayments, guarantor requests'),
+              _buildHelpTopic(context, Icons.group_add, 'Guarantor Requests', 'Being a guarantor, consent issues'),
+              _buildHelpTopic(context, Icons.verified_user, 'Account & KYC', 'Profile updates, identity verification'),
               const SizedBox(height: 32),
-
-              // Contact Info
               Container(
                 padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface,
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                decoration: BoxDecoration(color: context.cardBackground, borderRadius: BorderRadius.circular(12)),
                 child: Row(
                   children: [
-                    Icon(
-                      Icons.info_outline,
-                      color: Theme.of(context).textTheme.bodySmall?.color ?? CoopvestColors.mediumGray,
-                    ),
+                    Icon(Icons.info_outline, color: context.textSecondary),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'Response Time',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color: Theme.of(context).textTheme.titleLarge?.color,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'We typically respond within 24 hours on business days.',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Theme.of(context).textTheme.bodySmall?.color,
-                            ),
-                          ),
+                          Text('Response Time', style: TextStyle(fontWeight: FontWeight.bold, color: context.textPrimary)),
+                          Text('We typically respond within 24 hours on business days.', style: TextStyle(fontSize: 13, color: context.textSecondary)),
                         ],
                       ),
                     ),
@@ -295,81 +109,31 @@ class SupportHomeScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildHelpTopic({
-    required IconData icon,
-    required String title,
-    required String description,
-    required VoidCallback onTap,
-  }) {
-    return Builder(
-      builder: (context) {
-        final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-        return InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              border: Border.all(color: isDarkMode ? CoopvestColors.darkDivider : CoopvestColors.lightGray),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: CoopvestColors.primaryLight.withAlpha((255 * 0.1).toInt()),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(icon, color: CoopvestColors.primary),
+  Widget _buildHelpTopic(BuildContext context, IconData icon, String title, String description) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: InkWell(
+        onTap: () {},
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(color: context.cardBackground, borderRadius: BorderRadius.circular(12), border: Border.all(color: context.dividerColor)),
+          child: Row(
+            children: [
+              Icon(icon, color: CoopvestColors.primary),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: context.textPrimary)),
+                    Text(description, style: TextStyle(fontSize: 12, color: context.textSecondary)),
+                  ],
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: isDarkMode ? CoopvestColors.darkText : CoopvestColors.darkGray,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        description,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.mediumGray,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Icon(
-                  Icons.arrow_forward_ios,
-                  size: 16,
-                  color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.mediumGray,
-                ),
-              ],
-            ),
+              ),
+              Icon(Icons.chevron_right, color: context.textSecondary),
+            ],
           ),
-        );
-      }
-    );
-  }
-
-  void _createTicketWithCategory(
-    BuildContext context,
-    String category,
-    String categoryName,
-  ) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => TicketCreationScreen(
-          preselectedCategory: category,
-          preselectedCategoryName: categoryName,
         ),
       ),
     );

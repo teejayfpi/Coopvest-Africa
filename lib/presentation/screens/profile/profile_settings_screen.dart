@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../../../config/theme_config.dart';
+import '../../../config/theme_extension.dart';
 import '../../../presentation/widgets/common/cards.dart';
 import '../kyc/kyc_employment_details_screen.dart';
 import '../support/support_home_screen.dart';
@@ -150,7 +151,7 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
         decoration: BoxDecoration(
-          color: Theme.of(context).scaffoldBackgroundColor,
+          color: context.scaffoldBackground,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         padding: const EdgeInsets.all(20),
@@ -161,14 +162,14 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: CoopvestColors.lightGray,
+                color: context.dividerColor,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
             const SizedBox(height: 20),
-            const Text(
+            Text(
               'Change Profile Picture',
-              style: CoopvestTypography.headlineSmall,
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: context.textPrimary),
             ),
             const SizedBox(height: 20),
             Row(
@@ -222,8 +223,9 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
             const SizedBox(height: 8),
             Text(
               label,
-              style: CoopvestTypography.bodyMedium.copyWith(
+              style: TextStyle(
                 fontWeight: FontWeight.w600,
+                color: context.textPrimary,
               ),
             ),
           ],
@@ -235,6 +237,7 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: context.scaffoldBackground,
       appBar: AppBar(
         title: const Text('Settings'),
         elevation: 0,
@@ -245,11 +248,11 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
         child: Column(
           children: [
             // Profile Header
-            _buildProfileHeader(),
+            _buildProfileHeader(context),
             const SizedBox(height: 32),
             
             // Settings Sections
-            ..._settingsItems.map((section) => _buildSettingsSection(section)),
+            ..._settingsItems.map((section) => _buildSettingsSection(section, context)),
             
             const SizedBox(height: 32),
             // Logout Button
@@ -272,8 +275,10 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
     );
   }
 
-  Widget _buildProfileHeader() {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+  Widget _buildProfileHeader(BuildContext context) {
+    final authState = ref.watch(authProvider);
+    final user = authState.user;
+
     return Column(
       children: [
         Stack(
@@ -293,10 +298,10 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
                 ),
                 child: CircleAvatar(
                   radius: 60,
-                  backgroundColor: isDarkMode ? Colors.white10 : CoopvestColors.veryLightGray,
+                  backgroundColor: context.secondaryCardBackground,
                   backgroundImage: _profileImage != null ? FileImage(_profileImage!) : null,
                   child: _profileImage == null
-                      ? const Icon(Icons.person, size: 60, color: CoopvestColors.mediumGray)
+                      ? Icon(Icons.person, size: 60, color: context.textSecondary)
                       : null,
                 ),
               ),
@@ -312,7 +317,7 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
                     color: CoopvestColors.primary,
                     shape: BoxShape.circle,
                     border: Border.all(
-                      color: Theme.of(context).scaffoldBackgroundColor,
+                      color: context.scaffoldBackground,
                       width: 3,
                     ),
                   ),
@@ -325,190 +330,140 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
                             valueColor: AlwaysStoppedAnimation(Colors.white),
                           ),
                         )
-                      : const Icon(Icons.camera_alt, size: 16, color: Colors.white),
+                      : const Icon(Icons.camera_alt, color: Colors.white, size: 16),
                 ),
               ),
             ),
           ],
         ),
         const SizedBox(height: 16),
-        const Text(
-          'User Name',
-          style: CoopvestTypography.headlineLarge,
+        Text(
+          user?.name ?? 'Ayanlowo',
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: context.textPrimary),
         ),
         const SizedBox(height: 4),
-        const Text(
-          'user@example.com',
-          style: CoopvestTypography.bodyMedium,
-        ),
-        const SizedBox(height: 8),
-        TextButton(
-          onPressed: _showImageSourceDialog,
-          child: const Text('Change Profile Picture'),
+        Text(
+          user?.email ?? 'ayanlowo@example.com',
+          style: TextStyle(color: context.textSecondary),
         ),
       ],
     );
   }
 
-  Widget _buildSettingsSection(Map<String, dynamic> section) {
+  Widget _buildSettingsSection(Map<String, dynamic> section, BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(left: 4, bottom: 12, top: 8),
+          padding: const EdgeInsets.only(left: 8, top: 24, bottom: 12),
           child: Text(
             section['title'] as String,
-            style: CoopvestTypography.titleMedium.copyWith(
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
               color: CoopvestColors.primary,
+              letterSpacing: 1.2,
             ),
           ),
         ),
         AppCard(
           padding: EdgeInsets.zero,
           child: Column(
-            children: [
-              ...(section['items'] as List).asMap().entries.map((entry) {
-                final index = entry.key;
-                final item = entry.value;
-                final isLast = index == (section['items'] as List).length - 1;
-                
-                return Column(
-                  children: [
-                    _buildSettingsItem(item),
-                    if (!isLast)
-                      const Divider(height: 1, indent: 56),
-                  ],
-                );
-              }),
-            ],
+            children: (section['items'] as List).map((item) {
+              final isLast = (section['items'] as List).indexOf(item) == (section['items'] as List).length - 1;
+              return _buildSettingsTile(item as Map<String, dynamic>, !isLast, context);
+            }).toList(),
           ),
         ),
-        const SizedBox(height: 24),
       ],
     );
   }
 
-  Widget _buildSettingsItem(Map<String, dynamic> item) {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    return ListTile(
-      leading: Icon(
-        (item['icon'] as IconData?) ?? Icons.settings, 
-        color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.darkGray
-      ),
-      title: Text(
-        item['label'] as String,
-        style: const TextStyle(fontWeight: FontWeight.w600),
-      ),
-      subtitle: Text(item['subtitle'] as String),
-      trailing: item['label'] == 'Dark Mode'
-          ? Switch(
-              value: ref.watch(themeModeProvider) == ThemeMode.dark,
-              onChanged: (value) {
-                ref.read(themeModeProvider.notifier).toggleTheme();
-              },
-              activeColor: CoopvestColors.primary,
-            )
-          : (item['trailing'] != null
-              ? Text(
-                  item['trailing'] as String,
-                  style: const TextStyle(color: CoopvestColors.mediumGray),
+  Widget _buildSettingsTile(Map<String, dynamic> item, bool showDivider, BuildContext context) {
+    final isDarkMode = ref.watch(themeProvider) == ThemeMode.dark;
+
+    return Column(
+      children: [
+        ListTile(
+          onTap: () => _handleSettingsTap(item['label'] as String),
+          leading: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: CoopvestColors.primary.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(item['icon'] as IconData, color: CoopvestColors.primary, size: 20),
+          ),
+          title: Text(
+            item['label'] as String,
+            style: TextStyle(fontWeight: FontWeight.w600, color: context.textPrimary),
+          ),
+          subtitle: Text(
+            item['subtitle'] as String,
+            style: TextStyle(fontSize: 12, color: context.textSecondary),
+          ),
+          trailing: item['label'] == 'Dark Mode'
+              ? Switch(
+                  value: isDarkMode,
+                  onChanged: (value) {
+                    ref.read(themeProvider.notifier).toggleTheme();
+                  },
+                  activeColor: CoopvestColors.primary,
                 )
-              : const Icon(Icons.chevron_right, color: CoopvestColors.lightGray)),
-      onTap: () {
-        final label = item['label'] as String;
-        switch (label) {
-          case 'Edit Profile':
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (context) => const KYCEmploymentDetailsScreen()),
-            );
-            break;
-          case 'Membership':
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (context) => const MembershipScreen()),
-            );
-            break;
-          case 'Security':
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (context) => const SecuritySettingsScreen()),
-            );
-            break;
-          case 'Bank Accounts':
-            Navigator.of(context).pushNamed('/kyc-bank-info');
-            break;
-          case 'Notifications':
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Notification settings'),
-                backgroundColor: CoopvestColors.primary,
-              ),
-            );
-            break;
-          case 'Dark Mode':
-            ref.read(themeModeProvider.notifier).toggleTheme();
-            break;
-          case 'Help Center':
-          case 'Live Chat':
-            Navigator.of(context).pushNamed('/support');
-            break;
-          case 'Share App':
-            Share.share('Check out Coopvest Africa! Save, Borrow, and Invest together. Download now at https://coopvestafrica.com');
-            break;
-          case 'Privacy Policy':
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Privacy Policy document opening...')),
-            );
-            break;
-          case 'About':
-            showAboutDialog(
-              context: context,
-              applicationName: 'Coopvest Africa',
-              applicationVersion: '1.0.0',
-              applicationIcon: const Icon(Icons.account_balance, color: CoopvestColors.primary),
-              children: const [
-                Text('Coopvest Africa is a cooperative financial platform for savings, loans, and investments.'),
-              ],
-            );
-            break;
-          default:
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('$label feature coming soon')),
-            );
-        }
-      },
+              : (item['trailing'] != null
+                  ? Text(item['trailing'] as String, style: TextStyle(color: context.textSecondary))
+                  : Icon(Icons.chevron_right, color: context.textSecondary, size: 20)),
+        ),
+        if (showDivider)
+          Divider(height: 1, indent: 56, color: context.dividerColor),
+      ],
     );
+  }
+
+  void _handleSettingsTap(String label) {
+    switch (label) {
+      case 'Membership':
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (context) => const MembershipScreen()),
+        );
+        break;
+      case 'Security':
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (context) => const SecuritySettingsScreen()),
+        );
+        break;
+      case 'Help Center':
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (context) => const SupportHomeScreen()),
+        );
+        break;
+      case 'Share App':
+        Share.share('Check out Coopvest Africa - The best cooperative platform!');
+        break;
+      default:
+        // Handle other taps
+        break;
+    }
   }
 
   void _showLogoutDialog() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Logout'),
-        content: const Text('Are you sure you want to logout?'),
+        backgroundColor: context.cardBackground,
+        title: Text('Logout', style: TextStyle(color: context.textPrimary)),
+        content: Text('Are you sure you want to logout?', style: TextStyle(color: context.textSecondary)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () async {
-              Navigator.of(context).pop();
-              try {
-                await ref.read(authProvider.notifier).logout();
-                if (mounted) {
-                  Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Logout failed: $e'), backgroundColor: CoopvestColors.error),
-                  );
-                }
-              }
+            onPressed: () {
+              ref.read(authProvider.notifier).logout();
+              Navigator.of(context).pushNamedAndRemoveUntil('/welcome', (route) => false);
             },
-            child: const Text(
-              'Logout',
-              style: TextStyle(color: CoopvestColors.error),
-            ),
+            child: const Text('Logout', style: TextStyle(color: CoopvestColors.error)),
           ),
         ],
       ),

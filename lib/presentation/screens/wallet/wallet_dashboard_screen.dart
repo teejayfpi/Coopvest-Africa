@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../../config/theme_config.dart';
+import '../../../config/theme_extension.dart';
 import '../../../core/utils/utils.dart';
 import '../../../data/models/wallet_models.dart';
 import '../../../presentation/providers/wallet_provider.dart';
@@ -44,9 +45,9 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
     final wallet = walletState.wallet;
     final savingsGoals = walletState.savingsGoals;
     final recentTransactions = walletState.transactions.take(5).toList();
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
+      backgroundColor: context.scaffoldBackground,
       appBar: AppBar(
         elevation: 0,
         title: const Text('My Wallet'),
@@ -105,7 +106,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: isDarkMode 
-              ? [CoopvestColors.darkSurface, CoopvestColors.darkSurface.withOpacity(0.8)]
+              ? [context.cardBackground, context.cardBackground.withOpacity(0.8)]
               : [CoopvestColors.primary, const Color(0xFF2E7D32)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -131,14 +132,14 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
                   Text(
                     'Total Balance',
                     style: CoopvestTypography.bodyMedium.copyWith(
-                      color: isDarkMode ? CoopvestColors.darkTextSecondary : Colors.white.withOpacity(0.8),
+                      color: isDarkMode ? context.textSecondary : Colors.white.withOpacity(0.8),
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     '₦${(wallet?.balance ?? 0).toStringAsFixed(2)}',
                     style: CoopvestTypography.displaySmall.copyWith(
-                      color: isDarkMode ? CoopvestColors.darkText : Colors.white,
+                      color: isDarkMode ? context.textPrimary : Colors.white,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -173,14 +174,14 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
                     Text(
                       'Available',
                       style: CoopvestTypography.bodySmall.copyWith(
-                        color: isDarkMode ? CoopvestColors.darkTextSecondary : Colors.white.withOpacity(0.8),
+                        color: isDarkMode ? context.textSecondary : Colors.white.withOpacity(0.8),
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       '₦${(wallet?.availableForWithdrawal ?? 0).toStringAsFixed(2)}',
                       style: TextStyle(
-                        color: isDarkMode ? CoopvestColors.darkText : Colors.white,
+                        color: isDarkMode ? context.textPrimary : Colors.white,
                         fontWeight: FontWeight.bold,
                         fontSize: 18,
                       ),
@@ -188,7 +189,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
                   ],
                 ),
               ),
-              Container(width: 1, height: 40, color: isDarkMode ? CoopvestColors.darkDivider : Colors.white.withOpacity(0.2)),
+              Container(width: 1, height: 40, color: isDarkMode ? context.dividerColor : Colors.white.withOpacity(0.2)),
               const SizedBox(width: 24),
               Expanded(
                 child: Column(
@@ -197,14 +198,14 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
                     Text(
                       'Pending',
                       style: CoopvestTypography.bodySmall.copyWith(
-                        color: isDarkMode ? CoopvestColors.darkTextSecondary : Colors.white.withOpacity(0.8),
+                        color: isDarkMode ? context.textSecondary : Colors.white.withOpacity(0.8),
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       '₦${(wallet?.pendingContributions ?? 0).toStringAsFixed(2)}',
                       style: TextStyle(
-                        color: isDarkMode ? CoopvestColors.darkText : Colors.white,
+                        color: isDarkMode ? context.textPrimary : Colors.white,
                         fontWeight: FontWeight.bold,
                         fontSize: 18,
                       ),
@@ -223,9 +224,9 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Quick Actions',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: context.textPrimary),
         ),
         const SizedBox(height: 16),
         Row(
@@ -286,7 +287,6 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
     required String label,
     required VoidCallback onTap,
   }) {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return AppCard(
       onTap: onTap,
       padding: const EdgeInsets.symmetric(vertical: 20),
@@ -298,13 +298,15 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
               color: CoopvestColors.primary.withOpacity(0.1),
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, color: CoopvestColors.primary),
+            child: const Icon(icon, color: CoopvestColors.primary),
           ),
           const SizedBox(height: 12),
           Text(
             label,
-            style: CoopvestTypography.labelMedium.copyWith(
-              color: isDarkMode ? CoopvestColors.darkText : CoopvestColors.darkGray,
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+              color: context.textPrimary,
             ),
           ),
         ],
@@ -319,9 +321,9 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text(
+            Text(
               'Savings Goals',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: context.textPrimary),
             ),
             TextButton(
               onPressed: () {
@@ -335,28 +337,24 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 8),
         if (goals.isEmpty)
           AppCard(
             child: Center(
               child: Column(
                 children: [
                   const Icon(Icons.savings_outlined, size: 48, color: CoopvestColors.mediumGray),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'No active savings goals',
-                    style: TextStyle(color: CoopvestColors.mediumGray),
-                  ),
                   const SizedBox(height: 16),
-                  PrimaryButton(
-                    label: 'Create Goal',
+                  Text(
+                    'No active savings goals',
+                    style: TextStyle(color: context.textSecondary),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton(
                     onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (context) => SavingsGoalsScreen(userId: widget.userId),
-                        ),
-                      );
+                      // Navigate to create goal
                     },
+                    child: const Text('Create a Goal'),
                   ),
                 ],
               ),
@@ -374,36 +372,43 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
                   width: 280,
                   margin: const EdgeInsets.only(right: 16),
                   child: AppCard(
+                    onTap: () {
+                      // Navigate to goal details
+                    },
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          goal.name,
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                        ),
-                        const Spacer(),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              '₦${goal.currentAmount.toStringAsFixed(0)}',
+                              goal.name,
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: context.textPrimary),
+                            ),
+                            Text(
+                              '${goal.progressPercentage.toStringAsFixed(0)}%',
                               style: const TextStyle(
                                 color: CoopvestColors.primary,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                            Text(
-                              '${goal.progressPercentage.toStringAsFixed(0)}%',
-                              style: const TextStyle(color: CoopvestColors.mediumGray, fontSize: 12),
-                            ),
                           ],
                         ),
-                        const SizedBox(height: 8),
+                        const Spacer(),
                         LinearProgressIndicator(
                           value: goal.progressPercentage / 100,
-                          backgroundColor: CoopvestColors.primary.withOpacity(0.1),
-                          valueColor: const AlwaysStoppedAnimation(CoopvestColors.primary),
+                          backgroundColor: context.dividerColor,
+                          valueColor: const AlwaysStoppedAnimation<Color>(CoopvestColors.primary),
+                          minHeight: 8,
                           borderRadius: BorderRadius.circular(4),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          '₦${goal.currentAmount.toStringAsFixed(0)} of ₦${goal.targetAmount.toStringAsFixed(0)}',
+                          style: TextStyle(
+                            color: context.textSecondary,
+                            fontSize: 12,
+                          ),
                         ),
                       ],
                     ),
@@ -423,9 +428,9 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text(
+            Text(
               'Recent Transactions',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: context.textPrimary),
             ),
             TextButton(
               onPressed: () {
@@ -439,28 +444,45 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 8),
         if (transactions.isEmpty)
-          const Center(
-            child: Padding(
-              padding: EdgeInsets.symmetric(vertical: 24),
-              child: Text(
-                'No recent transactions',
-                style: TextStyle(color: CoopvestColors.mediumGray),
+          AppCard(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  'No transactions yet',
+                  style: TextStyle(color: context.textSecondary),
+                ),
               ),
             ),
           )
         else
           ...transactions.map((txn) => TransactionCard(
-            title: txn.description ?? txn.type.capitalize(),
-            subtitle: DateFormat('MMM d, yyyy').format(txn.createdAt),
-            amount: txn.amount,
-            isIncome: txn.type == 'contribution' || txn.type == 'deposit',
-            date: DateFormat('HH:mm').format(txn.createdAt),
-            icon: txn.type == 'withdrawal' ? Icons.remove_circle_outline : Icons.add_circle_outline,
-          )),
+                title: txn.description,
+                subtitle: txn.type.toUpperCase(),
+                amount: txn.amount,
+                isIncome: txn.type == 'credit' || txn.type == 'deposit',
+                date: DateFormat('MMM dd, yyyy').format(txn.createdAt),
+                icon: _getTransactionIcon(txn.type),
+              )),
       ],
     );
+  }
+
+  IconData _getTransactionIcon(String type) {
+    switch (type.toLowerCase()) {
+      case 'deposit':
+        return Icons.add_circle_outline;
+      case 'withdrawal':
+        return Icons.remove_circle_outline;
+      case 'loan_disbursement':
+        return Icons.account_balance_wallet;
+      case 'loan_repayment':
+        return Icons.payment;
+      default:
+        return Icons.swap_horiz;
+    }
   }
 
   void _showReceiveQRDialog(BuildContext context) {
@@ -471,29 +493,22 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Scan this QR code to receive funds from another user.'),
+            const Text('Scan this QR code to receive funds from another Coopvest user.'),
             const SizedBox(height: 24),
-            SizedBox(
-              width: 200,
-              height: 200,
-              child: QrImageView(
-                data: widget.userId,
-                version: QrVersions.auto,
-                size: 200.0,
-                eyeStyle: QrEyeStyle(
-                  eyeShape: QrEyeShape.square,
-                  color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black,
-                ),
-                dataModuleStyle: QrDataModuleStyle(
-                  dataModuleShape: QrDataModuleShape.square,
-                  color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black,
-                ),
-              ),
+            QrImageView(
+              data: widget.userId,
+              version: QrVersions.auto,
+              size: 200.0,
+              foregroundColor: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black,
             ),
             const SizedBox(height: 16),
             Text(
-              'User ID: ${widget.userId}',
-              style: const TextStyle(fontSize: 12, color: CoopvestColors.mediumGray),
+              widget.userName,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
+            Text(
+              'ID: ${widget.userId.substring(0, 8).toUpperCase()}',
+              style: const TextStyle(color: CoopvestColors.mediumGray),
             ),
           ],
         ),

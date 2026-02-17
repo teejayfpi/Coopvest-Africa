@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/theme_config.dart';
+import '../../../config/theme_extension.dart';
 import '../../../core/extensions/string_extensions.dart';
 import '../../../data/models/wallet_models.dart';
 import '../../../presentation/providers/wallet_provider.dart';
@@ -18,19 +19,16 @@ class TransactionsHistoryScreen extends ConsumerWidget {
     final transactions = walletState.transactions;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: context.scaffoldBackground,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.white,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: CoopvestColors.darkGray),
+          icon: Icon(Icons.arrow_back, color: context.iconPrimary),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
           'Transaction History',
-          style: CoopvestTypography.headlineLarge.copyWith(
-            color: CoopvestColors.darkGray,
-          ),
+          style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold),
         ),
       ),
       body: SafeArea(
@@ -39,13 +37,11 @@ class TransactionsHistoryScreen extends ConsumerWidget {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.receipt_long, color: CoopvestColors.mediumGray, size: 64),
+                    Icon(Icons.receipt_long, color: context.textSecondary, size: 64),
                     const SizedBox(height: 16),
                     Text(
                       'No transactions yet',
-                      style: CoopvestTypography.titleMedium.copyWith(
-                        color: CoopvestColors.mediumGray,
-                      ),
+                      style: TextStyle(color: context.textSecondary, fontSize: 16),
                     ),
                   ],
                 ),
@@ -75,8 +71,8 @@ class TransactionsHistoryScreen extends ConsumerWidget {
               height: 44,
               decoration: BoxDecoration(
                 color: isCredit 
-                    ? CoopvestColors.success.withAlpha((255 * 0.1).toInt())
-                    : CoopvestColors.error.withAlpha((255 * 0.1).toInt()),
+                    ? CoopvestColors.success.withOpacity(0.1)
+                    : CoopvestColors.error.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
@@ -91,23 +87,19 @@ class TransactionsHistoryScreen extends ConsumerWidget {
                 children: [
                   Text(
                     txn.description ?? txn.type.replaceAll('_', ' ').capitalize(),
-                    style: CoopvestTypography.bodyMedium.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: TextStyle(fontWeight: FontWeight.bold, color: context.textPrimary),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     '${_getMonthName(txn.createdAt.month)} ${txn.createdAt.day}, ${txn.createdAt.year}',
-                    style: CoopvestTypography.bodySmall.copyWith(
-                      color: CoopvestColors.mediumGray,
-                    ),
+                    style: TextStyle(fontSize: 12, color: context.textSecondary),
                   ),
                 ],
               ),
             ),
             Text(
               '${isCredit ? '+' : '-'}₦${txn.amount.toStringAsFixed(2)}',
-              style: CoopvestTypography.bodyMedium.copyWith(
+              style: TextStyle(
                 fontWeight: FontWeight.bold,
                 color: isCredit ? CoopvestColors.success : CoopvestColors.error,
               ),

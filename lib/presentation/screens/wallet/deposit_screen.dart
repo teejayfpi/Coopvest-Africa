@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/theme_config.dart';
+import '../../../config/theme_extension.dart';
 import '../../../core/utils/utils.dart';
 import '../../../presentation/providers/wallet_provider.dart';
 import '../../../presentation/widgets/common/buttons.dart';
@@ -24,50 +25,27 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
   bool _isProcessing = false;
 
   final List<Map<String, dynamic>> _paymentMethods = [
-    {
-      'value': 'bank_transfer',
-      'label': 'Bank Transfer',
-      'icon': Icons.account_balance,
-    },
-    {
-      'value': 'card',
-      'label': 'Debit Card',
-      'icon': Icons.credit_card,
-    },
-    {
-      'value': 'ussd',
-      'label': 'USSD',
-      'icon': Icons.phone_android,
-    },
+    {'value': 'bank_transfer', 'label': 'Bank Transfer', 'icon': Icons.account_balance},
+    {'value': 'card', 'label': 'Debit Card', 'icon': Icons.credit_card},
+    {'value': 'ussd', 'label': 'USSD', 'icon': Icons.phone_android},
   ];
 
   Future<void> _processDeposit() async {
     if (!_formKey.currentState!.validate()) return;
-
-    setState(() {
-      _isProcessing = true;
-    });
-
+    setState(() => _isProcessing = true);
     try {
       final amount = double.parse(_amountController.text.replaceAll(',', ''));
-
       await ref.read(walletProvider.notifier).makeContribution(
         amount: amount,
         description: 'Wallet deposit via ${_selectedPaymentMethod.replaceAll('_', ' ')}',
       );
-
       _showSuccessDialog();
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Deposit failed: $e'),
-          backgroundColor: CoopvestColors.error,
-        ),
+        SnackBar(content: Text('Deposit failed: $e'), backgroundColor: CoopvestColors.error),
       );
     } finally {
-      setState(() {
-        _isProcessing = false;
-      });
+      setState(() => _isProcessing = false);
     }
   }
 
@@ -76,11 +54,12 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
+        backgroundColor: context.cardBackground,
         title: Row(
-          children: const [
-            Icon(Icons.check_circle, color: CoopvestColors.success),
-            SizedBox(width: 8),
-            Text('Deposit Successful'),
+          children: [
+            const Icon(Icons.check_circle, color: CoopvestColors.success),
+            const SizedBox(width: 8),
+            Text('Deposit Successful', style: TextStyle(color: context.textPrimary)),
           ],
         ),
         content: Column(
@@ -89,19 +68,18 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
             Text(
               'Your deposit of ₦${_amountController.text} has been processed successfully.',
               textAlign: TextAlign.center,
+              style: TextStyle(color: context.textSecondary),
             ),
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: CoopvestColors.info.withAlpha((255 * 0.1).toInt()),
+                color: CoopvestColors.info.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Text(
+              child: const Text(
                 'Funds have been added to your wallet balance.',
-                style: CoopvestTypography.bodySmall.copyWith(
-                  color: CoopvestColors.info,
-                ),
+                style: TextStyle(color: CoopvestColors.info, fontSize: 12),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -133,19 +111,16 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: context.scaffoldBackground,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.white,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: CoopvestColors.darkGray),
+          icon: Icon(Icons.arrow_back, color: context.iconPrimary),
           onPressed: _goBack,
         ),
         title: Text(
           'Deposit Funds',
-          style: CoopvestTypography.headlineLarge.copyWith(
-            color: CoopvestColors.darkGray,
-          ),
+          style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold),
         ),
       ),
       body: SafeArea(
@@ -156,7 +131,6 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Amount Input
                 AppTextField(
                   label: 'Amount',
                   hint: 'Enter deposit amount',
@@ -164,25 +138,12 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
                   keyboardType: TextInputType.number,
                   textInputAction: TextInputAction.done,
                   prefixText: '₦ ',
-                  onChanged: (value) {
-                    setState(() {});
-                  },
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter an amount';
-                    }
-                    final amount = double.tryParse(value.replaceAll(',', ''));
-                    if (amount == null || amount < 100) {
-                      return 'Minimum deposit is ₦100';
-                    }
-                    return null;
-                  },
+                  onChanged: (value) => setState(() {}),
                 ),
 
                 const SizedBox(height: 24),
 
-                // Quick Amount Buttons
-                const Text('Quick Select:', style: TextStyle(fontWeight: FontWeight.w500)),
+                Text('Quick Select:', style: TextStyle(fontWeight: FontWeight.bold, color: context.textPrimary)),
                 const SizedBox(height: 12),
                 Wrap(
                   spacing: 12,
@@ -196,11 +157,11 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                         decoration: BoxDecoration(
-                          color: CoopvestColors.veryLightGray,
+                          color: context.cardBackground,
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: CoopvestColors.lightGray),
+                          border: Border.all(color: context.dividerColor),
                         ),
-                        child: Text('₦${amount.formatNumber()}'),
+                        child: Text('₦${amount.formatNumber()}', style: TextStyle(color: context.textPrimary)),
                       ),
                     );
                   }).toList(),
@@ -208,32 +169,22 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
 
                 const SizedBox(height: 24),
 
-                // Payment Method Selection
-                const Text(
-                  'Payment Method',
-                  style: TextStyle(fontWeight: FontWeight.w500),
-                ),
+                Text('Payment Method', style: TextStyle(fontWeight: FontWeight.bold, color: context.textPrimary)),
                 const SizedBox(height: 12),
                 
                 Column(
                   children: _paymentMethods.map((method) {
                     final isSelected = _selectedPaymentMethod == method['value'];
                     return GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _selectedPaymentMethod = method['value'] as String;
-                        });
-                      },
+                      onTap: () => setState(() => _selectedPaymentMethod = method['value'] as String),
                       child: Container(
                         margin: const EdgeInsets.only(bottom: 12),
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: isSelected 
-                              ? CoopvestColors.primary.withAlpha((255 * 0.1).toInt())
-                              : CoopvestColors.veryLightGray,
+                          color: isSelected ? CoopvestColors.primary.withOpacity(0.1) : context.cardBackground,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: isSelected ? CoopvestColors.primary : CoopvestColors.lightGray,
+                            color: isSelected ? CoopvestColors.primary : context.dividerColor,
                             width: isSelected ? 2 : 1,
                           ),
                         ),
@@ -241,14 +192,15 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
                           children: [
                             Icon(
                               (method['icon'] as IconData?) ?? Icons.payment,
-                              color: isSelected ? CoopvestColors.primary : CoopvestColors.mediumGray,
+                              color: isSelected ? CoopvestColors.primary : context.textSecondary,
                             ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Text(
                                 method['label'] as String,
-                                style: CoopvestTypography.bodyMedium.copyWith(
-                                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                                style: TextStyle(
+                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                  color: context.textPrimary,
                                 ),
                               ),
                             ),
@@ -263,18 +215,16 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
 
                 const SizedBox(height: 24),
 
-                // Info Card
                 AppCard(
-                  backgroundColor: CoopvestColors.info.withAlpha((255 * 0.1).toInt()),
-                  border: Border.all(color: CoopvestColors.info.withAlpha((255 * 0.3).toInt())),
+                  backgroundColor: CoopvestColors.info.withOpacity(0.1),
                   child: Row(
-                    children: const [
-                      Icon(Icons.info, color: CoopvestColors.info),
-                      SizedBox(width: 12),
+                    children: [
+                      const Icon(Icons.info, color: CoopvestColors.info),
+                      const SizedBox(width: 12),
                       Expanded(
                         child: Text(
                           'Deposits are processed instantly. Bank transfers may take 1-2 minutes to reflect.',
-                          style: TextStyle(color: CoopvestColors.darkGray),
+                          style: TextStyle(color: context.textPrimary, fontSize: 12),
                         ),
                       ),
                     ],
@@ -283,7 +233,6 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
 
                 const SizedBox(height: 32),
 
-                // Submit Button
                 _isProcessing
                     ? const Center(child: CircularProgressIndicator(color: CoopvestColors.primary))
                     : PrimaryButton(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/theme_config.dart';
+import '../../../config/theme_extension.dart';
 
 /// KYC Success Screen - Shown when KYC verification is complete
 class KYCSuccessScreen extends ConsumerWidget {
@@ -9,7 +10,7 @@ class KYCSuccessScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      backgroundColor: CoopvestTheme.lightTheme.scaffoldBackgroundColor,
+      backgroundColor: context.scaffoldBackground,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
@@ -22,34 +23,34 @@ class KYCSuccessScreen extends ConsumerWidget {
                 width: 120,
                 height: 120,
                 decoration: BoxDecoration(
-                  color: CoopvestTheme.lightTheme.primaryColor.withAlpha((255 * 0.1).toInt()),
+                  color: CoopvestColors.primary.withOpacity(0.1),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(
+                child: const Icon(
                   Icons.check_circle,
                   size: 80,
-                  color: CoopvestTheme.lightTheme.primaryColor,
+                  color: CoopvestColors.primary,
                 ),
               ),
               const SizedBox(height: 32),
               
               // Success Message
-              const Text(
+              Text(
                 'KYC Verification Complete!',
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF1B5E20),
+                  color: context.textPrimary,
                 ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
               
-              const Text(
+              Text(
                 'Your identity verification has been submitted successfully. Our team will review your documents and update your status within 24-48 hours.',
                 style: TextStyle(
                   fontSize: 16,
-                  color: Colors.grey,
+                  color: context.textSecondary,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -59,34 +60,35 @@ class KYCSuccessScreen extends ConsumerWidget {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.grey[100],
+                  color: context.cardBackground,
                   borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: context.dividerColor),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        Icon(
+                        const Icon(
                           Icons.lightbulb_outline,
-                          color: CoopvestTheme.lightTheme.primaryColor,
+                          color: CoopvestColors.primary,
                           size: 20,
                         ),
                         const SizedBox(width: 8),
-                        const Text(
+                        Text(
                           'What\'s Next?',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
-                            color: Color(0xFF1B5E20),
+                            color: context.textPrimary,
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 12),
-                    _buildNextStep('1', 'Check back later for approval status'),
-                    _buildNextStep('2', 'Once approved, you can apply for loans'),
-                    _buildNextStep('3', 'Start saving to build your credit history'),
+                    _buildNextStep(context, '1', 'Check back later for approval status'),
+                    _buildNextStep(context, '2', 'Once approved, you can apply for loans'),
+                    _buildNextStep(context, '3', 'Start saving to build your credit history'),
                   ],
                 ),
               ),
@@ -98,11 +100,10 @@ class KYCSuccessScreen extends ConsumerWidget {
                 height: 56,
                 child: ElevatedButton(
                   onPressed: () {
-                    // Navigate to home/dashboard
                     Navigator.of(context).pushReplacementNamed('/home');
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: CoopvestTheme.lightTheme.primaryColor,
+                    backgroundColor: CoopvestColors.primary,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -124,7 +125,7 @@ class KYCSuccessScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildNextStep(String number, String text) {
+  Widget _buildNextStep(BuildContext context, String number, String text) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8.0),
       child: Row(
@@ -134,7 +135,7 @@ class KYCSuccessScreen extends ConsumerWidget {
             width: 24,
             height: 24,
             decoration: BoxDecoration(
-              color: CoopvestTheme.lightTheme.primaryColor,
+              color: CoopvestColors.primary,
               shape: BoxShape.circle,
             ),
             child: Center(
@@ -152,9 +153,9 @@ class KYCSuccessScreen extends ConsumerWidget {
           Expanded(
             child: Text(
               text,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 14,
-                color: Colors.grey,
+                color: context.textSecondary,
               ),
             ),
           ),

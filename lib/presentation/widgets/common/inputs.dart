@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../config/theme_config.dart';
+import '../../../config/theme_extension.dart';
 
 /// Text Input Field Component
 class AppTextField extends StatefulWidget {
@@ -75,8 +76,8 @@ class _AppTextFieldState extends State<AppTextField> {
           widget.label,
           style: CoopvestTypography.labelLarge.copyWith(
             color: widget.enabled
-                ? (Theme.of(context).brightness == Brightness.dark ? Colors.white : CoopvestColors.darkGray)
-                : CoopvestColors.mediumGray,
+                ? context.textPrimary
+                : context.textSecondary,
           ),
         ),
         const SizedBox(height: 8),
@@ -97,12 +98,12 @@ class _AppTextFieldState extends State<AppTextField> {
           onChanged: widget.onChanged,
           onTap: widget.onTap,
           style: CoopvestTypography.bodyMedium.copyWith(
-            color: Theme.of(context).brightness == Brightness.dark ? Colors.white : CoopvestColors.darkGray,
+            color: context.textPrimary,
           ),
           decoration: InputDecoration(
             hintText: widget.hint,
             hintStyle: CoopvestTypography.bodyMedium.copyWith(
-              color: CoopvestColors.mediumGray,
+              color: context.textSecondary,
             ),
             prefixIcon: widget.prefixIcon,
             prefixText: widget.prefixText,
@@ -115,24 +116,24 @@ class _AppTextFieldState extends State<AppTextField> {
                     },
                     child: Icon(
                       _obscureText ? Icons.visibility_off : Icons.visibility,
-                      color: CoopvestColors.mediumGray,
+                      color: context.textSecondary,
                     ),
                   )
                 : widget.suffixIcon,
             counterText: widget.showCounter ? null : '',
             filled: true,
             fillColor: widget.filledColor ?? (widget.enabled
-                ? (Theme.of(context).brightness == Brightness.dark ? CoopvestColors.darkSurface : CoopvestColors.veryLightGray)
-                : (Theme.of(context).brightness == Brightness.dark ? Colors.white10 : CoopvestColors.lightGray)),
+                ? context.cardBackground
+                : context.secondaryCardBackground),
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: Theme.of(context).brightness == Brightness.dark ? CoopvestColors.darkDivider : CoopvestColors.lightGray),
+              borderSide: BorderSide(color: context.dividerColor),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: Theme.of(context).brightness == Brightness.dark ? CoopvestColors.darkDivider : CoopvestColors.lightGray),
+              borderSide: BorderSide(color: context.dividerColor),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
@@ -196,8 +197,8 @@ class AppDropdown<T> extends StatelessWidget {
           label,
           style: CoopvestTypography.labelLarge.copyWith(
             color: enabled 
-                ? (Theme.of(context).brightness == Brightness.dark ? Colors.white : CoopvestColors.darkGray) 
-                : CoopvestColors.mediumGray,
+                ? context.textPrimary
+                : context.textSecondary,
           ),
         ),
         const SizedBox(height: 8),
@@ -207,26 +208,26 @@ class AppDropdown<T> extends StatelessWidget {
           items: items,
           onChanged: enabled ? onChanged : null,
           validator: validator,
-          dropdownColor: Theme.of(context).brightness == Brightness.dark ? CoopvestColors.darkSurface : Colors.white,
+          dropdownColor: context.cardBackground,
           style: CoopvestTypography.bodyMedium.copyWith(
-            color: Theme.of(context).brightness == Brightness.dark ? Colors.white : CoopvestColors.darkGray,
+            color: context.textPrimary,
           ),
           decoration: InputDecoration(
             hintText: hint,
             prefixIcon: prefixIcon,
             filled: true,
             fillColor: enabled
-                ? (Theme.of(context).brightness == Brightness.dark ? CoopvestColors.darkSurface : CoopvestColors.veryLightGray)
-                : (Theme.of(context).brightness == Brightness.dark ? Colors.white10 : CoopvestColors.lightGray),
+                ? context.cardBackground
+                : context.secondaryCardBackground,
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: Theme.of(context).brightness == Brightness.dark ? CoopvestColors.darkDivider : CoopvestColors.lightGray),
+              borderSide: BorderSide(color: context.dividerColor),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: Theme.of(context).brightness == Brightness.dark ? CoopvestColors.darkDivider : CoopvestColors.lightGray),
+              borderSide: BorderSide(color: context.dividerColor),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
@@ -277,8 +278,8 @@ class AppCheckbox extends StatelessWidget {
               label,
               style: CoopvestTypography.bodyMedium.copyWith(
                 color: enabled
-                    ? (Theme.of(context).brightness == Brightness.dark ? Colors.white : CoopvestColors.darkGray)
-                    : CoopvestColors.mediumGray,
+                    ? context.textPrimary
+                    : context.textSecondary,
               ),
             ),
           ),
@@ -326,8 +327,8 @@ class AppRadio<T> extends StatelessWidget {
               label,
               style: CoopvestTypography.bodyMedium.copyWith(
                 color: enabled
-                    ? (Theme.of(context).brightness == Brightness.dark ? Colors.white : CoopvestColors.darkGray)
-                    : CoopvestColors.mediumGray,
+                    ? context.textPrimary
+                    : context.textSecondary,
               ),
             ),
           ),

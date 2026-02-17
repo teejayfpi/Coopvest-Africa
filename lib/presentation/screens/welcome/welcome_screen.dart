@@ -40,7 +40,7 @@ class WelcomeScreen extends StatelessWidget {
                 ),
                 Expanded(
                   flex: 2,
-                  child: _buildBottomSection(),
+                  child: _buildBottomSection(context),
                 ),
               ],
             ),
@@ -113,7 +113,7 @@ class WelcomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildBottomSection() {
+  Widget _buildBottomSection(BuildContext context) {
     return Column(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [

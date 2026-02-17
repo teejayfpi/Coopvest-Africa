@@ -135,7 +135,7 @@ class TerminationApplicationScreen extends ConsumerWidget {
     );
   }
 
-  final List<TerminationReason> _reasons = [
+  static const List<TerminationReason> _reasons = [
     TerminationReason.financialDifficulties,
     TerminationReason.noLongerNeedsServices,
     TerminationReason.relocating,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../config/theme_config.dart';
+import '../../../config/theme_extension.dart';
 import '../../../config/theme_enhanced.dart';
 
 /// Enhanced App Card with gradient and shadow options
@@ -73,9 +74,9 @@ class EnhancedCard extends StatelessWidget {
 
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return BoxDecoration(
-      color: backgroundColor ?? (isDarkMode ? CoopvestColors.darkSurface : Colors.white),
+      color: backgroundColor ?? context.cardBackground,
       borderRadius: borderRadius ?? BorderRadius.circular(CoopvestRadius.card),
-      border: border ?? (isDarkMode ? BorderSide(color: CoopvestColors.darkDivider.withOpacity(0.5)) : null),
+      border: border ?? BorderSide(color: context.dividerColor.withOpacity(0.5)),
       boxShadow: elevation != null
           ? [BoxShadow(color: isDarkMode ? Colors.black26 : CoopvestColorsEnhanced.shadowMedium, blurRadius: elevation! * 2)]
           : (isDarkMode ? CoopvestShadows.none : CoopvestShadows.medium),
@@ -239,7 +240,6 @@ class QuickActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -252,7 +252,7 @@ class QuickActionButton extends StatelessWidget {
                   end: Alignment.bottomRight,
                 )
               : null,
-          color: gradientColors == null ? (isDarkMode ? Colors.white10 : CoopvestColors.veryLightGray) : null,
+          color: gradientColors == null ? context.secondaryCardBackground : null,
           borderRadius: BorderRadius.circular(CoopvestRadius.large),
           boxShadow: gradientColors != null ? CoopvestShadows.coloredPrimary : null,
         ),
@@ -277,7 +277,7 @@ class QuickActionButton extends StatelessWidget {
               label,
               style: CoopvestTypography.bodyMedium.copyWith(
                 fontWeight: FontWeight.w600,
-                color: gradientColors != null ? Colors.white : (isDarkMode ? CoopvestColors.darkText : CoopvestColors.darkGray),
+                color: gradientColors != null ? Colors.white : context.textPrimary,
               ),
               textAlign: TextAlign.center,
               maxLines: 1,
@@ -307,7 +307,6 @@ class SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -330,7 +329,7 @@ class SectionHeader extends StatelessWidget {
             : Text(
                 title,
                 style: CoopvestTypography.titleMedium.copyWith(
-                  color: isDarkMode ? CoopvestColors.darkText : CoopvestColors.darkGray,
+                  color: context.textPrimary,
                   fontWeight: FontWeight.bold,
                   fontSize: 18,
                 ),

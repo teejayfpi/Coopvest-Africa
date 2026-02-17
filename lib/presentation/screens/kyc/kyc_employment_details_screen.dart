@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/theme_config.dart';
+import '../../../config/theme_extension.dart';
 import '../../../core/utils/utils.dart';
 import '../../../data/models/kyc_models.dart';
 import '../../../presentation/providers/kyc_provider.dart';
@@ -148,13 +149,14 @@ class _KYCEmploymentDetailsScreenState
       firstDate: DateTime.now().subtract(const Duration(days: 365 * 70)),
       lastDate: DateTime.now().subtract(const Duration(days: 365 * 18)),
       builder: (context, child) {
+        final isDarkMode = Theme.of(context).brightness == Brightness.dark;
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
+            colorScheme: ColorScheme.light(
               primary: CoopvestColors.primary,
               onPrimary: Colors.white,
-              surface: Colors.white,
-              onSurface: CoopvestColors.darkGray,
+              surface: isDarkMode ? CoopvestColors.darkSurface : Colors.white,
+              onSurface: isDarkMode ? Colors.white : CoopvestColors.darkGray,
             ),
           ),
           child: child!,
@@ -230,21 +232,17 @@ class _KYCEmploymentDetailsScreenState
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: context.scaffoldBackground,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: Theme.of(context).appBarTheme.foregroundColor),
+          icon: Icon(Icons.arrow_back, color: context.iconPrimary),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
           'Employment Details',
-          style: CoopvestTypography.headlineLarge.copyWith(
-            color: Theme.of(context).appBarTheme.foregroundColor,
-          ),
+          style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold),
         ),
       ),
       body: SafeArea(
@@ -268,9 +266,7 @@ class _KYCEmploymentDetailsScreenState
               // Personal Information Section
               Text(
                 'Personal Information',
-                style: CoopvestTypography.headlineSmall.copyWith(
-                  color: isDarkMode ? Colors.white : CoopvestColors.darkGray,
-                ),
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: context.textPrimary),
               ),
               const SizedBox(height: 16),
 
@@ -281,7 +277,7 @@ class _KYCEmploymentDetailsScreenState
                 controller: _dateOfBirthController,
                 readOnly: true,
                 onTap: _selectDateOfBirth,
-                suffixIcon: const Icon(
+                suffixIcon: Icon(
                   Icons.calendar_today,
                   color: CoopvestColors.primary,
                   size: 20,
@@ -309,9 +305,7 @@ class _KYCEmploymentDetailsScreenState
               // Employment Section
               Text(
                 'Employment Details',
-                style: CoopvestTypography.headlineSmall.copyWith(
-                  color: isDarkMode ? Colors.white : CoopvestColors.darkGray,
-                ),
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: context.textPrimary),
               ),
               const SizedBox(height: 16),
 
@@ -329,212 +323,201 @@ class _KYCEmploymentDetailsScreenState
                   });
                 },
                 hint: 'Select employment type',
-                validator: (value) => value == null ? 'Employment type is required' : null,
               ),
               const SizedBox(height: 20),
 
-              // Organization Search
+              // Organization
               Text(
-                'Organization / Employer *',
-                style: CoopvestTypography.labelLarge.copyWith(
-                  color: CoopvestColors.darkGray,
-                ),
+                'Organization *',
+                style: TextStyle(fontWeight: FontWeight.bold, color: context.textPrimary),
               ),
               const SizedBox(height: 8),
-              
-              // Search Field
-              TextField(
-                controller: _organizationSearchController,
-                decoration: InputDecoration(
-                  hintText: 'Search for your organization...',
-                  prefixIcon: const Icon(Icons.search, color: CoopvestColors.primary),
-                  filled: true,
-                  fillColor: CoopvestColors.veryLightGray,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: CoopvestColors.lightGray),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: CoopvestColors.lightGray),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: CoopvestColors.primary, width: 2),
-                  ),
-                ),
-                onChanged: (_) => _onOrganizationSearch(),
-              ),
-              const SizedBox(height: 12),
-
-              // Selected Organization Display
-              if (_selectedOrganization != null)
-                Container(
-                  padding: const EdgeInsets.all(12),
+              GestureDetector(
+                onTap: _showOrganizationPicker,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
-                    color: CoopvestColors.primary.withAlpha((255 * 0.1).toInt()),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: CoopvestColors.primary),
+                    color: context.cardBackground,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: context.dividerColor),
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.check_circle, color: CoopvestColors.primary),
-                      const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          _selectedOrganization!,
-                          style: CoopvestTypography.bodyMedium.copyWith(
-                            color: CoopvestColors.primary,
-                            fontWeight: FontWeight.w600,
+                          _selectedOrganization ?? 'Select your organization',
+                          style: TextStyle(
+                            color: _selectedOrganization == null 
+                                ? context.textSecondary 
+                                : context.textPrimary,
                           ),
                         ),
                       ),
-                      GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            _selectedOrganization = null;
-                            _organizationSearchController.clear();
-                          });
-                        },
-                        child: const Icon(Icons.close, color: CoopvestColors.primary),
-                      ),
+                      Icon(Icons.keyboard_arrow_down, color: context.textSecondary),
                     ],
                   ),
-                )
-              else if (_searchQuery.isEmpty)
-                // Show categorized organizations
-                _buildOrganizationCategories()
-              else if (_filteredOrganizations.isEmpty)
-                // Show "Not Listed" option
-                _buildNotListedOption()
-              else
-                // Show search results
-                _buildSearchResults(),
-
+                ),
+              ),
               const SizedBox(height: 20),
 
               // Job Title
               AppTextField(
-                label: 'Job Title / Designation *',
-                hint: 'e.g., Administrative Officer',
+                label: 'Job Title *',
+                hint: 'Enter your job title',
                 controller: _jobTitleController,
-                textInputAction: TextInputAction.next,
-                validator: (value) => Validators.validateNotEmpty(value, 'Field'),
               ),
               const SizedBox(height: 20),
 
-              // Monthly Income Range
-              Text(
-                'Monthly Income Range *',
-                style: CoopvestTypography.labelLarge.copyWith(
-                  color: CoopvestColors.darkGray,
-                ),
+              // Income Range
+              AppDropdown<String>(
+                label: 'Monthly Income Range *',
+                value: _selectedIncomeRange,
+                items: IncomeRanges.ranges.map((range) => DropdownMenuItem(
+                  value: range,
+                  child: Text(range),
+                )).toList(),
+                onChanged: (value) {
+                  setState(() {
+                    _selectedIncomeRange = value;
+                  });
+                },
+                hint: 'Select income range',
               ),
-              const SizedBox(height: 8),
-              
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: IncomeRanges.ranges.map((range) {
-                  final isSelected = _selectedIncomeRange == range['value'];
-                  return GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _selectedIncomeRange = range['value'] as String?;
-                      });
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? CoopvestColors.primary
-                            : CoopvestColors.veryLightGray,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: isSelected
-                              ? CoopvestColors.primary
-                              : CoopvestColors.lightGray,
-                        ),
-                      ),
-                      child: Text(
-                        range['label'] as String,
-                        style: CoopvestTypography.bodySmall.copyWith(
-                          color: isSelected ? Colors.white : CoopvestColors.darkGray,
-                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
 
               // Address Section
               Text(
                 'Residential Address',
-                style: CoopvestTypography.headlineSmall.copyWith(
-                  color: CoopvestColors.darkGray,
-                ),
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: context.textPrimary),
               ),
               const SizedBox(height: 16),
 
-              // Residential Address
+              // Address
               AppTextField(
                 label: 'Residential Address *',
-                hint: 'Enter your full address',
+                hint: 'Enter your full residential address',
                 controller: _addressController,
-                maxLines: 3,
-                minLines: 2,
-                validator: (value) => Validators.validateNotEmpty(value, 'Field'),
+                maxLines: 2,
               ),
               const SizedBox(height: 20),
 
-              // City & State
+              // State & City
               Row(
                 children: [
                   Expanded(
                     child: AppDropdown<String>(
-                      label: 'City (Optional)',
-                      value: _selectedCity,
-                      items: _cities.map((city) => DropdownMenuItem(
-                        value: city,
-                        child: Text(city, overflow: TextOverflow.ellipsis),
-                      )).toList(),
-                      onChanged: (value) {
-                        setState(() {
-                          _selectedCity = value;
-                        });
-                      },
-                      hint: 'Select city',
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: AppDropdown<String>(
-                      label: 'State (Optional)',
+                      label: 'State *',
                       value: _selectedState,
                       items: _states.map((state) => DropdownMenuItem(
                         value: state,
-                        child: Text(state, overflow: TextOverflow.ellipsis),
+                        child: Text(state),
                       )).toList(),
                       onChanged: (value) {
                         setState(() {
                           _selectedState = value;
                         });
                       },
-                      hint: 'Select state',
+                      hint: 'State',
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: AppDropdown<String>(
+                      label: 'City *',
+                      value: _selectedCity,
+                      items: _cities.map((city) => DropdownMenuItem(
+                        value: city,
+                        child: Text(city),
+                      )).toList(),
+                      onChanged: (value) {
+                        setState(() {
+                          _selectedCity = value;
+                        });
+                      },
+                      hint: 'City',
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 32),
+
+              const SizedBox(height: 40),
 
               // Continue Button
               PrimaryButton(
                 label: 'Continue',
                 onPressed: _validateAndContinue,
                 width: double.infinity,
+              ),
+              const SizedBox(height: 24),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showOrganizationPicker() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => Container(
+          height: MediaQuery.of(context).size.height * 0.8,
+          decoration: BoxDecoration(
+            color: context.scaffoldBackground,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            children: [
+              const SizedBox(height: 12),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: context.dividerColor,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: TextField(
+                  controller: _organizationSearchController,
+                  style: TextStyle(color: context.textPrimary),
+                  decoration: InputDecoration(
+                    hintText: 'Search organization...',
+                    hintStyle: TextStyle(color: context.textSecondary),
+                    prefixIcon: Icon(Icons.search, color: context.textSecondary),
+                    filled: true,
+                    fillColor: context.cardBackground,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                  onChanged: (val) {
+                    setModalState(() {});
+                  },
+                ),
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: _filteredOrganizations.length,
+                  itemBuilder: (context, index) {
+                    final org = _filteredOrganizations[index];
+                    return ListTile(
+                      title: Text(org, style: TextStyle(color: context.textPrimary)),
+                      onTap: () {
+                        setState(() {
+                          _selectedOrganization = org;
+                        });
+                        Navigator.pop(context);
+                      },
+                    );
+                  },
+                ),
               ),
             ],
           ),
@@ -543,244 +526,33 @@ class _KYCEmploymentDetailsScreenState
     );
   }
 
-  Widget _buildProgressStep(int step, bool isActive) {
+  Widget _buildProgressStep(int step, bool isCompleted) {
     return Container(
       width: 32,
       height: 32,
       decoration: BoxDecoration(
-        color: isActive ? CoopvestColors.primary : CoopvestColors.lightGray,
-        borderRadius: BorderRadius.circular(16),
+        color: isCompleted ? CoopvestColors.primary : context.dividerColor,
+        shape: BoxShape.circle,
       ),
       child: Center(
-        child: isActive
-            ? const Icon(Icons.check, color: Colors.white, size: 18)
-            : Text(
-                '$step',
-                style: TextStyle(
-                  color: isActive ? Colors.white : CoopvestColors.mediumGray,
-                  fontWeight: FontWeight.bold,
-                ),
+        child: isCompleted 
+          ? const Icon(Icons.check, color: Colors.white, size: 16)
+          : Text(
+              '$step',
+              style: TextStyle(
+                color: context.textSecondary,
+                fontWeight: FontWeight.bold,
               ),
+            ),
       ),
     );
   }
 
   Widget _buildProgressLine(int step) {
-    final isComplete = step < 1; // Step 1 is complete
     return Expanded(
       child: Container(
         height: 2,
-        color: isComplete ? CoopvestColors.primary : CoopvestColors.lightGray,
-      ),
-    );
-  }
-
-  Widget _buildOrganizationCategories() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: _preApprovedOrganizations.map((category) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  (category['icon'] as IconData?) ?? Icons.business,
-                  color: CoopvestColors.primary,
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  (category['label'] as String?) ?? 'Other',
-                  style: CoopvestTypography.labelLarge.copyWith(
-                    color: CoopvestColors.primary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            ...(category['organizations'] as List<String>).map((org) {
-              return GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _selectedOrganization = org;
-                    _organizationSearchController.text = org;
-                  });
-                },
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  margin: const EdgeInsets.only(bottom: 4),
-                  decoration: BoxDecoration(
-                    color: CoopvestColors.veryLightGray,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    org,
-                    style: CoopvestTypography.bodyMedium.copyWith(
-                      color: CoopvestColors.darkGray,
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
-            const SizedBox(height: 12),
-          ],
-        );
-      }).toList(),
-    );
-  }
-
-  Widget _buildSearchResults() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Search Results',
-          style: CoopvestTypography.labelMedium.copyWith(
-            color: CoopvestColors.mediumGray,
-          ),
-        ),
-        const SizedBox(height: 8),
-        ..._filteredOrganizations.map((org) {
-          return GestureDetector(
-            onTap: () {
-              setState(() {
-                _selectedOrganization = org;
-                _organizationSearchController.text = org;
-              });
-            },
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              margin: const EdgeInsets.only(bottom: 4),
-              decoration: BoxDecoration(
-                color: CoopvestColors.veryLightGray,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      org,
-                      style: CoopvestTypography.bodyMedium.copyWith(
-                        color: CoopvestColors.darkGray,
-                      ),
-                    ),
-                  ),
-                  Icon(
-                    Icons.add_circle_outline,
-                    color: CoopvestColors.primary,
-                    size: 20,
-                  ),
-                ],
-              ),
-            ),
-          );
-        }).toList(),
-        const SizedBox(height: 12),
-        _buildNotListedOption(),
-      ],
-    );
-  }
-
-  Widget _buildNotListedOption() {
-    return GestureDetector(
-      onTap: () {
-        // Show dialog to request organization approval
-        _showRequestOrganizationDialog();
-      },
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: CoopvestColors.warning.withAlpha((255 * 0.1).toInt()),
-          border: Border.all(color: CoopvestColors.warning),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              Icons.help_outline,
-              color: CoopvestColors.warning,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'My organization is not listed',
-                    style: CoopvestTypography.bodyMedium.copyWith(
-                      color: CoopvestColors.warning,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Submit a request for admin verification and approval',
-                    style: CoopvestTypography.bodySmall.copyWith(
-                      color: CoopvestColors.warning,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(
-              Icons.arrow_forward,
-              color: CoopvestColors.warning,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showRequestOrganizationDialog() {
-    final organizationController = TextEditingController();
-    
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Request Organization Approval'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Your organization will be submitted for admin verification. This process typically takes 24-48 hours.',
-              style: CoopvestTypography.bodyMedium.copyWith(
-                color: CoopvestColors.mediumGray,
-              ),
-            ),
-            const SizedBox(height: 16),
-            AppTextField(
-              label: 'Organization Name',
-              controller: organizationController,
-              hint: 'Enter your organization name',
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (organizationController.text.isNotEmpty) {
-                ref.read(kycProvider.notifier).requestOrganizationApproval(
-                  organizationController.text,
-                );
-                setState(() {
-                  _selectedOrganization = organizationController.text;
-                });
-                Navigator.pop(context);
-              }
-            },
-            child: const Text('Submit Request'),
-          ),
-        ],
+        color: context.dividerColor,
       ),
     );
   }

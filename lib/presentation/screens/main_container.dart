@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../config/theme_config.dart';
+import '../../config/theme_extension.dart';
 import '../providers/auth_provider.dart';
 import 'home/home_dashboard_screen.dart';
 import 'wallet/wallet_dashboard_screen.dart';
@@ -54,11 +55,9 @@ class _MainContainerState extends ConsumerState<MainContainer> {
             });
           },
           type: BottomNavigationBarType.fixed,
-          backgroundColor: Theme.of(context).brightness == Brightness.dark 
-              ? CoopvestColors.darkSurface 
-              : Colors.white,
+          backgroundColor: context.cardBackground,
           selectedItemColor: CoopvestColors.primary,
-          unselectedItemColor: CoopvestColors.mediumGray,
+          unselectedItemColor: context.textSecondary,
           selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
           unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.normal, fontSize: 12),
           items: const [

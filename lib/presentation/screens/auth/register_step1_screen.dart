@@ -3,6 +3,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../../../config/theme_config.dart';
+import '../../../config/theme_extension.dart';
 import '../../../core/utils/utils.dart';
 import '../../widgets/common/buttons.dart';
 import '../../widgets/common/inputs.dart';
@@ -46,7 +47,6 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
     _emailController = TextEditingController();
     _passwordController = TextEditingController();
     _confirmPasswordController = TextEditingController();
-
     _passwordController.addListener(_updatePasswordStrength);
   }
 
@@ -63,29 +63,11 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
   void _updatePasswordStrength() {
     final password = _passwordController.text;
     double strength = 0;
-
     if (password.length >= 8) strength += 0.25;
     if (password.contains(RegExp(r'[A-Z]'))) strength += 0.25;
     if (password.contains(RegExp(r'[0-9]'))) strength += 0.25;
     if (password.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>]'))) strength += 0.25;
-
-    setState(() {
-      _passwordStrength = strength;
-    });
-  }
-
-  String _getPasswordStrengthText() {
-    if (_passwordStrength < 0.25) return 'Weak';
-    if (_passwordStrength < 0.5) return 'Fair';
-    if (_passwordStrength < 0.75) return 'Good';
-    return 'Strong';
-  }
-
-  Color _getPasswordStrengthColor() {
-    if (_passwordStrength < 0.25) return CoopvestColors.error;
-    if (_passwordStrength < 0.5) return CoopvestColors.warning;
-    if (_passwordStrength < 0.75) return Colors.orange;
-    return CoopvestColors.success;
+    setState(() => _passwordStrength = strength);
   }
 
   void _validateAndContinue() {
@@ -94,93 +76,32 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
       _phoneError = Validators.validatePhone(_phoneController.text);
       _emailError = Validators.validateEmail(_emailController.text);
       _passwordError = Validators.validatePassword(_passwordController.text);
-      _confirmPasswordError = _passwordController.text != _confirmPasswordController.text
-          ? 'Passwords do not match'
-          : null;
+      _confirmPasswordError = _passwordController.text != _confirmPasswordController.text ? 'Passwords do not match' : null;
     });
 
-    if (_nameError == null &&
-        _phoneError == null &&
-        _emailError == null &&
-        _passwordError == null &&
-        _confirmPasswordError == null &&
-        _agreeToTerms) {
-      // Navigate to step 2
-      Navigator.of(context).pushNamed(
-        '/register-step2',
-        arguments: {
-          'name': _nameController.text,
-          'phone': _phoneController.text,
-          'email': _emailController.text,
-          'password': _passwordController.text,
-        },
-      );
-    } else if (!_agreeToTerms) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please accept Terms & Privacy Policy'),
-          backgroundColor: CoopvestColors.error,
-        ),
-      );
-    }
-  }
-
-  Future<void> _handleGoogleSignup(BuildContext context) async {
-    try {
-      setState(() {
-        _isLoadingGoogle = true;
+    if (_nameError == null && _phoneError == null && _emailError == null && _passwordError == null && _confirmPasswordError == null && _agreeToTerms) {
+      Navigator.of(context).pushNamed('/register-step2', arguments: {
+        'name': _nameController.text,
+        'phone': _phoneController.text,
+        'email': _emailController.text,
+        'password': _passwordController.text,
       });
-
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      if (googleUser == null) {
-        setState(() {
-          _isLoadingGoogle = false;
-        });
-        return;
-      }
-
-      if (mounted) {
-        // Navigate to complete registration screen with phone collection
-        Navigator.of(context).pushReplacementNamed(
-          '/google-complete',
-          arguments: googleUser,
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Google Sign-Up failed: ${e.toString()}'),
-            backgroundColor: CoopvestColors.error,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoadingGoogle = false;
-        });
-      }
+    } else if (!_agreeToTerms) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please accept Terms & Privacy Policy'), backgroundColor: CoopvestColors.error));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: context.scaffoldBackground,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.white,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: CoopvestColors.darkGray),
+          icon: Icon(Icons.arrow_back, color: context.iconPrimary),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: Text(
-          'Create Account',
-          style: CoopvestTypography.headlineLarge.copyWith(
-            color: CoopvestColors.darkGray,
-          ),
-        ),
+        title: Text('Create Account', style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold)),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -188,373 +109,59 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Progress Indicator
               Row(
                 children: [
                   Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: CoopvestColors.primary,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: const Center(
-                      child: Text(
-                        '1',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
+                    width: 32, height: 32,
+                    decoration: const BoxDecoration(color: CoopvestColors.primary, shape: BoxShape.circle),
+                    child: const Center(child: Text('1', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
                   ),
                   const SizedBox(width: 8),
-                  Expanded(
-                    child: Container(
-                      height: 2,
-                      color: CoopvestColors.lightGray,
-                    ),
-                  ),
+                  Expanded(child: Container(height: 2, color: context.dividerColor)),
                   const SizedBox(width: 8),
                   Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: CoopvestColors.lightGray,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: const Center(
-                      child: Text(
-                        '2',
-                        style: TextStyle(
-                          color: CoopvestColors.mediumGray,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
+                    width: 32, height: 32,
+                    decoration: BoxDecoration(color: context.dividerColor, shape: BoxShape.circle),
+                    child: Center(child: Text('2', style: TextStyle(color: context.textSecondary, fontWeight: FontWeight.bold))),
                   ),
                 ],
               ),
               const SizedBox(height: 32),
-
-              // Subtitle
-              Text(
-                'Basic Account Information',
-                style: CoopvestTypography.headlineMedium.copyWith(
-                  color: CoopvestColors.darkGray,
-                ),
-              ),
+              Text('Basic Account Information', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: context.textPrimary)),
               const SizedBox(height: 8),
-              Text(
-                'Enter your basic information to get started',
-                style: CoopvestTypography.bodyMedium.copyWith(
-                  color: CoopvestColors.mediumGray,
-                ),
-              ),
+              Text('Enter your basic information to get started', style: TextStyle(color: context.textSecondary)),
               const SizedBox(height: 24),
-
-              // Full Name
-              AppTextField(
-                label: 'Full Name',
-                hint: 'As per your official ID',
-                controller: _nameController,
-                textInputAction: TextInputAction.next,
-                errorText: _nameError,
-                prefixIcon: const Padding(
-                  padding: EdgeInsets.only(left: 12),
-                  child: Icon(Icons.person_outline, color: CoopvestColors.primary),
-                ),
-                onChanged: (_) {
-                  if (_nameError != null) {
-                    setState(() {
-                      _nameError = Validators.validateName(_nameController.text);
-                    });
-                  }
-                },
-              ),
+              AppTextField(label: 'Full Name', hint: 'As per your official ID', controller: _nameController, errorText: _nameError),
               const SizedBox(height: 20),
-
-              // Phone Number
-              AppTextField(
-                label: 'Phone Number',
-                hint: '+234 801 234 5678',
-                controller: _phoneController,
-                keyboardType: TextInputType.phone,
-                textInputAction: TextInputAction.next,
-                errorText: _phoneError,
-                prefixIcon: const Padding(
-                  padding: EdgeInsets.only(left: 12),
-                  child: Icon(Icons.phone_outlined, color: CoopvestColors.primary),
-                ),
-                onChanged: (_) {
-                  if (_phoneError != null) {
-                    setState(() {
-                      _phoneError = Validators.validatePhone(_phoneController.text);
-                    });
-                  }
-                },
-              ),
+              AppTextField(label: 'Phone Number', hint: '+234 801 234 5678', controller: _phoneController, keyboardType: TextInputType.phone, errorText: _phoneError),
               const SizedBox(height: 20),
-
-              // Email
-              AppTextField(
-                label: 'Email Address',
-                hint: 'your.email@example.com',
-                controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
-                textInputAction: TextInputAction.next,
-                errorText: _emailError,
-                prefixIcon: const Padding(
-                  padding: EdgeInsets.only(left: 12),
-                  child: Icon(Icons.mail_outline, color: CoopvestColors.primary),
-                ),
-                onChanged: (_) {
-                  if (_emailError != null) {
-                    setState(() {
-                      _emailError = Validators.validateEmail(_emailController.text);
-                    });
-                  }
-                },
-              ),
+              AppTextField(label: 'Email Address', hint: 'your.email@example.com', controller: _emailController, keyboardType: TextInputType.emailAddress, errorText: _emailError),
               const SizedBox(height: 20),
-
-              // Password
-              AppTextField(
-                label: 'Password',
-                hint: 'Create a strong password',
-                controller: _passwordController,
-                obscureText: _obscurePassword,
-                textInputAction: TextInputAction.next,
-                errorText: _passwordError,
-                prefixIcon: const Padding(
-                  padding: EdgeInsets.only(left: 12),
-                  child: Icon(Icons.lock_outline, color: CoopvestColors.primary),
-                ),
-                suffixIcon: GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _obscurePassword = !_obscurePassword;
-                    });
-                  },
-                  child: Icon(
-                    _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                    color: CoopvestColors.mediumGray,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              // Password Strength Indicator
-              if (_passwordController.text.isNotEmpty)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Password Strength',
-                          style: CoopvestTypography.bodySmall.copyWith(
-                            color: CoopvestColors.mediumGray,
-                          ),
-                        ),
-                        Text(
-                          _getPasswordStrengthText(),
-                          style: CoopvestTypography.labelSmall.copyWith(
-                            color: _getPasswordStrengthColor(),
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: _passwordStrength,
-                        minHeight: 4,
-                        backgroundColor: CoopvestColors.lightGray,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          _getPasswordStrengthColor(),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Use uppercase, numbers, and special characters',
-                      style: CoopvestTypography.bodySmall.copyWith(
-                        color: CoopvestColors.mediumGray,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-                ),
-
-              // Confirm Password
-              AppTextField(
-                label: 'Confirm Password',
-                hint: 'Re-enter your password',
-                controller: _confirmPasswordController,
-                obscureText: _obscureConfirmPassword,
-                textInputAction: TextInputAction.done,
-                errorText: _confirmPasswordError,
-                prefixIcon: const Padding(
-                  padding: EdgeInsets.only(left: 12),
-                  child: Icon(Icons.lock_outline, color: CoopvestColors.primary),
-                ),
-                suffixIcon: GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _obscureConfirmPassword = !_obscureConfirmPassword;
-                    });
-                  },
-                  child: Icon(
-                    _obscureConfirmPassword ? Icons.visibility_off : Icons.visibility,
-                    color: CoopvestColors.mediumGray,
-                  ),
-                ),
-                onChanged: (_) {
-                  if (_confirmPasswordError != null) {
-                    setState(() {
-                      _confirmPasswordError = _passwordController.text != _confirmPasswordController.text
-                          ? 'Passwords do not match'
-                          : null;
-                    });
-                  }
-                },
-              ),
+              AppTextField(label: 'Password', hint: 'Enter your password', controller: _passwordController, obscureText: _obscurePassword, errorText: _passwordError),
+              const SizedBox(height: 20),
+              AppTextField(label: 'Confirm Password', hint: 'Re-enter your password', controller: _confirmPasswordController, obscureText: _obscureConfirmPassword, errorText: _confirmPasswordError),
               const SizedBox(height: 24),
-
-              // Terms & Privacy
-              GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _agreeToTerms = !_agreeToTerms;
-                  });
-                },
-                child: Row(
-                  children: [
-                    Checkbox(
-                      value: _agreeToTerms,
-                      onChanged: (value) {
-                        setState(() {
-                          _agreeToTerms = value ?? false;
-                        });
-                      },
-                      activeColor: CoopvestColors.primary,
-                    ),
-                    Expanded(
-                      child: RichText(
-                        text: TextSpan(
-                          text: 'I agree to the ',
-                          style: CoopvestTypography.bodySmall.copyWith(
-                            color: CoopvestColors.mediumGray,
-                          ),
-                          children: [
-                            TextSpan(
-                              text: 'Terms & Conditions',
-                              style: CoopvestTypography.bodySmall.copyWith(
-                                color: CoopvestColors.primary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            TextSpan(
-                              text: ' and ',
-                              style: CoopvestTypography.bodySmall.copyWith(
-                                color: CoopvestColors.mediumGray,
-                              ),
-                            ),
-                            TextSpan(
-                              text: 'Privacy Policy',
-                              style: CoopvestTypography.bodySmall.copyWith(
-                                color: CoopvestColors.primary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 32),
-
-              // Google Sign-In Button
-              SecondaryButton(
-                label: _isLoadingGoogle ? 'Creating account...' : 'Sign up with Google',
-                onPressed: () => _handleGoogleSignup(context),
-                isLoading: _isLoadingGoogle,
-                isEnabled: !_isLoadingGoogle,
-                width: double.infinity,
-                icon: Image.network(
-                  'https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg',
-                  height: 24,
-                  errorBuilder: (context, error, stackTrace) => const Icon(Icons.login),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Divider
               Row(
                 children: [
+                  Checkbox(value: _agreeToTerms, onChanged: (v) => setState(() => _agreeToTerms = v ?? false), activeColor: CoopvestColors.primary),
                   Expanded(
-                    child: Container(
-                      height: 1,
-                      color: CoopvestColors.lightGray,
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Text(
-                      'or',
-                      style: CoopvestTypography.bodySmall.copyWith(
-                        color: CoopvestColors.mediumGray,
+                    child: RichText(
+                      text: TextSpan(
+                        text: 'I agree to the ',
+                        style: TextStyle(color: context.textSecondary),
+                        children: [
+                          TextSpan(text: 'Terms of Service', style: const TextStyle(color: CoopvestColors.primary, fontWeight: FontWeight.bold)),
+                          const TextSpan(text: ' and '),
+                          TextSpan(text: 'Privacy Policy', style: const TextStyle(color: CoopvestColors.primary, fontWeight: FontWeight.bold)),
+                        ],
                       ),
-                    ),
-                  ),
-                  Expanded(
-                    child: Container(
-                      height: 1,
-                      color: CoopvestColors.lightGray,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
-
-              // Continue Button
-              PrimaryButton(
-                label: 'Continue',
-                onPressed: _validateAndContinue,
-                width: double.infinity,
-              ),
-              const SizedBox(height: 16),
-
-              // Login Link
-              Center(
-                child: RichText(
-                  text: TextSpan(
-                    text: 'Already have an account? ',
-                    style: CoopvestTypography.bodyMedium.copyWith(
-                      color: CoopvestColors.mediumGray,
-                    ),
-                    children: [
-                      TextSpan(
-                        text: 'Log In',
-                        style: CoopvestTypography.bodyMedium.copyWith(
-                          color: CoopvestColors.primary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        recognizer: TapGestureRecognizer()
-                          ..onTap = () {
-                            Navigator.of(context).pushNamed('/login');
-                          },
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+              const SizedBox(height: 32),
+              PrimaryButton(label: 'Continue', onPressed: _validateAndContinue, width: double.infinity),
+              const SizedBox(height: 24),
             ],
           ),
         ),

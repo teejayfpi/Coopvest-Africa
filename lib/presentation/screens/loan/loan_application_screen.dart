@@ -28,6 +28,8 @@ class LoanApplicationScreen extends ConsumerStatefulWidget {
 }
 
 class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
+  bool get isDarkMode => Theme.of(context).brightness == Brightness.dark;
+
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _amountController = TextEditingController();
   final TextEditingController _purposeController = TextEditingController();
@@ -1085,7 +1087,7 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
-                        color: CoopvestColors.primary.withAlpha((255 * 0.1).toInt()),
+                        color: CoopvestColors.primary.withOpacity(0.1),
                         blurRadius: 10,
                         offset: const Offset(0, 4),
                       ),

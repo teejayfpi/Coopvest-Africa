@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../data/models/termination_models.dart';
+import '../../../data/models/auth_models.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/termination_provider.dart';
 import '../../widgets/common/buttons.dart';
 import 'termination_info_screen.dart';
+import 'package:intl/intl.dart';
 
 /// Membership Screen
 /// Shows membership status and provides access to termination workflow
@@ -23,7 +25,7 @@ class MembershipScreen extends ConsumerWidget {
     final currentRequest = terminationState.currentRequest;
 
     return Scaffold(
-      backgroundColor: CoopvestColors.veryLightGray,
+      backgroundColor: context.scaffoldBackground,
       appBar: AppBar(
         title: const Text('Membership'),
         backgroundColor: CoopvestColors.primary,
@@ -40,7 +42,7 @@ class MembershipScreen extends ConsumerWidget {
             const SizedBox(height: 24),
 
             // Membership Information Section
-            _buildMembershipInfoSection(user),
+            _buildMembershipInfoSection(user, context),
             const SizedBox(height: 24),
 
             // Termination Section (only shown for active/suspended/inactive users)
@@ -50,7 +52,7 @@ class MembershipScreen extends ConsumerWidget {
 
             // Pending Termination Info (shown if request is pending)
             if (currentRequest != null && currentRequest!.isPending) ...[
-              _buildPendingTerminationInfo(context, currentRequest!),
+              _buildPendingTerminationInfo(context, ref, currentRequest!),
             ],
 
             const SizedBox(height: 24),
@@ -69,7 +71,6 @@ class MembershipScreen extends ConsumerWidget {
     TerminationRequest? currentRequest,
   ) {
     final statusText = getMembershipStatusText(membershipStatus);
-    final statusColor = _getStatusColor(membershipStatus);
     final isActive = membershipStatus == 'active';
     final isPending = membershipStatus == 'pending_termination';
 
@@ -222,22 +223,22 @@ class MembershipScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildMembershipInfoSection(user) {
+  Widget _buildMembershipInfoSection(User? user, BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Membership Information',
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w600,
-            color: CoopvestColors.textPrimary,
+            color: context.textPrimary,
           ),
         ),
         const SizedBox(height: 12),
         Container(
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: context.cardBackground,
             borderRadius: BorderRadius.circular(12),
             boxShadow: [
               BoxShadow(
@@ -250,23 +251,28 @@ class MembershipScreen extends ConsumerWidget {
           child: Column(
             children: [
               _buildInfoRow(
+                context: context,
                 icon: Icons.calendar_today,
                 label: 'Member Since',
                 value: user?.createdAt != null
-                    ? _formatDate(user.createdAt)
+                    ? _formatDate(user!.createdAt)
                     : 'N/A',
               ),
               const Divider(height: 1),
               _buildInfoRow(
+                context: context,
                 icon: Icons.verified,
                 label: 'KYC Status',
                 value: (user?.kycStatus ?? '').toUpperCase(),
               ),
               const Divider(height: 1),
               _buildInfoRow(
+                context: context,
                 icon: Icons.shield,
                 label: 'Membership ID',
-                value: user?.id.substring(0, 8).toUpperCase() ?? 'N/A',
+                value: user?.id != null && user!.id.length >= 8 
+                    ? user.id.substring(0, 8).toUpperCase() 
+                    : 'N/A',
               ),
             ],
           ),
@@ -276,6 +282,7 @@ class MembershipScreen extends ConsumerWidget {
   }
 
   Widget _buildInfoRow({
+    required BuildContext context,
     required IconData icon,
     required String label,
     required String value,
@@ -289,18 +296,18 @@ class MembershipScreen extends ConsumerWidget {
           Expanded(
             child: Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
-                color: CoopvestColors.textSecondary,
+                color: context.textSecondary,
               ),
             ),
           ),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w500,
-              color: CoopvestColors.textPrimary,
+              color: context.textPrimary,
             ),
           ),
         ],
@@ -320,18 +327,18 @@ class MembershipScreen extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Membership Actions',
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w600,
-            color: CoopvestColors.textPrimary,
+            color: context.textPrimary,
           ),
         ),
         const SizedBox(height: 12),
         Container(
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: context.cardBackground,
             borderRadius: BorderRadius.circular(12),
             boxShadow: [
               BoxShadow(
@@ -366,12 +373,10 @@ class MembershipScreen extends ConsumerWidget {
                 onTap: isLoading
                     ? null
                     : () {
-                        // First check eligibility
                         ref
                             .read(terminationProvider.notifier)
                             .checkEligibility()
                             .then((eligibility) {
-                          // Navigate to info screen
                           Navigator.push(
                             context,
                             MaterialPageRoute(
@@ -392,20 +397,20 @@ class MembershipScreen extends ConsumerWidget {
         ),
         if (eligibility != null && !isEligible) ...[
           const SizedBox(height: 12),
-          _buildEligibilityWarnings(eligibility),
+          _buildEligibilityWarnings(eligibility, context),
         ],
       ],
     );
   }
 
-  Widget _buildEligibilityWarnings(TerminationEligibility eligibility) {
+  Widget _buildEligibilityWarnings(TerminationEligibility eligibility, BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: CoopvestColors.warning.withAlpha((255 * 0.1).toInt()),
+        color: CoopvestColors.warning.withOpacity(0.1),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: CoopvestColors.warning.withAlpha((255 * 0.3).toInt()),
+          color: CoopvestColors.warning.withOpacity(0.3),
         ),
       ),
       child: Column(
@@ -430,9 +435,9 @@ class MembershipScreen extends ConsumerWidget {
               padding: const EdgeInsets.only(left: 26, bottom: 4),
               child: Text(
                 '• $error',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
-                  color: CoopvestColors.textSecondary,
+                  color: context.textSecondary,
                 ),
               ),
             ),
@@ -444,17 +449,18 @@ class MembershipScreen extends ConsumerWidget {
 
   Widget _buildPendingTerminationInfo(
     BuildContext context,
+    WidgetRef ref,
     TerminationRequest request,
   ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Termination Request',
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w600,
-            color: CoopvestColors.textPrimary,
+            color: context.textPrimary,
           ),
         ),
         const SizedBox(height: 12),
@@ -462,10 +468,10 @@ class MembershipScreen extends ConsumerWidget {
           width: double.infinity,
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: CoopvestColors.warning.withAlpha((255 * 0.1).toInt()),
+            color: CoopvestColors.warning.withOpacity(0.1),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: CoopvestColors.warning.withAlpha((255 * 0.3).toInt()),
+              color: CoopvestColors.warning.withOpacity(0.3),
             ),
           ),
           child: Column(
@@ -490,15 +496,15 @@ class MembershipScreen extends ConsumerWidget {
                 ],
               ),
               const SizedBox(height: 12),
-              _buildDetailRow(
+              _buildDetailRow(context, 
                 'Requested On',
                 _formatDate(request.requestedAt),
               ),
-              _buildDetailRow(
+              _buildDetailRow(context, 
                 'Reason',
                 getTerminationReasonText(request.reason),
               ),
-              _buildDetailRow(
+              _buildDetailRow(context, 
                 'Exit Type',
                 request.exitType == TerminationExitType.permanent
                     ? 'Permanent'
@@ -523,7 +529,7 @@ class MembershipScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildDetailRow(String label, String value) {
+  Widget _buildDetailRow(BuildContext context, String label, String value) {
     return Padding(
       padding: const EdgeInsets.only(top: 4),
       child: Row(
@@ -531,16 +537,17 @@ class MembershipScreen extends ConsumerWidget {
         children: [
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
-              color: CoopvestColors.textSecondary,
+              color: context.textSecondary,
             ),
           ),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w500,
+              color: context.textPrimary,
             ),
           ),
         ],
@@ -552,16 +559,16 @@ class MembershipScreen extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: CoopvestColors.lightGray.withOpacity(0.3),
+        color: context.secondaryCardBackground,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
         children: [
-          const Text(
+          Text(
             'Membership termination is subject to approval and may take 7-14 business days. All financial obligations must be settled before termination can be processed.',
             style: TextStyle(
               fontSize: 11,
-              color: CoopvestColors.textSecondary,
+              color: context.textSecondary,
             ),
             textAlign: TextAlign.center,
           ),
@@ -583,25 +590,8 @@ class MembershipScreen extends ConsumerWidget {
     );
   }
 
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'active':
-        return CoopvestColors.success;
-      case 'pending_termination':
-        return CoopvestColors.warning;
-      case 'suspended':
-        return CoopvestColors.error;
-      case 'terminated':
-        return CoopvestColors.primary;
-      case 'inactive':
-        return CoopvestColors.mediumGray;
-      default:
-        return CoopvestColors.mediumGray;
-    }
-  }
-
   String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year}';
+    return DateFormat('MMM dd, yyyy').format(date);
   }
 
   void _showCancelDialog(BuildContext context, WidgetRef ref, String requestId) {
@@ -641,5 +631,22 @@ class MembershipScreen extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  String getMembershipStatusText(String status) {
+    switch (status) {
+      case 'active':
+        return 'Active';
+      case 'pending_termination':
+        return 'Pending Termination';
+      case 'suspended':
+        return 'Suspended';
+      case 'terminated':
+        return 'Terminated';
+      case 'inactive':
+        return 'Inactive';
+      default:
+        return status.toUpperCase();
+    }
   }
 }

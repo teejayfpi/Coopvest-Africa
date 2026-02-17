@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/theme_config.dart';
+import '../../../config/theme_extension.dart';
 import '../../../presentation/providers/kyc_provider.dart';
 import '../../../presentation/widgets/common/buttons.dart';
 import '../../../presentation/widgets/common/cards.dart';
@@ -80,7 +81,6 @@ class _KYCPersonalDetailsScreenState extends ConsumerState<KYCPersonalDetailsScr
       {'label': 'Shomolu', 'value': 'shomolu'},
       {'label': 'Surulere', 'value': 'surulere'},
     ],
-    // Add more states and LGAs as needed
   };
 
   @override
@@ -99,46 +99,25 @@ class _KYCPersonalDetailsScreenState extends ConsumerState<KYCPersonalDetailsScr
 
   void _validateAndContinue() {
     if (_addressController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter your residential address'),
-          backgroundColor: CoopvestColors.error,
-        ),
-      );
+      _showError('Please enter your residential address');
       return;
     }
 
     if (_cityController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter your city'),
-          backgroundColor: CoopvestColors.error,
-        ),
-      );
+      _showError('Please enter your city');
       return;
     }
 
     if (_selectedState == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select your state'),
-          backgroundColor: CoopvestColors.error,
-        ),
-      );
+      _showError('Please select your state');
       return;
     }
 
     if (_selectedLGA == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select your local government area'),
-          backgroundColor: CoopvestColors.error,
-        ),
-      );
+      _showError('Please select your local government area');
       return;
     }
 
-    // Update KYC state
     ref.read(kycProvider.notifier).updateAddress(
       residentialAddress: _addressController.text,
       city: _cityController.text,
@@ -146,31 +125,35 @@ class _KYCPersonalDetailsScreenState extends ConsumerState<KYCPersonalDetailsScr
       country: null,
     );
 
-    // Navigate to next step (Employment)
     Navigator.of(context).pushNamed('/kyc-employment');
   }
 
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: CoopvestColors.error,
+      ),
+    );
+  }
+
   void _goBack() {
-    ref.read(kycProvider.notifier).previousStep();
     Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: context.scaffoldBackground,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.white,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: CoopvestColors.darkGray),
+          icon: Icon(Icons.arrow_back, color: context.iconPrimary),
           onPressed: _goBack,
         ),
         title: Text(
           'Personal Details',
-          style: CoopvestTypography.headlineLarge.copyWith(
-            color: CoopvestColors.darkGray,
-          ),
+          style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold),
         ),
       ),
       body: SafeArea(
@@ -196,16 +179,12 @@ class _KYCPersonalDetailsScreenState extends ConsumerState<KYCPersonalDetailsScr
               // Header
               Text(
                 'Where Do You Live?',
-                style: CoopvestTypography.headlineSmall.copyWith(
-                  color: CoopvestColors.darkGray,
-                ),
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: context.textPrimary),
               ),
               const SizedBox(height: 8),
               Text(
                 'Enter your residential information for verification purposes',
-                style: CoopvestTypography.bodyMedium.copyWith(
-                  color: CoopvestColors.mediumGray,
-                ),
+                style: TextStyle(color: context.textSecondary),
               ),
               const SizedBox(height: 24),
 
@@ -217,12 +196,6 @@ class _KYCPersonalDetailsScreenState extends ConsumerState<KYCPersonalDetailsScr
                 keyboardType: TextInputType.streetAddress,
                 textInputAction: TextInputAction.next,
                 maxLines: 2,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Address is required';
-                  }
-                  return null;
-                },
               ),
               
               const SizedBox(height: 16),
@@ -234,143 +207,51 @@ class _KYCPersonalDetailsScreenState extends ConsumerState<KYCPersonalDetailsScr
                 controller: _cityController,
                 keyboardType: TextInputType.text,
                 textInputAction: TextInputAction.next,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'City is required';
-                  }
-                  return null;
-                },
               ),
               
               const SizedBox(height: 16),
 
               // State Selection
-              Text(
-                'State *',
-                style: CoopvestTypography.labelLarge.copyWith(
-                  color: CoopvestColors.darkGray,
-                ),
-              ),
-              const SizedBox(height: 12),
-              
-              Container(
-                decoration: BoxDecoration(
-                  border: Border.all(color: CoopvestColors.lightGray),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: DropdownButtonFormField<String>(
-                  initialValue: _selectedState,
-                  hint: const Text('Select your state'),
-                  decoration: const InputDecoration(
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  ),
-                  icon: const Icon(Icons.keyboard_arrow_down),
-                  items: _states.map((state) {
-                    return DropdownMenuItem<String>(
-                      value: state['value'] as String?,
-                      child: Text(
-                        state['label'] as String,
-                        style: CoopvestTypography.bodyMedium,
-                      ),
-                    );
-                  }).toList(),
-                  onChanged: (value) {
-                    setState(() {
-                      _selectedState = value;
-                      _selectedLGA = null;
-                    });
-                  },
-                ),
+              AppDropdown<String>(
+                label: 'State *',
+                hint: 'Select your state',
+                value: _selectedState,
+                items: _states.map((state) {
+                  return DropdownMenuItem<String>(
+                    value: state['value'] as String?,
+                    child: Text(state['label'] as String),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  setState(() {
+                    _selectedState = value;
+                    _selectedLGA = null;
+                  });
+                },
               ),
               
               const SizedBox(height: 16),
 
               // LGA Selection
               if (_selectedState != null)
-                Text(
-                  'Local Government Area (LGA) *',
-                  style: CoopvestTypography.labelLarge.copyWith(
-                    color: CoopvestColors.darkGray,
-                  ),
+                AppDropdown<String>(
+                  label: 'Local Government Area (LGA) *',
+                  hint: 'Select your LGA',
+                  value: _selectedLGA,
+                  items: (_lgasByState[_selectedState] ?? []).map((lga) {
+                    return DropdownMenuItem<String>(
+                      value: lga['value'] as String?,
+                      child: Text(lga['label'] as String),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedLGA = value;
+                    });
+                  },
                 ),
-              const SizedBox(height: 12),
-              
-              if (_selectedState != null)
-                Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: CoopvestColors.lightGray),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: DropdownButtonFormField<String>(
-                    initialValue: _selectedLGA,
-                    hint: const Text('Select your LGA'),
-                    decoration: const InputDecoration(
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    ),
-                    icon: const Icon(Icons.keyboard_arrow_down),
-                    items: (_lgasByState[_selectedState] ?? []).map((lga) {
-                      return DropdownMenuItem<String>(
-                        value: lga['value'] as String?,
-                        child: Text(
-                          lga['label'] as String,
-                          style: CoopvestTypography.bodyMedium,
-                        ),
-                      );
-                    }).toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        _selectedLGA = value;
-                      });
-                    },
-                  ),
-                ),
-              
-              if (_selectedState == null)
-                Container(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  decoration: BoxDecoration(
-                    color: CoopvestColors.veryLightGray,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: CoopvestColors.lightGray),
-                  ),
-                  child: Center(
-                    child: Text(
-                      'Select your state first to see available LGAs',
-                      style: CoopvestTypography.bodyMedium.copyWith(
-                        color: CoopvestColors.mediumGray,
-                      ),
-                    ),
-                  ),
-                ),
-              
-              const SizedBox(height: 16),
 
-              // Address Verification Card
-              AppCard(
-                backgroundColor: CoopvestColors.info.withAlpha((255 * 0.1).toInt()),
-                border: Border.all(color: CoopvestColors.info.withAlpha((255 * 0.3).toInt())),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.verified_user,
-                      color: CoopvestColors.info,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Your address information is used for identity verification and delivery purposes only.',
-                        style: CoopvestTypography.bodySmall.copyWith(
-                          color: CoopvestColors.darkGray,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 32),
+              const SizedBox(height: 40),
 
               // Continue Button
               PrimaryButton(
@@ -378,15 +259,7 @@ class _KYCPersonalDetailsScreenState extends ConsumerState<KYCPersonalDetailsScr
                 onPressed: _validateAndContinue,
                 width: double.infinity,
               ),
-              
-              const SizedBox(height: 16),
-
-              // Back Button
-              SecondaryButton(
-                label: 'Go Back',
-                onPressed: _goBack,
-                width: double.infinity,
-              ),
+              const SizedBox(height: 24),
             ],
           ),
         ),
@@ -394,34 +267,31 @@ class _KYCPersonalDetailsScreenState extends ConsumerState<KYCPersonalDetailsScr
     );
   }
 
-  Widget _buildProgressStep(int step, bool isActive) {
+  Widget _buildProgressStep(int step, bool isPending) {
     return Container(
       width: 32,
       height: 32,
       decoration: BoxDecoration(
-        color: isActive ? CoopvestColors.primary : CoopvestColors.lightGray,
-        borderRadius: BorderRadius.circular(16),
+        color: isPending ? context.dividerColor : CoopvestColors.primary,
+        shape: BoxShape.circle,
       ),
       child: Center(
-        child: isActive
-            ? const Icon(Icons.check, color: Colors.white, size: 18)
-            : Text(
-                '$step',
-                style: TextStyle(
-                  color: isActive ? Colors.white : CoopvestColors.mediumGray,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+        child: Text(
+          '$step',
+          style: TextStyle(
+            color: isPending ? context.textSecondary : Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
       ),
     );
   }
 
   Widget _buildProgressLine(int step) {
-    final isComplete = step < 4; // All steps except last are complete
     return Expanded(
       child: Container(
         height: 2,
-        color: isComplete ? CoopvestColors.primary : CoopvestColors.lightGray,
+        color: context.dividerColor,
       ),
     );
   }

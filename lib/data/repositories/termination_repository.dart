@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/network/api_client.dart';
 import '../../core/utils/utils.dart';
 import '../models/termination_models.dart';
-import 'termination_api_service.dart';
+import '../api/termination_api_service.dart';
 
 /// Termination Repository Provider
 final terminationRepositoryProvider = Provider<TerminationRepository>((ref) {
