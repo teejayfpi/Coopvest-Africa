@@ -298,7 +298,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
               color: CoopvestColors.primary.withOpacity(0.1),
               shape: BoxShape.circle,
             ),
-            child: const Icon(icon, color: CoopvestColors.primary),
+            child: Icon(icon, color: CoopvestColors.primary),
           ),
           const SizedBox(height: 12),
           Text(
@@ -459,7 +459,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
           )
         else
           ...transactions.map((txn) => TransactionCard(
-                title: txn.description,
+                title: txn.description ?? 'No description',
                 subtitle: txn.type.toUpperCase(),
                 amount: txn.amount,
                 isIncome: txn.type == 'credit' || txn.type == 'deposit',

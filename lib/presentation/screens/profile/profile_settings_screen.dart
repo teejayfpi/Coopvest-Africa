@@ -380,7 +380,7 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
   }
 
   Widget _buildSettingsTile(Map<String, dynamic> item, bool showDivider, BuildContext context) {
-    final isDarkMode = ref.watch(themeProvider) == ThemeMode.dark;
+    final isDarkMode = ref.watch(themeModeProvider) == ThemeMode.dark;
 
     return Column(
       children: [
@@ -406,7 +406,7 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
               ? Switch(
                   value: isDarkMode,
                   onChanged: (value) {
-                    ref.read(themeProvider.notifier).toggleTheme();
+                    ref.read(themeModeProvider.notifier).toggleTheme();
                   },
                   activeColor: CoopvestColors.primary,
                 )

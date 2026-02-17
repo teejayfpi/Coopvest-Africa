@@ -1153,9 +1153,9 @@ class _ReferralInfoScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
-                      children: const [
-                        Icon(Icons.stars, color: CoopvestColors.primary),
-                        SizedBox(width: 8),
+                      children: [
+                        const Icon(Icons.stars, color: CoopvestColors.primary),
+                        const SizedBox(width: 8),
                         Text(
                           'Earn Interest Reduction',
                           style: CoopvestTypography.titleMedium.copyWith(
