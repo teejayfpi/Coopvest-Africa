@@ -404,6 +404,27 @@ class TerminationFormData extends Equatable {
     };
   }
 
+  TerminationFormData copyWith({
+    TerminationReason? reason,
+    String? reasonDetails,
+    TerminationExitType? exitType,
+    bool? acknowledgedFinancialObligations,
+    bool? acknowledgedServiceTermination,
+    bool? acknowledgedGuarantorObligations,
+  }) {
+    return TerminationFormData(
+      reason: reason ?? this.reason,
+      reasonDetails: reasonDetails ?? this.reasonDetails,
+      exitType: exitType ?? this.exitType,
+      acknowledgedFinancialObligations:
+          acknowledgedFinancialObligations ?? this.acknowledgedFinancialObligations,
+      acknowledgedServiceTermination:
+          acknowledgedServiceTermination ?? this.acknowledgedServiceTermination,
+      acknowledgedGuarantorObligations:
+          acknowledgedGuarantorObligations ?? this.acknowledgedGuarantorObligations,
+    );
+  }
+
   @override
   List<Object?> get props => [
         reason,

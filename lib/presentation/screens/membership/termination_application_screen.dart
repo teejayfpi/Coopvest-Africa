@@ -262,7 +262,7 @@ class TerminationApplicationScreen extends ConsumerWidget {
             ),
             const SizedBox(width: 12),
             Expanded(
-              _buildExitTypeCard(
+              child: _buildExitTypeCard(
                 type: TerminationExitType.temporary,
                 icon: Icons.pause_circle,
                 title: 'Temporary',
@@ -288,7 +288,7 @@ class TerminationApplicationScreen extends ConsumerWidget {
 
         return GestureDetector(
           onTap: () {
-            final currentFormData = ref.read(terminationProvider).state.formData;
+            final currentFormData = ref.read(terminationProvider).formData;
             if (currentFormData != null) {
               ref.read(terminationProvider.notifier).updateFormData(
                     currentFormData.copyWith(exitType: type),
@@ -460,7 +460,7 @@ class TerminationApplicationScreen extends ConsumerWidget {
                     notifier,
                     'financial',
                     value ?? false,
-                  ),
+                  );
                 },
               ),
               const Divider(height: 1),
@@ -474,7 +474,7 @@ class TerminationApplicationScreen extends ConsumerWidget {
                     notifier,
                     'service',
                     value ?? false,
-                  ),
+                  );
                 },
               ),
               const Divider(height: 1),
@@ -488,7 +488,7 @@ class TerminationApplicationScreen extends ConsumerWidget {
                     notifier,
                     'guarantor',
                     value ?? false,
-                  ),
+                  );
                 },
               ),
             ],
@@ -596,7 +596,7 @@ class TerminationApplicationScreen extends ConsumerWidget {
   }
 
   Future<void> _submitTermination(BuildContext context, WidgetRef ref) async {
-    final formData = ref.read(terminationProvider).state.formData;
+    final formData = ref.read(terminationProvider).formData;
 
     if (formData == null || !formData.isValid) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -674,7 +674,7 @@ class TerminationApplicationScreen extends ConsumerWidget {
     } else if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(ref.read(terminationProvider).state.error ??
+          content: Text(ref.read(terminationProvider).error ??
               'Failed to submit termination request'),
           backgroundColor: CoopvestColors.error,
         ),
