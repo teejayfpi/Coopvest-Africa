@@ -401,10 +401,15 @@ class _SplashScreenState extends State<SplashScreen> {
   Future<void> _initializeApp() async {
     // Initialize feature service first (connects to admin backend)
     final featureService = FeatureService();
-    await featureService.init();
     
-    // Simulate initialization delay
-    await Future.delayed(const Duration(seconds: 3));
+    // Run initialization with timeout - max 15 seconds total
+    await Future.wait([
+      featureService.init(),
+      Future.delayed(const Duration(seconds: 3)),
+    ]).timeout(const Duration(seconds: 15)).catchError((_) {
+      // If timeout or error, continue anyway
+      return [];
+    });
 
     if (mounted) {
       // Navigate directly to home - NO login/registration required

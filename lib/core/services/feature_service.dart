@@ -104,7 +104,7 @@ class FeatureService {
       final response = await http.get(
         Uri.parse('$_baseUrl/features/platform/mobile'),
         headers: {'Content-Type': 'application/json'},
-      );
+      ).timeout(const Duration(seconds: 10)); // Add 10 second timeout
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -118,7 +118,8 @@ class FeatureService {
         }
       }
     } catch (e) {
-      // Network error, keep cached values
+      // Network error or timeout, keep cached values or default to empty
+      // App should still work even if feature service fails
     }
   }
 
