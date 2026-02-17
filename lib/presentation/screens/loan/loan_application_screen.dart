@@ -115,8 +115,8 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
 
     try {
       final loanInfo = _loanTypes[_selectedLoanType]!;
-      final requestedAmount = double.parse(_amountController.text.replaceAll(',', ''));
-      final monthlySavings = double.tryParse(_monthlySavingsController.text) ?? 0.0;
+      final requestedAmount = double.tryParse(_amountController.text.replaceAll(',', '')) ?? 0.0;
+      final monthlySavings = double.tryParse(_monthlySavingsController.text.replaceAll(',', '')) ?? 0.0;
 
       // Validate amount range
       if (requestedAmount < (loanInfo['minAmount'] as num).toDouble()) {
@@ -302,10 +302,12 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Loan Type Selection Card
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Loan Type Selection Card
               AppCard(
                 backgroundColor: CoopvestColors.primary.withAlpha((255 * 0.05).toInt()),
                 border: Border.all(color: CoopvestColors.primary.withAlpha((255 * 0.2).toInt())),
@@ -553,19 +555,20 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
 
               const SizedBox(height: 16),
 
-              // Back Button
-              SecondaryButton(
-                label: 'Go Back',
-                onPressed: _goBack,
-                width: double.infinity,
-              ),
+                // Back Button
+                SecondaryButton(
+                  label: 'Go Back',
+                  onPressed: _goBack,
+                  width: double.infinity,
+                ),
 
-              // QR Code and Status Section
-              if (_showQrCode) ...[
-                const SizedBox(height: 32),
-                _buildStatusSection(),
+                // QR Code and Status Section
+                if (_showQrCode) ...[
+                  const SizedBox(height: 32),
+                  _buildStatusSection(),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
