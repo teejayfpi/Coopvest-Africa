@@ -5,6 +5,7 @@ import 'package:flutter/gestures.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../../../config/theme_config.dart';
+import '../../../config/theme_extension.dart';
 import '../../../core/utils/utils.dart';
 import '../../../data/models/auth_models.dart';
 import '../../providers/auth_provider.dart';
@@ -187,10 +188,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final isLoading = authState.status == AuthStatus.loading;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.scaffoldBackground(context),
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.white,
+        backgroundColor: AppColors.scaffoldBackground(context),
         automaticallyImplyLeading: false,
       ),
       body: SafeArea(
@@ -203,14 +204,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               Text(
                 'Welcome Back',
                 style: CoopvestTypography.displaySmall.copyWith(
-                  color: CoopvestColors.darkGray,
+                  color: AppColors.textPrimary(context),
                 ),
               ),
               const SizedBox(height: 8),
               Text(
                 'Log in to your Coopvest account',
                 style: CoopvestTypography.bodyMedium.copyWith(
-                  color: CoopvestColors.mediumGray,
+                  color: AppColors.textSecondary(context),
                 ),
               ),
               const SizedBox(height: 32),
@@ -361,7 +362,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   Expanded(
                     child: Container(
                       height: 1,
-                      color: CoopvestColors.lightGray,
+                      color: AppColors.dividerColor(context),
                     ),
                   ),
                   Padding(
@@ -369,14 +370,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     child: Text(
                       'or',
                       style: CoopvestTypography.bodySmall.copyWith(
-                        color: CoopvestColors.mediumGray,
+                        color: AppColors.textSecondary(context),
                       ),
                     ),
                   ),
                   Expanded(
                     child: Container(
                       height: 1,
-                      color: CoopvestColors.lightGray,
+                      color: AppColors.dividerColor(context),
                     ),
                   ),
                 ],
@@ -389,7 +390,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   text: TextSpan(
                     text: "Don't have an account? ",
                     style: CoopvestTypography.bodyMedium.copyWith(
-                      color: CoopvestColors.mediumGray,
+                      color: AppColors.textSecondary(context),
                     ),
                     children: [
                       TextSpan(
