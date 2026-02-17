@@ -14,6 +14,8 @@ import '../../../presentation/providers/loan_provider.dart';
 import '../../../presentation/widgets/common/cards.dart';
 import '../loan/loan_dashboard_screen.dart';
 import '../wallet/wallet_dashboard_screen.dart';
+import '../wallet/deposit_screen.dart';
+import '../wallet/withdrawal_screen.dart';
 import '../savings/savings_goals_screen.dart';
 import '../rollover/rollover_eligibility_screen.dart';
 import '../support/support_home_screen.dart';
@@ -577,7 +579,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    txn.description,
+                    txn.description ?? '',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       color: context.textPrimary,

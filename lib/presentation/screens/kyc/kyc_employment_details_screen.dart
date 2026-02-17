@@ -372,9 +372,9 @@ class _KYCEmploymentDetailsScreenState
               AppDropdown<String>(
                 label: 'Monthly Income Range *',
                 value: _selectedIncomeRange,
-                items: IncomeRanges.ranges.map((range) => DropdownMenuItem(
-                  value: range,
-                  child: Text(range),
+                items: IncomeRanges.ranges.map((range) => DropdownMenuItem<String>(
+                  value: range['value'] as String,
+                  child: Text(range['label'] as String),
                 )).toList(),
                 onChanged: (value) {
                   setState(() {

@@ -26,10 +26,12 @@ class AppTextField extends StatefulWidget {
   final TextCapitalization textCapitalization;
   final String? prefixText;
   final Color? filledColor;
+  final bool filled;
 
   const AppTextField({
     this.prefixText,
     this.filledColor,
+    this.filled = false,
     Key? key,
     required this.label,
     this.hint,
@@ -121,7 +123,7 @@ class _AppTextFieldState extends State<AppTextField> {
                   )
                 : widget.suffixIcon,
             counterText: widget.showCounter ? null : '',
-            filled: true,
+            filled: widget.filled,
             fillColor: widget.filledColor ?? (widget.enabled
                 ? context.cardBackground
                 : context.secondaryCardBackground),

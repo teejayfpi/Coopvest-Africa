@@ -12,6 +12,12 @@ class Ticket extends Equatable {
   final DateTime createdAt;
   final DateTime updatedAt;
 
+  /// Alias for ticketId to maintain compatibility
+  String get id => ticketId;
+  
+  /// Alias for title to maintain compatibility
+  String get subject => title;
+
   const Ticket({
     required this.ticketId,
     required this.userId,

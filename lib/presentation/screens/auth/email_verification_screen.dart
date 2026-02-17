@@ -139,7 +139,7 @@ class _EmailVerificationScreenState extends ConsumerState<EmailVerificationScree
                 const SizedBox(height: 16),
                 PrimaryButton(label: 'Verify Code', onPressed: _verifyOTP, isLoading: _isVerifying, width: double.infinity),
                 const SizedBox(height: 16),
-                SecondaryButton(label: _cooldownSeconds > 0 ? 'Resend in ${_cooldownSeconds}s' : 'Resend Email', onPressed: _cooldownSeconds > 0 ? null : _resendVerificationEmail, isLoading: _isResending, width: double.infinity),
+                SecondaryButton(label: _cooldownSeconds > 0 ? 'Resend in ${_cooldownSeconds}s' : 'Resend Email', onPressed: _cooldownSeconds > 0 ? null : () => _resendVerificationEmail(), isLoading: _isResending, width: double.infinity),
               ],
             ],
           ),

@@ -9,6 +9,7 @@ import '../../../core/utils/utils.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/common/buttons.dart';
 import '../../widgets/common/inputs.dart';
+import '../../../data/models/auth_models.dart';
 
 /// Login Screen
 class LoginScreen extends ConsumerStatefulWidget {
