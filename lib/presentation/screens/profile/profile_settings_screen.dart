@@ -7,6 +7,7 @@ import '../../../presentation/widgets/common/cards.dart';
 import '../kyc/kyc_employment_details_screen.dart';
 import '../support/support_home_screen.dart';
 import '../security/security_settings_screen.dart';
+import '../membership/membership_screen.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -35,12 +36,17 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
           'subtitle': 'Personal information, contact details',
         },
         {
+          'icon': Icons.account_balance_outlined,
+          'label': 'Membership',
+          'subtitle': 'View status, request termination',
+        },
+        {
           'icon': Icons.security_outlined,
           'label': 'Security',
           'subtitle': 'Password, PIN, Biometrics',
         },
         {
-          'icon': Icons.account_balance_outlined,
+          'icon': Icons.account_balance_wallet_outlined,
           'label': 'Bank Accounts',
           'subtitle': 'Manage your linked bank accounts',
         },
@@ -414,6 +420,11 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
           case 'Edit Profile':
             Navigator.of(context).push(
               MaterialPageRoute(builder: (context) => const KYCEmploymentDetailsScreen()),
+            );
+            break;
+          case 'Membership':
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (context) => const MembershipScreen()),
             );
             break;
           case 'Security':

@@ -1,0 +1,644 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../config/theme_config.dart';
+import '../../../data/models/termination_models.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/termination_provider.dart';
+import '../../widgets/common/buttons.dart';
+import 'termination_info_screen.dart';
+
+/// Membership Screen
+/// Shows membership status and provides access to termination workflow
+/// Location: Profile → Account Settings → Membership
+class MembershipScreen extends ConsumerWidget {
+  const MembershipScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authProvider);
+    final terminationState = ref.watch(terminationProvider);
+    final user = authState.user;
+    final membershipStatus = user?.membershipStatus ?? 'active';
+    final currentRequest = terminationState.currentRequest;
+
+    return Scaffold(
+      backgroundColor: CoopvestColors.veryLightGray,
+      appBar: AppBar(
+        title: const Text('Membership'),
+        backgroundColor: CoopvestColors.primary,
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Membership Status Card
+            _buildMembershipStatusCard(context, membershipStatus, currentRequest),
+            const SizedBox(height: 24),
+
+            // Membership Information Section
+            _buildMembershipInfoSection(user),
+            const SizedBox(height: 24),
+
+            // Termination Section (only shown for active/suspended/inactive users)
+            if (user?.canRequestTermination ?? false) ...[
+              _buildTerminationSection(context, ref, terminationState),
+            ],
+
+            // Pending Termination Info (shown if request is pending)
+            if (currentRequest != null && currentRequest!.isPending) ...[
+              _buildPendingTerminationInfo(context, currentRequest!),
+            ],
+
+            const SizedBox(height: 24),
+
+            // Terms and Conditions
+            _buildTermsSection(context),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMembershipStatusCard(
+    BuildContext context,
+    String membershipStatus,
+    TerminationRequest? currentRequest,
+  ) {
+    final statusText = getMembershipStatusText(membershipStatus);
+    final statusColor = _getStatusColor(membershipStatus);
+    final isActive = membershipStatus == 'active';
+    final isPending = membershipStatus == 'pending_termination';
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            CoopvestColors.primary,
+            CoopvestColors.primary.withOpacity(0.8),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: CoopvestColors.primary.withOpacity(0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                isActive
+                    ? Icons.verified_user
+                    : Icons.warning_amber_rounded,
+                color: Colors.white,
+                size: 28,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Membership Status',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      statusText,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (isPending) ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 6,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  Icon(
+                    Icons.hourglass_empty,
+                    color: Colors.white,
+                    size: 16,
+                  ),
+                  SizedBox(width: 8),
+                  Text(
+                    'Pending Approval',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 16),
+          const Divider(color: Colors.white24),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _buildStatusDetail(
+                icon: Icons.account_balance,
+                label: 'Full Access',
+                value: isActive ? 'Active' : 'Restricted',
+              ),
+              const SizedBox(width: 24),
+              _buildStatusDetail(
+                icon: Icons.savings,
+                label: 'Services',
+                value: isActive ? 'Available' : 'Suspended',
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusDetail({
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
+    return Expanded(
+      child: Row(
+        children: [
+          Icon(icon, color: Colors.white70, size: 16),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 10,
+                ),
+              ),
+              Text(
+                value,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMembershipInfoSection(user) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Membership Information',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: CoopvestColors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              _buildInfoRow(
+                icon: Icons.calendar_today,
+                label: 'Member Since',
+                value: user?.createdAt != null
+                    ? _formatDate(user.createdAt)
+                    : 'N/A',
+              ),
+              const Divider(height: 1),
+              _buildInfoRow(
+                icon: Icons.verified,
+                label: 'KYC Status',
+                value: (user?.kycStatus ?? '').toUpperCase(),
+              ),
+              const Divider(height: 1),
+              _buildInfoRow(
+                icon: Icons.shield,
+                label: 'Membership ID',
+                value: user?.id.substring(0, 8).toUpperCase() ?? 'N/A',
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInfoRow({
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Row(
+        children: [
+          Icon(icon, color: CoopvestColors.primary, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 13,
+                color: CoopvestColors.textSecondary,
+              ),
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: CoopvestColors.textPrimary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTerminationSection(
+    BuildContext context,
+    WidgetRef ref,
+    TerminationState terminationState,
+  ) {
+    final isLoading = terminationState.isLoading;
+    final eligibility = terminationState.eligibility;
+    final isEligible = eligibility?.isEligible ?? false;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Membership Actions',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: CoopvestColors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              ListTile(
+                leading: const Icon(
+                  Icons.info_outline,
+                  color: CoopvestColors.info,
+                ),
+                title: const Text(
+                  'Terminate Membership',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: CoopvestColors.error,
+                  ),
+                ),
+                subtitle: const Text(
+                  'Request to close your membership',
+                  style: TextStyle(fontSize: 12),
+                ),
+                trailing: const Icon(
+                  Icons.chevron_right,
+                  color: CoopvestColors.lightGray,
+                ),
+                onTap: isLoading
+                    ? null
+                    : () {
+                        // First check eligibility
+                        ref
+                            .read(terminationProvider.notifier)
+                            .checkEligibility()
+                            .then((eligibility) {
+                          // Navigate to info screen
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  const TerminationInfoScreen(),
+                            ),
+                          );
+                        });
+                      },
+              ),
+              if (isLoading)
+                const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: LinearProgressIndicator(),
+                ),
+            ],
+          ),
+        ),
+        if (eligibility != null && !isEligible) ...[
+          const SizedBox(height: 12),
+          _buildEligibilityWarnings(eligibility),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildEligibilityWarnings(TerminationEligibility eligibility) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: CoopvestColors.warning.withAlpha((255 * 0.1).toInt()),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: CoopvestColors.warning.withAlpha((255 * 0.3).toInt()),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: const [
+              Icon(Icons.warning, color: CoopvestColors.warning, size: 18),
+              SizedBox(width: 8),
+              Text(
+                'Termination Not Available',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: CoopvestColors.warning,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ...eligibility.eligibilityErrors.map(
+            (error) => Padding(
+              padding: const EdgeInsets.only(left: 26, bottom: 4),
+              child: Text(
+                '• $error',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: CoopvestColors.textSecondary,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPendingTerminationInfo(
+    BuildContext context,
+    TerminationRequest request,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Termination Request',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: CoopvestColors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: CoopvestColors.warning.withAlpha((255 * 0.1).toInt()),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: CoopvestColors.warning.withAlpha((255 * 0.3).toInt()),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(
+                    Icons.hourglass_empty,
+                    color: CoopvestColors.warning,
+                  ),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'Your termination request is pending admin approval',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w500,
+                        color: CoopvestColors.warning,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              _buildDetailRow(
+                'Requested On',
+                _formatDate(request.requestedAt),
+              ),
+              _buildDetailRow(
+                'Reason',
+                getTerminationReasonText(request.reason),
+              ),
+              _buildDetailRow(
+                'Exit Type',
+                request.exitType == TerminationExitType.permanent
+                    ? 'Permanent'
+                    : 'Temporary',
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () => _showCancelDialog(context, ref, request.id),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: CoopvestColors.error,
+                    side: const BorderSide(color: CoopvestColors.error),
+                  ),
+                  child: const Text('Cancel Request'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              color: CoopvestColors.textSecondary,
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTermsSection(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: CoopvestColors.lightGray.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          const Text(
+            'Membership termination is subject to approval and may take 7-14 business days. All financial obligations must be settled before termination can be processed.',
+            style: TextStyle(
+              fontSize: 11,
+              color: CoopvestColors.textSecondary,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 12),
+          TextButton(
+            onPressed: () {
+              // Navigate to terms
+            },
+            child: const Text(
+              'View Terms & Conditions',
+              style: TextStyle(
+                fontSize: 12,
+                color: CoopvestColors.primary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'active':
+        return CoopvestColors.success;
+      case 'pending_termination':
+        return CoopvestColors.warning;
+      case 'suspended':
+        return CoopvestColors.error;
+      case 'terminated':
+        return CoopvestColors.primary;
+      case 'inactive':
+        return CoopvestColors.mediumGray;
+      default:
+        return CoopvestColors.mediumGray;
+    }
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day}/${date.month}/${date.year}';
+  }
+
+  void _showCancelDialog(BuildContext context, WidgetRef ref, String requestId) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cancel Termination Request'),
+        content: const Text(
+          'Are you sure you want to cancel your termination request? '
+          'You can submit a new request at any time.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Keep Request'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await ref
+                  .read(terminationProvider.notifier)
+                  .cancelRequest(requestId: requestId);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Termination request cancelled'),
+                    backgroundColor: CoopvestColors.success,
+                  ),
+                );
+              }
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: CoopvestColors.error,
+            ),
+            child: const Text('Cancel Request'),
+          ),
+        ],
+      ),
+    );
+  }
+}

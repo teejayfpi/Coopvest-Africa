@@ -18,6 +18,11 @@ export 'rollover/guarantor_consent_screen.dart';
 // Security Screen
 export 'security/security_settings_screen.dart';
 
+// Membership Screens
+export 'membership/membership_screen.dart';
+export 'membership/termination_info_screen.dart';
+export 'membership/termination_application_screen.dart';
+
 // Note: Admin functionality has been removed from the mobile app.
 // All admin operations (loan approvals, rollover reviews, guarantor validation)
 // are now handled in the dedicated admin web portal at admin.coopvestafrica.org

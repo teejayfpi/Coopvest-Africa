@@ -10,6 +10,7 @@ class User extends Equatable {
   final String? gender;
   final String? occupation;
   final String kycStatus; // pending, approved, rejected
+  final String membershipStatus; // active, pending_termination, suspended, terminated, inactive
   final String? idType;
   final String? idNumber;
   final String? address;
@@ -28,6 +29,7 @@ class User extends Equatable {
     this.gender,
     this.occupation,
     required this.kycStatus,
+    this.membershipStatus = 'active',
     this.idType,
     this.idNumber,
     this.address,
@@ -37,6 +39,23 @@ class User extends Equatable {
     required this.createdAt,
     required this.updatedAt,
   });
+
+  /// Check if user can request termination
+  bool get canRequestTermination {
+    return membershipStatus == 'active' ||
+           membershipStatus == 'suspended' ||
+           membershipStatus == 'inactive';
+  }
+
+  /// Check if user is terminated
+  bool get isTerminated {
+    return membershipStatus == 'terminated';
+  }
+
+  /// Check if termination is pending approval
+  bool get isTerminationPending {
+    return membershipStatus == 'pending_termination';
+  }
 
   factory User.fromJson(Map<String, dynamic> json) {
     return User(
@@ -48,6 +67,7 @@ class User extends Equatable {
       gender: json['gender'] as String?,
       occupation: json['occupation'] as String?,
       kycStatus: json['kycVerified'] == true ? 'approved' : (json['kyc_status'] as String? ?? 'pending'),
+      membershipStatus: json['membershipStatus'] as String? ?? json['membership_status'] as String? ?? 'active',
       idType: json['id_type'] as String?,
       idNumber: json['id_number'] as String?,
       address: json['address'] as String?,
