@@ -45,8 +45,8 @@ class MembershipScreen extends ConsumerWidget {
             _buildMembershipInfoSection(user, context),
             const SizedBox(height: 24),
 
-            // Termination Section (only shown for active/suspended/inactive users)
-            if (user?.canRequestTermination ?? false) ...[
+            // Termination Section - Always show for active members
+            if (membershipStatus == 'active') ...[
               _buildTerminationSection(context, ref, terminationState),
             ],
 
