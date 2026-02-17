@@ -73,10 +73,11 @@ class _SavingsGoalsScreenState extends ConsumerState<SavingsGoalsScreen> {
   }
 
   void _showCreateGoalDialog() {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: isDarkMode ? CoopvestColors.darkSurface : Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -95,12 +96,16 @@ class _SavingsGoalsScreenState extends ConsumerState<SavingsGoalsScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
+                    Text(
                       'Create Savings Goal',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 20, 
+                        fontWeight: FontWeight.bold,
+                        color: isDarkMode ? Colors.white : CoopvestColors.darkGray,
+                      ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.close),
+                      icon: Icon(Icons.close, color: isDarkMode ? Colors.white : CoopvestColors.darkGray),
                       onPressed: () => Navigator.of(context).pop(),
                     ),
                   ],
@@ -146,7 +151,13 @@ class _SavingsGoalsScreenState extends ConsumerState<SavingsGoalsScreen> {
                 ),
                 const SizedBox(height: 16),
                 
-                const Text('Target Date', style: TextStyle(fontWeight: FontWeight.w500)),
+                Text(
+                  'Target Date', 
+                  style: TextStyle(
+                    fontWeight: FontWeight.w500,
+                    color: isDarkMode ? Colors.white : CoopvestColors.darkGray,
+                  ),
+                ),
                 const SizedBox(height: 8),
                 GestureDetector(
                   onTap: () async {
@@ -163,7 +174,8 @@ class _SavingsGoalsScreenState extends ConsumerState<SavingsGoalsScreen> {
                   child: Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      border: Border.all(color: CoopvestColors.lightGray),
+                      color: isDarkMode ? Colors.white.withOpacity(0.05) : CoopvestColors.veryLightGray,
+                      border: Border.all(color: isDarkMode ? CoopvestColors.darkDivider : CoopvestColors.lightGray),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(
@@ -172,7 +184,10 @@ class _SavingsGoalsScreenState extends ConsumerState<SavingsGoalsScreen> {
                         const SizedBox(width: 12),
                         Text(
                           '${_getMonthName(_targetDate.month)} ${_targetDate.day}, ${_targetDate.year}',
-                          style: const TextStyle(fontSize: 16),
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: isDarkMode ? Colors.white : CoopvestColors.darkGray,
+                          ),
                         ),
                       ],
                     ),
@@ -205,20 +220,21 @@ class _SavingsGoalsScreenState extends ConsumerState<SavingsGoalsScreen> {
     final walletState = ref.watch(walletProvider);
     final goals = walletState.savingsGoals;
     final activeGoals = goals.where((g) => g.status == 'active').toList();
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.white,
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: CoopvestColors.darkGray),
+          icon: Icon(Icons.arrow_back, color: Theme.of(context).appBarTheme.foregroundColor),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
           'Savings Goals',
           style: CoopvestTypography.headlineLarge.copyWith(
-            color: CoopvestColors.darkGray,
+            color: Theme.of(context).appBarTheme.foregroundColor,
           ),
         ),
       ),
@@ -317,14 +333,15 @@ class _SavingsGoalsScreenState extends ConsumerState<SavingsGoalsScreen> {
                   children: [
                     Text(
                       '₦${goal.currentAmount.formatNumber()}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 18,
+                        color: isDarkMode ? Colors.white : CoopvestColors.darkGray,
                       ),
                     ),
                     Text(
                       'of ₦${goal.targetAmount.formatNumber()}',
-                      style: TextStyle(color: CoopvestColors.mediumGray),
+                      style: TextStyle(color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.mediumGray),
                     ),
                   ],
                 ),
@@ -340,7 +357,7 @@ class _SavingsGoalsScreenState extends ConsumerState<SavingsGoalsScreen> {
                     ),
                     Text(
                       '${goal.monthsRemaining} months left',
-                      style: TextStyle(color: CoopvestColors.mediumGray),
+                      style: TextStyle(color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.mediumGray),
                     ),
                   ],
                 ),

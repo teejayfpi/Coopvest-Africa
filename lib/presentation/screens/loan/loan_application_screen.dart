@@ -334,7 +334,7 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
                         initialValue: _selectedLoanType,
                         decoration: const InputDecoration(
                           border: InputBorder.none,
-                          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         ),
                         icon: const Icon(Icons.keyboard_arrow_down),
                         isExpanded: true, // Allow dropdown to take full width
@@ -343,30 +343,27 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
                           final value = entry.value;
                           return DropdownMenuItem(
                             value: key,
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(minHeight: 48),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    key,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: CoopvestTypography.bodyMedium.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 13,
-                                    ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  key,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: CoopvestTypography.bodyMedium.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 12,
                                   ),
-                                  Text(
-                                    '${value['duration']}m @ ${value['interest']}% interest',
-                                    overflow: TextOverflow.ellipsis,
-                                    style: CoopvestTypography.bodySmall.copyWith(
-                                      color: CoopvestColors.mediumGray,
-                                      fontSize: 10,
-                                    ),
+                                ),
+                                Text(
+                                  '${value['duration']}m @ ${value['interest']}% interest',
+                                  overflow: TextOverflow.ellipsis,
+                                  style: CoopvestTypography.bodySmall.copyWith(
+                                    color: CoopvestColors.mediumGray,
+                                    fontSize: 9,
                                   ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
                           );
                         }).toList(),
@@ -1073,7 +1070,7 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
                 Text(
                   'Share this QR code with your 3 guarantors:',
                   style: CoopvestTypography.titleMedium.copyWith(
-                    color: CoopvestColors.darkGray,
+                    color: isDarkMode ? Colors.white : CoopvestColors.darkGray,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -1112,7 +1109,7 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
                   child: Text(
                     'Guarantors should scan this code to confirm their guarantee. If the borrower defaults, the loan is inherited by the 3 guarantors equally.',
                     style: CoopvestTypography.bodySmall.copyWith(
-                      color: CoopvestColors.darkGray,
+                      color: isDarkMode ? Colors.white : CoopvestColors.darkGray,
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -1131,9 +1128,12 @@ class _ReferralInfoScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: isDarkMode ? CoopvestColors.darkBackground : Colors.white,
       appBar: AppBar(
+        backgroundColor: isDarkMode ? CoopvestColors.darkSurface : Colors.white,
+        foregroundColor: isDarkMode ? Colors.white : CoopvestColors.darkGray,
         title: const Text('How Referral Bonuses Work'),
       ),
       body: SafeArea(
@@ -1153,43 +1153,51 @@ class _ReferralInfoScreen extends StatelessWidget {
                         SizedBox(width: 8),
                         Text(
                           'Earn Interest Reduction',
-                          style: CoopvestTypography.titleMedium,
+                          style: CoopvestTypography.titleMedium.copyWith(
+                            color: isDarkMode ? Colors.white : CoopvestColors.darkGray,
+                          ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 12),
                     Text(
                       'Invite friends to join Coopvest Africa and earn tiered interest reductions on your loans!',
-                      style: CoopvestTypography.bodyMedium,
+                      style: CoopvestTypography.bodyMedium.copyWith(
+                        color: isDarkMode ? Colors.white : CoopvestColors.darkGray,
+                      ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 24),
               
-              const Text(
+              Text(
                 'Tier System',
-                style: CoopvestTypography.titleLarge,
+                style: CoopvestTypography.titleLarge.copyWith(
+                  color: isDarkMode ? Colors.white : CoopvestColors.darkGray,
+                ),
               ),
               const SizedBox(height: 12),
               
-              _buildTierInfoCard(2, 'Bronze', '2 Referrals', '2% OFF'),
-              _buildTierInfoCard(3, 'Silver', '4 Referrals', '3% OFF'),
-              _buildTierInfoCard(4, 'Gold', '6 Referrals', '4% OFF (Max)'),
+              _buildTierInfoCard(context, 2, 'Bronze', '2 Referrals', '2% OFF'),
+              _buildTierInfoCard(context, 3, 'Silver', '4 Referrals', '3% OFF'),
+              _buildTierInfoCard(context, 4, 'Gold', '6 Referrals', '4% OFF (Max)'),
               
               const SizedBox(height: 24),
               
-              const Text(
+              Text(
                 'Qualification Rules',
-                style: CoopvestTypography.titleLarge,
+                style: CoopvestTypography.titleLarge.copyWith(
+                  color: isDarkMode ? Colors.white : CoopvestColors.darkGray,
+                ),
               ),
               const SizedBox(height: 12),
               
-              _buildRuleRow('1. Referred member registers with your code'),
-              _buildRuleRow('2. Member completes KYC verification'),
-              _buildRuleRow('3. Member saves consistently for 3 months'),
-              _buildRuleRow('4. Member meets minimum savings amount'),
-              _buildRuleRow('5. Member passes fraud check'),
+              _buildRuleRow(context, '1. Referred member registers with your code'),
+              _buildRuleRow(context, '2. Member completes KYC verification'),
+              _buildRuleRow(context, '3. Member saves consistently for 3 months'),
+              _buildRuleRow(context, '4. Member meets minimum savings amount'),
+              _buildRuleRow(context, '5. Member passes fraud check'),
               
               const SizedBox(height: 24),
               
@@ -1235,7 +1243,8 @@ class _ReferralInfoScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildTierInfoCard(double bonus, String tier, String requirement, String discount) {
+  Widget _buildTierInfoCard(BuildContext context, double bonus, String tier, String requirement, String discount) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return AppCard(
       margin: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -1271,12 +1280,14 @@ class _ReferralInfoScreen extends StatelessWidget {
                 ),
                 Text(
                   requirement,
-                  style: CoopvestTypography.bodyMedium,
+                  style: CoopvestTypography.bodyMedium.copyWith(
+                    color: isDarkMode ? Colors.white : CoopvestColors.darkGray,
+                  ),
                 ),
                 Text(
                   discount,
                   style: CoopvestTypography.bodySmall.copyWith(
-                    color: CoopvestColors.mediumGray,
+                    color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.mediumGray,
                   ),
                 ),
               ],
@@ -1296,7 +1307,8 @@ class _ReferralInfoScreen extends StatelessWidget {
     }
   }
 
-  Widget _buildRuleRow(String rule) {
+  Widget _buildRuleRow(BuildContext context, String rule) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
@@ -1307,7 +1319,9 @@ class _ReferralInfoScreen extends StatelessWidget {
           Expanded(
             child: Text(
               rule,
-              style: CoopvestTypography.bodyMedium,
+              style: CoopvestTypography.bodyMedium.copyWith(
+                color: isDarkMode ? Colors.white : CoopvestColors.darkGray,
+              ),
             ),
           ),
         ],

@@ -230,19 +230,20 @@ class _KYCEmploymentDetailsScreenState
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.white,
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: CoopvestColors.darkGray),
+          icon: Icon(Icons.arrow_back, color: Theme.of(context).appBarTheme.foregroundColor),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
           'Employment Details',
           style: CoopvestTypography.headlineLarge.copyWith(
-            color: CoopvestColors.darkGray,
+            color: Theme.of(context).appBarTheme.foregroundColor,
           ),
         ),
       ),
@@ -268,7 +269,7 @@ class _KYCEmploymentDetailsScreenState
               Text(
                 'Personal Information',
                 style: CoopvestTypography.headlineSmall.copyWith(
-                  color: CoopvestColors.darkGray,
+                  color: isDarkMode ? Colors.white : CoopvestColors.darkGray,
                 ),
               ),
               const SizedBox(height: 16),
@@ -309,7 +310,7 @@ class _KYCEmploymentDetailsScreenState
               Text(
                 'Employment Details',
                 style: CoopvestTypography.headlineSmall.copyWith(
-                  color: CoopvestColors.darkGray,
+                  color: isDarkMode ? Colors.white : CoopvestColors.darkGray,
                 ),
               ),
               const SizedBox(height: 16),

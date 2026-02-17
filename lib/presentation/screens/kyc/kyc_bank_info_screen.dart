@@ -199,19 +199,20 @@ class _KYCBankInfoScreenState extends ConsumerState<KYCBankInfoScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.white,
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: CoopvestColors.darkGray),
+          icon: Icon(Icons.arrow_back, color: Theme.of(context).appBarTheme.foregroundColor),
           onPressed: _goBack,
         ),
         title: Text(
           'Bank Information',
           style: CoopvestTypography.headlineLarge.copyWith(
-            color: CoopvestColors.darkGray,
+            color: Theme.of(context).appBarTheme.foregroundColor,
           ),
         ),
       ),
@@ -239,14 +240,14 @@ class _KYCBankInfoScreenState extends ConsumerState<KYCBankInfoScreen> {
               Text(
                 'Add Your Bank Details',
                 style: CoopvestTypography.headlineSmall.copyWith(
-                  color: CoopvestColors.darkGray,
+                  color: isDarkMode ? Colors.white : CoopvestColors.darkGray,
                 ),
               ),
               const SizedBox(height: 8),
               Text(
                 'Enter your bank account information for receiving payouts and refunds',
                 style: CoopvestTypography.bodyMedium.copyWith(
-                  color: CoopvestColors.mediumGray,
+                  color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.mediumGray,
                 ),
               ),
               const SizedBox(height: 24),
@@ -255,19 +256,21 @@ class _KYCBankInfoScreenState extends ConsumerState<KYCBankInfoScreen> {
               Text(
                 'Select Bank *',
                 style: CoopvestTypography.labelLarge.copyWith(
-                  color: CoopvestColors.darkGray,
+                  color: isDarkMode ? Colors.white : CoopvestColors.darkGray,
                 ),
               ),
               const SizedBox(height: 12),
               
               Container(
                 decoration: BoxDecoration(
-                  border: Border.all(color: CoopvestColors.lightGray),
+                  color: isDarkMode ? CoopvestColors.darkSurface : CoopvestColors.veryLightGray,
+                  border: Border.all(color: isDarkMode ? CoopvestColors.darkDivider : CoopvestColors.lightGray),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: DropdownButtonFormField<String>(
                   initialValue: _selectedBank,
-                  hint: const Text('Select your bank'),
+                  hint: Text('Select your bank', style: TextStyle(color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.mediumGray)),
+                  dropdownColor: isDarkMode ? CoopvestColors.darkSurface : Colors.white,
                   decoration: const InputDecoration(
                     border: InputBorder.none,
                     contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -278,7 +281,9 @@ class _KYCBankInfoScreenState extends ConsumerState<KYCBankInfoScreen> {
                       value: bank['label'] as String?,
                       child: Text(
                         bank['label'] as String,
-                        style: CoopvestTypography.bodyMedium,
+                        style: CoopvestTypography.bodyMedium.copyWith(
+                          color: isDarkMode ? Colors.white : CoopvestColors.darkGray,
+                        ),
                       ),
                     );
                   }).toList(),

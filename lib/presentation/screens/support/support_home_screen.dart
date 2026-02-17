@@ -14,18 +14,18 @@ class SupportHomeScreen extends ConsumerWidget {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     
     return Scaffold(
-      backgroundColor: isDarkMode ? CoopvestColors.darkBackground : Colors.white,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: isDarkMode ? CoopvestColors.darkSurface : Colors.white,
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: isDarkMode ? Colors.white : CoopvestColors.darkGray),
+          icon: Icon(Icons.arrow_back, color: Theme.of(context).appBarTheme.foregroundColor),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
           'Support Center',
           style: TextStyle(
-            color: isDarkMode ? Colors.white : CoopvestColors.darkGray,
+            color: Theme.of(context).appBarTheme.foregroundColor,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -148,18 +148,15 @@ class SupportHomeScreen extends ConsumerWidget {
                       ),
                     );
                   },
-                  icon: const Icon(Icons.inbox_outlined, color: CoopvestColors.primary),
+                  icon: const Icon(Icons.inbox_outlined),
                   label: const Text(
                     'My Tickets',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
-                      color: CoopvestColors.primary,
                     ),
                   ),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: CoopvestColors.primary,
-                    side: const BorderSide(color: CoopvestColors.primary),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -256,14 +253,14 @@ class SupportHomeScreen extends ConsumerWidget {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: isDarkMode ? CoopvestColors.darkSurface : Colors.grey[100],
+                  color: Theme.of(context).colorScheme.surface,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
                   children: [
                     Icon(
                       Icons.info_outline,
-                      color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.mediumGray,
+                      color: Theme.of(context).textTheme.bodySmall?.color ?? CoopvestColors.mediumGray,
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -274,7 +271,7 @@ class SupportHomeScreen extends ConsumerWidget {
                             'Response Time',
                             style: TextStyle(
                               fontWeight: FontWeight.w600,
-                              color: isDarkMode ? CoopvestColors.darkText : CoopvestColors.darkGray,
+                              color: Theme.of(context).textTheme.titleLarge?.color,
                             ),
                           ),
                           const SizedBox(height: 4),
@@ -282,7 +279,7 @@ class SupportHomeScreen extends ConsumerWidget {
                             'We typically respond within 24 hours on business days.',
                             style: TextStyle(
                               fontSize: 13,
-                              color: isDarkMode ? CoopvestColors.darkTextSecondary : CoopvestColors.mediumGray,
+                              color: Theme.of(context).textTheme.bodySmall?.color,
                             ),
                           ),
                         ],
