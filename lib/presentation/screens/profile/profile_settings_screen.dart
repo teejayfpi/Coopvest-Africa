@@ -527,41 +527,45 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
             Text('Coopvest', style: TextStyle(color: CoopvestColors.primary)),
           ],
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: CoopvestColors.primary.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(16),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: CoopvestColors.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Icon(Icons.savings, size: 40, color: CoopvestColors.primary),
               ),
-              child: const Icon(Icons.savings, size: 40, color: CoopvestColors.primary),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Coopvest Africa',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 4),
-            Text('Version 1.0.0', style: TextStyle(color: context.textSecondary)),
-            const SizedBox(height: 16),
-            Text(
-              'Empowering cooperatives through digital innovation. Save, borrow, and invest together.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: context.textSecondary),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _buildAboutButton(Icons.language, 'Website'),
-                const SizedBox(width: 16),
-                _buildAboutButton(Icons.email, 'Contact'),
-              ],
-            ),
-          ],
+              const SizedBox(height: 16),
+              const Text(
+                'Coopvest Africa',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 4),
+              Text('Version 1.0.0', style: TextStyle(color: context.textSecondary)),
+              const SizedBox(height: 16),
+              Text(
+                'Empowering cooperatives through digital innovation. Save, borrow, and invest together.',
+                textAlign: TextAlign.center,
+                maxLines: 4,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: context.textSecondary),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _buildAboutButton(Icons.language, 'Website'),
+                  const SizedBox(width: 16),
+                  _buildAboutButton(Icons.email, 'Contact'),
+                ],
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
