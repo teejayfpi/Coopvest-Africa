@@ -10,6 +10,7 @@ import '../../../presentation/providers/loan_provider.dart';
 import '../../../presentation/screens/wallet/deposit_screen.dart';
 import '../../../presentation/screens/loan/loan_dashboard_screen.dart';
 import '../../../presentation/screens/wallet/wallet_dashboard_screen.dart';
+import '../../../presentation/screens/referral/referral_dashboard_screen.dart';
 import 'package:fl_chart/fl_chart.dart';
 
 class HomeDashboardScreen extends ConsumerStatefulWidget {
@@ -110,9 +111,9 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                         () => Navigator.push(context, MaterialPageRoute(builder: (context) => LoanDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? '', userPhone: ''))),
                       ),
                       _buildActionButton(
-                        'Investment Pool',
-                        Icons.trending_up_outlined,
-                        () {},
+                        'Referral',
+                        Icons.share_outlined,
+                        () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ReferralDashboardScreen())),
                       ),
                       _buildActionButton(
                         'Download Statements',
