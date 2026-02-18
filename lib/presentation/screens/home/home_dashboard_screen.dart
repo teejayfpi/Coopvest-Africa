@@ -638,14 +638,10 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> with 
 
   Widget _buildQuickActionsGrid(BuildContext context, String userId, String userName) {
     final quickActions = [
-      {'label': 'Deposit', 'icon': Icons.add_circle, 'color': CoopvestColors.success, 'route': () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => DepositScreen(userId: userId)))},
-      {'label': 'Withdraw', 'icon': Icons.remove_circle, 'color': CoopvestColors.error, 'route': () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => WithdrawalScreen(userId: userId)))},
       {'label': 'Loans', 'icon': Icons.payments, 'color': const Color(0xFF1565C0), 'route': () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => LoanDashboardScreen(userId: userId, userName: userName, userPhone: '')))},
-      {'label': 'Support', 'icon': Icons.headset_mic, 'color': const Color(0xFF7B1FA2), 'route': () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const SupportHomeScreen()))},
-      {'label': 'Savings', 'icon': Icons.savings, 'color': const Color(0xFFF57C00), 'route': () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => SavingsGoalsScreen(userId: userId)))},
-      {'label': 'History', 'icon': Icons.history, 'color': const Color(0xFF00838F), 'route': () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => WalletDashboardScreen(userId: userId, userName: userName)))},
+      {'label': 'Deposit', 'icon': Icons.add_circle, 'color': CoopvestColors.success, 'route': () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => DepositScreen(userId: userId)))},
       {'label': 'Referral', 'icon': Icons.share, 'color': const Color(0xFF5D4037), 'route': () => {}},
-      {'label': 'Profile', 'icon': Icons.person, 'color': const Color(0xFF455A64), 'route': () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const ProfileSettingsScreen()))},
+      {'label': 'Support', 'icon': Icons.headset_mic, 'color': const Color(0xFF7B1FA2), 'route': () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const SupportHomeScreen()))},
     ];
 
     return Column(
@@ -716,15 +712,18 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> with 
                 child: Icon(icon, color: color, size: 26),
               ),
               const SizedBox(height: 10),
-              Text(
-                label,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: context.textPrimary,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 12,
-                ),
-              ),
+	              Flexible(
+	                child: Text(
+	                  label,
+	                  textAlign: TextAlign.center,
+	                  overflow: TextOverflow.ellipsis,
+	                  style: TextStyle(
+	                    color: context.textPrimary,
+	                    fontWeight: FontWeight.w600,
+	                    fontSize: 12,
+	                  ),
+	                ),
+	              ),
             ],
           ),
         ),
