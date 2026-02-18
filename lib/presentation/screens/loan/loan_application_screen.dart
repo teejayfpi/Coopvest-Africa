@@ -342,38 +342,33 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
                         ),
                         icon: const Icon(Icons.keyboard_arrow_down),
                         isExpanded: true, // Allow dropdown to take full width
-                        items: _loanTypes.entries.map((entry) {
-                          final key = entry.key;
-                          final value = entry.value;
-                          return DropdownMenuItem(
-                            value: key,
-                            child: SizedBox(
-                              width: double.maxFinite,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    key,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: CoopvestTypography.bodyMedium.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                  Text(
-                                    '${value['duration']}m @ ${value['interest']}% interest',
-                                    overflow: TextOverflow.ellipsis,
-                                    style: CoopvestTypography.bodySmall.copyWith(
-                                      color: CoopvestColors.mediumGray,
-                                      fontSize: 9,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        }).toList(),
+	                        items: _loanTypes.entries.map((entry) {
+	                          final key = entry.key;
+	                          final value = entry.value;
+	                          return DropdownMenuItem(
+	                            value: key,
+	                            child: Column(
+	                              crossAxisAlignment: CrossAxisAlignment.start,
+	                              mainAxisAlignment: MainAxisAlignment.center,
+	                              children: [
+	                                Text(
+	                                  key,
+	                                  style: CoopvestTypography.bodyMedium.copyWith(
+	                                    fontWeight: FontWeight.w600,
+	                                    fontSize: 12,
+	                                  ),
+	                                ),
+	                                Text(
+	                                  '${value['duration']}m @ ${value['interest']}% interest',
+	                                  style: CoopvestTypography.bodySmall.copyWith(
+	                                    color: CoopvestColors.mediumGray,
+	                                    fontSize: 9,
+	                                  ),
+	                                ),
+	                              ],
+	                            ),
+	                          );
+	                        }).toList(),
                         onChanged: (value) {
                           setState(() {
                             _selectedLoanType = value!;
