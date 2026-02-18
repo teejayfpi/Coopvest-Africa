@@ -198,7 +198,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> with 
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Coopvest',
+                    'Coopvest Africa',
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,

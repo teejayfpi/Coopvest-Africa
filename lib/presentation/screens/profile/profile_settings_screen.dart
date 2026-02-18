@@ -524,7 +524,7 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
         title: Row(
           children: [
             const Text('About '),
-            Text('Coopvest', style: TextStyle(color: CoopvestColors.primary)),
+            Text('Coopvest Africa', style: TextStyle(color: CoopvestColors.primary)),
           ],
         ),
         content: SingleChildScrollView(

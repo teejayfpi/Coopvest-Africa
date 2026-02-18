@@ -128,7 +128,7 @@ class NotificationService {
     try {
       // Show local notification
       _showLocalNotification(
-        title: message.notification?.title ?? 'Coopvest',
+        title: message.notification?.title ?? 'Coopvest Africa',
         body: message.notification?.body ?? '',
         payload: jsonEncode(message.data),
       ).catchError((e) {
@@ -197,7 +197,7 @@ class NotificationService {
     try {
       const androidDetails = AndroidNotificationDetails(
         'coopvest_notifications',
-        'Coopvest Notifications',
+        'Coopvest Africa Notifications',
         channelDescription: 'General notifications',
         importance: Importance.high,
         priority: Priority.high,
