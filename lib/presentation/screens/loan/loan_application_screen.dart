@@ -581,12 +581,14 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
   }
 
   Widget _buildInfoRow(String text) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
       child: Text(
         text,
         style: CoopvestTypography.bodySmall.copyWith(
-          color: CoopvestColors.darkGray,
+          color: isDarkMode ? Colors.white : CoopvestColors.darkGray,
+          fontWeight: FontWeight.w500,
         ),
       ),
     );
