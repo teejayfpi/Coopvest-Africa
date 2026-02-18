@@ -23,7 +23,7 @@ import '../support/ticket_detail_screen.dart';
 import '../profile/profile_settings_screen.dart';
 import 'notifications_screen.dart';
 
-/// Main Home Dashboard Screen - Enhanced Version
+/// Main Home Dashboard Screen - Premium Enhanced Version
 class HomeDashboardScreen extends ConsumerStatefulWidget {
   const HomeDashboardScreen({super.key});
 
@@ -31,15 +31,37 @@ class HomeDashboardScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeDashboardScreen> createState() => _HomeDashboardScreenState();
 }
 
-class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
+class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> with SingleTickerProviderStateMixin {
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
+  late Animation<double> _slideAnimation;
+
   @override
   void initState() {
     super.initState();
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
+    );
+    _slideAnimation = Tween<double>(begin: 50.0, end: 0.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeOutCubic),
+    );
+    
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _animationController.forward();
       ref.read(ticketProvider.notifier).loadTickets();
       ref.read(walletProvider.notifier).loadWallet();
       ref.read(loanProvider.notifier).getLoans();
     });
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
   }
 
   @override
@@ -52,7 +74,6 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
     final user = ref.watch(currentUserProvider);
     final userName = user?.name ?? 'User';
     final userId = user?.id ?? '';
-    final userInitials = _getInitials(userName);
 
     final ticketState = ref.watch(ticketProvider);
     final recentTickets = ticketState.tickets.take(2).toList();
@@ -61,157 +82,167 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
 
     return Scaffold(
       backgroundColor: context.scaffoldBackground,
-      appBar: AppBar(
-        elevation: 0,
-        backgroundColor: context.scaffoldBackground,
-        title: Row(
+      body: AnimatedBuilder(
+        animation: _animationController,
+        builder: (context, child) {
+          return Transform.translate(
+            offset: Offset(0, _slideAnimation.value),
+            child: Opacity(
+              opacity: _fadeAnimation.value,
+              child: child,
+            ),
+          );
+        },
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(
+            children: [
+              _buildPremiumAppBar(context, userName),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildTimeBasedGreeting(userName, context),
+                    const SizedBox(height: 20),
+                    _buildBalanceCard(wallet, context),
+                    const SizedBox(height: 20),
+                    _buildStatsRow(wallet, context, userId, userName),
+                    const SizedBox(height: 24),
+                    _buildQuickActionsGrid(context, userId, userName),
+                    const SizedBox(height: 24),
+                    _buildRolloverBanner(context),
+                    const SizedBox(height: 24),
+                    _buildSectionHeader('Support Tickets', () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (context) => const TicketListScreen()),
+                      );
+                    }, context),
+                    const SizedBox(height: 12),
+                    if (ticketState.isLoading)
+                      const Center(child: CircularProgressIndicator())
+                    else if (recentTickets.isEmpty)
+                      _buildEmptyTicketsCard(context)
+                    else
+                      ...recentTickets.map((ticket) => _buildTicketItem(context, ticket)),
+                    const SizedBox(height: 24),
+                    if (savingsGoals.isNotEmpty) ...[
+                      _buildSectionHeader('Savings Goals', () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (context) => SavingsGoalsScreen(userId: userId)),
+                        );
+                      }, context),
+                      const SizedBox(height: 12),
+                      ...savingsGoals.take(2).map((goal) => _buildGoalProgressCard(context, goal)),
+                      const SizedBox(height: 24),
+                    ],
+                    _buildSectionHeader('Recent Activity', () {}, context),
+                    const SizedBox(height: 12),
+                    if (recentTransactions.isEmpty)
+                      _buildEmptyActivityCard(context)
+                    else
+                      ...recentTransactions.map((txn) => _buildActivityItem(context, txn)),
+                    const SizedBox(height: 100),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPremiumAppBar(BuildContext context, String userName) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: isDarkMode 
+            ? [const Color(0xFF1B5E20), const Color(0xFF0D3813)]
+            : [CoopvestColors.primary, CoopvestColors.primaryLight],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: CoopvestColors.primary.withOpacity(0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+        borderRadius: const BorderRadius.only(
+          bottomLeft: Radius.circular(28),
+          bottomRight: Radius.circular(28),
+        ),
+      ),
+      padding: const EdgeInsets.only(top: 50, left: 20, right: 20, bottom: 24),
+      child: SafeArea(
+        bottom: false,
+        child: Row(
           children: [
             Container(
-              width: 44,
-              height: 44,
+              width: 48,
+              height: 48,
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    CoopvestColors.primary,
-                    CoopvestColors.primaryLight,
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: CoopvestColors.primary.withOpacity(0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.white.withOpacity(0.3)),
+              ),
+              child: const Icon(Icons.account_balance, color: Colors.white, size: 26),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Coopvest',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  Text(
+                    'Your financial companion',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.white.withOpacity(0.85),
+                    ),
                   ),
                 ],
               ),
-              child: Center(
-                child: Text(
-                  'C',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+            ),
+            _buildAppBarIcon(
+              Icons.notifications_none,
+              () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (context) => const NotificationsScreen()),
               ),
             ),
             const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Coopvest',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: context.textPrimary,
-                  ),
-                ),
-                Text(
-                  'Welcome back',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: context.textSecondary,
-                  ),
-                ),
-              ],
+            _buildAppBarIcon(
+              Icons.person_outline,
+              () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (context) => const ProfileSettingsScreen()),
+              ),
             ),
           ],
         ),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.notifications_none, color: context.textPrimary),
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => const NotificationsScreen(),
-                ),
-              );
-            },
-          ),
-          const SizedBox(width: 8),
-        ],
       ),
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: () async {
-            await ref.read(walletProvider.notifier).loadWallet();
-            await ref.read(ticketProvider.notifier).loadTickets();
-            await ref.read(loanProvider.notifier).getLoans();
-          },
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildTimeBasedGreeting(userName, context),
-                const SizedBox(height: 24),
-                
-                // Main Balance Card
-                _buildBalanceCard(wallet, context),
-                const SizedBox(height: 24),
-                
-                // Stats Row
-                _buildStatsRow(wallet, context, userId, userName),
-                const SizedBox(height: 28),
-                
-                // Quick Actions
-                _buildQuickActionsGrid(context, userId, userName),
-                const SizedBox(height: 28),
-                
-                // Rollover Banner
-                _buildRolloverSection(context),
-                const SizedBox(height: 28),
-                
-                // Support Tickets Section
-                _buildSectionHeader('Support Tickets', () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => const TicketListScreen(),
-                    ),
-                  );
-                }, context),
-                const SizedBox(height: 12),
-                if (ticketState.isLoading)
-                  const Center(child: CircularProgressIndicator())
-                else if (recentTickets.isEmpty)
-                  _buildEmptyTicketsCard(context)
-                else
-                  ...recentTickets.map((ticket) => _buildTicketItem(context, ticket)),
-                
-                const SizedBox(height: 24),
-                
-                // Savings Goals
-                if (savingsGoals.isNotEmpty) ...[
-                  _buildSectionHeader('Savings Goals', () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => SavingsGoalsScreen(userId: userId),
-                      ),
-                    );
-                  }, context),
-                  const SizedBox(height: 12),
-                  ...savingsGoals.take(2).map((goal) => _buildGoalProgressCard(context, goal)),
-                  const SizedBox(height: 24),
-                ],
-                
-                // Recent Activity
-                _buildSectionHeader('Recent Activity', () {}, context),
-                const SizedBox(height: 12),
-                if (recentTransactions.isEmpty)
-                  _buildEmptyActivityCard(context)
-                else
-                  ...recentTransactions.map((txn) => _buildActivityItem(context, txn)),
-                  
-                const SizedBox(height: 80), // Space for bottom nav
-              ],
-            ),
-          ),
-        ),
+    );
+  }
+
+  Widget _buildAppBarIcon(IconData icon, VoidCallback onTap) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: IconButton(
+        icon: Icon(icon, color: Colors.white, size: 24),
+        onPressed: onTap,
       ),
     );
   }
@@ -228,17 +259,29 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
   Widget _buildTimeBasedGreeting(String userName, BuildContext context) {
     final hour = DateTime.now().hour;
     String greeting;
+    IconData emoji;
     if (hour < 12) {
       greeting = 'Good Morning';
+      emoji = Icons.wb_sunny_outlined;
     } else if (hour < 17) {
       greeting = 'Good Afternoon';
+      emoji = Icons.light_mode;
     } else {
       greeting = 'Good Evening';
+      emoji = Icons.nights_stay_outlined;
     }
 
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: CoopvestColors.primary.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(emoji, color: CoopvestColors.primary, size: 22),
+        ),
+        const SizedBox(width: 14),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -250,11 +293,11 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                 fontWeight: FontWeight.w500,
               ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             Text(
               userName,
               style: TextStyle(
-                fontSize: 24,
+                fontSize: 20,
                 fontWeight: FontWeight.bold,
                 color: context.textPrimary,
               ),
@@ -267,6 +310,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
 
   Widget _buildBalanceCard(Wallet? wallet, BuildContext context) {
     final balance = wallet?.balance ?? 0.0;
+    final pending = wallet?.pendingContributions ?? 0;
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     
     return Container(
@@ -283,8 +327,8 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
         boxShadow: [
           BoxShadow(
             color: CoopvestColors.primary.withOpacity(0.4),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
+            blurRadius: 24,
+            offset: const Offset(0, 12),
           ),
         ],
       ),
@@ -298,47 +342,76 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Total Balance',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.white.withOpacity(0.8),
-                      fontWeight: FontWeight.w500,
-                    ),
+                  Row(
+                    children: [
+                      Text(
+                        'Total Balance',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.white.withOpacity(0.85),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.25),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: const BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            const Text(
+                              'Active',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 10),
                   Text(
                     '₦${balance.formatNumber()}',
                     style: TextStyle(
-                      fontSize: 32,
+                      fontSize: 34,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
-                      letterSpacing: -0.5,
+                      letterSpacing: -1,
                     ),
                   ),
                 ],
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(14),
                 ),
-                child: Row(
-                  children: [
-                    Icon(Icons.visibility_outlined, color: Colors.white.withOpacity(0.9), size: 18),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Hide',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.9),
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
-                ),
+                child: Icon(Icons.visibility_outlined, color: Colors.white.withOpacity(0.9), size: 24),
               ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              _buildBalanceDetail('Available', '₦${balance.formatNumber()}'),
+              const SizedBox(width: 24),
+              _buildBalanceDetail('Pending', '₦${pending.formatNumber()}'),
             ],
           ),
           const SizedBox(height: 24),
@@ -356,9 +429,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                 );
               }),
               const SizedBox(width: 12),
-              _buildBalanceAction(Icons.swap_horiz, 'Transfer', () {
-                // Navigate to transfer
-              }),
+              _buildBalanceAction(Icons.swap_horiz, 'Transfer', () {}),
             ],
           ),
         ],
@@ -366,28 +437,55 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
     );
   }
 
-  Widget _buildBalanceAction(IconData icon, String label, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.2),
-          borderRadius: BorderRadius.circular(12),
+  Widget _buildBalanceDetail(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.white.withOpacity(0.7),
+          ),
         ),
-        child: Row(
-          children: [
-            Icon(icon, color: Colors.white, size: 20),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-                fontSize: 14,
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBalanceAction(IconData icon, String label, VoidCallback onTap) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: Colors.white, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -397,52 +495,72 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
     final activeLoans = ref.watch(loanProvider).loans.where((l) => l.status == 'active' || l.status == 'repaying').length;
     final savingsGoals = ref.watch(walletProvider).savingsGoals.where((g) => g.status == 'active').length;
     final pending = wallet?.pendingContributions ?? 0;
+    final walletBalance = wallet?.balance ?? 0.0;
 
-    return Row(
+    return Column(
       children: [
-        Expanded(
-          child: _buildStatCard(
-            'Active Loans',
-            '$activeLoans',
-            Icons.account_balance_wallet,
-            const Color(0xFF1565C0),
-            context,
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => LoanDashboardScreen(userId: userId, userName: userName, userPhone: ''),
-                ),
-              );
-            },
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: _buildStatCard(
+                'Total Savings',
+                '₦${walletBalance.formatNumber()}',
+                Icons.savings,
+                CoopvestColors.primary,
+                context,
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (context) => WalletDashboardScreen(userId: userId, userName: userName)),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildStatCard(
+                'Active Loans',
+                '$activeLoans',
+                Icons.account_balance_wallet,
+                const Color(0xFF1565C0),
+                context,
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (context) => LoanDashboardScreen(userId: userId, userName: userName, userPhone: '')),
+                  );
+                },
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _buildStatCard(
-            'Savings Goals',
-            '$savingsGoals',
-            Icons.flag,
-            const Color(0xFFF57C00),
-            context,
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => SavingsGoalsScreen(userId: userId),
-                ),
-              );
-            },
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _buildStatCard(
-            'Pending',
-            '₦${pending.formatNumber()}',
-            Icons.pending,
-            const Color(0xFF7B1FA2),
-            context,
-            onTap: () {},
-          ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildStatCard(
+                'Savings Goals',
+                '$savingsGoals',
+                Icons.flag,
+                const Color(0xFFF57C00),
+                context,
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (context) => SavingsGoalsScreen(userId: userId)),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildStatCard(
+                'Pending',
+                '₦${pending.formatNumber()}',
+                Icons.pending,
+                const Color(0xFF7B1FA2),
+                context,
+                onTap: () {},
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -454,34 +572,47 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: context.cardBackground,
-          borderRadius: BorderRadius.circular(16),
+          gradient: LinearGradient(
+            colors: [
+              color.withOpacity(0.08),
+              color.withOpacity(0.03),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(18),
           boxShadow: [
             BoxShadow(
-              color: color.withOpacity(0.1),
-              blurRadius: 10,
+              color: color.withOpacity(0.08),
+              blurRadius: 12,
               offset: const Offset(0, 4),
             ),
           ],
-          border: Border.all(color: color.withOpacity(0.1)),
+          border: Border.all(color: color.withOpacity(0.15)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: color, size: 22),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.18),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(icon, color: color, size: 20),
+                ),
+                Icon(Icons.chevron_right, color: color.withOpacity(0.6), size: 20),
+              ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             Text(
               value,
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                fontSize: 16,
+                fontSize: 18,
                 color: context.textPrimary,
               ),
               maxLines: 1,
@@ -492,7 +623,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
               title,
               style: TextStyle(
                 color: context.textSecondary,
-                fontSize: 12,
+                fontSize: 13,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -531,46 +662,70 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
           physics: const NeverScrollableScrollPhysics(),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 4,
-            mainAxisSpacing: 16,
+            mainAxisSpacing: 14,
             crossAxisSpacing: 12,
-            childAspectRatio: 0.85,
+            childAspectRatio: 0.95,
           ),
           itemCount: quickActions.length,
           itemBuilder: (context, index) {
             final action = quickActions[index];
-            return GestureDetector(
-              onTap: action['route'] as VoidCallback,
-              child: Column(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: (action['color'] as Color).withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: (action['color'] as Color).withOpacity(0.2)),
-                    ),
-                    child: Icon(
-                      action['icon'] as IconData,
-                      color: action['color'] as Color,
-                      size: 26,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    action['label'] as String,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: context.textPrimary,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
+            return _buildQuickActionItem(
+              action['label'] as String,
+              action['icon'] as IconData,
+              action['color'] as Color,
+              action['route'] as VoidCallback,
             );
           },
         ),
       ],
+    );
+  }
+
+  Widget _buildQuickActionItem(String label, IconData icon, Color color, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeInOut,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              color.withOpacity(0.12),
+              color.withOpacity(0.06),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: color.withOpacity(0.2)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.18),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(icon, color: color, size: 26),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: context.textPrimary,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -600,19 +755,26 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
     );
   }
 
-  Widget _buildRolloverSection(BuildContext context) {
+  Widget _buildRolloverBanner(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            const Color(0xFF1B5E20).withOpacity(0.08),
-            const Color(0xFF2E7D32).withOpacity(0.05),
+            CoopvestColors.primary.withOpacity(0.1),
+            CoopvestColors.primary.withOpacity(0.04),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: CoopvestColors.primary.withOpacity(0.15)),
+        border: Border.all(color: CoopvestColors.primary.withOpacity(0.2)),
+        boxShadow: [
+          BoxShadow(
+            color: CoopvestColors.primary.withOpacity(0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       padding: const EdgeInsets.all(20),
       child: Row(
@@ -620,10 +782,21 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: CoopvestColors.primary.withOpacity(0.15),
+              gradient: LinearGradient(
+                colors: [CoopvestColors.primary, CoopvestColors.primaryLight],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
               borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: CoopvestColors.primary.withOpacity(0.3),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
-            child: const Icon(Icons.autorenew, color: CoopvestColors.primary, size: 28),
+            child: const Icon(Icons.autorenew, color: Colors.white, size: 26),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -634,7 +807,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                   'Loan Rollover',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    fontSize: 16,
+                    fontSize: 17,
                     color: context.textPrimary,
                   ),
                 ),
@@ -651,7 +824,11 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
           ),
           Container(
             decoration: BoxDecoration(
-              color: CoopvestColors.primary,
+              gradient: LinearGradient(
+                colors: [CoopvestColors.primary, CoopvestColors.primaryLight],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
               borderRadius: BorderRadius.circular(12),
             ),
             child: IconButton(
@@ -675,34 +852,32 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
       child: Container(
         decoration: BoxDecoration(
           color: context.cardBackground,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(18),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.04),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
             ),
           ],
           border: Border.all(color: Colors.black.withOpacity(0.05)),
         ),
         child: InkWell(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(18),
           onTap: () {
             Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (context) => TicketDetailScreen(ticketId: ticket.id),
-              ),
+              MaterialPageRoute(builder: (context) => TicketDetailScreen(ticketId: ticket.id)),
             );
           },
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(18),
             child: Row(
               children: [
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(12),
+                    color: statusColor.withOpacity(0.14),
+                    borderRadius: BorderRadius.circular(14),
                   ),
                   child: Icon(Icons.confirmation_number_outlined, color: statusColor, size: 22),
                 ),
@@ -721,7 +896,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 5),
                       Text(
                         'ID: ${ticket.id.substring(0, 8).toUpperCase()}',
                         style: TextStyle(
@@ -733,10 +908,10 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                   decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(10),
+                    color: statusColor.withOpacity(0.14),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
                     ticket.status.toUpperCase(),
@@ -761,17 +936,17 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
       child: Container(
         decoration: BoxDecoration(
           color: context.cardBackground,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(18),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.04),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
             ),
           ],
           border: Border.all(color: Colors.black.withOpacity(0.05)),
         ),
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -781,52 +956,61 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                 Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(8),
+                      padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: Colors.orange.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(10),
+                        color: Colors.orange.withOpacity(0.16),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Icon(Icons.flag, color: Colors.orange, size: 18),
+                      child: const Icon(Icons.flag, color: Color(0xFFF57C00), size: 20),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 14),
                     Text(
                       goal.name,
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
-                        fontSize: 15,
+                        fontSize: 16,
                         color: context.textPrimary,
                       ),
                     ),
                   ],
                 ),
-                Text(
-                  '${goal.progressPercentage.toStringAsFixed(0)}%',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                    color: CoopvestColors.primary,
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [CoopvestColors.primary.withOpacity(0.8), CoopvestColors.primaryLight],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${goal.progressPercentage.toStringAsFixed(0)}%',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 16),
             ClipRRect(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(10),
               child: LinearProgressIndicator(
                 value: goal.progressPercentage / 100,
                 backgroundColor: CoopvestColors.veryLightGray,
                 valueColor: const AlwaysStoppedAnimation<Color>(CoopvestColors.primary),
-                minHeight: 8,
+                minHeight: 10,
               ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 14),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
                   '₦${goal.currentAmount.formatNumber()}',
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: 14,
                     fontWeight: FontWeight.w600,
                     color: context.textPrimary,
                   ),
@@ -834,7 +1018,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                 Text(
                   '₦${goal.targetAmount.formatNumber()}',
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: 14,
                     color: context.textSecondary,
                   ),
                 ),
@@ -856,30 +1040,30 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
       child: Container(
         decoration: BoxDecoration(
           color: context.cardBackground,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(18),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.04),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
             ),
           ],
           border: Border.all(color: Colors.black.withOpacity(0.05)),
         ),
         child: InkWell(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(18),
           onTap: () {},
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(18),
             child: Row(
               children: [
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(12),
+                    color: color.withOpacity(0.14),
+                    borderRadius: BorderRadius.circular(14),
                   ),
-                  child: Icon(icon, color: color, size: 20),
+                  child: Icon(icon, color: color, size: 22),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -890,13 +1074,13 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                         txn.description ?? '',
                         style: TextStyle(
                           fontWeight: FontWeight.w600,
-                          fontSize: 14,
+                          fontSize: 15,
                           color: context.textPrimary,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 5),
                       Text(
                         DateFormat('MMM dd, yyyy').format(txn.createdAt),
                         style: TextStyle(
@@ -911,7 +1095,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                   '${isCredit ? '+' : '-'}₦${txn.amount.formatNumber()}',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    fontSize: 15,
+                    fontSize: 16,
                     color: color,
                   ),
                 ),
@@ -926,28 +1110,35 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
   Widget _buildEmptyTicketsCard(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
         color: context.cardBackground,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: Colors.black.withOpacity(0.05)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         children: [
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
               color: context.textSecondary.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(16),
             ),
-            child: Icon(Icons.confirmation_number_outlined, color: context.textSecondary, size: 32),
+            child: Icon(Icons.confirmation_number_outlined, color: context.textSecondary, size: 36),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 18),
           Text(
             'No active tickets',
             style: TextStyle(
               fontWeight: FontWeight.w600,
-              fontSize: 16,
+              fontSize: 17,
               color: context.textPrimary,
             ),
           ),
@@ -959,16 +1150,23 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
               color: context.textSecondary,
             ),
           ),
-          const SizedBox(height: 16),
-          Container(
-            decoration: BoxDecoration(
-              color: CoopvestColors.primary,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: TextButton(
-              onPressed: () {
-                Navigator.of(context).pushNamed('/create-ticket');
-              },
+          const SizedBox(height: 18),
+          GestureDetector(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [CoopvestColors.primary, CoopvestColors.primaryLight],
+                ),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: CoopvestColors.primary.withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
               child: const Text(
                 'Create a Ticket',
                 style: TextStyle(
@@ -989,25 +1187,32 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
       padding: const EdgeInsets.all(32),
       decoration: BoxDecoration(
         color: context.cardBackground,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: Colors.black.withOpacity(0.05)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         children: [
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
               color: context.textSecondary.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(16),
             ),
-            child: Icon(Icons.history, color: context.textSecondary, size: 32),
+            child: Icon(Icons.history, color: context.textSecondary, size: 36),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 18),
           Text(
             'No recent activity',
             style: TextStyle(
               fontWeight: FontWeight.w600,
-              fontSize: 16,
+              fontSize: 17,
               color: context.textPrimary,
             ),
           ),
