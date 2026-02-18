@@ -159,6 +159,7 @@ class TerminationApplicationScreen extends ConsumerWidget {
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w600,
+            color: CoopvestColors.textPrimary,
           ),
         ),
         const SizedBox(height: 4),
@@ -166,7 +167,7 @@ class TerminationApplicationScreen extends ConsumerWidget {
           'Please select the primary reason for leaving Coopvest',
           style: TextStyle(
             fontSize: 12,
-            color: CoopvestColors.textSecondary,
+            color: CoopvestColors.textPrimary,
           ),
         ),
         const SizedBox(height: 12),
