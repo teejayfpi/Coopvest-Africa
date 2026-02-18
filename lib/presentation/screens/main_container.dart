@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../config/theme_config.dart';
 import '../../config/theme_extension.dart';
 import '../providers/auth_provider.dart';
-import 'home/home_dashboard_screen.dart';
+import 'home/replicated_dashboard_screen.dart';
 import 'wallet/wallet_dashboard_screen.dart';
 import 'loan/loan_dashboard_screen.dart';
 import 'profile/profile_settings_screen.dart';
@@ -26,7 +26,7 @@ class _MainContainerState extends ConsumerState<MainContainer> {
     final userPhone = user?.phone ?? '';
 
     final List<Widget> _screens = [
-      const HomeDashboardScreen(),
+      const ReplicatedDashboardScreen(),
       WalletDashboardScreen(userId: userId, userName: userName),
       LoanDashboardScreen(userId: userId, userName: userName, userPhone: userPhone),
       const ProfileSettingsScreen(),
@@ -56,14 +56,14 @@ class _MainContainerState extends ConsumerState<MainContainer> {
           },
           type: BottomNavigationBarType.fixed,
           backgroundColor: context.cardBackground,
-          selectedItemColor: CoopvestColors.primary,
+          selectedItemColor: const Color(0xFF0D2141),
           unselectedItemColor: context.textSecondary,
           selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
           unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.normal, fontSize: 12),
           items: const [
             BottomNavigationBarItem(
-              icon: Icon(Icons.dashboard_outlined),
-              activeIcon: Icon(Icons.dashboard),
+              icon: Icon(Icons.home_outlined),
+              activeIcon: Icon(Icons.home),
               label: 'Home',
             ),
             BottomNavigationBarItem(
@@ -72,8 +72,8 @@ class _MainContainerState extends ConsumerState<MainContainer> {
               label: 'Wallet',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.payments_outlined),
-              activeIcon: Icon(Icons.payments),
+              icon: Icon(Icons.description_outlined),
+              activeIcon: Icon(Icons.description),
               label: 'Loans',
             ),
             BottomNavigationBarItem(

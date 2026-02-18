@@ -26,3 +26,6 @@ export 'membership/termination_application_screen.dart';
 // Note: Admin functionality has been removed from the mobile app.
 // All admin operations (loan approvals, rollover reviews, guarantor validation)
 // are now handled in the dedicated admin web portal at admin.coopvestafrica.org
+
+// Replicated Dashboard Screen
+export 'home/replicated_dashboard_screen.dart';
