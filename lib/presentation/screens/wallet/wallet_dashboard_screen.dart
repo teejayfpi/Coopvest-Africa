@@ -320,12 +320,15 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
             child: Icon(icon, color: CoopvestColors.primary),
           ),
           const SizedBox(height: 12),
-          Text(
-            label,
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              fontSize: 14,
-              color: context.textPrimary,
+          Flexible(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+                color: context.textPrimary,
+              ),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
