@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../config/theme_config.dart';
 import '../../config/theme_extension.dart';
 import '../providers/auth_provider.dart';
-import 'home/replicated_dashboard_screen.dart';
+import 'home/home_dashboard_screen.dart';
 import 'wallet/wallet_dashboard_screen.dart';
 import 'loan/loan_dashboard_screen.dart';
 import 'profile/profile_settings_screen.dart';
@@ -26,7 +26,7 @@ class _MainContainerState extends ConsumerState<MainContainer> {
     final userPhone = user?.phone ?? '';
 
     final List<Widget> _screens = [
-      const ReplicatedDashboardScreen(),
+      const HomeDashboardScreen(),
       WalletDashboardScreen(userId: userId, userName: userName),
       LoanDashboardScreen(userId: userId, userName: userName, userPhone: userPhone),
       const ProfileSettingsScreen(),
