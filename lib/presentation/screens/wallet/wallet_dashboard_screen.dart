@@ -30,6 +30,8 @@ class WalletDashboardScreen extends ConsumerStatefulWidget {
 }
 
 class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
+  bool _isBalanceHidden = false;
+
   @override
   void initState() {
     super.initState();
@@ -101,6 +103,8 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
 
   Widget _buildBalanceCard(BuildContext context, Wallet? wallet) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final displayBalance = _isBalanceHidden ? '••••••' : '₦${(wallet?.balance ?? 0).toStringAsFixed(2)}';
+    
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -137,7 +141,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    '₦${(wallet?.balance ?? 0).toStringAsFixed(2)}',
+                    displayBalance,
                     style: CoopvestTypography.displaySmall.copyWith(
                       color: isDarkMode ? context.textPrimary : Colors.white,
                       fontWeight: FontWeight.bold,
@@ -145,21 +149,36 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
                   ),
                 ],
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: isDarkMode ? CoopvestColors.primary.withOpacity(0.2) : Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.visibility_off, color: isDarkMode ? CoopvestColors.primary : Colors.white, size: 16),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Hide',
-                      style: TextStyle(color: isDarkMode ? CoopvestColors.primary : Colors.white, fontSize: 12),
-                    ),
-                  ],
+              GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _isBalanceHidden = !_isBalanceHidden;
+                  });
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: isDarkMode ? CoopvestColors.primary.withOpacity(0.2) : Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _isBalanceHidden ? Icons.visibility_off : Icons.visibility,
+                        color: isDarkMode ? CoopvestColors.primary : Colors.white,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        _isBalanceHidden ? 'Show' : 'Hide',
+                        style: TextStyle(
+                          color: isDarkMode ? CoopvestColors.primary : Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -179,7 +198,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '₦${(wallet?.availableForWithdrawal ?? 0).toStringAsFixed(2)}',
+                      _isBalanceHidden ? '••••••' : '₦${(wallet?.availableForWithdrawal ?? 0).toStringAsFixed(2)}',
                       style: TextStyle(
                         color: isDarkMode ? context.textPrimary : Colors.white,
                         fontWeight: FontWeight.bold,
@@ -203,7 +222,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '₦${(wallet?.pendingContributions ?? 0).toStringAsFixed(2)}',
+                      _isBalanceHidden ? '••••••' : '₦${(wallet?.pendingContributions ?? 0).toStringAsFixed(2)}',
                       style: TextStyle(
                         color: isDarkMode ? context.textPrimary : Colors.white,
                         fontWeight: FontWeight.bold,
