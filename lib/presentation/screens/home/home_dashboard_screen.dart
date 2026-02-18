@@ -21,6 +21,7 @@ import '../support/support_home_screen.dart';
 import '../support/ticket_list_screen.dart';
 import '../support/ticket_detail_screen.dart';
 import '../profile/profile_settings_screen.dart';
+import '../referral/referral_dashboard_screen.dart';
 import 'notifications_screen.dart';
 
 /// Main Home Dashboard Screen - Premium Enhanced Version
@@ -640,7 +641,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> with 
     final quickActions = [
       {'label': 'Loans', 'icon': Icons.payments, 'color': const Color(0xFF1565C0), 'route': () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => LoanDashboardScreen(userId: userId, userName: userName, userPhone: '')))},
       {'label': 'Deposit', 'icon': Icons.add_circle, 'color': CoopvestColors.success, 'route': () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => DepositScreen(userId: userId)))},
-      {'label': 'Referral', 'icon': Icons.share, 'color': const Color(0xFF5D4037), 'route': () => {}},
+      {'label': 'Referral', 'icon': Icons.share, 'color': const Color(0xFF5D4037), 'route': () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const ReferralDashboardScreen()))},
       {'label': 'Support', 'icon': Icons.headset_mic, 'color': const Color(0xFF7B1FA2), 'route': () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const SupportHomeScreen()))},
     ];
 
