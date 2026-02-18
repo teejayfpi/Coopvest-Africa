@@ -106,7 +106,9 @@ class TerminationApplicationScreen extends ConsumerWidget {
                   ),
                 ),
                 Text(
-                  user?.id.substring(0, 8).toUpperCase() ?? '',
+                  user?.id != null && user!.id.length >= 8
+                      ? user.id.substring(0, 8).toUpperCase()
+                      : (user?.id ?? '').toUpperCase(),
                   style: const TextStyle(
                     fontSize: 12,
                     color: CoopvestColors.textSecondary,
