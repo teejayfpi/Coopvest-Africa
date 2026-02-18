@@ -529,7 +529,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
             Text(
-              'ID: ${widget.userId.substring(0, 8).toUpperCase()}',
+              'ID: ${widget.userId.length >= 8 ? widget.userId.substring(0, 8).toUpperCase() : widget.userId.toUpperCase()}',
               style: const TextStyle(color: CoopvestColors.mediumGray),
             ),
           ],

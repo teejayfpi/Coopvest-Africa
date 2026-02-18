@@ -900,7 +900,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> with 
                       ),
                       const SizedBox(height: 5),
                       Text(
-                        'ID: ${ticket.id.substring(0, 8).toUpperCase()}',
+                        'ID: ${ticket.id.length >= 8 ? ticket.id.substring(0, 8).toUpperCase() : ticket.id.toUpperCase()}',
                         style: TextStyle(
                           fontSize: 12,
                           color: context.textSecondary,
