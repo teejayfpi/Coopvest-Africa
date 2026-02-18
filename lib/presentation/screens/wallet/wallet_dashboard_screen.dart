@@ -52,7 +52,11 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
       backgroundColor: context.scaffoldBackground,
       appBar: AppBar(
         elevation: 0,
-        title: const Text('My Wallet'),
+        backgroundColor: context.scaffoldBackground,
+        title: Text(
+          'My Wallet',
+          style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold),
+        ),
         automaticallyImplyLeading: false,
         actions: [
           IconButton(
@@ -65,37 +69,90 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
         ],
       ),
       body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: () async {
-            await ref.read(walletProvider.notifier).loadWallet();
-            await ref.read(walletProvider.notifier).loadTransactions();
-          },
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Balance Card
-                _buildBalanceCard(context, wallet),
-                
-                const SizedBox(height: 24),
+        child: _buildBody(context, walletState, wallet, savingsGoals, recentTransactions),
+      ),
+    );
+  }
 
-                // Quick Actions
-                _buildQuickActions(context),
-                
-                const SizedBox(height: 24),
+  Widget _buildBody(
+    BuildContext context,
+    WalletState walletState,
+    Wallet? wallet,
+    List<SavingsGoal> savingsGoals,
+    List<Transaction> recentTransactions,
+  ) {
+    if (walletState.isLoading && wallet == null) {
+      return const Center(
+        child: CircularProgressIndicator(color: CoopvestColors.primary),
+      );
+    }
 
-                // Savings Goals Section
-                _buildSavingsGoalsSection(context, ref, savingsGoals),
-                
-                const SizedBox(height: 24),
-
-                // Recent Transactions
-                _buildRecentTransactions(context, ref, recentTransactions),
-              ],
-            ),
+    if (walletState.status == WalletStatus.error && wallet == null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 64, color: CoopvestColors.error),
+              const SizedBox(height: 16),
+              Text(
+                'Failed to load wallet data',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: context.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                walletState.error ?? 'An unexpected error occurred',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: context.textSecondary),
+              ),
+              const SizedBox(height: 24),
+              PrimaryButton(
+                label: 'Retry',
+                onPressed: () {
+                  ref.read(walletProvider.notifier).loadWallet();
+                  ref.read(walletProvider.notifier).loadTransactions();
+                },
+              ),
+            ],
           ),
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: () async {
+        await ref.read(walletProvider.notifier).loadWallet();
+        await ref.read(walletProvider.notifier).loadTransactions();
+      },
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Balance Card
+            _buildBalanceCard(context, wallet),
+            
+            const SizedBox(height: 24),
+
+            // Quick Actions
+            _buildQuickActions(context),
+            
+            const SizedBox(height: 24),
+
+            // Savings Goals Section
+            _buildSavingsGoalsSection(context, ref, savingsGoals),
+            
+            const SizedBox(height: 24),
+
+            // Recent Transactions
+            _buildRecentTransactions(context, ref, recentTransactions),
+          ],
         ),
       ),
     );
@@ -422,7 +479,6 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
                           backgroundColor: context.dividerColor,
                           valueColor: const AlwaysStoppedAnimation<Color>(CoopvestColors.primary),
                           minHeight: 8,
-                          borderRadius: BorderRadius.circular(4),
                         ),
                         const SizedBox(height: 12),
                         Text(
