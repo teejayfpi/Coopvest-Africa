@@ -366,32 +366,52 @@ class MembershipScreen extends ConsumerWidget {
                   'Request to close your membership',
                   style: TextStyle(fontSize: 12),
                 ),
-                trailing: const Icon(
-                  Icons.chevron_right,
-                  color: CoopvestColors.lightGray,
-                ),
+                trailing: isLoading
+                    ? SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            CoopvestColors.primary.withOpacity(0.7),
+                          ),
+                        ),
+                      )
+                    : const Icon(
+                        Icons.chevron_right,
+                        color: CoopvestColors.lightGray,
+                      ),
                 onTap: isLoading
                     ? null
                     : () {
+                        _showLoadingDialog(context);
                         ref
                             .read(terminationProvider.notifier)
                             .checkEligibility()
                             .then((eligibility) {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  const TerminationInfoScreen(),
-                            ),
-                          );
+                          Navigator.of(context).pop(); // Close loading dialog
+                          if (context.mounted) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const TerminationInfoScreen(),
+                              ),
+                            );
+                          }
+                        }).catchError((error) {
+                          Navigator.of(context).pop(); // Close loading dialog
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Error: $error'),
+                                backgroundColor: CoopvestColors.error,
+                              ),
+                            );
+                          }
                         });
                       },
               ),
-              if (isLoading)
-                const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: LinearProgressIndicator(),
-                ),
             ],
           ),
         ),
@@ -400,6 +420,66 @@ class MembershipScreen extends ConsumerWidget {
           _buildEligibilityWarnings(eligibility, context),
         ],
       ],
+    );
+  }
+
+  void _showLoadingDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        child: Center(
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: context.cardBackground,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.15),
+                  blurRadius: 20,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 60,
+                  height: 60,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 3,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      CoopvestColors.primary,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'Checking Eligibility',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: context.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Please wait while we verify your account...',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: context.textSecondary,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
