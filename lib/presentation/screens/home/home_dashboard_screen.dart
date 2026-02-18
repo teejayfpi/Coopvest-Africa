@@ -23,6 +23,7 @@ import '../support/ticket_detail_screen.dart';
 import '../profile/profile_settings_screen.dart';
 import '../referral/referral_dashboard_screen.dart';
 import 'notifications_screen.dart';
+import 'package:fl_chart/fl_chart.dart';
 
 /// Main Home Dashboard Screen - Premium Enhanced Version
 class HomeDashboardScreen extends ConsumerStatefulWidget {
@@ -111,6 +112,12 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> with 
                     _buildStatsRow(wallet, context, userId, userName),
                     const SizedBox(height: 24),
                     _buildQuickActionsGrid(context, userId, userName),
+                    const SizedBox(height: 24),
+                    _buildInsightsSection(context, walletState),
+                    const SizedBox(height: 24),
+                    _buildLoanStatusSection(context),
+                    const SizedBox(height: 24),
+                    _buildNotificationsSection(context),
                     const SizedBox(height: 24),
                     _buildRolloverBanner(context),
                     const SizedBox(height: 24),
@@ -349,7 +356,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> with 
                         'Total Balance',
                         style: TextStyle(
                           fontSize: 14,
-                          color: Colors.white.withOpacity(0.85),
+                          color: Colors.white.withOpacity(0.75),
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -713,18 +720,18 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> with 
                 child: Icon(icon, color: color, size: 26),
               ),
               const SizedBox(height: 10),
-	              Flexible(
-	                child: Text(
-	                  label,
-	                  textAlign: TextAlign.center,
-	                  overflow: TextOverflow.ellipsis,
-	                  style: TextStyle(
-	                    color: context.textPrimary,
-	                    fontWeight: FontWeight.w600,
-	                    fontSize: 12,
-	                  ),
-	                ),
-	              ),
+              Flexible(
+                child: Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: context.textPrimary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -755,6 +762,375 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> with 
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildInsightsSection(BuildContext context, WalletState walletState) {
+    final transactions = walletState.transactions;
+    
+    // Generate chart data from transactions (last 6 months)
+    List<FlSpot> chartData = [];
+    for (int i = 0; i < 6; i++) {
+      final amount = (transactions.length > i) ? transactions[i].amount : 0.0;
+      chartData.add(FlSpot(i.toDouble(), amount / 1000)); // Normalize for chart
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: context.cardBackground,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        border: Border.all(color: Colors.black.withOpacity(0.05)),
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Insights',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: context.textPrimary,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: CoopvestColors.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  'Contributions',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: CoopvestColors.primary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            height: 200,
+            child: LineChart(
+              LineChartData(
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  horizontalInterval: 5,
+                  getDrawingHorizontalLine: (value) {
+                    return FlLine(
+                      color: Colors.grey.withOpacity(0.1),
+                      strokeWidth: 1,
+                    );
+                  },
+                ),
+                titlesData: FlTitlesData(
+                  show: true,
+                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      getTitlesWidget: (value, meta) {
+                        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
+                        if (value.toInt() < months.length) {
+                          return Text(
+                            months[value.toInt()],
+                            style: TextStyle(
+                              color: context.textSecondary,
+                              fontSize: 12,
+                            ),
+                          );
+                        }
+                        return const Text('');
+                      },
+                    ),
+                  ),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      getTitlesWidget: (value, meta) {
+                        return Text(
+                          '₦${value.toInt()}k',
+                          style: TextStyle(
+                            color: context.textSecondary,
+                            fontSize: 11,
+                          ),
+                        );
+                      },
+                      reservedSize: 40,
+                    ),
+                  ),
+                ),
+                borderData: FlBorderData(
+                  show: false,
+                ),
+                lineBarsData: [
+                  LineChartBarData(
+                    spots: chartData.isEmpty ? [FlSpot(0, 0)] : chartData,
+                    isCurved: true,
+                    gradient: LinearGradient(
+                      colors: [CoopvestColors.primary, CoopvestColors.primaryLight],
+                    ),
+                    barWidth: 3,
+                    isStrokeCapRound: true,
+                    dotData: FlDotData(
+                      show: true,
+                      getDotPainter: (spot, percent, barData, index) {
+                        return FlDotCirclePainter(
+                          radius: 4,
+                          color: CoopvestColors.primary,
+                          strokeWidth: 2,
+                          strokeColor: Colors.white,
+                        );
+                      },
+                    ),
+                    belowBarData: BarAreaData(
+                      show: true,
+                      gradient: LinearGradient(
+                        colors: [
+                          CoopvestColors.primary.withOpacity(0.3),
+                          CoopvestColors.primary.withOpacity(0.0),
+                        ],
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoanStatusSection(BuildContext context) {
+    final loanState = ref.watch(loanProvider);
+    final pendingLoans = loanState.loans.where((l) => l.status == 'pending').length;
+    final approvedLoans = loanState.loans.where((l) => l.status == 'approved').length;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: context.cardBackground,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        border: Border.all(color: Colors.black.withOpacity(0.05)),
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Loan Status',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: context.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _buildLoanStatusCard(
+                  'Pending Approval',
+                  '$pendingLoans',
+                  Icons.schedule,
+                  Colors.orange,
+                  context,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildLoanStatusCard(
+                  'Approved',
+                  '$approvedLoans',
+                  Icons.check_circle,
+                  CoopvestColors.success,
+                  context,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoanStatusCard(String title, String value, IconData icon, Color color, BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            color.withOpacity(0.1),
+            color.withOpacity(0.05),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: color, size: 22),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: context.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 13,
+              color: context.textSecondary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNotificationsSection(BuildContext context) {
+    final notifications = [
+      {'icon': Icons.lightbulb_outline, 'title': '5 Tips for Better Financial Planning', 'time': '2h ago', 'color': Colors.amber},
+      {'icon': Icons.info_outline, 'title': 'Your loan has been approved', 'time': '1d ago', 'color': CoopvestColors.success},
+    ];
+
+    return Container(
+      decoration: BoxDecoration(
+        color: context.cardBackground,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        border: Border.all(color: Colors.black.withOpacity(0.05)),
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Notifications',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: context.textPrimary,
+                ),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+                  );
+                },
+                child: Text(
+                  'View All',
+                  style: TextStyle(
+                    color: CoopvestColors.primary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...notifications.map((notif) => _buildNotificationItem(
+            notif['icon'] as IconData,
+            notif['title'] as String,
+            notif['time'] as String,
+            notif['color'] as Color,
+            context,
+          )),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNotificationItem(IconData icon, String title, String time, Color color, BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: context.textPrimary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  time,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: context.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -911,17 +1287,19 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> with 
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.14),
+                    gradient: LinearGradient(
+                      colors: [CoopvestColors.primary.withOpacity(0.8), CoopvestColors.primaryLight],
+                    ),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    ticket.status.toUpperCase(),
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: statusColor,
+                    '${ticket.status.toUpperCase()}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: Colors.white,
                     ),
                   ),
                 ),
