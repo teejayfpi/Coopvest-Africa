@@ -156,7 +156,9 @@ class _BankAccountsScreenState extends ConsumerState<BankAccountsScreen> {
                           ),
                           title: Row(
                             children: [
-                              Text(account['bankName'], style: const TextStyle(fontWeight: FontWeight.w600)),
+                              Expanded(
+                                child: Text(account['bankName'], style: const TextStyle(fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+                              ),
                               if (account['isPrimary']) ...[
                                 const SizedBox(width: 8),
                                 Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: CoopvestColors.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(4)), child: const Text('Primary', style: TextStyle(fontSize: 10, color: CoopvestColors.primary, fontWeight: FontWeight.w600))),
