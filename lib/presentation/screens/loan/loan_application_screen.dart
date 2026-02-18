@@ -347,27 +347,30 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
                           final value = entry.value;
                           return DropdownMenuItem(
                             value: key,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  key,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: CoopvestTypography.bodyMedium.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 12,
+                            child: SizedBox(
+                              width: double.maxFinite,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    key,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: CoopvestTypography.bodyMedium.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 12,
+                                    ),
                                   ),
-                                ),
-                                Text(
-                                  '${value['duration']}m @ ${value['interest']}% interest',
-                                  overflow: TextOverflow.ellipsis,
-                                  style: CoopvestTypography.bodySmall.copyWith(
-                                    color: CoopvestColors.mediumGray,
-                                    fontSize: 9,
+                                  Text(
+                                    '${value['duration']}m @ ${value['interest']}% interest',
+                                    overflow: TextOverflow.ellipsis,
+                                    style: CoopvestTypography.bodySmall.copyWith(
+                                      color: CoopvestColors.mediumGray,
+                                      fontSize: 9,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           );
                         }).toList(),
