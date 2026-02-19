@@ -1,48 +1,23 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/services/logger_service.dart';
 import '../../data/api/loan_api_service.dart';
+import '../../data/models/loan_models.dart';
 import '../../data/repositories/auth_repository.dart';
 
-class LoanState {
-  final List<dynamic> loans;
-  final LoanStatus status;
-  final String? error;
-
-  LoanState({
-    this.loans = const [],
-    this.status = LoanStatus.initial,
-    this.error,
-  });
-
-  LoanState copyWith({
-    List<dynamic>? loans,
-    LoanStatus? status,
-    String? error,
-  }) {
-    return LoanState(
-      loans: loans ?? this.loans,
-      status: status ?? this.status,
-      error: error ?? this.error,
-    );
-  }
-}
-
-enum LoanStatus { initial, loading, success, error }
-
 /// Loan Provider - Uses official ApiClient through Riverpod
-final loanProvider = StateNotifierProvider<LoanNotifier, LoanState>((ref) {
+final loanProvider = StateNotifierProvider<LoanNotifier, LoansState>((ref) {
   final authRepository = ref.watch(authRepositoryProvider);
   final loanApiService = ref.watch(loanApiServiceProvider);
   return LoanNotifier(authRepository, loanApiService);
 });
 
 /// Loan Notifier
-class LoanNotifier extends StateNotifier<LoanState> {
+class LoanNotifier extends StateNotifier<LoansState> {
   final AuthRepository _authRepository;
   final LoanApiService _loanApiService;
 
   LoanNotifier(this._authRepository, this._loanApiService)
-      : super(LoanState());
+      : super(const LoansState());
 
   /// Apply for a loan
   Future<void> applyForLoan({
@@ -65,7 +40,7 @@ class LoanNotifier extends StateNotifier<LoanState> {
 
       if (response.success && response.loan != null) {
         state = state.copyWith(
-          status: LoanStatus.success,
+          status: LoanStatus.loaded,
           loans: [...state.loans, response.loan!],
         );
       } else {
@@ -92,7 +67,7 @@ class LoanNotifier extends StateNotifier<LoanState> {
 
       if (response.success) {
         state = state.copyWith(
-          status: LoanStatus.success,
+          status: LoanStatus.loaded,
           loans: response.loans,
         );
       } else {
