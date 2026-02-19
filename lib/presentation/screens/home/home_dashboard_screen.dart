@@ -50,132 +50,135 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FB),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            // Dark Header Section
-            _buildHeader(context, userName, membershipId),
-            
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Overlapping Stats Cards
-                  Transform.translate(
-                    offset: const Offset(0, -30),
-                    child: Row(
+      body: SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            children: [
+              // Dark Header Section
+              _buildHeader(context, userName, membershipId),
+              
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Overlapping Stats Cards
+                    Transform.translate(
+                      offset: const Offset(0, -30),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: _buildStatCard(
+                              'Wallet Balance',
+                              '\u20a6${walletBalance.formatNumber()}',
+                              Icons.account_balance_wallet_outlined,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildStatCard(
+                              'Contributions',
+                              '\u20a6${totalContributions.formatNumber()}',
+                              Icons.savings_outlined,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildStatCard(
+                              'Loans',
+                              '\u20a6${activeLoans.formatNumber()}',
+                              Icons.monetization_on_outlined,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    
+                    // Quick Actions Grid
+                    GridView.count(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      crossAxisCount: 4,
+                      mainAxisSpacing: 12,
+                      crossAxisSpacing: 12,
+                      childAspectRatio: 0.85,
                       children: [
-                        Expanded(
-                          child: _buildStatCard(
-                            'Wallet Balance',
-                            '₦${walletBalance.formatNumber()}',
-                            Icons.account_balance_wallet_outlined,
-                          ),
+                        _buildActionButton(
+                          'Make Contribution',
+                          Icons.payments_outlined,
+                          () => Navigator.push(context, MaterialPageRoute(builder: (context) => DepositScreen(userId: user?.id ?? ''))),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _buildStatCard(
-                            'Contributions',
-                            '₦${totalContributions.formatNumber()}',
-                            Icons.savings_outlined,
-                          ),
+                        _buildActionButton(
+                          'Apply for Loan',
+                          Icons.description_outlined,
+                          () => Navigator.push(context, MaterialPageRoute(builder: (context) => LoanDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? '', userPhone: ''))),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _buildStatCard(
-                            'Loans',
-                            '₦${activeLoans.formatNumber()}',
-                            Icons.monetization_on_outlined,
-                          ),
+                        _buildActionButton(
+                          'Referral',
+                          Icons.share_outlined,
+                          () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ReferralDashboardScreen())),
+                        ),
+                        _buildActionButton(
+                          'Download Statements',
+                          Icons.assignment_outlined,
+                          () => Navigator.push(context, MaterialPageRoute(builder: (context) => WalletDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? ''))),
                         ),
                       ],
                     ),
-                  ),
-                  
-                  // Quick Actions Grid
-                  GridView.count(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    crossAxisCount: 4,
-                    mainAxisSpacing: 12,
-                    crossAxisSpacing: 12,
-                    childAspectRatio: 0.85,
-                    children: [
-                      _buildActionButton(
-                        'Make Contribution',
-                        Icons.payments_outlined,
-                        () => Navigator.push(context, MaterialPageRoute(builder: (context) => DepositScreen(userId: user?.id ?? ''))),
-                      ),
-                      _buildActionButton(
-                        'Apply for Loan',
-                        Icons.description_outlined,
-                        () => Navigator.push(context, MaterialPageRoute(builder: (context) => LoanDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? '', userPhone: ''))),
-                      ),
-                      _buildActionButton(
-                        'Referral',
-                        Icons.share_outlined,
-                        () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ReferralDashboardScreen())),
-                      ),
-                      _buildActionButton(
-                        'Download Statements',
-                        Icons.assignment_outlined,
-                        () => Navigator.push(context, MaterialPageRoute(builder: (context) => WalletDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? ''))),
-                      ),
-                    ],
-                  ),
-                  
-                  const SizedBox(height: 24),
-                  
-                  // Insights & Loan Status Row
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Insights Chart
-                      Expanded(
-                        flex: 3,
-                        child: _buildInsightsCard(walletState),
-                      ),
-                      const SizedBox(width: 12),
-                      // Loan Status
-                      Expanded(
-                        flex: 2,
-                        child: _buildLoanStatusCard(loansState),
-                      ),
-                    ],
-                  ),
-                  
-                  const SizedBox(height: 24),
-                  
-                  // Notifications Section
-                  const Text(
-                    'Notifications',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF1A1A1A),
+                    
+                    const SizedBox(height: 24),
+                    
+                    // Insights & Loan Status Row
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Insights Chart
+                        Expanded(
+                          flex: 3,
+                          child: _buildInsightsCard(walletState),
+                        ),
+                        const SizedBox(width: 12),
+                        // Loan Status
+                        Expanded(
+                          flex: 2,
+                          child: _buildLoanStatusCard(loansState),
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  _buildNotificationItem(
-                    'Your loan has been approved',
-                    '2h ago',
-                    Icons.notifications_outlined,
-                    const Color(0xFF8D6E63),
-                  ),
-                  const SizedBox(height: 12),
-                  _buildNotificationItem(
-                    '5 Tips for Better Financial Planning',
-                    '',
-                    Icons.lightbulb_outline,
-                    const Color(0xFF8D6E63),
-                  ),
-                  
-                  const SizedBox(height: 80), // Space for bottom nav
-                ],
+                    
+                    const SizedBox(height: 24),
+                    
+                    // Notifications Section
+                    const Text(
+                      'Notifications',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1A1A1A),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _buildNotificationItem(
+                      'Your loan has been approved',
+                      '2h ago',
+                      Icons.notifications_outlined,
+                      CoopvestColors.primary,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildNotificationItem(
+                      '5 Tips for Better Financial Planning',
+                      '',
+                      Icons.lightbulb_outline,
+                      CoopvestColors.primary,
+                    ),
+                    
+                    const SizedBox(height: 80), // Space for bottom nav
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
       bottomNavigationBar: _buildBottomNav(),
@@ -185,9 +188,9 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
   Widget _buildHeader(BuildContext context, String name, String membershipId) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.only(top: 60, left: 20, right: 20, bottom: 60),
+      padding: const EdgeInsets.only(top: 40, left: 20, right: 20, bottom: 50),
       decoration: const BoxDecoration(
-        color: Color(0xFF0D2141), // Deep navy blue
+        color: CoopvestColors.primary, // Coopvest Green
         borderRadius: BorderRadius.only(
           bottomLeft: Radius.circular(30),
           bottomRight: Radius.circular(30),
@@ -203,7 +206,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                 'Welcome back,',
                 style: TextStyle(
                   color: Colors.white.withOpacity(0.8),
-                  fontSize: 24,
+                  fontSize: 20,
                   fontWeight: FontWeight.w400,
                 ),
               ),
@@ -211,7 +214,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                 name,
                 style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 28,
+                  fontSize: 24,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -226,7 +229,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
             ],
           ),
           const CircleAvatar(
-            radius: 35,
+            radius: 30,
             backgroundColor: Colors.white24,
             backgroundImage: NetworkImage('https://i.pravatar.cc/150?u=teejay'),
           ),
@@ -251,7 +254,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
       ),
       child: Column(
         children: [
-          Icon(icon, color: const Color(0xFF8D6E63), size: 28),
+          Icon(icon, color: CoopvestColors.primary, size: 28),
           const SizedBox(height: 8),
           Text(
             title,
@@ -289,7 +292,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: const Color(0xFF8D6E63), size: 28),
+            Icon(icon, color: CoopvestColors.primary, size: 28),
             const SizedBox(height: 8),
             Text(
               label,
@@ -376,7 +379,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                       FlSpot(5, 70),
                     ],
                     isCurved: true,
-                    color: const Color(0xFF8D6E63),
+                    color: CoopvestColors.primary,
                     barWidth: 3,
                     isStrokeCapRound: true,
                     dotData: const FlDotData(show: false),
@@ -428,9 +431,9 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          const Align(
+          Align(
             alignment: Alignment.bottomRight,
-            child: Icon(Icons.access_time, color: Color(0xFF8D6E63), size: 32),
+            child: Icon(Icons.access_time, color: CoopvestColors.primary, size: 32),
           ),
         ],
       ),
@@ -507,7 +510,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
       child: BottomNavigationBar(
         currentIndex: 0,
         type: BottomNavigationBarType.fixed,
-        selectedItemColor: const Color(0xFF0D2141),
+        selectedItemColor: CoopvestColors.primary,
         unselectedItemColor: Colors.black45,
         showSelectedLabels: true,
         showUnselectedLabels: true,
