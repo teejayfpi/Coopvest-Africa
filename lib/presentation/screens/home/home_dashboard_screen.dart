@@ -40,7 +40,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
     final loansState = ref.watch(loanProvider);
     
     final userName = user?.name.split(' ').first ?? 'User';
-    final membershipId = user?.id.substring(0, 6) ?? '567890';
+    final membershipId = user?.id.substring(0, 6) ?? 'N/A';
     
     final walletBalance = wallet?.balance ?? 0.0;
     final totalContributions = wallet?.totalContributions ?? 0.0;
@@ -50,147 +50,152 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FB),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            children: [
-              // Dark Header Section
-              _buildHeader(context, userName, membershipId),
-              
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Overlapping Stats Cards
-                    Transform.translate(
-                      offset: const Offset(0, -30),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: _buildStatCard(
-                              'Wallet Balance',
-                              '\u20a6${walletBalance.formatNumber()}',
-                              Icons.account_balance_wallet_outlined,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _buildStatCard(
-                              'Contributions',
-                              '\u20a6${totalContributions.formatNumber()}',
-                              Icons.savings_outlined,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _buildStatCard(
-                              'Loans',
-                              '\u20a6${activeLoans.formatNumber()}',
-                              Icons.monetization_on_outlined,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    
-                    // Quick Actions Grid
-                    GridView.count(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      crossAxisCount: 4,
-                      mainAxisSpacing: 12,
-                      crossAxisSpacing: 12,
-                      childAspectRatio: 0.85,
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            // Dark Header Section
+            _buildHeader(context, userName, membershipId, user?.name ?? 'User'),
+            
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Overlapping Stats Cards
+                  Transform.translate(
+                    offset: const Offset(0, -30),
+                    child: Column(
                       children: [
-                        _buildActionButton(
-                          'Make Contribution',
-                          Icons.payments_outlined,
-                          () => Navigator.push(context, MaterialPageRoute(builder: (context) => DepositScreen(userId: user?.id ?? ''))),
-                        ),
-                        _buildActionButton(
-                          'Apply for Loan',
-                          Icons.description_outlined,
-                          () => Navigator.push(context, MaterialPageRoute(builder: (context) => LoanDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? '', userPhone: ''))),
-                        ),
-                        _buildActionButton(
-                          'Referral',
-                          Icons.share_outlined,
-                          () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ReferralDashboardScreen())),
-                        ),
-                        _buildActionButton(
-                          'Download Statements',
-                          Icons.assignment_outlined,
-                          () => Navigator.push(context, MaterialPageRoute(builder: (context) => WalletDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? ''))),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: _buildStatCard(
+                                'Wallet Balance',
+                                '\u20a6${walletBalance.formatNumber()}',
+                                Icons.account_balance_wallet_outlined,
+                                () => Navigator.push(context, MaterialPageRoute(builder: (context) => WalletDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? ''))),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _buildStatCard(
+                                'Contributions',
+                                '\u20a6${totalContributions.formatNumber()}',
+                                Icons.savings_outlined,
+                                () => Navigator.push(context, MaterialPageRoute(builder: (context) => WalletDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? ''))),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _buildStatCard(
+                                'Loans',
+                                '\u20a6${activeLoans.formatNumber()}',
+                                Icons.monetization_on_outlined,
+                                () => Navigator.push(context, MaterialPageRoute(builder: (context) => LoanDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? '', userPhone: user?.phone ?? ''))),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                    
-                    const SizedBox(height: 24),
-                    
-                    // Insights & Loan Status Row
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Insights Chart
-                        Expanded(
-                          flex: 3,
-                          child: _buildInsightsCard(walletState),
-                        ),
-                        const SizedBox(width: 12),
-                        // Loan Status
-                        Expanded(
-                          flex: 2,
-                          child: _buildLoanStatusCard(loansState),
-                        ),
-                      ],
-                    ),
-                    
-                    const SizedBox(height: 24),
-                    
-                    // Notifications Section
-                    const Text(
-                      'Notifications',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF1A1A1A),
+                  ),
+                  
+                  // Quick Actions Grid
+                  GridView.count(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    crossAxisCount: 4,
+                    mainAxisSpacing: 12,
+                    crossAxisSpacing: 12,
+                    childAspectRatio: 0.85,
+                    children: [
+                      _buildActionButton(
+                        'Make Contribution',
+                        Icons.payments_outlined,
+                        () => Navigator.push(context, MaterialPageRoute(builder: (context) => DepositScreen(userId: user?.id ?? ''))),
                       ),
+                      _buildActionButton(
+                        'Apply for Loan',
+                        Icons.description_outlined,
+                        () => Navigator.push(context, MaterialPageRoute(builder: (context) => LoanDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? '', userPhone: user?.phone ?? ''))),
+                      ),
+                      _buildActionButton(
+                        'Referral',
+                        Icons.share_outlined,
+                        () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ReferralDashboardScreen())),
+                      ),
+                      _buildActionButton(
+                        'Download Statements',
+                        Icons.assignment_outlined,
+                        () => Navigator.push(context, MaterialPageRoute(builder: (context) => WalletDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? ''))),
+                      ),
+                    ],
+                  ),
+                  
+                  const SizedBox(height: 24),
+                  
+                  // Insights & Loan Status Row
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Insights Chart
+                      Expanded(
+                        flex: 3,
+                        child: _buildInsightsCard(walletState),
+                      ),
+                      const SizedBox(width: 12),
+                      // Loan Status
+                      Expanded(
+                        flex: 2,
+                        child: _buildLoanStatusCard(loansState),
+                      ),
+                    ],
+                  ),
+                  
+                  const SizedBox(height: 24),
+                  
+                  // Notifications Section
+                  const Text(
+                    'Notifications',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1A1A1A),
                     ),
-                    const SizedBox(height: 12),
-                    _buildNotificationItem(
-                      'Your loan has been approved',
-                      '2h ago',
-                      Icons.notifications_outlined,
-                      CoopvestColors.primary,
-                    ),
-                    const SizedBox(height: 12),
-                    _buildNotificationItem(
-                      '5 Tips for Better Financial Planning',
-                      '',
-                      Icons.lightbulb_outline,
-                      CoopvestColors.primary,
-                    ),
-                    
-                    const SizedBox(height: 80), // Space for bottom nav
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 12),
+                  _buildNotificationItem(
+                    'Your loan has been approved',
+                    '2h ago',
+                    Icons.notifications_outlined,
+                    CoopvestColors.primary,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildNotificationItem(
+                    '5 Tips for Better Financial Planning',
+                    '',
+                    Icons.lightbulb_outline,
+                    CoopvestColors.primary,
+                  ),
+                  
+                  const SizedBox(height: 24),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
       bottomNavigationBar: _buildBottomNav(),
     );
   }
 
-  Widget _buildHeader(BuildContext context, String name, String membershipId) {
+  Widget _buildHeader(BuildContext context, String name, String membershipId, String fullName) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.only(top: 40, left: 20, right: 20, bottom: 50),
       decoration: const BoxDecoration(
-        color: CoopvestColors.primary, // Coopvest Green
+        color: CoopvestColors.primary,
         borderRadius: BorderRadius.only(
           bottomLeft: Radius.circular(30),
           bottomRight: Radius.circular(30),
@@ -220,7 +225,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Membership ID: $membershipId',
+                'Member ID: $membershipId',
                 style: TextStyle(
                   color: Colors.white.withOpacity(0.6),
                   fontSize: 14,
@@ -228,53 +233,73 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
               ),
             ],
           ),
-          const CircleAvatar(
+          // Use initials as profile picture since no profile picture field exists
+          CircleAvatar(
             radius: 30,
             backgroundColor: Colors.white24,
-            backgroundImage: NetworkImage('https://i.pravatar.cc/150?u=teejay'),
+            child: Text(
+              _getInitials(fullName),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildStatCard(String title, String value, IconData icon) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: CoopvestColors.primary, size: 28),
-          const SizedBox(height: 8),
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 11,
-              color: Colors.black54,
-              fontWeight: FontWeight.w500,
+  String _getInitials(String name) {
+    if (name.isEmpty) return 'U';
+    final parts = name.trim().split(' ');
+    if (parts.length >= 2) {
+      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+  }
+
+  Widget _buildStatCard(String title, String value, IconData icon, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
+          ],
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: CoopvestColors.primary, size: 28),
+            const SizedBox(height: 8),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 11,
+                color: Colors.black54,
+                fontWeight: FontWeight.w500,
+              ),
+              textAlign: TextAlign.center,
             ),
-          ),
-        ],
+            const SizedBox(height: 4),
+            Text(
+              value,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -397,45 +422,50 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
   Widget _buildLoanStatusCard(LoansState loansState) {
     final pendingLoan = loansState.loans.any((l) => l.status == 'under_review' || l.status == 'pending_guarantors');
     
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Loan Status',
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.black87,
-              fontWeight: FontWeight.w500,
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(context, MaterialPageRoute(builder: (context) => LoanDashboardScreen(userId: loansState.loans.isNotEmpty ? loansState.loans.first.userId : '', userName: '', userPhone: '')));
+      },
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            pendingLoan ? 'Pending\nApproval' : 'No Active\nApplications',
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF1A1A1A),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Loan Status',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.black87,
+                fontWeight: FontWeight.w500,
+              ),
             ),
-          ),
-          const SizedBox(height: 12),
-          Align(
-            alignment: Alignment.bottomRight,
-            child: Icon(Icons.access_time, color: CoopvestColors.primary, size: 32),
-          ),
-        ],
+            const SizedBox(height: 12),
+            Text(
+              pendingLoan ? 'Pending\nApproval' : 'No Active\nApplications',
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1A1A1A),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.bottomRight,
+              child: Icon(Icons.access_time, color: CoopvestColors.primary, size: 32),
+            ),
+          ],
+        ),
       ),
     );
   }
