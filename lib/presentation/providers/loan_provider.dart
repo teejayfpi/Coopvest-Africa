@@ -9,6 +9,7 @@ Loan _convertLoanDataToLoan(LoanData data) {
   return Loan(
     id: data.id,
     userId: data.userId,
+    type: data.loanType,
     amount: data.amount,
     tenure: data.tenure,
     interestRate: data.interestRate,

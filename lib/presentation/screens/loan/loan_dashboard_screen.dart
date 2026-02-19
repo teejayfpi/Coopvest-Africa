@@ -4,7 +4,7 @@ import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/utils/utils.dart' hide NumExtension;
 import '../../../core/extensions/number_extensions.dart';
-import '../../../data/models/loan_models.dart' hide LoanStatus;
+import '../../../data/models/loan_models.dart';
 import '../../../presentation/providers/loan_provider.dart';
 import '../../../presentation/widgets/common/buttons.dart';
 import '../../../presentation/widgets/common/cards.dart';
@@ -87,7 +87,7 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
                     Expanded(
                       child: _buildStatCard(
                         'Total Borrowed',
-                        '₦${(_quickStats['totalBorrowed'] as num).toDouble().toStringAsFixed(0)}',
+                        '\u20a6${(_quickStats['totalBorrowed'] as num).toDouble().toStringAsFixed(0)}',
                         Icons.account_balance,
                         CoopvestColors.primary,
                         onTap: () {},
@@ -101,7 +101,7 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
                     Expanded(
                       child: _buildStatCard(
                         'Total Repaid',
-                        '₦${(_quickStats['totalRepaid'] as num).toDouble().toStringAsFixed(0)}',
+                        '\u20a6${(_quickStats['totalRepaid'] as num).toDouble().toStringAsFixed(0)}',
                         Icons.payments,
                         CoopvestColors.info,
                         onTap: () {},
@@ -296,7 +296,7 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
                       ),
                     ),
                     Text(
-                      '₦${loan.amount.formatNumber()}',
+                      '\u20a6${loan.amount.formatNumber()}',
                       style: TextStyle(fontWeight: FontWeight.bold, color: context.textPrimary),
                     ),
                   ],
