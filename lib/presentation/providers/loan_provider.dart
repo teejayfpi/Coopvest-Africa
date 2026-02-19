@@ -4,6 +4,27 @@ import '../../data/api/loan_api_service.dart';
 import '../../data/models/loan_models.dart';
 import '../../data/repositories/auth_repository.dart';
 
+/// Convert LoanData (API model) to Loan (domain model)
+Loan _convertLoanDataToLoan(LoanData data) {
+  return Loan(
+    id: data.id,
+    userId: data.userId,
+    amount: data.amount,
+    tenure: data.tenure,
+    interestRate: data.interestRate,
+    monthlyRepayment: data.monthlyRepayment,
+    totalRepayment: data.monthlyRepayment * data.tenure,
+    status: data.status,
+    purpose: data.purpose,
+    guarantorsAccepted: 0,
+    guarantorsRequired: 3,
+    createdAt: data.createdAt,
+    updatedAt: data.createdAt,
+    approvedAt: null,
+    disbursedAt: null,
+  );
+}
+
 /// Loan Provider - Uses official ApiClient through Riverpod
 final loanProvider = StateNotifierProvider<LoanNotifier, LoansState>((ref) {
   final authRepository = ref.watch(authRepositoryProvider);
@@ -39,9 +60,10 @@ class LoanNotifier extends StateNotifier<LoansState> {
       );
 
       if (response.success && response.loan != null) {
+        final loan = _convertLoanDataToLoan(response.loan!);
         state = state.copyWith(
           status: LoanStatus.loaded,
-          loans: [...state.loans, response.loan!],
+          loans: [...state.loans, loan],
         );
       } else {
         state = state.copyWith(
@@ -66,9 +88,10 @@ class LoanNotifier extends StateNotifier<LoansState> {
       final response = await _loanApiService.getUserLoans();
 
       if (response.success) {
+        final loans = response.loans.map(_convertLoanDataToLoan).toList();
         state = state.copyWith(
           status: LoanStatus.loaded,
-          loans: response.loans,
+          loans: loans,
         );
       } else {
         state = state.copyWith(
