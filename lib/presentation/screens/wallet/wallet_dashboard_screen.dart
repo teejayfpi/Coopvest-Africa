@@ -36,10 +36,14 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(walletProvider.notifier).loadWallet();
-      ref.read(walletProvider.notifier).loadTransactions();
-      ref.read(walletProvider.notifier).loadSavingsGoals();
+      _loadData();
     });
+  }
+
+  Future<void> _loadData() async {
+    await ref.read(walletProvider.notifier).loadWallet();
+    await ref.read(walletProvider.notifier).loadTransactions();
+    await ref.read(walletProvider.notifier).loadSavingsGoals();
   }
 
   @override
@@ -63,7 +67,6 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
           IconButton(
             icon: const Icon(Icons.qr_code_scanner, color: CoopvestColors.primary),
             onPressed: () {
-              // Show QR code for receiving funds
               _showReceiveQRDialog(context);
             },
           ),
@@ -82,12 +85,14 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
     List<SavingsGoal> savingsGoals,
     List<Transaction> recentTransactions,
   ) {
+    // Show loading only if we have no data at all
     if (walletState.isLoading && wallet == null) {
       return const Center(
         child: CircularProgressIndicator(color: CoopvestColors.primary),
       );
     }
 
+    // Show error only if we have no data at all
     if (walletState.status == WalletStatus.error && wallet == null) {
       return Center(
         child: Padding(
@@ -114,10 +119,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
               const SizedBox(height: 24),
               PrimaryButton(
                 label: 'Retry',
-                onPressed: () {
-                  ref.read(walletProvider.notifier).loadWallet();
-                  ref.read(walletProvider.notifier).loadTransactions();
-                },
+                onPressed: _loadData,
               ),
             ],
           ),
@@ -126,10 +128,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
     }
 
     return RefreshIndicator(
-      onRefresh: () async {
-        await ref.read(walletProvider.notifier).loadWallet();
-        await ref.read(walletProvider.notifier).loadTransactions();
-      },
+      onRefresh: _loadData,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(24),
@@ -193,14 +192,16 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
                 children: [
                   Text(
                     'Total Balance',
-                    style: CoopvestTypography.bodyMedium.copyWith(
+                    style: TextStyle(
+                      fontSize: 14,
                       color: isDarkMode ? context.textSecondary : Colors.white.withOpacity(0.8),
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     displayBalance,
-                    style: CoopvestTypography.displaySmall.copyWith(
+                    style: TextStyle(
+                      fontSize: 28,
                       color: isDarkMode ? context.textPrimary : Colors.white,
                       fontWeight: FontWeight.bold,
                     ),
@@ -250,7 +251,8 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
                   children: [
                     Text(
                       'Available',
-                      style: CoopvestTypography.bodySmall.copyWith(
+                      style: TextStyle(
+                        fontSize: 12,
                         color: isDarkMode ? context.textSecondary : Colors.white.withOpacity(0.8),
                       ),
                     ),
@@ -274,7 +276,8 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
                   children: [
                     Text(
                       'Pending',
-                      style: CoopvestTypography.bodySmall.copyWith(
+                      style: TextStyle(
+                        fontSize: 12,
                         color: isDarkMode ? context.textSecondary : Colors.white.withOpacity(0.8),
                       ),
                     ),
@@ -298,95 +301,66 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
   }
 
   Widget _buildQuickActions(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceAround,
       children: [
-        Text(
-          'Quick Actions',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: context.textPrimary),
+        _buildActionItem(
+          context,
+          'Deposit',
+          Icons.add_circle_outline,
+          () => Navigator.push(context, MaterialPageRoute(builder: (context) => DepositScreen(userId: widget.userId))),
         ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(
-              child: _buildQuickActionButton(
-                context,
-                icon: Icons.add,
-                label: 'Deposit',
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => DepositScreen(userId: widget.userId),
-                    ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: _buildQuickActionButton(
-                context,
-                icon: Icons.remove,
-                label: 'Withdraw',
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => WithdrawalScreen(userId: widget.userId),
-                    ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: _buildQuickActionButton(
-                context,
-                icon: Icons.savings,
-                label: 'Save',
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => SavingsGoalsScreen(userId: widget.userId),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
+        _buildActionItem(
+          context,
+          'Withdraw',
+          Icons.file_upload_outlined,
+          () => Navigator.push(context, MaterialPageRoute(builder: (context) => WithdrawalScreen(userId: widget.userId))),
+        ),
+        _buildActionItem(
+          context,
+          'Transfer',
+          Icons.swap_horiz,
+          () {
+            // Transfer functionality
+          },
+        ),
+        _buildActionItem(
+          context,
+          'History',
+          Icons.history,
+          () => Navigator.push(context, MaterialPageRoute(builder: (context) => const TransactionsHistoryScreen())),
         ),
       ],
     );
   }
 
-  Widget _buildQuickActionButton(
-    BuildContext context, {
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    return AppCard(
+  Widget _buildActionItem(BuildContext context, String label, IconData icon, VoidCallback onTap) {
+    return GestureDetector(
       onTap: onTap,
-      padding: const EdgeInsets.symmetric(vertical: 20),
       child: Column(
         children: [
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: CoopvestColors.primary.withOpacity(0.1),
+              color: context.cardBackground,
               shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
-            child: Icon(icon, color: CoopvestColors.primary),
+            child: Icon(icon, color: CoopvestColors.primary, size: 28),
           ),
-          const SizedBox(height: 12),
-          Flexible(
-            child: Text(
-              label,
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 14,
-                color: context.textPrimary,
-              ),
-              overflow: TextOverflow.ellipsis,
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: context.textPrimary,
             ),
           ),
         ],
@@ -403,41 +377,43 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
           children: [
             Text(
               'Savings Goals',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: context.textPrimary),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: context.textPrimary,
+              ),
             ),
             TextButton(
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => SavingsGoalsScreen(userId: widget.userId),
-                  ),
-                );
-              },
-              child: const Text('View All'),
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SavingsGoalsScreen())),
+              child: const Text('View All', style: TextStyle(color: CoopvestColors.primary)),
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
         if (goals.isEmpty)
-          AppCard(
-            child: Center(
-              child: Column(
-                children: [
-                  const Icon(Icons.savings_outlined, size: 48, color: CoopvestColors.mediumGray),
-                  const SizedBox(height: 16),
-                  Text(
-                    'No active savings goals',
-                    style: TextStyle(color: context.textSecondary),
-                  ),
-                  const SizedBox(height: 8),
-                  TextButton(
-                    onPressed: () {
-                      // Navigate to create goal
-                    },
-                    child: const Text('Create a Goal'),
-                  ),
-                ],
-              ),
+          Container(
+            padding: const EdgeInsets.all(24),
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: context.cardBackground,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              children: [
+                Icon(Icons.savings_outlined, size: 48, color: context.textSecondary.withOpacity(0.5)),
+                const SizedBox(height: 12),
+                Text(
+                  'No savings goals yet',
+                  style: TextStyle(color: context.textSecondary),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton(
+                  onPressed: () {
+                    // Create goal
+                  },
+                  child: const Text('Create Goal'),
+                ),
+              ],
             ),
           )
         else
@@ -448,49 +424,62 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
               itemCount: goals.length,
               itemBuilder: (context, index) {
                 final goal = goals[index];
+                final progress = goal.targetAmount > 0 ? goal.currentAmount / goal.targetAmount : 0.0;
+                
                 return Container(
-                  width: 280,
+                  width: 240,
                   margin: const EdgeInsets.only(right: 16),
-                  child: AppCard(
-                    onTap: () {
-                      // Navigate to goal details
-                    },
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              goal.name,
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: context.textPrimary),
-                            ),
-                            Text(
-                              '${goal.progressPercentage.toStringAsFixed(0)}%',
-                              style: const TextStyle(
-                                color: CoopvestColors.primary,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: context.cardBackground,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.03),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        goal.name,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: context.textPrimary,
                         ),
-                        const Spacer(),
-                        LinearProgressIndicator(
-                          value: goal.progressPercentage / 100,
-                          backgroundColor: context.dividerColor,
-                          valueColor: const AlwaysStoppedAnimation<Color>(CoopvestColors.primary),
-                          minHeight: 8,
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          '₦${goal.currentAmount.toStringAsFixed(0)} of ₦${goal.targetAmount.toStringAsFixed(0)}',
-                          style: TextStyle(
-                            color: context.textSecondary,
-                            fontSize: 12,
+                      ),
+                      const Spacer(),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            '₦${goal.currentAmount.toStringAsFixed(0)}',
+                            style: const TextStyle(fontWeight: FontWeight.bold, color: CoopvestColors.primary),
                           ),
-                        ),
-                      ],
-                    ),
+                          Text(
+                            'of ₦${goal.targetAmount.toStringAsFixed(0)}',
+                            style: TextStyle(fontSize: 12, color: context.textSecondary),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      LinearProgressIndicator(
+                        value: progress,
+                        backgroundColor: context.dividerColor,
+                        color: CoopvestColors.primary,
+                        minHeight: 8,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${(progress * 100).toStringAsFixed(0)}%',
+                        style: TextStyle(fontSize: 10, color: context.textSecondary),
+                      ),
+                    ],
                   ),
                 );
               },
@@ -509,59 +498,70 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
           children: [
             Text(
               'Recent Transactions',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: context.textPrimary),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: context.textPrimary,
+              ),
             ),
             TextButton(
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => TransactionsHistoryScreen(userId: widget.userId),
-                  ),
-                );
-              },
-              child: const Text('See All'),
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const TransactionsHistoryScreen())),
+              child: const Text('See All', style: TextStyle(color: CoopvestColors.primary)),
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
         if (transactions.isEmpty)
-          AppCard(
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text(
-                  'No transactions yet',
-                  style: TextStyle(color: context.textSecondary),
-                ),
-              ),
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Text('No recent transactions', style: TextStyle(color: context.textSecondary)),
             ),
           )
         else
-          ...transactions.map((txn) => TransactionCard(
-                title: txn.description ?? 'No description',
-                subtitle: txn.type.toUpperCase(),
-                amount: txn.amount,
-                isIncome: txn.type == 'credit' || txn.type == 'deposit',
-                date: DateFormat('MMM dd, yyyy').format(txn.createdAt),
-                icon: _getTransactionIcon(txn.type),
-              )),
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: transactions.length,
+            separatorBuilder: (context, index) => const Divider(),
+            itemBuilder: (context, index) {
+              final tx = transactions[index];
+              final isDeposit = tx.type == 'deposit';
+              
+              return ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: (isDeposit ? Colors.green : Colors.orange).withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    isDeposit ? Icons.arrow_downward : Icons.arrow_upward,
+                    color: isDeposit ? Colors.green : Colors.orange,
+                    size: 20,
+                  ),
+                ),
+                title: Text(
+                  tx.description ?? (isDeposit ? 'Deposit' : 'Withdrawal'),
+                  style: TextStyle(fontWeight: FontWeight.w600, color: context.textPrimary),
+                ),
+                subtitle: Text(
+                  DateFormat('MMM dd, yyyy').format(tx.createdAt),
+                  style: TextStyle(fontSize: 12, color: context.textSecondary),
+                ),
+                trailing: Text(
+                  '${isDeposit ? '+' : '-'}₦${tx.amount.toStringAsFixed(2)}',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: isDeposit ? Colors.green : Colors.orange,
+                  ),
+                ),
+              );
+            },
+          ),
       ],
     );
-  }
-
-  IconData _getTransactionIcon(String type) {
-    switch (type.toLowerCase()) {
-      case 'deposit':
-        return Icons.add_circle_outline;
-      case 'withdrawal':
-        return Icons.remove_circle_outline;
-      case 'loan_disbursement':
-        return Icons.account_balance_wallet;
-      case 'loan_repayment':
-        return Icons.payment;
-      default:
-        return Icons.swap_horiz;
-    }
   }
 
   void _showReceiveQRDialog(BuildContext context) {
@@ -572,28 +572,27 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Scan this QR code to receive funds from another Coopvest user.'),
+            const Text('Scan this QR code to receive funds into your wallet'),
             const SizedBox(height: 24),
-            QrImageView(
-              data: widget.userId,
-              version: QrVersions.auto,
-              size: 200.0,
-              foregroundColor: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black,
+            SizedBox(
+              width: 200,
+              height: 200,
+              child: QrImageView(
+                data: widget.userId,
+                version: QrVersions.auto,
+                size: 200.0,
+              ),
             ),
             const SizedBox(height: 16),
             Text(
-              widget.userName,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-            ),
-            Text(
-              'ID: ${widget.userId.length >= 8 ? widget.userId.substring(0, 8).toUpperCase() : widget.userId.toUpperCase()}',
-              style: const TextStyle(color: CoopvestColors.mediumGray),
+              'Wallet ID: ${widget.userId}',
+              style: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ],
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.pop(context),
             child: const Text('Close'),
           ),
         ],

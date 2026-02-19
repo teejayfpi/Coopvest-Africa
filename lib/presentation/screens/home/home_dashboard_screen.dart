@@ -51,7 +51,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
         .fold(0.0, (sum, l) => sum + l.amount);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FB),
+      backgroundColor: context.scaffoldBackground,
       body: SingleChildScrollView(
         child: Column(
           children: [
@@ -73,6 +73,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                           children: [
                             Expanded(
                               child: _buildStatCard(
+                                context,
                                 'Wallet Balance',
                                 '\u20a6${walletBalance.formatNumber()}',
                                 Icons.account_balance_wallet_outlined,
@@ -82,6 +83,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                             const SizedBox(width: 12),
                             Expanded(
                               child: _buildStatCard(
+                                context,
                                 'Contributions',
                                 '\u20a6${totalContributions.formatNumber()}',
                                 Icons.savings_outlined,
@@ -91,6 +93,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                             const SizedBox(width: 12),
                             Expanded(
                               child: _buildStatCard(
+                                context,
                                 'Loans',
                                 '\u20a6${activeLoans.formatNumber()}',
                                 Icons.monetization_on_outlined,
@@ -103,31 +106,35 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                     ),
                   ),
                   
-                  // Quick Actions Grid - Fixed overflow by using a flexible grid and better spacing
+                  // Quick Actions Grid
                   GridView.count(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     crossAxisCount: 4,
                     mainAxisSpacing: 10,
                     crossAxisSpacing: 10,
-                    childAspectRatio: 0.75, // Adjusted to give more vertical space for labels
+                    childAspectRatio: 0.75,
                     children: [
                       _buildActionButton(
+                        context,
                         'Make Contribution',
                         Icons.payments_outlined,
                         () => Navigator.push(context, MaterialPageRoute(builder: (context) => DepositScreen(userId: user?.id ?? ''))),
                       ),
                       _buildActionButton(
+                        context,
                         'Apply for Loan',
                         Icons.description_outlined,
                         () => Navigator.push(context, MaterialPageRoute(builder: (context) => LoanDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? '', userPhone: user?.phone ?? ''))),
                       ),
                       _buildActionButton(
+                        context,
                         'Referral',
                         Icons.share_outlined,
                         () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ReferralDashboardScreen())),
                       ),
                       _buildActionButton(
+                        context,
                         'Download Statements',
                         Icons.assignment_outlined,
                         () => Navigator.push(context, MaterialPageRoute(builder: (context) => WalletDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? ''))),
@@ -144,13 +151,13 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                       // Insights Chart
                       Expanded(
                         flex: 3,
-                        child: _buildInsightsCard(walletState),
+                        child: _buildInsightsCard(context, walletState),
                       ),
                       const SizedBox(width: 12),
                       // Loan Status
                       Expanded(
                         flex: 2,
-                        child: _buildLoanStatusCard(loansState),
+                        child: _buildLoanStatusCard(context, loansState),
                       ),
                     ],
                   ),
@@ -158,16 +165,17 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                   const SizedBox(height: 24),
                   
                   // Notifications Section
-                  const Text(
+                  Text(
                     'Notifications',
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF1A1A1A),
+                      color: context.textPrimary,
                     ),
                   ),
                   const SizedBox(height: 12),
                   _buildNotificationItem(
+                    context,
                     'Your loan has been approved',
                     '2h ago',
                     Icons.notifications_outlined,
@@ -175,6 +183,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                   ),
                   const SizedBox(height: 12),
                   _buildNotificationItem(
+                    context,
                     '5 Tips for Better Financial Planning',
                     '',
                     Icons.lightbulb_outline,
@@ -188,7 +197,6 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
           ],
         ),
       ),
-      // Removed the redundant bottomNavigationBar from here as it's already in MainContainer
     );
   }
 
@@ -261,13 +269,13 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
     return '${parts[0][0]}${parts[parts.length - 1][0]}'.toUpperCase();
   }
 
-  Widget _buildStatCard(String title, String value, IconData icon, VoidCallback onTap) {
+  Widget _buildStatCard(BuildContext context, String title, String value, IconData icon, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: context.cardBackground,
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
@@ -283,9 +291,9 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
             const SizedBox(height: 8),
             Text(
               title,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
-                color: Colors.black54,
+                color: context.textSecondary,
                 fontWeight: FontWeight.w500,
               ),
               textAlign: TextAlign.center,
@@ -293,10 +301,10 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
             const SizedBox(height: 4),
             Text(
               value,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.bold,
-                color: Colors.black87,
+                color: context.textPrimary,
               ),
             ),
           ],
@@ -305,15 +313,15 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
     );
   }
 
-  Widget _buildActionButton(String label, IconData icon, VoidCallback onTap) {
+  Widget _buildActionButton(BuildContext context, String label, IconData icon, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: context.cardBackground,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.black.withOpacity(0.05)),
+          border: Border.all(color: context.dividerColor.withOpacity(0.05)),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -323,9 +331,9 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
             Flexible(
               child: Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 9,
-                  color: Colors.black87,
+                  color: context.textPrimary,
                   fontWeight: FontWeight.w500,
                 ),
                 textAlign: TextAlign.center,
@@ -339,11 +347,11 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
     );
   }
 
-  Widget _buildInsightsCard(WalletState walletState) {
+  Widget _buildInsightsCard(BuildContext context, WalletState walletState) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.cardBackground,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
@@ -356,20 +364,20 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Insights',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: Color(0xFF1A1A1A),
+              color: context.textPrimary,
             ),
           ),
           const SizedBox(height: 16),
-          const Text(
+          Text(
             'Contributions',
             style: TextStyle(
               fontSize: 14,
-              color: Colors.black54,
+              color: context.textSecondary,
             ),
           ),
           const SizedBox(height: 8),
@@ -390,7 +398,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                         if (value.toInt() % 2 == 0 && value.toInt() < titles.length * 2) {
                            final index = value.toInt() ~/ 2;
                            if (index < titles.length) {
-                             return Text(titles[index], style: const TextStyle(fontSize: 10, color: Colors.grey));
+                             return Text(titles[index], style: TextStyle(fontSize: 10, color: context.textSecondary));
                            }
                         }
                         return const Text('');
@@ -426,13 +434,13 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
     );
   }
 
-  Widget _buildLoanStatusCard(LoansState loansState) {
+  Widget _buildLoanStatusCard(BuildContext context, LoansState loansState) {
     final pendingLoan = loansState.loans.any((l) => l.status == 'under_review' || l.status == 'pending_guarantors');
     
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.cardBackground,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
@@ -445,21 +453,21 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Loan Status',
             style: TextStyle(
               fontSize: 14,
-              color: Colors.black87,
+              color: context.textPrimary,
               fontWeight: FontWeight.w500,
             ),
           ),
           const SizedBox(height: 12),
           Text(
             pendingLoan ? 'Pending\nApproval' : 'No Active\nApplications',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: Color(0xFF1A1A1A),
+              color: context.textPrimary,
             ),
           ),
           const SizedBox(height: 12),
@@ -472,11 +480,11 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
     );
   }
 
-  Widget _buildNotificationItem(String title, String time, IconData icon, Color color) {
+  Widget _buildNotificationItem(BuildContext context, String title, String time, IconData icon, Color color) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.cardBackground,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
@@ -503,19 +511,19 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF1A1A1A),
+                    color: context.textPrimary,
                   ),
                 ),
                 if (time.isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Text(
                     time,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: Colors.black45,
+                      color: context.textSecondary,
                     ),
                   ),
                 ],
