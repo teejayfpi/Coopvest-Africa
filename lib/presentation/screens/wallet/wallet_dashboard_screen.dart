@@ -38,6 +38,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(walletProvider.notifier).loadWallet();
       ref.read(walletProvider.notifier).loadTransactions();
+      ref.read(walletProvider.notifier).loadSavingsGoals();
     });
   }
 

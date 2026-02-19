@@ -48,6 +48,60 @@ class WalletRepository {
     }
   }
 
+  /// Get savings goals
+  Future<List<SavingsGoal>> getSavingsGoals({
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    try {
+      final response = await _apiClient.get(
+        '/wallet/savings-goals',
+        queryParameters: {
+          'page': page,
+          'page_size': pageSize,
+        },
+      );
+
+      final data = response as Map<String, dynamic>;
+      final goals = (data['data'] as List? ?? [])
+          .map((item) => SavingsGoal.fromJson(item as Map<String, dynamic>))
+          .toList();
+
+      return goals;
+    } catch (e) {
+      logger.e('Get savings goals error: $e');
+      // Mock savings goals for development
+      return [
+        SavingsGoal(
+          id: 'goal_1',
+          userId: 'mock_user',
+          walletId: 'mock_id',
+          name: 'Emergency Fund',
+          description: 'Build emergency savings',
+          targetAmount: 500000.0,
+          currentAmount: 250000.0,
+          monthlyContribution: 50000.0,
+          targetDate: DateTime.now().add(const Duration(days: 180)),
+          createdAt: DateTime.now().subtract(const Duration(days: 30)),
+          status: 'active',
+        ),
+        SavingsGoal(
+          id: 'goal_2',
+          userId: 'mock_user',
+          walletId: 'mock_id',
+          name: 'Vacation Fund',
+          description: 'Save for vacation',
+          targetAmount: 200000.0,
+          currentAmount: 80000.0,
+          monthlyContribution: 20000.0,
+          targetDate: DateTime.now().add(const Duration(days: 120)),
+          createdAt: DateTime.now().subtract(const Duration(days: 15)),
+          status: 'active',
+        ),
+      ];
+    }
+  }
+
   /// Get transactions
   Future<List<Transaction>> getTransactions({
     int page = 1,
@@ -223,6 +277,30 @@ class WalletNotifier extends StateNotifier<WalletState> {
       );
     } catch (e) {
       logger.e('Load transactions error: $e');
+      state = state.copyWith(
+        status: WalletStatus.error,
+        error: e.toString(),
+      );
+    }
+  }
+
+  /// Load savings goals
+  Future<void> loadSavingsGoals({
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    try {
+      final goals = await _walletRepository.getSavingsGoals(
+        page: page,
+        pageSize: pageSize,
+      );
+
+      state = state.copyWith(
+        status: WalletStatus.loaded,
+        savingsGoals: goals,
+      );
+    } catch (e) {
+      logger.e('Load savings goals error: $e');
       state = state.copyWith(
         status: WalletStatus.error,
         error: e.toString(),
