@@ -1,37 +1,30 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
+import '../../../presentation/providers/notifications_provider.dart';
 import '../../widgets/common/cards.dart';
 
-class NotificationsScreen extends StatelessWidget {
+class NotificationsScreen extends ConsumerStatefulWidget {
   const NotificationsScreen({super.key});
+
+  @override\n  ConsumerState<NotificationsScreen> createState() => _NotificationsScreenState();
+}
+
+class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(notificationsProvider.notifier).loadNotifications();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    // Mock notifications
-    final List<Map<String, dynamic>> notifications = [
-      {
-        'title': 'Welcome to Coopvest Africa',
-        'body': 'Thank you for joining our cooperative. Start your savings journey today!',
-        'time': '2 hours ago',
-        'icon': Icons.celebration,
-        'color': CoopvestColors.primary,
-      },
-      {
-        'title': 'KYC Verified',
-        'body': 'Your identity verification has been approved. You can now apply for loans.',
-        'time': '1 day ago',
-        'icon': Icons.verified,
-        'color': CoopvestColors.success,
-      },
-      {
-        'title': 'New Loan Feature',
-        'body': 'Check out our new loan rollover feature on the dashboard.',
-        'time': '2 days ago',
-        'icon': Icons.new_releases,
-        'color': Colors.orange,
-      },
-    ];
+    final notificationsState = ref.watch(notificationsProvider);
+    final notifications = notificationsState.notifications;
 
     return Scaffold(
       backgroundColor: context.scaffoldBackground,
@@ -48,69 +41,141 @@ class NotificationsScreen extends StatelessWidget {
             fontWeight: FontWeight.w600,
           ),
         ),
+        actions: [
+          if (notifications.isNotEmpty)
+            TextButton(
+              onPressed: () {
+                // Mark all as read
+                for (final notif in notifications.where((n) => !n.isRead)) {
+                  ref.read(notificationsProvider.notifier).markAsRead(notif.id);
+                }
+              },
+              child: const Text('Mark all as read'),
+            ),
+        ],
       ),
-      body: notifications.isEmpty
-          ? _buildEmptyState(context)
-          : ListView.separated(
-              padding: const EdgeInsets.all(24),
-              itemCount: notifications.length,
-              separatorBuilder: (context, index) => const SizedBox(height: 16),
-              itemBuilder: (context, index) {
-                final item = notifications[index];
-                return AppCard(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+      body: notificationsState.isLoading && notifications.isEmpty
+          ? const Center(
+              child: CircularProgressIndicator(color: CoopvestColors.primary),
+            )
+          : notifications.isEmpty
+              ? _buildEmptyState(context)
+              : RefreshIndicator(
+                  onRefresh: () async {
+                    await ref.read(notificationsProvider.notifier).loadNotifications();
+                  },
+                  child: ListView.separated(
+                    padding: const EdgeInsets.all(24),
+                    itemCount: notifications.length,
+                    separatorBuilder: (context, index) => const SizedBox(height: 16),
+                    itemBuilder: (context, index) {
+                      final notification = notifications[index];
+                      return _buildNotificationCard(context, notification, ref);
+                    },
+                  ),
+                ),
+    );
+  }
+
+  Widget _buildNotificationCard(
+    BuildContext context,
+    AppNotification notification,
+    WidgetRef ref,
+  ) {
+    final color = _getColorFromHex(notification.color);
+    final icon = _getIconFromString(notification.icon);
+
+    return GestureDetector(
+      onTap: () {
+        if (!notification.isRead) {
+          ref.read(notificationsProvider.notifier).markAsRead(notification.id);
+        }
+      },
+      child: AppCard(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: color.withAlpha((255 * 0.1).toInt()),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                icon,
+                color: color,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: (item['color'] as Color).withAlpha((255 * 0.1).toInt()),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          item['icon'] as IconData? ?? Icons.notifications,
-                          color: item['color'] as Color,
-                          size: 20,
+                      Expanded(
+                        child: Text(
+                          notification.title,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                            color: context.textPrimary,
+                          ),
                         ),
                       ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              item['title'] as String,
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                                color: context.textPrimary,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              item['body'] as String,
-                              style: TextStyle(
-                                color: context.textSecondary,
-                                fontSize: 14,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              item['time'] as String,
-                              style: TextStyle(
-                                color: context.textSecondary,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
+                      if (!notification.isRead)
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                            color: CoopvestColors.primary,
+                            shape: BoxShape.circle,
+                          ),
                         ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    notification.body,
+                    style: TextStyle(
+                      color: context.textSecondary,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        _formatTime(notification.timestamp),
+                        style: TextStyle(
+                          color: context.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                      PopupMenuButton(
+                        itemBuilder: (context) => [
+                          PopupMenuItem(
+                            child: const Text('Delete'),
+                            onTap: () {
+                              ref
+                                  .read(notificationsProvider.notifier)
+                                  .deleteNotification(notification.id);
+                            },
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                );
-              },
+                ],
+              ),
             ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -135,5 +200,49 @@ class NotificationsScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  String _formatTime(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+
+    if (difference.inMinutes < 1) {
+      return 'Just now';
+    } else if (difference.inMinutes < 60) {
+      return '${difference.inMinutes}m ago';
+    } else if (difference.inHours < 24) {
+      return '${difference.inHours}h ago';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays}d ago';
+    } else {
+      return DateFormat('MMM dd, yyyy').format(dateTime);
+    }
+  }
+
+  Color _getColorFromHex(String hexColor) {
+    try {
+      return Color(int.parse(hexColor.replaceFirst('#', '0xff')));
+    } catch (e) {
+      return CoopvestColors.primary;
+    }
+  }
+
+  IconData _getIconFromString(String iconName) {
+    switch (iconName.toLowerCase()) {
+      case 'celebration':
+        return Icons.celebration;
+      case 'verified':
+        return Icons.verified;
+      case 'new_releases':
+        return Icons.new_releases;
+      case 'savings':
+        return Icons.savings;
+      case 'person_add':
+        return Icons.person_add;
+      case 'payment':
+        return Icons.payment;
+      default:
+        return Icons.notifications;
+    }
   }
 }

@@ -9,6 +9,8 @@ import '../../../data/models/loan_models.dart';
 import '../../../presentation/providers/auth_provider.dart';
 import '../../../presentation/providers/wallet_provider.dart';
 import '../../../presentation/providers/loan_provider.dart';
+import '../../../presentation/providers/insights_provider.dart';
+import '../../../presentation/providers/notifications_provider.dart';
 import '../../../presentation/screens/wallet/deposit_screen.dart';
 import '../../../presentation/screens/loan/loan_dashboard_screen.dart';
 import '../../../presentation/screens/wallet/wallet_dashboard_screen.dart';
