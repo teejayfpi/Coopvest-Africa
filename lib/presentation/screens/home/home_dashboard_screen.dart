@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/extensions/number_extensions.dart';
+import '../../../data/models/wallet_models.dart';
+import '../../../data/models/loan_models.dart';
 import '../../../presentation/providers/auth_provider.dart';
 import '../../../presentation/providers/wallet_provider.dart';
 import '../../../presentation/providers/loan_provider.dart';

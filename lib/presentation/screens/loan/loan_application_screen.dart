@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/theme_config.dart';
+import '../../../config/theme_extension.dart';
 import '../../../data/models/referral_models.dart';
 import '../../../presentation/providers/referral_provider.dart';
 import '../../../presentation/widgets/common/buttons.dart';
@@ -629,7 +630,7 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
   Widget _buildReferralBonusSection(BuildContext context, WidgetRef ref, Map<String, dynamic> loanInfo) {
     final referralState = ref.watch(referralProvider);
     final referrals = referralState.referrals;
-    final activeReferralsCount = referrals.where((r) => r.status == 'active').length;
+    final activeReferralsCount = referrals.where((r) => r.confirmed && !r.isFlagged).length;
     
     // Tiered interest reduction based on active referrals
     double reduction = 0;
