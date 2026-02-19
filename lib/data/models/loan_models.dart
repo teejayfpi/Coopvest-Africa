@@ -4,6 +4,7 @@ import 'package:equatable/equatable.dart';
 class Loan extends Equatable {
   final String id;
   final String userId;
+  final String type;
   final double amount;
   final int tenure; // months
   final double interestRate;
@@ -21,6 +22,7 @@ class Loan extends Equatable {
   const Loan({
     required this.id,
     required this.userId,
+    required this.type,
     required this.amount,
     required this.tenure,
     required this.interestRate,
@@ -38,19 +40,20 @@ class Loan extends Equatable {
 
   factory Loan.fromJson(Map<String, dynamic> json) {
     return Loan(
-      id: json['id'] as String,
-      userId: json['user_id'] as String,
-      amount: (json['amount'] as num).toDouble(),
-      tenure: json['tenure'] as int,
-      interestRate: (json['interest_rate'] as num).toDouble(),
-      monthlyRepayment: (json['monthly_repayment'] as num).toDouble(),
-      totalRepayment: (json['total_repayment'] as num).toDouble(),
-      status: json['status'] as String,
+      id: json['id'] as String? ?? '',
+      userId: json['user_id'] as String? ?? '',
+      type: json['type'] as String? ?? json['loanType'] as String? ?? 'Personal Loan',
+      amount: (json['amount'] as num?)?.toDouble() ?? 0.0,
+      tenure: json['tenure'] as int? ?? 12,
+      interestRate: (json['interest_rate'] as num?)?.toDouble() ?? 0.0,
+      monthlyRepayment: (json['monthly_repayment'] as num?)?.toDouble() ?? 0.0,
+      totalRepayment: (json['total_repayment'] as num?)?.toDouble() ?? 0.0,
+      status: json['status'] as String? ?? 'pending',
       purpose: json['purpose'] as String?,
       guarantorsAccepted: json['guarantors_accepted'] as int? ?? 0,
       guarantorsRequired: json['guarantors_required'] as int? ?? 3,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      createdAt: json['created_at'] != null ? DateTime.parse(json['created_at'] as String) : DateTime.now(),
+      updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at'] as String) : DateTime.now(),
       approvedAt: json['approved_at'] != null
           ? DateTime.parse(json['approved_at'] as String)
           : null,
@@ -64,6 +67,7 @@ class Loan extends Equatable {
     return {
       'id': id,
       'user_id': userId,
+      'type': type,
       'amount': amount,
       'tenure': tenure,
       'interest_rate': interestRate,
@@ -83,6 +87,7 @@ class Loan extends Equatable {
   Loan copyWith({
     String? id,
     String? userId,
+    String? type,
     double? amount,
     int? tenure,
     double? interestRate,
@@ -100,6 +105,7 @@ class Loan extends Equatable {
     return Loan(
       id: id ?? this.id,
       userId: userId ?? this.userId,
+      type: type ?? this.type,
       amount: amount ?? this.amount,
       tenure: tenure ?? this.tenure,
       interestRate: interestRate ?? this.interestRate,
@@ -126,6 +132,7 @@ class Loan extends Equatable {
   List<Object?> get props => [
     id,
     userId,
+    type,
     amount,
     tenure,
     interestRate,
