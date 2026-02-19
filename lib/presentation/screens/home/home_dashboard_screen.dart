@@ -103,14 +103,14 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                     ),
                   ),
                   
-                  // Quick Actions Grid
+                  // Quick Actions Grid - Fixed overflow by using a flexible grid and better spacing
                   GridView.count(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     crossAxisCount: 4,
-                    mainAxisSpacing: 12,
-                    crossAxisSpacing: 12,
-                    childAspectRatio: 0.85,
+                    mainAxisSpacing: 10,
+                    crossAxisSpacing: 10,
+                    childAspectRatio: 0.75, // Adjusted to give more vertical space for labels
                     children: [
                       _buildActionButton(
                         'Make Contribution',
@@ -188,7 +188,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: _buildBottomNav(),
+      // Removed the redundant bottomNavigationBar from here as it's already in MainContainer
     );
   }
 
@@ -235,7 +235,6 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
               ),
             ],
           ),
-          // Use initials as profile picture since no profile picture field exists
           CircleAvatar(
             radius: 30,
             backgroundColor: Colors.white24,
@@ -256,10 +255,10 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
   String _getInitials(String name) {
     if (name.isEmpty) return 'U';
     final parts = name.trim().split(' ');
-    if (parts.length >= 2) {
-      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    if (parts.length == 1) {
+      return parts[0][0].toUpperCase();
     }
-    return name.substring(0, 2).toUpperCase();
+    return '${parts[0][0]}${parts[parts.length - 1][0]}'.toUpperCase();
   }
 
   Widget _buildStatCard(String title, String value, IconData icon, VoidCallback onTap) {
@@ -319,17 +318,20 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: CoopvestColors.primary, size: 28),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 10,
-                color: Colors.black87,
-                fontWeight: FontWeight.w500,
+            Icon(icon, color: CoopvestColors.primary, size: 24),
+            const SizedBox(height: 6),
+            Flexible(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 9,
+                  color: Colors.black87,
+                  fontWeight: FontWeight.w500,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
-              textAlign: TextAlign.center,
-              maxLines: 2,
             ),
           ],
         ),
@@ -384,9 +386,12 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                     sideTitles: SideTitles(
                       showTitles: true,
                       getTitlesWidget: (value, meta) {
-                        const titles = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
-                        if (value.toInt() < titles.length) {
-                          return Text(titles[value.toInt()], style: const TextStyle(fontSize: 10, color: Colors.grey));
+                        const titles = ['Jan', 'Mar', 'May', 'Jun'];
+                        if (value.toInt() % 2 == 0 && value.toInt() < titles.length * 2) {
+                           final index = value.toInt() ~/ 2;
+                           if (index < titles.length) {
+                             return Text(titles[index], style: const TextStyle(fontSize: 10, color: Colors.grey));
+                           }
                         }
                         return const Text('');
                       },
@@ -424,50 +429,45 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
   Widget _buildLoanStatusCard(LoansState loansState) {
     final pendingLoan = loansState.loans.any((l) => l.status == 'under_review' || l.status == 'pending_guarantors');
     
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(context, MaterialPageRoute(builder: (context) => LoanDashboardScreen(userId: loansState.loans.isNotEmpty ? loansState.loans.first.userId : '', userName: '', userPhone: '')));
-      },
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.03),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Loan Status',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.black87,
+              fontWeight: FontWeight.w500,
             ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Loan Status',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.black87,
-                fontWeight: FontWeight.w500,
-              ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            pendingLoan ? 'Pending\nApproval' : 'No Active\nApplications',
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1A1A1A),
             ),
-            const SizedBox(height: 12),
-            Text(
-              pendingLoan ? 'Pending\nApproval' : 'No Active\nApplications',
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF1A1A1A),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.bottomRight,
-              child: Icon(Icons.access_time, color: CoopvestColors.primary, size: 32),
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 12),
+          const Align(
+            alignment: Alignment.bottomRight,
+            child: Icon(Icons.access_time, color: CoopvestColors.primary, size: 32),
+          ),
+        ],
       ),
     );
   }
@@ -522,36 +522,6 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
               ],
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBottomNav() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
-      child: BottomNavigationBar(
-        currentIndex: 0,
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: CoopvestColors.primary,
-        unselectedItemColor: Colors.black45,
-        showSelectedLabels: true,
-        showUnselectedLabels: true,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.account_balance_wallet_outlined), label: 'Wallet'),
-          BottomNavigationBarItem(icon: Icon(Icons.description_outlined), label: 'Loans'),
-          BottomNavigationBarItem(icon: Icon(Icons.trending_up_outlined), label: 'Investments'),
-          BottomNavigationBarItem(icon: Icon(Icons.menu), label: 'More'),
         ],
       ),
     );
