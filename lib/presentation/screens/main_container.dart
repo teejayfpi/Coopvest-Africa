@@ -56,7 +56,7 @@ class _MainContainerState extends ConsumerState<MainContainer> {
           },
           type: BottomNavigationBarType.fixed,
           backgroundColor: context.cardBackground,
-          selectedItemColor: const Color(0xFF0D2141),
+          selectedItemColor: CoopvestColors.primary,
           unselectedItemColor: context.textSecondary,
           selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
           unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.normal, fontSize: 12),

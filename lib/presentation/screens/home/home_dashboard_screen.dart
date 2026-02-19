@@ -25,12 +25,29 @@ class HomeDashboardScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
+  late Future<void> _refreshFuture;
+
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(walletProvider.notifier).loadWallet();
-      ref.read(loanProvider.notifier).getLoans();
+    _refreshFuture = _loadData();
+    // Set up periodic refresh for real-time updates every 30 seconds
+    _setupPeriodicRefresh();
+  }
+
+  Future<void> _loadData() async {
+    await Future.wait([
+      ref.read(walletProvider.notifier).loadWallet(),
+      ref.read(loanProvider.notifier).getLoans(),
+    ]);
+  }
+
+  void _setupPeriodicRefresh() {
+    Future.delayed(const Duration(seconds: 30), () {
+      if (mounted) {
+        _loadData();
+        _setupPeriodicRefresh();
+      }
     });
   }
 
@@ -52,149 +69,161 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
 
     return Scaffold(
       backgroundColor: context.scaffoldBackground,
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            // Dark Header Section
-            _buildHeader(context, userName, membershipId, user?.name ?? 'User'),
-            
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Overlapping Stats Cards
-                  Transform.translate(
-                    offset: const Offset(0, -30),
-                    child: Column(
+      body: RefreshIndicator(
+        onRefresh: _loadData,
+        color: CoopvestColors.primary,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(
+            children: [
+              // Dark Header Section
+              _buildHeader(context, userName, membershipId, user?.name ?? 'User'),
+              
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Overlapping Stats Cards
+                    Transform.translate(
+                      offset: const Offset(0, -30),
+                      child: Column(
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: _buildStatCard(
+                                  context,
+                                  'Wallet Balance',
+                                  '\u20a6${walletBalance.formatNumber()}',
+                                  Icons.account_balance_wallet_outlined,
+                                  () => Navigator.push(context, MaterialPageRoute(builder: (context) => WalletDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? ''))),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _buildStatCard(
+                                  context,
+                                  'Contributions',
+                                  '\u20a6${totalContributions.formatNumber()}',
+                                  Icons.savings_outlined,
+                                  () => Navigator.push(context, MaterialPageRoute(builder: (context) => WalletDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? ''))),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _buildStatCard(
+                                  context,
+                                  'Loans',
+                                  '\u20a6${activeLoans.formatNumber()}',
+                                  Icons.monetization_on_outlined,
+                                  () => Navigator.push(context, MaterialPageRoute(builder: (context) => LoanDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? '', userPhone: user?.phone ?? ''))),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    
+                    // Quick Actions Grid
+                    GridView.count(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      crossAxisCount: 4,
+                      mainAxisSpacing: 10,
+                      crossAxisSpacing: 10,
+                      childAspectRatio: 0.75,
                       children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: _buildStatCard(
-                                context,
-                                'Wallet Balance',
-                                '\u20a6${walletBalance.formatNumber()}',
-                                Icons.account_balance_wallet_outlined,
-                                () => Navigator.push(context, MaterialPageRoute(builder: (context) => WalletDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? ''))),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _buildStatCard(
-                                context,
-                                'Contributions',
-                                '\u20a6${totalContributions.formatNumber()}',
-                                Icons.savings_outlined,
-                                () => Navigator.push(context, MaterialPageRoute(builder: (context) => WalletDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? ''))),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _buildStatCard(
-                                context,
-                                'Loans',
-                                '\u20a6${activeLoans.formatNumber()}',
-                                Icons.monetization_on_outlined,
-                                () => Navigator.push(context, MaterialPageRoute(builder: (context) => LoanDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? '', userPhone: user?.phone ?? ''))),
-                              ),
-                            ),
-                          ],
+                        _buildActionButton(
+                          context,
+                          'Make Contribution',
+                          Icons.payments_outlined,
+                          () => Navigator.push(context, MaterialPageRoute(builder: (context) => DepositScreen(userId: user?.id ?? ''))),
+                        ),
+                        _buildActionButton(
+                          context,
+                          'Apply for Loan',
+                          Icons.description_outlined,
+                          () => Navigator.push(context, MaterialPageRoute(builder: (context) => LoanDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? '', userPhone: user?.phone ?? ''))),
+                        ),
+                        _buildActionButton(
+                          context,
+                          'Referral',
+                          Icons.share_outlined,
+                          () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ReferralDashboardScreen())),
+                        ),
+                        _buildActionButton(
+                          context,
+                          'Download Statements',
+                          Icons.assignment_outlined,
+                          () => Navigator.push(context, MaterialPageRoute(builder: (context) => WalletDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? ''))),
                         ),
                       ],
                     ),
-                  ),
-                  
-                  // Quick Actions Grid
-                  GridView.count(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    crossAxisCount: 4,
-                    mainAxisSpacing: 10,
-                    crossAxisSpacing: 10,
-                    childAspectRatio: 0.75,
-                    children: [
-                      _buildActionButton(
-                        context,
-                        'Make Contribution',
-                        Icons.payments_outlined,
-                        () => Navigator.push(context, MaterialPageRoute(builder: (context) => DepositScreen(userId: user?.id ?? ''))),
-                      ),
-                      _buildActionButton(
-                        context,
-                        'Apply for Loan',
-                        Icons.description_outlined,
-                        () => Navigator.push(context, MaterialPageRoute(builder: (context) => LoanDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? '', userPhone: user?.phone ?? ''))),
-                      ),
-                      _buildActionButton(
-                        context,
-                        'Referral',
-                        Icons.share_outlined,
-                        () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ReferralDashboardScreen())),
-                      ),
-                      _buildActionButton(
-                        context,
-                        'Download Statements',
-                        Icons.assignment_outlined,
-                        () => Navigator.push(context, MaterialPageRoute(builder: (context) => WalletDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? ''))),
-                      ),
-                    ],
-                  ),
-                  
-                  const SizedBox(height: 24),
-                  
-                  // Insights & Loan Status Row
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Insights Chart
-                      Expanded(
-                        flex: 3,
-                        child: _buildInsightsCard(context, walletState),
-                      ),
-                      const SizedBox(width: 12),
-                      // Loan Status
-                      Expanded(
-                        flex: 2,
-                        child: _buildLoanStatusCard(context, loansState),
-                      ),
-                    ],
-                  ),
-                  
-                  const SizedBox(height: 24),
-                  
-                  // Notifications Section
-                  Text(
-                    'Notifications',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: context.textPrimary,
+                    
+                    const SizedBox(height: 24),
+                    
+                    // Insights & Loan Status Row
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Insights Chart
+                        Expanded(
+                          flex: 3,
+                          child: _buildInsightsCard(context, walletState),
+                        ),
+                        const SizedBox(width: 12),
+                        // Loan Status
+                        Expanded(
+                          flex: 2,
+                          child: _buildLoanStatusCard(context, loansState),
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  _buildNotificationItem(
-                    context,
-                    'Your loan has been approved',
-                    '2h ago',
-                    Icons.notifications_outlined,
-                    CoopvestColors.primary,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildNotificationItem(
-                    context,
-                    '5 Tips for Better Financial Planning',
-                    '',
-                    Icons.lightbulb_outline,
-                    CoopvestColors.primary,
-                  ),
-                  
-                  const SizedBox(height: 24),
-                ],
+                    
+                    const SizedBox(height: 24),
+                    
+                    // Notifications Section
+                    Text(
+                      'Notifications',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: context.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _buildNotificationItem(
+                      context,
+                      'Your loan has been approved',
+                      '2h ago',
+                      Icons.notifications_outlined,
+                      CoopvestColors.primary,
+                      () => Navigator.push(context, MaterialPageRoute(builder: (context) => LoanDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? '', userPhone: user?.phone ?? ''))),
+                    ),
+                    const SizedBox(height: 12),
+                    _buildNotificationItem(
+                      context,
+                      '5 Tips for Better Financial Planning',
+                      '',
+                      Icons.lightbulb_outline,
+                      CoopvestColors.primary,
+                      () => ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: const Text('Financial tips feature coming soon'),
+                          backgroundColor: CoopvestColors.primary,
+                        ),
+                      ),
+                    ),
+                    
+                    const SizedBox(height: 24),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -204,12 +233,19 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.only(top: 40, left: 20, right: 20, bottom: 50),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: CoopvestColors.primary,
-        borderRadius: BorderRadius.only(
+        borderRadius: const BorderRadius.only(
           bottomLeft: Radius.circular(30),
           bottomRight: Radius.circular(30),
         ),
+        boxShadow: [
+          BoxShadow(
+            color: CoopvestColors.primary.withOpacity(0.3),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+          ),
+        ],
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -243,15 +279,18 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
               ),
             ],
           ),
-          CircleAvatar(
-            radius: 30,
-            backgroundColor: Colors.white24,
-            child: Text(
-              _getInitials(fullName),
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
+          GestureDetector(
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfileSettingsScreen())),
+            child: CircleAvatar(
+              radius: 30,
+              backgroundColor: Colors.white24,
+              child: Text(
+                _getInitials(fullName),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ),
@@ -322,6 +361,13 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
           color: context.cardBackground,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: context.dividerColor.withOpacity(0.05)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.02),
+              blurRadius: 5,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -348,88 +394,91 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
   }
 
   Widget _buildInsightsCard(BuildContext context, WalletState walletState) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: context.cardBackground,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Insights',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: context.textPrimary,
+    return GestureDetector(
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => WalletDashboardScreen(userId: ref.read(currentUserProvider)?.id ?? '', userName: ref.read(currentUserProvider)?.name ?? ''))),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: context.cardBackground,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Contributions',
-            style: TextStyle(
-              fontSize: 14,
-              color: context.textSecondary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          SizedBox(
-            height: 120,
-            child: LineChart(
-              LineChartData(
-                gridData: const FlGridData(show: false),
-                titlesData: FlTitlesData(
-                  leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      getTitlesWidget: (value, meta) {
-                        const titles = ['Jan', 'Mar', 'May', 'Jun'];
-                        if (value.toInt() % 2 == 0 && value.toInt() < titles.length * 2) {
-                           final index = value.toInt() ~/ 2;
-                           if (index < titles.length) {
-                             return Text(titles[index], style: TextStyle(fontSize: 10, color: context.textSecondary));
-                           }
-                        }
-                        return const Text('');
-                      },
-                      reservedSize: 22,
-                    ),
-                  ),
-                ),
-                borderData: FlBorderData(show: false),
-                lineBarsData: [
-                  LineChartBarData(
-                    spots: const [
-                      FlSpot(0, 20),
-                      FlSpot(1, 40),
-                      FlSpot(2, 30),
-                      FlSpot(3, 50),
-                      FlSpot(4, 45),
-                      FlSpot(5, 70),
-                    ],
-                    isCurved: true,
-                    color: CoopvestColors.primary,
-                    barWidth: 3,
-                    isStrokeCapRound: true,
-                    dotData: const FlDotData(show: false),
-                    belowBarData: BarAreaData(show: false),
-                  ),
-                ],
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Insights',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: context.textPrimary,
               ),
             ),
-          ),
-        ],
+            const SizedBox(height: 16),
+            Text(
+              'Contributions',
+              style: TextStyle(
+                fontSize: 14,
+                color: context.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 120,
+              child: LineChart(
+                LineChartData(
+                  gridData: const FlGridData(show: false),
+                  titlesData: FlTitlesData(
+                    leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        getTitlesWidget: (value, meta) {
+                          const titles = ['Jan', 'Mar', 'May', 'Jun'];
+                          if (value.toInt() % 2 == 0 && value.toInt() < titles.length * 2) {
+                             final index = value.toInt() ~/ 2;
+                             if (index < titles.length) {
+                               return Text(titles[index], style: TextStyle(fontSize: 10, color: context.textSecondary));
+                             }
+                          }
+                          return const Text('');
+                        },
+                        reservedSize: 22,
+                      ),
+                    ),
+                  ),
+                  borderData: FlBorderData(show: false),
+                  lineBarsData: [
+                    LineChartBarData(
+                      spots: const [
+                        FlSpot(0, 20),
+                        FlSpot(1, 40),
+                        FlSpot(2, 30),
+                        FlSpot(3, 50),
+                        FlSpot(4, 45),
+                        FlSpot(5, 70),
+                      ],
+                      isCurved: true,
+                      color: CoopvestColors.primary,
+                      barWidth: 3,
+                      isStrokeCapRound: true,
+                      dotData: const FlDotData(show: false),
+                      belowBarData: BarAreaData(show: false),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -437,101 +486,110 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
   Widget _buildLoanStatusCard(BuildContext context, LoansState loansState) {
     final pendingLoan = loansState.loans.any((l) => l.status == 'under_review' || l.status == 'pending_guarantors');
     
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: context.cardBackground,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Loan Status',
-            style: TextStyle(
-              fontSize: 14,
-              color: context.textPrimary,
-              fontWeight: FontWeight.w500,
+    return GestureDetector(
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => LoanDashboardScreen(userId: ref.read(currentUserProvider)?.id ?? '', userName: ref.read(currentUserProvider)?.name ?? '', userPhone: ref.read(currentUserProvider)?.phone ?? ''))),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: context.cardBackground,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            pendingLoan ? 'Pending\nApproval' : 'No Active\nApplications',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: context.textPrimary,
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Loan Status',
+              style: TextStyle(
+                fontSize: 14,
+                color: context.textPrimary,
+                fontWeight: FontWeight.w500,
+              ),
             ),
-          ),
-          const SizedBox(height: 12),
-          const Align(
-            alignment: Alignment.bottomRight,
-            child: Icon(Icons.access_time, color: CoopvestColors.primary, size: 32),
-          ),
-        ],
+            const SizedBox(height: 12),
+            Text(
+              pendingLoan ? 'Pending\nApproval' : 'No Active\nApplications',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: context.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Align(
+              alignment: Alignment.bottomRight,
+              child: Icon(Icons.access_time, color: CoopvestColors.primary, size: 32),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildNotificationItem(BuildContext context, String title, String time, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: context.cardBackground,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
+  Widget _buildNotificationItem(BuildContext context, String title, String time, IconData icon, Color color, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: context.cardBackground,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.02),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
             ),
-            child: Icon(icon, color: color, size: 24),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: context.textPrimary,
-                  ),
-                ),
-                if (time.isNotEmpty) ...[
-                  const SizedBox(height: 4),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: color, size: 24),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(
-                    time,
+                    title,
                     style: TextStyle(
-                      fontSize: 12,
-                      color: context.textSecondary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: context.textPrimary,
                     ),
                   ),
+                  if (time.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      time,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: context.textSecondary,
+                      ),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
+
+// Import ProfileSettingsScreen at the top
+import '../profile/profile_settings_screen.dart';
