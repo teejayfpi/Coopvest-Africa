@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/utils/utils.dart';
-import '../../../data/models/loan_models.dart' hide LoanStatus;
+import '../../../data/models/loan_models.dart';
 import '../../../presentation/providers/loan_provider.dart';
 import '../../../presentation/widgets/common/buttons.dart';
 import '../../../presentation/widgets/common/cards.dart';
@@ -26,6 +26,7 @@ class LoanDetailsScreen extends ConsumerWidget {
       orElse: () => Loan(
         id: loanId,
         userId: 'demo-user',
+        type: 'Personal Loan',
         amount: 50000,
         tenure: 4,
         interestRate: 5.0,
@@ -129,7 +130,7 @@ class LoanDetailsScreen extends ConsumerWidget {
                     Divider(height: 24, color: context.dividerColor),
                     _buildSummaryRow(context, 'Interest Rate', '${loan.interestRate}%'),
                     Divider(height: 24, color: context.dividerColor),
-                    _buildSummaryRow(context, 'Next Payment Due', _formatDate(loan.nextRepaymentDate)),
+                    _buildSummaryRow(context, 'Next Payment Due', _formatDate(loan.nextRepaymentDate) ?? 'N/A'),
                   ],
                 ),
               ),
@@ -146,7 +147,7 @@ class LoanDetailsScreen extends ConsumerWidget {
               const SizedBox(height: 24),
 
               Text(
-                'Guarantors (${loan.guarantorsConfirmed}/${loan.guarantorsRequired})',
+                'Guarantors (${loan.guarantorsAccepted}/${loan.guarantorsRequired})',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: context.textPrimary),
               ),
               const SizedBox(height: 12),
@@ -290,7 +291,8 @@ class LoanDetailsScreen extends ConsumerWidget {
     }
   }
 
-  String _formatDate(DateTime date) {
+  String _formatDate(DateTime? date) {
+    if (date == null) return 'N/A';
     return '${date.day}/${date.month}/${date.year}';
   }
 }
