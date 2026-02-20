@@ -16,6 +16,8 @@ import '../../../presentation/screens/wallet/deposit_screen.dart';
 import '../../../presentation/screens/loan/loan_dashboard_screen.dart';
 import '../../../presentation/screens/wallet/wallet_dashboard_screen.dart';
 import '../../../presentation/screens/referral/referral_dashboard_screen.dart';
+import '../../../presentation/screens/contributions/monthly_contributions_screen.dart';
+import '../../../presentation/screens/transactions/transactions_history_screen.dart';
 import 'package:fl_chart/fl_chart.dart';
 
 class HomeDashboardScreen extends ConsumerStatefulWidget {
@@ -122,7 +124,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                                   'Contributions',
                                   '\u20a6${totalContributions.formatNumber()}',
                                   Icons.savings_outlined,
-                                  () => Navigator.push(context, MaterialPageRoute(builder: (context) => WalletDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? ''))),
+                                  () => Navigator.push(context, MaterialPageRoute(builder: (context) => const MonthlyContributionsScreen())),
                                 ),
                               ),
                               const SizedBox(width: 12),
@@ -172,7 +174,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                           context,
                           'Download Statements',
                           Icons.assignment_outlined,
-                          () => Navigator.push(context, MaterialPageRoute(builder: (context) => WalletDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? ''))),
+                          () => Navigator.push(context, MaterialPageRoute(builder: (context) => const TransactionsHistoryScreen())),
                         ),
                       ],
                     ),
