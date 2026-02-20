@@ -185,35 +185,6 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                           Icons.assignment_outlined,
                           () => Navigator.push(context, MaterialPageRoute(builder: (context) => const TransactionsHistoryScreen())),
                         ),
-                        _buildActionButton(
-                          context,
-                          'Announcements',
-                          Icons.campaign_outlined,
-                          () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AnnouncementsScreen())),
-                        ),
-                        _buildActionButton(
-                          context,
-                          'Guarantors',
-                          Icons.people_outline,
-                          () => Navigator.push(context, MaterialPageRoute(builder: (context) => GuarantorDashboardScreen(userId: user?.id ?? ''))),
-                        ),
-                        _buildActionButton(
-                          context,
-                          'Upload Documents',
-                          Icons.upload_file_outlined,
-                          () => Navigator.push(context, MaterialPageRoute(builder: (context) => const DocumentUploadScreen())),
-                        ),
-                        _buildActionButton(
-                          context,
-                          'View All',
-                          Icons.apps_outlined,
-                          () => ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: const Text('More features coming soon'),
-                              backgroundColor: CoopvestColors.primary,
-                            ),
-                          ),
-                        ),
                       ],
                     ),
                     
