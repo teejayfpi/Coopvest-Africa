@@ -74,6 +74,12 @@ dependencies:
   uuid: ^4.0.0
   equatable: ^2.0.0
 
+  # PDF Generation for Statements
+  pdf: ^3.10.0
+  printing: ^5.11.0
+  path_provider: ^2.1.0
+  open_file: ^3.3.0
+
   # UI Enhancements
   flutter_animate: ^4.2.0
   shimmer: ^3.0.0

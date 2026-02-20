@@ -6,6 +6,7 @@ import '../../../core/extensions/string_extensions.dart';
 import '../../../data/models/wallet_models.dart';
 import '../../../presentation/providers/wallet_provider.dart';
 import '../../../presentation/widgets/common/cards.dart';
+import 'statement_download_screen.dart';
 
 /// Transactions History Screen
 class TransactionsHistoryScreen extends ConsumerWidget {
@@ -30,30 +31,104 @@ class TransactionsHistoryScreen extends ConsumerWidget {
           'Transaction History',
           style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold),
         ),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.download_outlined, color: context.iconPrimary),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const StatementDownloadScreen()),
+              );
+            },
+            tooltip: 'Download Statement',
+          ),
+        ],
       ),
       body: SafeArea(
-        child: transactions.isEmpty
-            ? Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+        child: Column(
+          children: [
+            // Download Statement Banner
+            Container(
+              margin: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: CoopvestColors.primary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: CoopvestColors.primary.withOpacity(0.3)),
+              ),
+              child: InkWell(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const StatementDownloadScreen()),
+                  );
+                },
+                child: Row(
                   children: [
-                    Icon(Icons.receipt_long, color: context.textSecondary, size: 64),
-                    const SizedBox(height: 16),
-                    Text(
-                      'No transactions yet',
-                      style: TextStyle(color: context.textSecondary, fontSize: 16),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: CoopvestColors.primary,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.picture_as_pdf, color: Colors.white, size: 24),
                     ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Download Statement',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: context.textPrimary,
+                              fontSize: 16,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Get a PDF statement with date range',
+                            style: TextStyle(
+                              color: context.textSecondary,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(Icons.chevron_right, color: context.iconSecondary),
                   ],
                 ),
-              )
-            : ListView.builder(
-                padding: const EdgeInsets.all(24),
-                itemCount: transactions.length,
-                itemBuilder: (context, index) {
-                  final txn = transactions[index];
-                  return _buildTransactionItem(context, txn);
-                },
               ),
+            ),
+            // Transaction List
+            Expanded(
+              child: transactions.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.receipt_long, color: context.textSecondary, size: 64),
+                          const SizedBox(height: 16),
+                          Text(
+                            'No transactions yet',
+                            style: TextStyle(color: context.textSecondary, fontSize: 16),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: transactions.length,
+                      itemBuilder: (context, index) {
+                        final txn = transactions[index];
+                        return _buildTransactionItem(context, txn);
+                      },
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }

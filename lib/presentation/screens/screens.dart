@@ -10,6 +10,10 @@ export 'auth/register_screen.dart';
 export 'auth/reset_password_screen.dart';
 export 'auth/biometric_login_screen.dart';
 
+// Transactions Screens
+export 'transactions/transactions_history_screen.dart';
+export 'transactions/statement_download_screen.dart';
+
 // Rollover Screens - Member-only functionality
 export 'rollover/rollover_eligibility_screen.dart';
 export 'rollover/rollover_request_screen.dart';

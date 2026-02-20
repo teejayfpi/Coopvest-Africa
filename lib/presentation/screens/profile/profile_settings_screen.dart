@@ -15,6 +15,7 @@ import 'package:share_plus/share_plus.dart';
 import 'edit_profile_screen.dart';
 import 'bank_accounts_screen.dart';
 import 'notifications_screen.dart';
+import '../transactions/statement_download_screen.dart';
 
 /// Profile & Settings Screen
 class ProfileSettingsScreen extends ConsumerStatefulWidget {
@@ -43,6 +44,11 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
           'icon': Icons.account_balance_outlined,
           'label': 'Membership',
           'subtitle': 'View status, request termination',
+        },
+        {
+          'icon': Icons.download_outlined,
+          'label': 'Download Statement',
+          'subtitle': 'Get PDF statements with date range',
         },
         {
           'icon': Icons.security_outlined,
@@ -433,6 +439,11 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
       case 'Membership':
         Navigator.of(context).push(
           MaterialPageRoute(builder: (context) => const MembershipScreen()),
+        );
+        break;
+      case 'Download Statement':
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (context) => const StatementDownloadScreen()),
         );
         break;
       case 'Bank Accounts':
