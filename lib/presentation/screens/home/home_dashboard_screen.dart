@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'dart:async';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/extensions/number_extensions.dart';
@@ -26,27 +27,40 @@ class HomeDashboardScreen extends ConsumerStatefulWidget {
 
 class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
   late Future<void> _refreshFuture;
+  late Timer _refreshTimer;
 
   @override
   void initState() {
     super.initState();
     _refreshFuture = _loadData();
-    // Set up periodic refresh for real-time updates every 30 seconds
+    // Set up periodic refresh for real-time updates every 15 seconds
     _setupPeriodicRefresh();
   }
 
+  @override
+  void dispose() {
+    _refreshTimer.cancel();
+    super.dispose();
+  }
+
   Future<void> _loadData() async {
-    await Future.wait([
-      ref.read(walletProvider.notifier).loadWallet(),
-      ref.read(loanProvider.notifier).getLoans(),
-    ]);
+    try {
+      await Future.wait([
+        ref.read(walletProvider.notifier).loadWallet(),
+        ref.read(loanProvider.notifier).getLoans(),
+      ]);
+    } catch (e) {
+      // Handle error silently for background refresh
+      if (mounted) {
+        debugPrint('Error loading dashboard data: $e');
+      }
+    }
   }
 
   void _setupPeriodicRefresh() {
-    Future.delayed(const Duration(seconds: 30), () {
+    _refreshTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       if (mounted) {
         _loadData();
-        _setupPeriodicRefresh();
       }
     });
   }
