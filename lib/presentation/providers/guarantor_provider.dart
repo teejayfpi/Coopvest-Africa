@@ -42,6 +42,11 @@ class GuarantorState {
       error: error ?? this.error,
     );
   }
+
+  // Getters
+  int get pendingCount => pendingRequests.length;
+  int get activeGuaranteesCount =>
+      myGuarantees.where((g) => g.status == 'active').length;
 }
 
 /// Guarantor Provider

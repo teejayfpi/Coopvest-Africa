@@ -384,7 +384,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
               ),
             ),
             TextButton(
-              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SavingsGoalsScreen())),
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => SavingsGoalsScreen(userId: widget.userId))),
               child: const Text('View All', style: TextStyle(color: CoopvestColors.primary)),
             ),
           ],

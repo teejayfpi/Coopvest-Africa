@@ -15,7 +15,7 @@ import '../../../presentation/providers/wallet_provider.dart';
 import '../../../presentation/providers/loan_provider.dart';
 import '../../../presentation/providers/insights_provider.dart';
 import '../../../presentation/providers/notifications_provider.dart';
-import '../../../presentation/providers/announcements_provider.dart';
+import '../../../presentation/providers/announcement_provider.dart';
 import '../../../presentation/providers/guarantor_provider.dart';
 import '../../../presentation/providers/document_provider.dart';
 import '../../../presentation/screens/wallet/deposit_screen.dart';
@@ -27,6 +27,7 @@ import '../../../presentation/screens/transactions/transactions_history_screen.d
 import '../../../presentation/screens/announcements/announcements_screen.dart';
 import '../../../presentation/screens/guarantor/guarantor_dashboard_screen.dart';
 import '../../../presentation/screens/documents/document_upload_screen.dart';
+import '../../../presentation/screens/profile/profile_settings_screen.dart';
 import 'package:fl_chart/fl_chart.dart';
 
 class HomeDashboardScreen extends ConsumerStatefulWidget {
@@ -182,7 +183,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                           context,
                           'Download Statements',
                           Icons.assignment_outlined,
-                          () => Navigator.push(context, MaterialPageRoute(builder: (context) => const TransactionsHistoryScreen())),
+                          () => Navigator.push(context, MaterialPageRoute(builder: (context) => TransactionsHistoryScreen(userId: user?.id ?? ''))),
                         ),
                       ],
                     ),
@@ -634,5 +635,3 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
     );
   }
 }
-
-import '../profile/profile_settings_screen.dart';

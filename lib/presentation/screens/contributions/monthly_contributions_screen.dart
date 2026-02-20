@@ -409,7 +409,6 @@ class _MonthlyContributionsScreenState
       label: Text(label),
       selected: isActive,
       selectedColor: CoopvestColors.primary.withOpacity(0.1),
-      selectedIconColor: CoopvestColors.primary,
       checkmarkColor: CoopvestColors.primary,
       labelStyle: TextStyle(
         color: isActive ? CoopvestColors.primary : context.textSecondary,

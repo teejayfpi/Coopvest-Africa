@@ -48,6 +48,12 @@ class DocumentState {
       uploadError: uploadError ?? this.uploadError,
     );
   }
+
+  // Getters
+  int get pendingCount => documents.where((d) => d.status == 'pending').length;
+  int get approvedCount => documents.where((d) => d.status == 'approved').length;
+  int get rejectedCount => documents.where((d) => d.status == 'rejected').length;
+  bool get isKycComplete => kycStatus['isComplete'] ?? false;
 }
 
 /// Document Provider

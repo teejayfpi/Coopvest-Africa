@@ -1,8 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/network/api_client.dart';
-import '../../core/utils/utils.dart';
-import '../../data/models/contributions/monthly_contribution.dart';
-import '../../data/api/contributions/contribution_api_service.dart';
+import '../../../core/network/api_client.dart';
+import '../../../core/utils/utils.dart';
+import '../../../data/models/contributions/monthly_contribution.dart';
+import '../../../data/api/contributions/contribution_api_service.dart';
 
 /// Contribution Repository Provider
 final contributionRepositoryProvider = Provider<ContributionRepository>((ref) {
@@ -69,7 +69,7 @@ class ContributionRepository {
 }
 
 /// Contribution loading states
-enum ContributionStatus {
+enum ContributionLoadStatus {
   initial,
   loading,
   loaded,
@@ -78,7 +78,7 @@ enum ContributionStatus {
 
 /// Contribution State
 class ContributionState {
-  final ContributionStatus status;
+  final ContributionLoadStatus status;
   final List<MonthlyContribution> contributions;
   final ContributionSummary? summary;
   final ContributionDetail? selectedDetail;
@@ -91,7 +91,7 @@ class ContributionState {
   final bool isRefreshing;
 
   const ContributionState({
-    this.status = ContributionStatus.initial,
+    this.status = ContributionLoadStatus.initial,
     this.contributions = const [],
     this.summary,
     this.selectedDetail,
@@ -104,11 +104,11 @@ class ContributionState {
     this.isRefreshing = false,
   });
 
-  bool get isLoading => status == ContributionStatus.loading;
-  bool get isLoaded => status == ContributionStatus.loaded;
+  bool get isLoading => status == ContributionLoadStatus.loading;
+  bool get isLoaded => status == ContributionLoadStatus.loaded;
 
   ContributionState copyWith({
-    ContributionStatus? status,
+    ContributionLoadStatus? status,
     List<MonthlyContribution>? contributions,
     ContributionSummary? summary,
     ContributionDetail? selectedDetail,
@@ -153,7 +153,7 @@ class ContributionNotifier extends StateNotifier<ContributionState> {
 
   /// Load initial contributions and summary
   Future<void> loadContributions() async {
-    state = state.copyWith(status: ContributionStatus.loading, error: null);
+    state = state.copyWith(status: ContributionLoadStatus.loading, error: null);
     try {
       final filter = state.filter;
       final response = await _repository.getContributions(
@@ -164,7 +164,7 @@ class ContributionNotifier extends StateNotifier<ContributionState> {
       final summary = await _repository.getContributionSummary();
 
       state = state.copyWith(
-        status: ContributionStatus.loaded,
+        status: ContributionLoadStatus.loaded,
         contributions: response.contributions,
         summary: summary,
         currentPage: response.page,
@@ -174,7 +174,7 @@ class ContributionNotifier extends StateNotifier<ContributionState> {
     } catch (e) {
       logger.e('Load contributions error: $e');
       state = state.copyWith(
-        status: ContributionStatus.error,
+        status: ContributionLoadStatus.error,
         error: e.toString(),
       );
     }
@@ -184,7 +184,7 @@ class ContributionNotifier extends StateNotifier<ContributionState> {
   Future<void> loadMoreContributions() async {
     if (state.isLoading || !state.hasMore) return;
 
-    state = state.copyWith(status: ContributionStatus.loading);
+    state = state.copyWith(status: ContributionLoadStatus.loading);
     try {
       final nextPage = state.currentPage + 1;
       final response = await _repository.getContributions(
@@ -194,7 +194,7 @@ class ContributionNotifier extends StateNotifier<ContributionState> {
       );
 
       state = state.copyWith(
-        status: ContributionStatus.loaded,
+        status: ContributionLoadStatus.loaded,
         contributions: [...state.contributions, ...response.contributions],
         currentPage: response.page,
         totalCount: response.totalCount,
@@ -202,7 +202,7 @@ class ContributionNotifier extends StateNotifier<ContributionState> {
       );
     } catch (e) {
       logger.e('Load more contributions error: $e');
-      state = state.copyWith(status: ContributionStatus.loaded);
+      state = state.copyWith(status: ContributionLoadStatus.loaded);
     }
   }
 
@@ -219,7 +219,7 @@ class ContributionNotifier extends StateNotifier<ContributionState> {
       final summary = await _repository.getContributionSummary();
 
       state = state.copyWith(
-        status: ContributionStatus.loaded,
+        status: ContributionLoadStatus.loaded,
         contributions: response.contributions,
         summary: summary,
         currentPage: response.page,
