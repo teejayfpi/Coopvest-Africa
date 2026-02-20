@@ -9,6 +9,9 @@ import '../kyc/kyc_employment_details_screen.dart';
 import '../support/support_home_screen.dart';
 import '../security/security_settings_screen.dart';
 import '../membership/membership_screen.dart';
+import '../announcements/announcements_screen.dart';
+import '../guarantor/guarantor_dashboard_screen.dart';
+import '../documents/document_upload_screen.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -59,6 +62,26 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
           'icon': Icons.account_balance_wallet_outlined,
           'label': 'Bank Accounts',
           'subtitle': 'Manage your linked bank accounts',
+        },
+      ],
+    },
+    {
+      'title': 'Information',
+      'items': [
+        {
+          'icon': Icons.campaign_outlined,
+          'label': 'Announcements',
+          'subtitle': 'View admin broadcasts and updates',
+        },
+        {
+          'icon': Icons.people_outline,
+          'label': 'Guarantors',
+          'subtitle': 'Track pending guarantor requests',
+        },
+        {
+          'icon': Icons.upload_file_outlined,
+          'label': 'Upload Documents',
+          'subtitle': 'Submit KYC and other documents',
         },
       ],
     },
@@ -474,6 +497,21 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
         break;
       case 'Share App':
         Share.share('Check out Coopvest Africa - The best cooperative platform!');
+        break;
+      case 'Announcements':
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (context) => const AnnouncementsScreen()),
+        );
+        break;
+      case 'Guarantors':
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (context) => GuarantorDashboardScreen(userId: ref.read(currentUserProvider)?.id ?? '')),
+        );
+        break;
+      case 'Upload Documents':
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (context) => const DocumentUploadScreen()),
+        );
         break;
       default:
         // Handle other taps

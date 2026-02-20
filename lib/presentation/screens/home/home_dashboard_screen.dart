@@ -7,17 +7,26 @@ import '../../../config/theme_extension.dart';
 import '../../../core/extensions/number_extensions.dart';
 import '../../../data/models/wallet_models.dart';
 import '../../../data/models/loan_models.dart';
+import '../../../data/models/announcement_models.dart';
+import '../../../data/models/guarantor_models.dart';
+import '../../../data/models/document_models.dart';
 import '../../../presentation/providers/auth_provider.dart';
 import '../../../presentation/providers/wallet_provider.dart';
 import '../../../presentation/providers/loan_provider.dart';
 import '../../../presentation/providers/insights_provider.dart';
 import '../../../presentation/providers/notifications_provider.dart';
+import '../../../presentation/providers/announcements_provider.dart';
+import '../../../presentation/providers/guarantor_provider.dart';
+import '../../../presentation/providers/document_provider.dart';
 import '../../../presentation/screens/wallet/deposit_screen.dart';
 import '../../../presentation/screens/loan/loan_dashboard_screen.dart';
 import '../../../presentation/screens/wallet/wallet_dashboard_screen.dart';
 import '../../../presentation/screens/referral/referral_dashboard_screen.dart';
 import '../../../presentation/screens/contributions/monthly_contributions_screen.dart';
 import '../../../presentation/screens/transactions/transactions_history_screen.dart';
+import '../../../presentation/screens/announcements/announcements_screen.dart';
+import '../../../presentation/screens/guarantor/guarantor_dashboard_screen.dart';
+import '../../../presentation/screens/documents/document_upload_screen.dart';
 import 'package:fl_chart/fl_chart.dart';
 
 class HomeDashboardScreen extends ConsumerStatefulWidget {
@@ -175,6 +184,35 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                           'Download Statements',
                           Icons.assignment_outlined,
                           () => Navigator.push(context, MaterialPageRoute(builder: (context) => const TransactionsHistoryScreen())),
+                        ),
+                        _buildActionButton(
+                          context,
+                          'Announcements',
+                          Icons.campaign_outlined,
+                          () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AnnouncementsScreen())),
+                        ),
+                        _buildActionButton(
+                          context,
+                          'Guarantors',
+                          Icons.people_outline,
+                          () => Navigator.push(context, MaterialPageRoute(builder: (context) => GuarantorDashboardScreen(userId: user?.id ?? ''))),
+                        ),
+                        _buildActionButton(
+                          context,
+                          'Upload Documents',
+                          Icons.upload_file_outlined,
+                          () => Navigator.push(context, MaterialPageRoute(builder: (context) => const DocumentUploadScreen())),
+                        ),
+                        _buildActionButton(
+                          context,
+                          'View All',
+                          Icons.apps_outlined,
+                          () => ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: const Text('More features coming soon'),
+                              backgroundColor: CoopvestColors.primary,
+                            ),
+                          ),
                         ),
                       ],
                     ),
