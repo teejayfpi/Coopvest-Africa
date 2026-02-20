@@ -44,7 +44,6 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
   void initState() {
     super.initState();
     _refreshFuture = _loadData();
-    // Set up periodic refresh for real-time updates every 15 seconds
     _setupPeriodicRefresh();
   }
 
@@ -61,7 +60,6 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
         ref.read(loanProvider.notifier).getLoans(),
       ]);
     } catch (e) {
-      // Handle error silently for background refresh
       if (mounted) {
         debugPrint('Error loading dashboard data: $e');
       }
@@ -101,7 +99,6 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
           physics: const AlwaysScrollableScrollPhysics(),
           child: Column(
             children: [
-              // Dark Header Section
               _buildHeader(context, userName, membershipId, user?.name ?? 'User'),
               
               Padding(
@@ -109,57 +106,54 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Overlapping Stats Cards
+                    // Stat Cards - Overlapping
                     Transform.translate(
                       offset: const Offset(0, -30),
-                      child: Column(
+                      child: Row(
                         children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: _buildStatCard(
-                                  context,
-                                  'Wallet Balance',
-                                  '\u20a6${walletBalance.formatNumber()}',
-                                  Icons.account_balance_wallet_outlined,
-                                  () => Navigator.push(context, MaterialPageRoute(builder: (context) => WalletDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? ''))),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: _buildStatCard(
-                                  context,
-                                  'Contributions',
-                                  '\u20a6${totalContributions.formatNumber()}',
-                                  Icons.savings_outlined,
-                                  () => Navigator.push(context, MaterialPageRoute(builder: (context) => const MonthlyContributionsScreen())),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: _buildStatCard(
-                                  context,
-                                  'Loans',
-                                  '\u20a6${activeLoans.formatNumber()}',
-                                  Icons.monetization_on_outlined,
-                                  () => Navigator.push(context, MaterialPageRoute(builder: (context) => LoanDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? '', userPhone: user?.phone ?? ''))),
-                                ),
-                              ),
-                            ],
+                          Expanded(
+                            child: _buildCompactStatCard(
+                              context,
+                              'Wallet Balance',
+                              '₦${walletBalance.formatNumber()}',
+                              Icons.account_balance_wallet_outlined,
+                              () => Navigator.push(context, MaterialPageRoute(builder: (context) => WalletDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? ''))),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildCompactStatCard(
+                              context,
+                              'Contributions',
+                              '₦${totalContributions.formatNumber()}',
+                              Icons.savings_outlined,
+                              () => Navigator.push(context, MaterialPageRoute(builder: (context) => const MonthlyContributionsScreen())),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildCompactStatCard(
+                              context,
+                              'Loans',
+                              '₦${activeLoans.formatNumber()}',
+                              Icons.monetization_on_outlined,
+                              () => Navigator.push(context, MaterialPageRoute(builder: (context) => LoanDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? '', userPhone: user?.phone ?? ''))),
+                            ),
                           ),
                         ],
                       ),
                     ),
                     
-                    // Quick Actions Grid
+                    const SizedBox(height: 20),
+                    
+                    // Action Buttons Grid
                     GridView.count(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       crossAxisCount: 4,
-                      mainAxisSpacing: 10,
-                      crossAxisSpacing: 10,
-                      childAspectRatio: 0.75,
+                      mainAxisSpacing: 12,
+                      crossAxisSpacing: 12,
+                      childAspectRatio: 0.85,
                       children: [
                         _buildActionButton(
                           context,
@@ -175,9 +169,14 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                         ),
                         _buildActionButton(
                           context,
-                          'Referral',
-                          Icons.share_outlined,
-                          () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ReferralDashboardScreen())),
+                          'Investment Pool',
+                          Icons.trending_up_outlined,
+                          () => ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: const Text('Investment Pool coming soon'),
+                              backgroundColor: CoopvestColors.primary,
+                            ),
+                          ),
                         ),
                         _buildActionButton(
                           context,
@@ -188,19 +187,17 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                       ],
                     ),
                     
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 28),
                     
-                    // Insights & Loan Status Row
+                    // Insights & Loan Status
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Insights Chart
                         Expanded(
                           flex: 3,
                           child: _buildInsightsCard(context, walletState),
                         ),
                         const SizedBox(width: 12),
-                        // Loan Status
                         Expanded(
                           flex: 2,
                           child: _buildLoanStatusCard(context, loansState),
@@ -208,13 +205,13 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                       ],
                     ),
                     
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 28),
                     
                     // Notifications Section
                     Text(
                       'Notifications',
                       style: TextStyle(
-                        fontSize: 20,
+                        fontSize: 16,
                         fontWeight: FontWeight.bold,
                         color: context.textPrimary,
                       ),
@@ -224,7 +221,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                       context,
                       'Your loan has been approved',
                       '2h ago',
-                      Icons.notifications_outlined,
+                      Icons.check_circle_outline,
                       CoopvestColors.primary,
                       () => Navigator.push(context, MaterialPageRoute(builder: (context) => LoanDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? '', userPhone: user?.phone ?? ''))),
                     ),
@@ -243,7 +240,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                       ),
                     ),
                     
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 32),
                   ],
                 ),
               ),
@@ -261,14 +258,14 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
       decoration: BoxDecoration(
         color: CoopvestColors.primary,
         borderRadius: const BorderRadius.only(
-          bottomLeft: Radius.circular(30),
-          bottomRight: Radius.circular(30),
+          bottomLeft: Radius.circular(24),
+          bottomRight: Radius.circular(24),
         ),
         boxShadow: [
           BoxShadow(
-            color: CoopvestColors.primary.withOpacity(0.3),
-            blurRadius: 15,
-            offset: const Offset(0, 5),
+            color: CoopvestColors.primary.withOpacity(0.2),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -281,25 +278,26 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
               Text(
                 'Welcome back,',
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.8),
-                  fontSize: 20,
+                  color: Colors.white.withOpacity(0.85),
+                  fontSize: 14,
                   fontWeight: FontWeight.w400,
                 ),
               ),
+              const SizedBox(height: 4),
               Text(
                 name,
                 style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 24,
+                  fontSize: 22,
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               Text(
-                'Member ID: $membershipId',
+                'Membership ID: $membershipId',
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.6),
-                  fontSize: 14,
+                  color: Colors.white.withOpacity(0.7),
+                  fontSize: 12,
                 ),
               ),
             ],
@@ -307,13 +305,13 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
           GestureDetector(
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfileSettingsScreen())),
             child: CircleAvatar(
-              radius: 30,
-              backgroundColor: Colors.white24,
+              radius: 32,
+              backgroundColor: Colors.white.withOpacity(0.2),
               child: Text(
                 _getInitials(fullName),
                 style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 20,
+                  fontSize: 18,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -333,26 +331,34 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
     return '${parts[0][0]}${parts[parts.length - 1][0]}'.toUpperCase();
   }
 
-  Widget _buildStatCard(BuildContext context, String title, String value, IconData icon, VoidCallback onTap) {
+  Widget _buildCompactStatCard(BuildContext context, String title, String value, IconData icon, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: context.cardBackground,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
+              color: Colors.black.withOpacity(0.06),
+              blurRadius: 12,
               offset: const Offset(0, 4),
             ),
           ],
         ),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, color: CoopvestColors.primary, size: 28),
-            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: CoopvestColors.primary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: CoopvestColors.primary, size: 20),
+            ),
+            const SizedBox(height: 10),
             Text(
               title,
               style: TextStyle(
@@ -360,9 +366,10 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                 color: context.textSecondary,
                 fontWeight: FontWeight.w500,
               ),
-              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 6),
             Text(
               value,
               style: TextStyle(
@@ -370,6 +377,8 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                 fontWeight: FontWeight.bold,
                 color: context.textPrimary,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),
@@ -381,15 +390,13 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: context.cardBackground,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: context.dividerColor.withOpacity(0.05)),
+          borderRadius: BorderRadius.circular(14),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.02),
-              blurRadius: 5,
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 8,
               offset: const Offset(0, 2),
             ),
           ],
@@ -397,15 +404,22 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: CoopvestColors.primary, size: 24),
-            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: CoopvestColors.primary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: CoopvestColors.primary, size: 22),
+            ),
+            const SizedBox(height: 8),
             Flexible(
               child: Text(
                 label,
                 style: TextStyle(
-                  fontSize: 9,
+                  fontSize: 10,
                   color: context.textPrimary,
-                  fontWeight: FontWeight.w500,
+                  fontWeight: FontWeight.w600,
                 ),
                 textAlign: TextAlign.center,
                 maxLines: 2,
@@ -428,8 +442,8 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.03),
-              blurRadius: 10,
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 12,
               offset: const Offset(0, 4),
             ),
           ],
@@ -440,22 +454,23 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
             Text(
               'Insights',
               style: TextStyle(
-                fontSize: 18,
+                fontSize: 16,
                 fontWeight: FontWeight.bold,
                 color: context.textPrimary,
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             Text(
               'Contributions',
               style: TextStyle(
-                fontSize: 14,
+                fontSize: 12,
                 color: context.textSecondary,
+                fontWeight: FontWeight.w500,
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             SizedBox(
-              height: 120,
+              height: 100,
               child: LineChart(
                 LineChartData(
                   gridData: const FlGridData(show: false),
@@ -467,16 +482,13 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                       sideTitles: SideTitles(
                         showTitles: true,
                         getTitlesWidget: (value, meta) {
-                          const titles = ['Jan', 'Mar', 'May', 'Jun'];
-                          if (value.toInt() % 2 == 0 && value.toInt() < titles.length * 2) {
-                             final index = value.toInt() ~/ 2;
-                             if (index < titles.length) {
-                               return Text(titles[index], style: TextStyle(fontSize: 10, color: context.textSecondary));
-                             }
+                          const titles = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
+                          if (value.toInt() < titles.length) {
+                            return Text(titles[value.toInt()], style: TextStyle(fontSize: 9, color: context.textSecondary));
                           }
                           return const Text('');
                         },
-                        reservedSize: 22,
+                        reservedSize: 20,
                       ),
                     ),
                   ),
@@ -485,18 +497,21 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                     LineChartBarData(
                       spots: const [
                         FlSpot(0, 20),
-                        FlSpot(1, 40),
-                        FlSpot(2, 30),
-                        FlSpot(3, 50),
-                        FlSpot(4, 45),
-                        FlSpot(5, 70),
+                        FlSpot(1, 35),
+                        FlSpot(2, 28),
+                        FlSpot(3, 45),
+                        FlSpot(4, 40),
+                        FlSpot(5, 60),
                       ],
                       isCurved: true,
                       color: CoopvestColors.primary,
-                      barWidth: 3,
+                      barWidth: 2.5,
                       isStrokeCapRound: true,
                       dotData: const FlDotData(show: false),
-                      belowBarData: BarAreaData(show: false),
+                      belowBarData: BarAreaData(
+                        show: true,
+                        color: CoopvestColors.primary.withOpacity(0.1),
+                      ),
                     ),
                   ],
                 ),
@@ -520,8 +535,8 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.03),
-              blurRadius: 10,
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 12,
               offset: const Offset(0, 4),
             ),
           ],
@@ -534,22 +549,26 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
               style: TextStyle(
                 fontSize: 14,
                 color: context.textPrimary,
-                fontWeight: FontWeight.w500,
+                fontWeight: FontWeight.w600,
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             Text(
               pendingLoan ? 'Pending\nApproval' : 'No Active\nApplications',
               style: TextStyle(
-                fontSize: 18,
+                fontSize: 16,
                 fontWeight: FontWeight.bold,
                 color: context.textPrimary,
               ),
             ),
-            const SizedBox(height: 12),
-            const Align(
+            const SizedBox(height: 16),
+            Align(
               alignment: Alignment.bottomRight,
-              child: Icon(Icons.access_time, color: CoopvestColors.primary, size: 32),
+              child: Icon(
+                Icons.access_time_outlined,
+                color: CoopvestColors.primary.withOpacity(0.6),
+                size: 28,
+              ),
             ),
           ],
         ),
@@ -561,14 +580,14 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: context.cardBackground,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(14),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.02),
-              blurRadius: 10,
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 8,
               offset: const Offset(0, 2),
             ),
           ],
@@ -579,11 +598,11 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(icon, color: color, size: 24),
+              child: Icon(icon, color: color, size: 20),
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -591,17 +610,17 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                   Text(
                     title,
                     style: TextStyle(
-                      fontSize: 14,
+                      fontSize: 13,
                       fontWeight: FontWeight.w600,
                       color: context.textPrimary,
                     ),
                   ),
-                  if (time.isNotEmpty) ...[
-                    const SizedBox(height: 4),
+                  if (time.isNotEmpty) ...[ 
+                    const SizedBox(height: 3),
                     Text(
                       time,
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: 11,
                         color: context.textSecondary,
                       ),
                     ),
@@ -616,5 +635,4 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
   }
 }
 
-// Import ProfileSettingsScreen at the top
 import '../profile/profile_settings_screen.dart';
