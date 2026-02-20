@@ -17,6 +17,7 @@ class User extends Equatable {
   final String? city;
   final String? state;
   final String? country;
+  final String? profilePicture; // URL to user's profile picture
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -36,6 +37,7 @@ class User extends Equatable {
     this.city,
     this.state,
     this.country,
+    this.profilePicture,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -74,6 +76,7 @@ class User extends Equatable {
       city: json['city'] as String?,
       state: json['state'] as String?,
       country: json['country'] as String?,
+      profilePicture: json['profile_picture'] as String? ?? json['profilePicture'] as String?,
       createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt'] as String) : (json['created_at'] != null ? DateTime.parse(json['created_at'] as String) : DateTime.now()),
       updatedAt: json['updatedAt'] != null ? DateTime.parse(json['updatedAt'] as String) : (json['updated_at'] != null ? DateTime.parse(json['updated_at'] as String) : DateTime.now()),
     );
