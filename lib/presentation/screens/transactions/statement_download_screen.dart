@@ -41,6 +41,11 @@ class _StatementDownloadScreenState extends ConsumerState<StatementDownloadScree
 
   String _selectedType = 'all';
 
+  String _capitalizeString(String text) {
+    if (text.isEmpty) return text;
+    return text[0].toUpperCase() + text.substring(1);
+  }
+
   Future<void> _selectStartDate(BuildContext context) async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -289,7 +294,7 @@ class _StatementDownloadScreenState extends ConsumerState<StatementDownloadScree
     return pw.Container(
       padding: const pw.EdgeInsets.all(16),
       decoration: pw.BoxDecoration(
-        color: PdfColor.fromInt(CoopvestColors.primary.value).withOpacity(0.1),
+        color: PdfColors.grey100,
         borderRadius: pw.BorderRadius.circular(8),
       ),
       child: pw.Row(
@@ -297,7 +302,7 @@ class _StatementDownloadScreenState extends ConsumerState<StatementDownloadScree
         children: [
           _buildPdfStatItem('Wallet Balance', '₦${(wallet?.balance ?? 0).formatNumber()}', true),
           _buildPdfStatItem('Total Contributions', '₦${(wallet?.totalContributions ?? 0).formatNumber()}', false),
-          _buildPdfStatItem('Total Withdrawals', '₦${(wallet?.totalWithdrawals ?? 0).formatNumber()}', false),
+          _buildPdfStatItem('Total Withdrawals', '₦${(wallet?.availableForWithdrawal ?? 0).formatNumber()}', false),
         ],
       ),
     );
@@ -365,8 +370,8 @@ class _StatementDownloadScreenState extends ConsumerState<StatementDownloadScree
           child: pw.Row(
             children: [
               pw.Expanded(flex: 2, child: pw.Text(DateFormat('MMM dd, yyyy').format(txn.createdAt), style: const pw.TextStyle(fontSize: 10))),
-              pw.Expanded(flex: 4, child: pw.Text(txn.description ?? txn.type.replaceAll('_', ' ').capitalize(), style: const pw.TextStyle(fontSize: 10))),
-              pw.Expanded(flex: 2, child: pw.Text(txn.type.replaceAll('_', ' ').capitalize(), style: const pw.TextStyle(fontSize: 10))),
+              pw.Expanded(flex: 4, child: pw.Text(txn.description ?? _capitalizeString(txn.type.replaceAll('_', ' ')), style: const pw.TextStyle(fontSize: 10))),
+              pw.Expanded(flex: 2, child: pw.Text(_capitalizeString(txn.type.replaceAll('_', ' ')), style: const pw.TextStyle(fontSize: 10))),
               pw.Expanded(
                 flex: 2,
                 child: pw.Text(
