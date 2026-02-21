@@ -328,7 +328,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
           context,
           'History',
           Icons.history,
-          () => Navigator.push(context, MaterialPageRoute(builder: (context) => const TransactionsHistoryScreen())),
+          () => Navigator.push(context, MaterialPageRoute(builder: (context) => TransactionsHistoryScreen(userId: widget.userId))),
         ),
       ],
     );

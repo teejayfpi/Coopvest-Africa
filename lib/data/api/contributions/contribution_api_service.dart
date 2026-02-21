@@ -1,6 +1,6 @@
 import 'package:dio/dio.dart';
 import '../../core/network/api_client.dart';
-import 'monthly_contribution.dart';
+import '../../../data/models/contributions/monthly_contribution.dart';
 
 /// API Service for Contribution Operations
 /// Handles all monthly contributions related API calls

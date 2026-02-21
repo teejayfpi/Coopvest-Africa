@@ -393,7 +393,7 @@ class ContributionFilter {
   final DateTime? startDate;
   final DateTime? endDate;
 
-  ContributionFilter({
+  const ContributionFilter({
     this.year,
     this.month,
     this.status,

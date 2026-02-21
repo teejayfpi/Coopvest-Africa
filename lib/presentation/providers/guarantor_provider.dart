@@ -15,15 +15,15 @@ class GuarantorState {
     this.pendingRequests = const [],
     this.allRequests = const [],
     this.myGuarantees = const [],
-    this.stats = const GuarantorStats(
+    GuarantorStats? stats,
+    this.isLoading = false,
+    this.error,
+  }) : stats = stats ?? GuarantorStats(
       pendingRequests: 0,
       acceptedGuarantees: 0,
       declinedRequests: 0,
       totalGuaranteedAmount: 0,
-    ),
-    this.isLoading = false,
-    this.error,
-  });
+    );
 
   GuarantorState copyWith({
     List<GuarantorRequest>? pendingRequests,
@@ -163,10 +163,6 @@ class GuarantorProvider extends StateNotifier<GuarantorState> {
       return false;
     }
   }
-
-  int get pendingCount => pendingRequests.length;
-  int get activeGuaranteesCount =>
-      myGuarantees.where((g) => g.status == 'active').length;
 }
 
 /// Guarantor Provider
