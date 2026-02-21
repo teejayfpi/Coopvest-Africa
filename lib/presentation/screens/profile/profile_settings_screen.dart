@@ -505,7 +505,7 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
         break;
       case 'Guarantors':
         Navigator.of(context).push(
-          MaterialPageRoute(builder: (context) => const GuarantorDashboardScreen())),
+          MaterialPageRoute(builder: (context) => const GuarantorDashboardScreen()),
         );
         break;
       case 'Upload Documents':

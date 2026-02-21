@@ -416,7 +416,7 @@ class _MonthlyContributionsScreenState
       ),
       onSelected: (selected) async {
         if (selected) {
-          await ref.read(contributionProvider.notifier).applyFilter(filterFn());
+          await ref.read(contributionProvider.notifier).applyFilter(filterFn);
         }
       },
     );
@@ -427,7 +427,7 @@ class _MonthlyContributionsScreenState
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (state.status == ContributionStatus.error &&
+    if (state.status == ContributionLoadStatus.error &&
         state.contributions.isEmpty) {
       return _buildErrorState(state.error);
     }
@@ -442,9 +442,11 @@ class _MonthlyContributionsScreenState
       itemCount: state.contributions.length + (state.hasMore ? 1 : 0),
       itemBuilder: (context, index) {
         if (index >= state.contributions.length) {
-          return const Center(
+          return const Padding(
             padding: EdgeInsets.all(16),
-            child: CircularProgressIndicator(),
+            child: Center(
+              child: CircularProgressIndicator(),
+            ),
           );
         }
 

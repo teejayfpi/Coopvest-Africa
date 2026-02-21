@@ -54,6 +54,28 @@ class Announcement {
     if (expiresAt == null) return false;
     return DateTime.now().isAfter(expiresAt!);
   }
+
+  Announcement copyWith({
+    String? id,
+    String? title,
+    String? content,
+    String? type,
+    DateTime? createdAt,
+    DateTime? expiresAt,
+    bool? isRead,
+    bool? isPinned,
+  }) {
+    return Announcement(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      content: content ?? this.content,
+      type: type ?? this.type,
+      createdAt: createdAt ?? this.createdAt,
+      expiresAt: expiresAt ?? this.expiresAt,
+      isRead: isRead ?? this.isRead,
+      isPinned: isPinned ?? this.isPinned,
+    );
+  }
 }
 
 /// Response model for announcements list

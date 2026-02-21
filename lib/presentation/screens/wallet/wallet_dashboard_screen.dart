@@ -505,7 +505,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
               ),
             ),
             TextButton(
-              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const TransactionsHistoryScreen())),
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => TransactionsHistoryScreen(userId: widget.userId))),
               child: const Text('See All', style: TextStyle(color: CoopvestColors.primary)),
             ),
           ],
