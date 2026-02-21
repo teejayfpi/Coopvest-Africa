@@ -652,12 +652,12 @@ class _StatementDownloadScreenState extends ConsumerState<StatementDownloadScree
             SizedBox(
               width: double.infinity,
               child: PrimaryButton(
-                onPressed: _isGenerating ? null : _generateAndDownloadStatement,
+                onPressed: _isGenerating ? () async {} : _generateAndDownloadStatement,
                 isLoading: _isGenerating,
                 icon: Icons.download_outlined,
-                child: _isGenerating
-                    ? const Text('Generating PDF...')
-                    : const Text('Download Statement (PDF)'),
+                label: _isGenerating
+                    ? 'Generating PDF...'
+                    : 'Download Statement (PDF)',
               ),
             ),
 

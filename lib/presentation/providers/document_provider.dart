@@ -54,6 +54,7 @@ class DocumentState {
   int get approvedCount => documents.where((d) => d.status == 'approved').length;
   int get rejectedCount => documents.where((d) => d.status == 'rejected').length;
   bool get isKycComplete => kycStatus['isComplete'] ?? false;
+  String get kyycStatus => kycStatus['status'] ?? 'unknown';
 }
 
 /// Document Provider
@@ -154,13 +155,6 @@ class DocumentProvider extends StateNotifier<DocumentState> {
       return false;
     }
   }
-
-  int get pendingCount =>
-      documents.where((d) => d.status == 'pending').length;
-  int get approvedCount =>
-      documents.where((d) => d.status == 'approved').length;
-  int get rejectedCount =>
-      documents.where((d) => d.status == 'rejected').length;
 }
 
 /// Document Provider
