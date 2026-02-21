@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../config/theme_config.dart';
+import '../../../config/theme_extension.dart';
 
 /// Loading Widget - displays a centered loading indicator
 class LoadingWidget extends StatelessWidget {

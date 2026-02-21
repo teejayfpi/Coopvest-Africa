@@ -355,7 +355,7 @@ class _StatementDownloadScreenState extends ConsumerState<StatementDownloadScree
           pw.Expanded(flex: 2, child: pw.Text('Date', style: const pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold))),
           pw.Expanded(flex: 4, child: pw.Text('Description', style: const pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold))),
           pw.Expanded(flex: 2, child: pw.Text('Type', style: const pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold))),
-          pw.Expanded(flex: 2, child: pw.Text('Amount', style: const pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold), textAlignment: pw.TextAlignment.end)),
+          pw.Expanded(flex: 2, child: pw.Text('Amount', style: const pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.right)),
         ],
       ),
     );
@@ -381,7 +381,7 @@ class _StatementDownloadScreenState extends ConsumerState<StatementDownloadScree
                     fontWeight: pw.FontWeight.bold,
                     color: isCredit ? PdfColors.green700 : PdfColors.red700,
                   ),
-                  textAlignment: pw.TextAlignment.end,
+                  textAlignment: pw.TextAlign.right,
                 ),
               ),
             ],
@@ -659,7 +659,7 @@ class _StatementDownloadScreenState extends ConsumerState<StatementDownloadScree
               child: PrimaryButton(
                 onPressed: _isGenerating ? () async {} : _generateAndDownloadStatement,
                 isLoading: _isGenerating,
-                icon: Icons.download_outlined,
+                icon: const Icon(Icons.download_outlined),
                 label: _isGenerating
                     ? 'Generating PDF...'
                     : 'Download Statement (PDF)',

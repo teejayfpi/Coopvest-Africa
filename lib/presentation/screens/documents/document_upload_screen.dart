@@ -199,7 +199,7 @@ class _DocumentUploadScreenState extends ConsumerState<DocumentUploadScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(documentProvider);
-    final kycStatus = state.kyycStatus;
+    final kycStatus = state.kycStatus;
 
     return Scaffold(
       backgroundColor: context.scaffoldBackground,
@@ -260,7 +260,7 @@ class _DocumentUploadScreenState extends ConsumerState<DocumentUploadScreen> {
     final required = kycStatus['requiredCount'] as int? ?? 0;
     final missing = List<String>.from(kycStatus['missingTypes'] ?? []);
 
-    final progress = required > 0 ? approved / required : 0;
+    final double progress = required > 0 ? approved / required : 0.0;
 
     return Container(
       margin: const EdgeInsets.all(16),
