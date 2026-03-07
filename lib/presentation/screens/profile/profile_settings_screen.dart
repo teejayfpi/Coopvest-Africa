@@ -753,13 +753,6 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
               const SizedBox(height: 12),
               _buildWarningPoint(
                 context,
-                Icons.credit_score,
-                'Credit Impact',
-                'This guarantee will be recorded on your credit history and may affect your borrowing capacity.',
-              ),
-              const SizedBox(height: 12),
-              _buildWarningPoint(
-                context,
                 Icons.legal,
                 'Legal Obligation',
                 'Failure to fulfill your guarantor obligations may result in legal action against you.',
