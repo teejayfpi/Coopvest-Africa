@@ -528,6 +528,160 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
     }
   }
 
+  void _showPrivacyPolicyDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: context.cardBackground,
+        title: Text('Privacy Policy', style: TextStyle(color: context.textPrimary)),
+        content: SingleChildScrollView(
+          child: Text(
+            'Privacy Policy\n\n'
+            'Last updated: January 2025\n\n'
+            'Coopvest Africa ("we", "our", or "us") is committed to protecting your privacy. '
+            'This Privacy Policy explains how your personal information is collected, used, and disclosed by Coopvest Africa.\n\n'
+            'Information We Collect:\n'
+            '- Personal identification information (Name, email, phone number)\n'
+            '- Financial information for cooperative services\n'
+            '- Transaction history\n'
+            '- Device information and usage data\n\n'
+            'How We Use Your Information:\n'
+            '- To provide and maintain our cooperative services\n'
+            '- To process transactions and send related information\n'
+            '- To send promotional communications (with your consent)\n'
+            '- To detect, prevent, and address technical issues\n\n'
+            'Data Protection:\n'
+            'We implement appropriate security measures to protect your personal information.\n\n'
+            'Contact Us:\n'
+            'If you have questions about this Privacy Policy, please contact us at support@coopvest.com',
+            style: TextStyle(color: context.textSecondary),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              // Could open URL to full privacy policy
+            },
+            child: const Text('Full Policy', style: TextStyle(color: CoopvestColors.primary)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAboutDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: context.cardBackground,
+        title: Row(
+          children: [
+            const Text('About '),
+            Text('Coopvest Africa', style: TextStyle(color: CoopvestColors.primary)),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: CoopvestColors.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Icon(Icons.savings, size: 40, color: CoopvestColors.primary),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Coopvest Africa',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 4),
+              Text('Version 1.0.0', style: TextStyle(color: context.textSecondary)),
+              const SizedBox(height: 16),
+              Text(
+                'Empowering cooperatives through digital innovation. Save, borrow, and invest together.',
+                textAlign: TextAlign.center,
+                maxLines: 4,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: context.textSecondary),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _buildAboutButton(Icons.language, 'Website'),
+                  const SizedBox(width: 16),
+                  _buildAboutButton(Icons.email, 'Contact'),
+                ],
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAboutButton(IconData icon, String label) {
+    return GestureDetector(
+      onTap: () {
+        // Handle website or contact tap
+        Navigator.of(context).pop();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: CoopvestColors.primary.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 16, color: CoopvestColors.primary),
+            const SizedBox(width: 8),
+            Text(label, style: TextStyle(color: CoopvestColors.primary)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showLogoutDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: context.cardBackground,
+        title: Text('Logout', style: TextStyle(color: context.textPrimary)),
+        content: Text('Are you sure you want to logout?', style: TextStyle(color: context.textSecondary)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              ref.read(authProvider.notifier).logout();
+              Navigator.of(context).pushNamedAndRemoveUntil('/welcome', (route) => false);
+            },
+            child: const Text('Logout', style: TextStyle(color: CoopvestColors.error)),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _navigateToQRScanner() {
     final authState = ref.read(authProvider);
     final user = authState.user;
@@ -698,160 +852,6 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
           ),
         ),
       ],
-    );
-  }
-
-  void _showPrivacyPolicyDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: context.cardBackground,
-        title: Text('Privacy Policy', style: TextStyle(color: context.textPrimary)),
-        content: SingleChildScrollView(
-          child: Text(
-            'Privacy Policy\n\n'
-            'Last updated: January 2025\n\n'
-            'Coopvest Africa ("we", "our", or "us") is committed to protecting your privacy. '
-            'This Privacy Policy explains how your personal information is collected, used, and disclosed by Coopvest Africa.\n\n'
-            'Information We Collect:\n'
-            '- Personal identification information (Name, email, phone number)\n'
-            '- Financial information for cooperative services\n'
-            '- Transaction history\n'
-            '- Device information and usage data\n\n'
-            'How We Use Your Information:\n'
-            '- To provide and maintain our cooperative services\n'
-            '- To process transactions and send related information\n'
-            '- To send promotional communications (with your consent)\n'
-            '- To detect, prevent, and address technical issues\n\n'
-            'Data Protection:\n'
-            'We implement appropriate security measures to protect your personal information.\n\n'
-            'Contact Us:\n'
-            'If you have questions about this Privacy Policy, please contact us at support@coopvest.com',
-            style: TextStyle(color: context.textSecondary),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              // Could open URL to full privacy policy
-            },
-            child: const Text('Full Policy', style: TextStyle(color: CoopvestColors.primary)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showAboutDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: context.cardBackground,
-        title: Row(
-          children: [
-            const Text('About '),
-            Text('Coopvest Africa', style: TextStyle(color: CoopvestColors.primary)),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  color: CoopvestColors.primary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: const Icon(Icons.savings, size: 40, color: CoopvestColors.primary),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Coopvest Africa',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 4),
-              Text('Version 1.0.0', style: TextStyle(color: context.textSecondary)),
-              const SizedBox(height: 16),
-              Text(
-                'Empowering cooperatives through digital innovation. Save, borrow, and invest together.',
-                textAlign: TextAlign.center,
-                maxLines: 4,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: context.textSecondary),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _buildAboutButton(Icons.language, 'Website'),
-                  const SizedBox(width: 16),
-                  _buildAboutButton(Icons.email, 'Contact'),
-                ],
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAboutButton(IconData icon, String label) {
-    return GestureDetector(
-      onTap: () {
-        // Handle website or contact tap
-        Navigator.of(context).pop();
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: CoopvestColors.primary.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, size: 16, color: CoopvestColors.primary),
-            const SizedBox(width: 8),
-            Text(label, style: TextStyle(color: CoopvestColors.primary)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showLogoutDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: context.cardBackground,
-        title: Text('Logout', style: TextStyle(color: context.textPrimary)),
-        content: Text('Are you sure you want to logout?', style: TextStyle(color: context.textSecondary)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              ref.read(authProvider.notifier).logout();
-              Navigator.of(context).pushNamedAndRemoveUntil('/welcome', (route) => false);
-            },
-            child: const Text('Logout', style: TextStyle(color: CoopvestColors.error)),
-          ),
-        ],
-      ),
     );
   }
 }
