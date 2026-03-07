@@ -1,0 +1,40 @@
+{
+  "project_info": {
+    "project_number": "1040576298736",
+    "firebase_url": "https://coopvest-africa-46a86-default-rtdb.firebaseio.com",
+    "project_id": "coopvest-africa-46a86",
+    "storage_bucket": "coopvest-africa-46a86.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1040576298736:android:9ab079fef03f2c19d28c35",
+        "android_client_info": {
+          "package_name": "com.coopvestafrica.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1040576298736-991ja94slls4f6csarfheerlkg7bfpon.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBqTLdRdvzUrloF09wNbvc2AQV5OvShcuw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1040576298736-991ja94slls4f6csarfheerlkg7bfpon.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

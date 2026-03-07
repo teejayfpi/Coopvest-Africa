@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Coopvest Africa</string>
+    <string name="notification_channel_name">Coopvest Notifications</string>
+    <string name="notification_channel_description">General notifications for Coopvest Africa</string>
+</resources>

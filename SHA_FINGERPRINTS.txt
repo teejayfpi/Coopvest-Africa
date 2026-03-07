@@ -1,0 +1,42 @@
+# SHA Certificate Fingerprints for Google Sign-In
+# Generated: February 2026
+# Project: Coopvest Africa (com.coopvestafrica.app)
+
+================================================================================
+CRITICAL: Add these SHA fingerprints to your Firebase Project Settings
+================================================================================
+
+DEBUG BUILD (for local development):
+-----------------------------------
+SHA1: F5:8A:B8:A3:86:FC:7C:33:3F:F1:E7:6C:81:42:D9:7E:0F:8B:3A:B8
+SHA256: D3:90:55:75:EB:CB:42:E3:56:57:5B:3C:73:0D:29:25:AC:1A:E9:2D:AC:D3:00:2A:96:39:6F:82:5F:77:BF:48
+
+RELEASE BUILD (for production):
+-----------------------------------
+SHA1: EE:09:82:3B:41:6B:E9:F3:01:8C:D4:0F:7E:26:B1:45:99:F8:BD:62
+SHA256: BB:26:01:51:C7:3E:9B:A2:3A:34:08:8F:B8:2F:F0:C6:19:61:11:D4:3D:31:DB:80:70:55:52:60:D6:DA:DF:BF
+
+================================================================================
+How to Add Fingerprints to Firebase Console
+================================================================================
+
+1. Go to https://console.firebase.google.com/
+2. Select your project: "coopvest-africa-46a86"
+3. Click the gear icon (Project Settings)
+4. Scroll down to "Your apps" section
+5. Click on your Android app (com.coopvestafrica.app)
+6. Scroll to "SHA certificate fingerprints"
+7. Click "Add fingerprint"
+8. Add BOTH the Debug and Release SHA1 fingerprints listed above.
+9. Click "Save"
+10. Download the new google-services.json
+11. Replace android/app/google-services.json with the downloaded file
+
+================================================================================
+Troubleshooting
+================================================================================
+
+Error code 10 (ApiException: 10):
+- This is a configuration error, usually caused by a SHA-1 mismatch.
+- Ensure the SHA-1 fingerprints in Firebase EXACTLY match the ones above.
+- If you are using Google Play App Signing, you MUST also add the SHA-1 from the Google Play Console (Setup > App Integrity).
