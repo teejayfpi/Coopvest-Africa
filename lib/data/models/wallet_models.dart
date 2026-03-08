@@ -6,6 +6,7 @@ class Wallet extends Equatable {
   final String userId;
   final double balance;
   final double totalContributions;
+  final double totalSavings; // Total savings used for loan eligibility calculation
   final double pendingContributions;
   final double availableForWithdrawal;
   final DateTime updatedAt;
@@ -15,6 +16,7 @@ class Wallet extends Equatable {
     required this.userId,
     required this.balance,
     required this.totalContributions,
+    required this.totalSavings,
     required this.pendingContributions,
     required this.availableForWithdrawal,
     required this.updatedAt,
@@ -26,6 +28,7 @@ class Wallet extends Equatable {
       userId: json['user_id'] as String,
       balance: (json['balance'] as num).toDouble(),
       totalContributions: (json['total_contributions'] as num).toDouble(),
+      totalSavings: (json['total_savings'] as num).toDouble(),
       pendingContributions: (json['pending_contributions'] as num).toDouble(),
       availableForWithdrawal: (json['available_for_withdrawal'] as num).toDouble(),
       updatedAt: DateTime.parse(json['updated_at'] as String),
@@ -38,6 +41,7 @@ class Wallet extends Equatable {
       'user_id': userId,
       'balance': balance,
       'total_contributions': totalContributions,
+      'total_savings': totalSavings,
       'pending_contributions': pendingContributions,
       'available_for_withdrawal': availableForWithdrawal,
       'updated_at': updatedAt.toIso8601String(),
@@ -49,6 +53,7 @@ class Wallet extends Equatable {
     String? userId,
     double? balance,
     double? totalContributions,
+    double? totalSavings,
     double? pendingContributions,
     double? availableForWithdrawal,
     DateTime? updatedAt,
@@ -58,6 +63,7 @@ class Wallet extends Equatable {
       userId: userId ?? this.userId,
       balance: balance ?? this.balance,
       totalContributions: totalContributions ?? this.totalContributions,
+      totalSavings: totalSavings ?? this.totalSavings,
       pendingContributions: pendingContributions ?? this.pendingContributions,
       availableForWithdrawal: availableForWithdrawal ?? this.availableForWithdrawal,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -70,6 +76,7 @@ class Wallet extends Equatable {
     userId,
     balance,
     totalContributions,
+    totalSavings,
     pendingContributions,
     availableForWithdrawal,
     updatedAt,

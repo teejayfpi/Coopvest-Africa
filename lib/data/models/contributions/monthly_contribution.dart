@@ -474,3 +474,71 @@ class ContributionFilter {
     return copyWith(year: null, month: null, startDate: null, endDate: null);
   }
 }
+
+/// Monthly Deductions Breakdown Model
+/// Provides a breakdown of deductions for a single month
+class MonthlyDeductionsBreakdown extends Equatable {
+  final String month; // Format: '2024-01' for January 2024
+  final double totalDeductions;
+  final List<DeductionItem> items;
+
+  const MonthlyDeductionsBreakdown({
+    required this.month,
+    required this.totalDeductions,
+    required this.items,
+  });
+
+  factory MonthlyDeductionsBreakdown.fromJson(Map<String, dynamic> json) {
+    return MonthlyDeductionsBreakdown(
+      month: json['month'] as String,
+      totalDeductions: (json['total_deductions'] as num).toDouble(),
+      items: (json['items'] as List)
+          .map((e) => DeductionItem.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'month': month,
+      'total_deductions': totalDeductions,
+      'items': items.map((e) => e.toJson()).toList(),
+    };
+  }
+
+  @override
+  List<Object?> get props => [month, totalDeductions, items];
+}
+
+/// Deduction Item Model
+/// Represents a single deduction item in the breakdown
+class DeductionItem extends Equatable {
+  final String name;
+  final double amount;
+  final String? description;
+
+  const DeductionItem({
+    required this.name,
+    required this.amount,
+    this.description,
+  });
+
+  factory DeductionItem.fromJson(Map<String, dynamic> json) {
+    return DeductionItem(
+      name: json['name'] as String,
+      amount: (json['amount'] as num).toDouble(),
+      description: json['description'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'name': name,
+      'amount': amount,
+      'description': description,
+    };
+  }
+
+  @override
+  List<Object?> get props => [name, amount, description];
+}

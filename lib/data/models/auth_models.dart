@@ -59,6 +59,17 @@ class User extends Equatable {
     return membershipStatus == 'pending_termination';
   }
 
+  /// Get membership duration in months
+  int get membershipDurationMonths {
+    final now = DateTime.now();
+    return ((now.difference(createdAt).inDays) / 30).floor();
+  }
+
+  /// Check if member is eligible for loan based on membership duration
+  bool isEligibleForLoan(int requiredMonths) {
+    return membershipDurationMonths >= requiredMonths;
+  }
+
   factory User.fromJson(Map<String, dynamic> json) {
     return User(
       id: json['userId'] as String? ?? json['id'] as String? ?? '',

@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../config/app_config.dart';
 import '../../core/services/logger_service.dart';
 import '../../data/api/loan_api_service.dart';
 import '../../data/models/loan_models.dart';
@@ -254,5 +255,39 @@ class LoanNotifier extends StateNotifier<LoansState> {
   /// Clear error
   void clearError() {
     state = state.copyWith(error: null);
+  }
+
+  /// Calculate maximum loan amount based on savings
+  /// Formula: totalSavings * 3 (loan multiplier)
+  double calculateMaxLoanAmount(double totalSavings) {
+    return totalSavings * AppConfig.loanMultiplier;
+  }
+
+  /// Check if member is eligible for loan based on membership duration
+  /// Requirement: At least 6 months of membership
+  bool isEligibleForLoan(int membershipMonths) {
+    return membershipMonths >= AppConfig.loanEligibilityMonths;
+  }
+
+  /// Get eligibility message for the user
+  String getEligibilityMessage({
+    required int membershipMonths,
+    required double totalSavings,
+  }) {
+    final isEligible = isEligibleForLoan(membershipMonths);
+    
+    if (!isEligible) {
+      final monthsRemaining = AppConfig.loanEligibilityMonths - membershipMonths;
+      return 'You will become eligible to apply for a loan after completing $monthsRemaining more month(s) of consistent contributions.';
+    }
+    
+    final maxLoan = calculateMaxLoanAmount(totalSavings);
+    return 'Based on your current savings of ₦${totalSavings.toStringAsFixed(0)}, you are eligible to apply for a loan of up to ₦${maxLoan.toStringAsFixed(0)}.';
+  }
+
+  /// Validate loan amount against maximum allowed
+  bool validateLoanAmount(double amount, double totalSavings) {
+    final maxLoan = calculateMaxLoanAmount(totalSavings);
+    return amount > 0 && amount <= maxLoan;
   }
 }

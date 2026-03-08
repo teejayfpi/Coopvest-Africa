@@ -21,12 +21,20 @@ class AppConfig {
   static const Duration tokenRefreshThreshold = Duration(minutes: 5);
 
   // Loan Configuration
-  static const double minLoanAmount = 50000;
-  static const double maxLoanAmount = 5000000;
+  // NOTE: Loan eligibility is now calculated based on 3x total savings
+  // See: LoanProvider for dynamic loan limit calculation
+  static const double loanMultiplier = 3.0; // Members can borrow 3x their savings
+  static const int loanEligibilityMonths = 6; // Minimum months of membership required
   static const List<int> loanTenures = [3, 6, 12];
   static const double baseInterestRate = 10.0;
   static const int guarantorsRequired = 3;
   static const double maxGuarantorLimit = 5000000;
+
+  // Monthly Deductions Configuration
+  static const double agmLevy = 1000.0; // AGM Levy - monthly
+  static const double developmentLevy = 500.0; // Development Levy - monthly
+  static const double totalMonthlyLevies = 1500.0; // AGM + Development
+  static const double entranceFee = 5000.0; // One-time entrance fee
 
   // Contribution Configuration
   static const double minContribution = 5000;
