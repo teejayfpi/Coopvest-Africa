@@ -7,6 +7,7 @@ import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../data/models/referral_models.dart';
 import '../../../presentation/providers/referral_provider.dart';
+import '../../../presentation/providers/wallet_provider.dart';
 import '../../../presentation/widgets/common/buttons.dart';
 import '../../../presentation/widgets/common/cards.dart';
 import '../../../presentation/widgets/common/inputs.dart';
@@ -36,49 +37,54 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
   final TextEditingController _amountController = TextEditingController();
   final TextEditingController _purposeController = TextEditingController();
   final TextEditingController _monthlySavingsController = TextEditingController();
+  
+  @override
+  void initState() {
+    super.initState();
+    // Load wallet data for savings-based loan limits
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(walletProvider.notifier).loadWallet();
+    });
+  }
 
   // Loan Types Configuration
+  // Now uses savings-based multipliers instead of fixed amounts
+  // Premium Loan: 4x savings, Maxi Loan: 5x savings, Others: 3x savings
   final Map<String, Map<String, dynamic>> _loanTypes = {
     'Quick Loan': {
       'duration': 4,
       'interest': 7.5,
-      'minAmount': 5000.0,
-      'maxAmount': 50000.0,
+      'multiplier': 3.0, // 3x savings
       'description': 'Short-term emergency cash for members in urgent need',
     },
     'Flexi Loan': {
       'duration': 6,
       'interest': 7.0,
-      'minAmount': 10000.0,
-      'maxAmount': 100000.0,
+      'multiplier': 3.0, // 3x savings
       'description': 'Flexible repayment plan for personal or business needs',
     },
     'Stable Loan (12 months)': {
       'duration': 12,
       'interest': 5.0,
-      'minAmount': 20000.0,
-      'maxAmount': 200000.0,
+      'multiplier': 3.0, // 3x savings
       'description': 'Long-term stability with the lowest interest rate',
     },
     'Stable Loan (18 months)': {
       'duration': 18,
       'interest': 7.0,
-      'minAmount': 30000.0,
-      'maxAmount': 300000.0,
+      'multiplier': 3.0, // 3x savings
       'description': 'Extended repayment for larger projects or investments',
     },
     'Premium Loan': {
       'duration': 24,
       'interest': 14.0,
-      'minAmount': 50000.0,
-      'maxAmount': 500000.0,
+      'multiplier': 4.0, // 4x savings - Special for premium members
       'description': 'Premium access for established members with higher limits',
     },
     'Maxi Loan': {
       'duration': 36,
       'interest': 19.0,
-      'minAmount': 100000.0,
-      'maxAmount': 1000000.0,
+      'multiplier': 5.0, // 5x savings - Maximum for major investments
       'description': 'Maximum loan for major investments and business expansion',
     },
   };
@@ -119,23 +125,32 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
 
     try {
       final loanInfo = _loanTypes[_selectedLoanType]!;
+      final multiplier = (loanInfo['multiplier'] as num).toDouble();
       final requestedAmount = double.tryParse(_amountController.text.replaceAll(',', '')) ?? 0.0;
       final monthlySavings = double.tryParse(_monthlySavingsController.text.replaceAll(',', '')) ?? 0.0;
+      
+      // Get member's savings for limit calculation
+      final walletState = ref.read(walletProvider);
+      final memberSavings = walletState.wallet?.totalSavings ?? walletState.wallet?.balance ?? 0.0;
+      
+      // Calculate limits based on savings
+      final minAmount = 1000.0;
+      final maxAmount = memberSavings * multiplier;
 
-      // Validate amount range
-      if (requestedAmount < (loanInfo['minAmount'] as num).toDouble()) {
+      // Validate amount range based on savings
+      if (requestedAmount < minAmount) {
         setState(() {
           _loanStatus = 'Rejected';
-          _rejectionReason = 'Minimum amount for ${_selectedLoanType} is \u20a6${loanInfo['minAmount']}';
+          _rejectionReason = 'Minimum amount is \u20a6${minAmount.toStringAsFixed(0)}';
           _isSubmitting = false;
         });
         return;
       }
 
-      if (requestedAmount > (loanInfo['maxAmount'] as num).toDouble()) {
+      if (requestedAmount > maxAmount) {
         setState(() {
           _loanStatus = 'Rejected';
-          _rejectionReason = 'Maximum amount for ${_selectedLoanType} is \u20a6${loanInfo['maxAmount']}';
+          _rejectionReason = 'Maximum amount for ${_selectedLoanType} is \u20a6${maxAmount.toStringAsFixed(0)} (${multiplier}x your savings)';
           _isSubmitting = false;
         });
         return;
@@ -283,8 +298,15 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
   @override
   Widget build(BuildContext context) {
     final loanInfo = _loanTypes[_selectedLoanType]!;
-    final minAmount = (loanInfo['minAmount'] as num).toDouble();
-    final maxAmount = (loanInfo['maxAmount'] as num).toDouble();
+    final multiplier = (loanInfo['multiplier'] as num).toDouble();
+    
+    // Get member's savings from wallet provider
+    final walletState = ref.watch(walletProvider);
+    final memberSavings = walletState.wallet?.totalSavings ?? walletState.wallet?.balance ?? 0.0;
+    
+    // Calculate min and max based on savings multiplier
+    final minAmount = 1000.0; // Minimum loan of ₦1,000
+    final maxAmount = memberSavings * multiplier;
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
