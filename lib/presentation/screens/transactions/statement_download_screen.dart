@@ -8,6 +8,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:flutter/services.dart' show ByteData, rootBundle;
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/extensions/number_extensions.dart';
@@ -187,13 +188,20 @@ class _StatementDownloadScreenState extends ConsumerState<StatementDownloadScree
   }) async {
     final pdf = pw.Document();
 
+    // Load logo image
+    final ByteData logoData = await rootBundle.load('assets/images/logo.png');
+    final Uint8List logoBytes = logoData.buffer.asUint8List();
+    final pw.MemoryImage logoImage = pw.MemoryImage(logoBytes);
+
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(40),
+        header: (context) => _buildPdfPageHeader(logoImage),
+        footer: (context) => _buildPdfPageFooter(context),
         build: (context) => [
-          // Header
-          _buildPdfHeader(user, startDate, endDate),
+          // Header with Logo
+          _buildPdfHeader(logoImage, user, startDate, endDate),
           pw.SizedBox(height: 20),
           // Account Summary
           _buildPdfAccountSummary(wallet),
@@ -215,51 +223,156 @@ class _StatementDownloadScreenState extends ConsumerState<StatementDownloadScree
     return pdf;
   }
 
-  pw.Widget _buildPdfHeader(dynamic user, DateTime startDate, DateTime endDate) {
+  // Header for each page with logo
+  pw.Widget _buildPdfPageHeader(pw.MemoryImage logo) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.only(bottom: 10),
+      decoration: const pw.BoxDecoration(
+        border: pw.Border(
+          bottom: pw.BorderSide(color: PdfColors.green800, width: 2),
+        ),
+      ),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Row(
+            children: [
+              pw.Container(
+                width: 40,
+                height: 40,
+                child: pw.Image(logo, fit: pw.BoxFit.contain),
+              ),
+              pw.SizedBox(width: 10),
+              pw.Text(
+                'Coopvest Africa',
+                style: pw.TextStyle(
+                  fontSize: 18,
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.green800,
+                ),
+              ),
+            ],
+          ),
+          pw.Text(
+            'Member Statement',
+            style: pw.TextStyle(
+              fontSize: 12,
+              fontWeight: pw.FontWeight.bold,
+              color: PdfColors.grey600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Footer for each page
+  pw.Widget _buildPdfPageFooter(pw.Context context) {
+    return pw.Container(
+      alignment: pw.Alignment.centerRight,
+      margin: const pw.EdgeInsets.only(top: 10),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Text(
+            'Coopvest Africa - Empowering Cooperative Finance',
+            style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey500),
+          ),
+          pw.Text(
+            'Page ${context.pageNumber} of ${context.pagesCount}',
+            style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey500),
+          ),
+        ],
+      ),
+    );
+  }
+
+  pw.Widget _buildPdfHeader(pw.MemoryImage logoImage, dynamic user, DateTime startDate, DateTime endDate) {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Row(
-          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-          children: [
-            pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Text(
-                  'CoopVesta Africa',
-                  style: pw.TextStyle(
-                    fontSize: 24,
-                    fontWeight: pw.FontWeight.bold,
-                    color: PdfColor.fromInt(CoopvestColors.primary.value),
-                  ),
-                ),
-                pw.Text(
-                  'Member Statement',
-                  style: const pw.TextStyle(fontSize: 16),
-                ),
-              ],
+        // Logo and Title Row
+        pw.Container(
+          padding: const pw.EdgeInsets.all(16),
+          decoration: pw.BoxDecoration(
+            gradient: pw.LinearGradient(
+              colors: [PdfColors.green800, PdfColors.green600],
+              begin: pw.Alignment.topLeft,
+              end: pw.Alignment.bottomRight,
             ),
-            pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.end,
-              children: [
-                pw.Text(
-                  'Statement Date',
-                  style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600),
+            borderRadius: pw.BorderRadius.circular(12),
+          ),
+          child: pw.Row(
+            children: [
+              pw.Container(
+                width: 60,
+                height: 60,
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.white,
+                  borderRadius: pw.BorderRadius.circular(8),
                 ),
-                pw.Text(
-                  DateFormat('MMM dd, yyyy').format(DateTime.now()),
-                  style: const pw.TextStyle(fontSize: 12),
+                padding: const pw.EdgeInsets.all(8),
+                child: pw.Image(logoImage, fit: pw.BoxFit.contain),
+              ),
+              pw.SizedBox(width: 16),
+              pw.Expanded(
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'COOPVEST AFRICA',
+                      style: pw.TextStyle(
+                        fontSize: 24,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.white,
+                        letterSpacing: 2,
+                      ),
+                    ),
+                    pw.Text(
+                      'Member Account Statement',
+                      style: const pw.TextStyle(
+                        fontSize: 14,
+                        color: PdfColors.white,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ],
+              ),
+              pw.Container(
+                padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.white.withOpacity(0.2),
+                  borderRadius: pw.BorderRadius.circular(20),
+                ),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text(
+                      'Statement Date',
+                      style: const pw.TextStyle(fontSize: 8, color: PdfColors.white),
+                    ),
+                    pw.Text(
+                      DateFormat('MMM dd, yyyy').format(DateTime.now()),
+                      style: pw.TextStyle(
+                        fontSize: 12,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
         pw.SizedBox(height: 20),
+        // Member Info Card
         pw.Container(
-          padding: const pw.EdgeInsets.all(12),
+          padding: const pw.EdgeInsets.all(16),
           decoration: pw.BoxDecoration(
+            color: PdfColors.grey50,
+            borderRadius: pw.BorderRadius.circular(12),
             border: pw.Border.all(color: PdfColors.grey300),
-            borderRadius: pw.BorderRadius.circular(8),
           ),
           child: pw.Row(
             children: [
@@ -267,19 +380,66 @@ class _StatementDownloadScreenState extends ConsumerState<StatementDownloadScree
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Text('Member Name', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600)),
-                    pw.Text(user?.name ?? 'Member', style: const pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                    pw.Row(
+                      children: [
+                        pw.Icon(pw.IconData(0xe7fd), size: 14, color: PdfColors.green700),
+                        pw.SizedBox(width: 6),
+                        pw.Text('Member Information', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.green700)),
+                      ],
+                    ),
+                    pw.SizedBox(height: 8),
+                    pw.Text(user?.name ?? 'Member', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
                     pw.Text(user?.email ?? '', style: const pw.TextStyle(fontSize: 10)),
+                    if (user?.phone != null) pw.Text(user?.phone ?? '', style: const pw.TextStyle(fontSize: 10)),
                   ],
                 ),
+              ),
+              pw.Container(
+                width: 1,
+                height: 60,
+                color: PdfColors.grey300,
               ),
               pw.Expanded(
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Text('Statement Period', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600)),
-                    pw.Text('${DateFormat('MMM dd, yyyy').format(startDate)} - ${DateFormat('MMM dd, yyyy').format(endDate)}',
-                        style: const pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                    pw.Row(
+                      children: [
+                        pw.Icon(pw.IconData(0xe916), size: 14, color: PdfColors.green700),
+                        pw.SizedBox(width: 6),
+                        pw.Text('Statement Period', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.green700)),
+                      ],
+                    ),
+                    pw.SizedBox(height: 8),
+                    pw.Text(DateFormat('MMMM dd, yyyy').format(startDate),
+                        style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                    pw.Text('to', style: const pw.TextStyle(fontSize: 10)),
+                    pw.Text(DateFormat('MMMM dd, yyyy').format(endDate),
+                        style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                  ],
+                ),
+              ),
+              pw.Container(
+                width: 1,
+                height: 60,
+                color: PdfColors.grey300,
+              ),
+              pw.Expanded(
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Row(
+                      children: [
+                        pw.Icon(pw.IconData(0xe8e5), size: 14, color: PdfColors.green700),
+                        pw.SizedBox(width: 6),
+                        pw.Text('Generated On', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.green700)),
+                      ],
+                    ),
+                    pw.SizedBox(height: 8),
+                    pw.Text(DateFormat('EEEE').format(DateTime.now()), style: const pw.TextStyle(fontSize: 10)),
+                    pw.Text(DateFormat('MMMM dd, yyyy').format(DateTime.now()),
+                        style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                    pw.Text(DateFormat('hh:mm a').format(DateTime.now()), style: const pw.TextStyle(fontSize: 10)),
                   ],
                 ),
               ),
