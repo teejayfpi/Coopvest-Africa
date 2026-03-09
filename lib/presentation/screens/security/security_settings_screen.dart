@@ -5,6 +5,7 @@ import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../presentation/providers/auth_provider.dart';
 import '../../../presentation/providers/theme_provider.dart';
+import 'login_history_screen.dart';
 
 /// Security Settings Screen
 class SecuritySettingsScreen extends ConsumerStatefulWidget {
@@ -350,6 +351,17 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
                 onChanged: (val) {},
                 activeColor: CoopvestColors.primary,
               ),
+            ),
+            
+            _buildSettingsTile(
+              icon: Icons.history,
+              title: 'Login History',
+              subtitle: 'View where your account was accessed',
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (context) => const LoginHistoryScreen()),
+                );
+              },
             ),
           ],
         ),

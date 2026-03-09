@@ -32,6 +32,7 @@ import 'presentation/screens/loan/loan_details_screen.dart';
 import 'presentation/screens/profile/profile_settings_screen.dart';
 import 'presentation/screens/security/security_settings_screen.dart';
 import 'presentation/screens/savings/savings_goals_screen.dart';
+import 'presentation/screens/search/global_search_screen.dart';
 import 'presentation/providers/theme_provider.dart';
 
 void main() async {
@@ -165,6 +166,9 @@ class CoopvestApp extends ConsumerWidget {
             userId: args?['userId'] ?? '',
           );
         },
+
+        // Search Route
+        '/search': (context) => const GlobalSearchScreen(),
       },
     );
   }
