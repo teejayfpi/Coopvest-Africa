@@ -20,6 +20,8 @@ import 'edit_profile_screen.dart';
 import 'bank_accounts_screen.dart';
 import 'notifications_screen.dart';
 import '../transactions/statement_download_screen.dart';
+import '../referral/referral_dashboard_screen.dart';
+import '../referral/referral_sharing_screen.dart';
 
 /// Profile & Settings Screen
 class ProfileSettingsScreen extends ConsumerStatefulWidget {
@@ -118,6 +120,21 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
           'icon': Icons.chat_bubble_outline,
           'label': 'Live Chat',
           'subtitle': 'Talk to our support team',
+        },
+      ],
+    },
+    {
+      'title': 'Referral',
+      'items': [
+        {
+          'icon': Icons.people_outline,
+          'label': 'My Referrals',
+          'subtitle': 'View your referral stats and history',
+        },
+        {
+          'icon': Icons.share_outlined,
+          'label': 'Share Referral Code',
+          'subtitle': 'Invite friends and earn rewards',
         },
       ],
     },
@@ -520,6 +537,16 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
       case 'Upload Documents':
         Navigator.of(context).push(
           MaterialPageRoute(builder: (context) => const DocumentUploadScreen()),
+        );
+        break;
+      case 'My Referrals':
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (context) => const ReferralDashboardScreen()),
+        );
+        break;
+      case 'Share Referral Code':
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (context) => const ReferralSharingScreen()),
         );
         break;
       default:
