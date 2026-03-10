@@ -341,7 +341,7 @@ class _StatementDownloadScreenState extends ConsumerState<StatementDownloadScree
               pw.Container(
                 padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: pw.BoxDecoration(
-                  color: PdfColors.white.withOpacity(0.2),
+                  color: const PdfColor.fromInt(0x33FFFFFF),
                   borderRadius: pw.BorderRadius.circular(20),
                 ),
                 child: pw.Column(

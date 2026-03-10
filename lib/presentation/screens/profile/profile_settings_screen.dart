@@ -545,8 +545,12 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
         );
         break;
       case 'Share Referral Code':
+        final authState = ref.read(authProvider);
+        final user = authState.user;
+        final referralCode = user?.referralCode ?? 'DEFAULT';
+        final userName = user?.name ?? 'User';
         Navigator.of(context).push(
-          MaterialPageRoute(builder: (context) => const ReferralSharingScreen()),
+          MaterialPageRoute(builder: (context) => ReferralSharingScreen(referralCode: referralCode, userName: userName)),
         );
         break;
       default:
@@ -780,7 +784,7 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
               const SizedBox(height: 12),
               _buildWarningPoint(
                 context,
-                Icons.legal,
+                Icons.gavel,
                 'Legal Obligation',
                 'Failure to fulfill your guarantor obligations may result in legal action against you.',
               ),
