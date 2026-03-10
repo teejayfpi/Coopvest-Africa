@@ -382,8 +382,6 @@ class _StatementDownloadScreenState extends ConsumerState<StatementDownloadScree
                   children: [
                     pw.Row(
                       children: [
-                        pw.Icon(pw.IconData(0xe7fd), size: 14, color: PdfColors.green700),
-                        pw.SizedBox(width: 6),
                         pw.Text('Member Information', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.green700)),
                       ],
                     ),
@@ -405,8 +403,6 @@ class _StatementDownloadScreenState extends ConsumerState<StatementDownloadScree
                   children: [
                     pw.Row(
                       children: [
-                        pw.Icon(pw.IconData(0xe916), size: 14, color: PdfColors.green700),
-                        pw.SizedBox(width: 6),
                         pw.Text('Statement Period', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.green700)),
                       ],
                     ),
@@ -430,8 +426,6 @@ class _StatementDownloadScreenState extends ConsumerState<StatementDownloadScree
                   children: [
                     pw.Row(
                       children: [
-                        pw.Icon(pw.IconData(0xe8e5), size: 14, color: PdfColors.green700),
-                        pw.SizedBox(width: 6),
                         pw.Text('Generated On', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.green700)),
                       ],
                     ),
