@@ -218,7 +218,11 @@ class TerminationApplicationScreen extends ConsumerWidget {
                     },
                     title: Text(
                       getTerminationReasonText(reason),
-                      style: const TextStyle(fontSize: 14),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: CoopvestColors.textPrimary,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                     activeColor: CoopvestColors.error,
                     controlAffinity: ListTileControlAffinity.trailing,
