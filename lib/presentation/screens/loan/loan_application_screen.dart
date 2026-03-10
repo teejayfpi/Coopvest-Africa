@@ -408,42 +408,6 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
                           fontStyle: FontStyle.italic,
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: isDarkMode ? CoopvestColors.darkSurface : CoopvestColors.veryLightGray,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                'Min: \u20a6${minAmount.toStringAsFixed(0)}',
-                                style: CoopvestTypography.bodySmall.copyWith(
-                                  color: isDarkMode ? CoopvestColors.darkText : CoopvestColors.darkGray,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: isDarkMode ? CoopvestColors.darkSurface : CoopvestColors.veryLightGray,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                'Max: \u20a6${maxAmount.toStringAsFixed(0)}',
-                                style: CoopvestTypography.bodySmall.copyWith(
-                                  color: isDarkMode ? CoopvestColors.darkText : CoopvestColors.darkGray,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
                     ],
                   ),
                 ),
