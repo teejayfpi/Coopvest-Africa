@@ -223,49 +223,6 @@ class _StatementDownloadScreenState extends ConsumerState<StatementDownloadScree
     return pdf;
   }
 
-  // Header for each page with logo
-  pw.Widget _buildPdfPageHeader(pw.MemoryImage logo) {
-    return pw.Container(
-      padding: const pw.EdgeInsets.only(bottom: 10),
-      decoration: const pw.BoxDecoration(
-        border: pw.Border(
-          bottom: pw.BorderSide(color: PdfColors.green800, width: 2),
-        ),
-      ),
-      child: pw.Row(
-        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-        children: [
-          pw.Row(
-            children: [
-              pw.Container(
-                width: 40,
-                height: 40,
-                child: pw.Image(logo, fit: pw.BoxFit.contain),
-              ),
-              pw.SizedBox(width: 10),
-              pw.Text(
-                'Coopvest Africa',
-                style: pw.TextStyle(
-                  fontSize: 18,
-                  fontWeight: pw.FontWeight.bold,
-                  color: PdfColors.green800,
-                ),
-              ),
-            ],
-          ),
-          pw.Text(
-            'Member Statement',
-            style: pw.TextStyle(
-              fontSize: 12,
-              fontWeight: pw.FontWeight.bold,
-              color: PdfColors.grey600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   // Footer for each page
   pw.Widget _buildPdfPageFooter(pw.Context context) {
     return pw.Container(
