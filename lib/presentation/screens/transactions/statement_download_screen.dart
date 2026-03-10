@@ -197,7 +197,6 @@ class _StatementDownloadScreenState extends ConsumerState<StatementDownloadScree
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(40),
-        header: (context) => _buildPdfPageHeader(logoImage),
         footer: (context) => _buildPdfPageFooter(context),
         build: (context) => [
           // Header with Logo
