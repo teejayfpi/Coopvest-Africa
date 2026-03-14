@@ -6,6 +6,8 @@ import '../../../config/app_config.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../data/models/referral_models.dart';
+import '../../../presentation/providers/auth_provider.dart';
+import '../../../presentation/providers/contributions/contribution_provider.dart';
 import '../../../presentation/providers/referral_provider.dart';
 import '../../../presentation/providers/wallet_provider.dart';
 import '../../../presentation/widgets/common/buttons.dart';
@@ -42,8 +44,10 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
   void initState() {
     super.initState();
     // Load wallet data for savings-based loan limits
+    // Load contributions to check eligibility
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(walletProvider.notifier).loadWallet();
+      ref.read(contributionProvider.notifier).loadContributions();
     });
   }
 
@@ -114,7 +118,245 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
 
   String get _formattedLoanId => 'COOP-${_loanId}';
 
+  // Check if user is eligible for loan based on membership duration and contributions
+  // Requirements: At least 6 months membership AND at least 6 months of consistent contributions
+  Map<String, dynamic> _checkLoanEligibility() {
+    // Get user from auth provider
+    final authState = ref.read(authProvider);
+    final user = authState.user;
+    
+    // Get contributions from contribution provider
+    final contributionState = ref.read(contributionProvider);
+    final contributions = contributionState.contributions;
+    final summary = contributionState.summary;
+    
+    // Check membership duration
+    int membershipMonths = 0;
+    if (user != null && user.createdAt != null) {
+      membershipMonths = user.membershipDurationMonths;
+    }
+    
+    // Count months with successful contributions
+    final now = DateTime.now();
+    final sixMonthsAgo = DateTime(now.year, now.month - 6, 1);
+    
+    // Count successful contributions in the last 6 months
+    final successfulContributions = contributions.where((c) {
+      if (c.status.name != 'successful' && c.status.name != 'completed') {
+        return false;
+      }
+      // Check if contribution is from the last 6 months
+      if (c.postedDate != null) {
+        return c.postedDate!.isAfter(sixMonthsAgo) || 
+               c.postedDate!.isAtSameMomentAs(sixMonthsAgo);
+      }
+      if (c.createdAt != null) {
+        return c.createdAt.isAfter(sixMonthsAgo) || 
+               c.createdAt.isAtSameMomentAs(sixMonthsAgo);
+      }
+      return false;
+    }).toList();
+    
+    // Get unique months with successful contributions
+    final uniqueContributionMonths = <String>{};
+    for (final c in successfulContributions) {
+      if (c.contributionMonth != null) {
+        uniqueContributionMonths.add(c.contributionMonth!);
+      }
+    }
+    
+    final contributionMonths = uniqueContributionMonths.length;
+    
+    // Also check from summary if available
+    final summaryContributionMonths = summary?.monthsContributed ?? 0;
+    
+    // Use the higher of the two values
+    final finalContributionMonths = contributionMonths > summaryContributionMonths 
+        ? contributionMonths 
+        : summaryContributionMonths;
+    
+    // Determine eligibility
+    final isEligible = membershipMonths >= 6 && finalContributionMonths >= 6;
+    
+    return {
+      'isEligible': isEligible,
+      'membershipMonths': membershipMonths,
+      'contributionMonths': finalContributionMonths,
+      'membershipRequired': 6,
+      'contributionsRequired': 6,
+    };
+  }
+
+  // Build eligibility status widget
+  Widget _buildEligibilityWidget() {
+    final eligibility = _checkLoanEligibility();
+    final isEligible = eligibility['isEligible'] as bool;
+    final membershipMonths = eligibility['membershipMonths'] as int;
+    final contributionMonths = eligibility['contributionMonths'] as int;
+    final membershipRequired = eligibility['membershipRequired'] as int;
+    final contributionsRequired = eligibility['contributionsRequired'] as int;
+    
+    if (isEligible) {
+      // User is eligible - show green status
+      return AppCard(
+        backgroundColor: CoopvestColors.success.withAlpha((255 * 0.1).toInt()),
+        border: Border.all(color: CoopvestColors.success.withAlpha((255 * 0.3).toInt())),
+        child: Row(
+          children: [
+            const Icon(Icons.check_circle, color: CoopvestColors.success, size: 28),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'You are eligible to apply for a loan!',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: CoopvestColors.success,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Membership: $membershipMonths months | Contributions: $contributionMonths months',
+                    style: TextStyle(
+                      color: isDarkMode ? Colors.white70 : CoopvestColors.darkGray,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    } else {
+      // User is NOT eligible - show red warning
+      String reason = '';
+      if (membershipMonths < 6 && contributionMonths < 6) {
+        reason = 'You need at least $membershipRequired months of membership AND $contributionsRequired months of consistent contributions to be eligible for a loan.';
+      } else if (membershipMonths < 6) {
+        reason = 'You need at least $membershipRequired months of membership. You currently have $membershipMonths months.';
+      } else if (contributionMonths < 6) {
+        reason = 'You need at least $contributionsRequired months of consistent contributions. You currently have $contributionMonths months.';
+      }
+      
+      return AppCard(
+        backgroundColor: CoopvestColors.error.withAlpha((255 * 0.1).toInt()),
+        border: Border.all(color: CoopvestColors.error.withAlpha((255 * 0.3).toInt())),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.block, color: CoopvestColors.error, size: 28),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Loan Eligibility Requirements Not Met',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: CoopvestColors.error,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              reason,
+              style: TextStyle(
+                color: isDarkMode ? Colors.white70 : CoopvestColors.darkGray,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isDarkMode ? Colors.grey[800] : Colors.grey[100],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildEligibilityRow(
+                    'Membership Duration',
+                    '$membershipMonths / $membershipRequired months',
+                    membershipMonths >= membershipRequired,
+                  ),
+                  const SizedBox(height: 8),
+                  _buildEligibilityRow(
+                    'Consistent Contributions',
+                    '$contributionMonths / $contributionsRequired months',
+                    contributionMonths >= contributionsRequired,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Continue making your monthly contributions to become eligible for a loan.',
+              style: TextStyle(
+                color: isDarkMode ? Colors.white60 : CoopvestColors.mediumGray,
+                fontSize: 12,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  Widget _buildEligibilityRow(String label, String value, bool isMet) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: isDarkMode ? Colors.white70 : CoopvestColors.darkGray,
+            fontSize: 13,
+          ),
+        ),
+        Row(
+          children: [
+            Text(
+              value,
+              style: TextStyle(
+                color: isMet ? CoopvestColors.success : CoopvestColors.error,
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(
+              isMet ? Icons.check_circle : Icons.cancel,
+              color: isMet ? CoopvestColors.success : CoopvestColors.error,
+              size: 16,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
   Future<void> _submitApplication() async {
+    // First check if user is eligible for loan
+    final eligibility = _checkLoanEligibility();
+    if (!(eligibility['isEligible'] as bool)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('You are not eligible to apply for a loan. Please meet the 6-month membership and contribution requirements.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     if (!_formKey.currentState!.validate()) return;
 
     setState(() {
@@ -333,6 +575,11 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Loan Eligibility Status Widget - Check 6 months membership & contributions
+                _buildEligibilityWidget(),
+
+                const SizedBox(height: 24),
+
                 // Loan Type Selection Card
                 AppCard(
                   backgroundColor: CoopvestColors.primary.withAlpha((255 * 0.05).toInt()),
