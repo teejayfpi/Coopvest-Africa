@@ -86,9 +86,8 @@ const errorHandler = async (err, req, res, next) => {
   }
 
   res.status(statusCode).json({
-    success: true, // Some clients might expect success: false, but keeping it consistent with existing structure
     success: false,
-    error: err.message || 'Internal Server Error',
+    error: process.env.NODE_ENV === 'production' ? 'Internal Server Error' : (err.message || 'Internal Server Error'),
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
   });
 };

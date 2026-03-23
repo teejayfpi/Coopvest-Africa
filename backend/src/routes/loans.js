@@ -279,48 +279,43 @@ router.get('/qr-codes', authenticate, [
   try {
     const userId = req.user.userId;
     const status = req.query.status || 'all';
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
 
-    const mockQRCodes = [
-      {
-        qrId: 'QR_001',
-        loanId: 'LOAN-ABC123',
-        applicantName: 'John Doe',
-        loanAmount: 500000,
-        loanCurrency: 'NGN',
-        loanTenure: 12,
-        interestRate: 10,
-        monthlyRepayment: 45833,
-        totalRepayment: 550000,
-        purpose: 'Business expansion',
-        status: 'active',
-        scanCount: 5,
-        guarantorsFound: 2,
-        guarantorsRequired: 3,
-        expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
-        createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000)
-      }
-    ];
-
-    let filteredQRCodes = mockQRCodes;
-    if (status !== 'all') {
-      filteredQRCodes = mockQRCodes.filter(qr => qr.status === status);
+    // Query real QR codes from the database
+    const query = { applicantId: userId };
+    if (status === 'active') {
+      query.expiresAt = { $gt: new Date() };
+    } else if (status === 'expired') {
+      query.expiresAt = { $lte: new Date() };
     }
 
-    const qrCodesWithProgress = filteredQRCodes.map(qr => ({
-      ...qr,
-      progress: {
-        found: qr.guarantorsFound,
-        required: qr.guarantorsRequired,
-        percentage: Math.round((qr.guarantorsFound / qr.guarantorsRequired) * 100),
-        remaining: qr.guarantorsRequired - qr.guarantorsFound
-      },
-      isExpired: new Date() > new Date(qr.expiresAt)
-    }));
+    const total = await LoanQR.countDocuments(query);
+    const qrCodes = await LoanQR.find(query)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit);
+
+    const qrCodesWithProgress = qrCodes.map(qr => {
+      const qrObj = qr.toObject();
+      const guarantorsFound = qrObj.guarantorsFound || 0;
+      const guarantorsRequired = qrObj.guarantorsRequired || 3;
+      return {
+        ...qrObj,
+        progress: {
+          found: guarantorsFound,
+          required: guarantorsRequired,
+          percentage: guarantorsRequired > 0 ? Math.round((guarantorsFound / guarantorsRequired) * 100) : 0,
+          remaining: guarantorsRequired - guarantorsFound
+        },
+        isExpired: new Date() > new Date(qrObj.expiresAt)
+      };
+    });
 
     res.json({
       success: true,
       qrCodes: qrCodesWithProgress,
-      pagination: { page: 1, limit: 20, total: qrCodesWithProgress.length }
+      pagination: { page, limit, total }
     });
   } catch (error) {
     logger.error('Error listing QR codes:', error);

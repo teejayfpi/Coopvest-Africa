@@ -6,6 +6,7 @@
 
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const { body, validationResult } = require('express-validator');
 const { v4: uuidv4 } = require('uuid');
 const { Wallet, User, AuditLog } = require('../models');
@@ -291,35 +292,48 @@ router.post('/transfer', authenticate, [
 
     const transactionId = `TXN-${uuidv4().substring(0, 8).toUpperCase()}`;
 
-    // Deduct from sender
-    senderWallet.balance -= amount;
-    senderWallet.transactions.push({
-      transactionId,
-      type: 'transfer',
-      amount: -amount,
-      currency: 'NGN',
-      status: 'completed',
-      description: description || `Transfer to ${recipient.name}`,
-      reference: `REF-${Date.now()}`,
-      metadata: { recipientId },
-      createdAt: new Date()
-    });
-    await senderWallet.save();
+    // Use MongoDB transaction to ensure atomicity
+    const session = await mongoose.startSession();
+    session.startTransaction();
 
-    // Add to recipient
-    recipientWallet.balance += amount;
-    recipientWallet.transactions.push({
-      transactionId: `TXN-${uuidv4().substring(0, 8).toUpperCase()}`,
-      type: 'transfer',
-      amount: amount,
-      currency: 'NGN',
-      status: 'completed',
-      description: `Transfer from ${senderWallet.userId}`,
-      reference: `REF-${Date.now()}`,
-      metadata: { senderId: userId },
-      createdAt: new Date()
-    });
-    await recipientWallet.save();
+    try {
+      // Deduct from sender
+      senderWallet.balance -= amount;
+      senderWallet.transactions.push({
+        transactionId,
+        type: 'transfer',
+        amount: -amount,
+        currency: 'NGN',
+        status: 'completed',
+        description: description || `Transfer to ${recipient.name}`,
+        reference: `REF-${Date.now()}`,
+        metadata: { recipientId },
+        createdAt: new Date()
+      });
+      await senderWallet.save({ session });
+
+      // Add to recipient
+      recipientWallet.balance += amount;
+      recipientWallet.transactions.push({
+        transactionId: `TXN-${uuidv4().substring(0, 8).toUpperCase()}`,
+        type: 'transfer',
+        amount: amount,
+        currency: 'NGN',
+        status: 'completed',
+        description: `Transfer from ${senderWallet.userId}`,
+        reference: `REF-${Date.now()}`,
+        metadata: { senderId: userId },
+        createdAt: new Date()
+      });
+      await recipientWallet.save({ session });
+
+      await session.commitTransaction();
+    } catch (txError) {
+      await session.abortTransaction();
+      throw txError;
+    } finally {
+      session.endSession();
+    }
 
     // Log audit
     await AuditLog.log({
