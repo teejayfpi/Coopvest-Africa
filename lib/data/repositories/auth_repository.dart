@@ -13,10 +13,10 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
 /// Auth Repository
 class AuthRepository {
   final ApiClient _apiClient;
+  User? _cachedUser;
 
   AuthRepository(this._apiClient);
 
-  /// Login with email and password
   /// Login with Google
   Future<AuthResponse> googleSignIn({
     required String idToken,
@@ -31,7 +31,9 @@ class AuthRepository {
         },
       );
 
-      return AuthResponse.fromJson(response as Map<String, dynamic>);
+      final authResponse = AuthResponse.fromJson(response as Map<String, dynamic>);
+      await _persistTokens(authResponse);
+      return authResponse;
     } catch (e) {
       logger.e('Google Sign-In error: $e');
       rethrow;
@@ -55,7 +57,9 @@ class AuthRepository {
         data: request.toJson(),
       );
 
-      return AuthResponse.fromJson(response as Map<String, dynamic>);
+      final authResponse = AuthResponse.fromJson(response as Map<String, dynamic>);
+      await _persistTokens(authResponse);
+      return authResponse;
     } catch (e) {
       logger.e('Login error: $e');
       rethrow;
@@ -136,23 +140,29 @@ class AuthRepository {
   Future<void> logout() async {
     try {
       await _apiClient.post('/auth/logout');
-      _apiClient.clearAuthToken();
     } catch (e) {
       logger.e('Logout error: $e');
-      // Clear token even if logout fails
+    } finally {
       _apiClient.clearAuthToken();
+      await TokenStorage.clearTokens();
+      _cachedUser = null;
     }
   }
 
-  /// Get current user
-  Future<User> getCurrentUser() async {
+  /// Get current user (with caching to avoid redundant API calls)
+  Future<User> getCurrentUser({bool forceRefresh = false}) async {
+    if (!forceRefresh && _cachedUser != null) {
+      return _cachedUser!;
+    }
     try {
       final response = await _apiClient.get('/auth/me');
       // The backend returns { success: true, user: { ... } }
       if (response is Map<String, dynamic> && response.containsKey('user')) {
-        return User.fromJson(response['user'] as Map<String, dynamic>);
+        _cachedUser = User.fromJson(response['user'] as Map<String, dynamic>);
+      } else {
+        _cachedUser = User.fromJson(response as Map<String, dynamic>);
       }
-      return User.fromJson(response as Map<String, dynamic>);
+      return _cachedUser!;
     } catch (e) {
       logger.e('Get current user error: $e');
       rethrow;
@@ -235,18 +245,54 @@ class AuthRepository {
       rethrow;
     }
   }
+  /// Get user ID from cache (avoids redundant API calls)
   Future<String> getUserId() async {
     final user = await getCurrentUser();
     return user.id;
   }
 
+  /// Get user name from cache (avoids redundant API calls)
   Future<String> getUserName() async {
     final user = await getCurrentUser();
     return user.name;
   }
 
+  /// Get user phone from cache (avoids redundant API calls)
   Future<String?> getUserPhone() async {
     final user = await getCurrentUser();
     return user.phone;
+  }
+
+  /// Restore session from persisted tokens on app startup
+  Future<bool> restoreSession() async {
+    try {
+      final hasToken = await TokenStorage.hasToken();
+      if (!hasToken) return false;
+
+      final token = await TokenStorage.getAccessToken();
+      if (token != null) {
+        _apiClient.setAuthToken(token);
+        // Validate the token by fetching current user
+        await getCurrentUser(forceRefresh: true);
+        return true;
+      }
+      return false;
+    } catch (e) {
+      logger.e('Session restore failed: $e');
+      await TokenStorage.clearTokens();
+      _apiClient.clearAuthToken();
+      return false;
+    }
+  }
+
+  /// Persist tokens from auth response to secure storage
+  Future<void> _persistTokens(AuthResponse authResponse) async {
+    if (authResponse.accessToken.isNotEmpty) {
+      _apiClient.setAuthToken(authResponse.accessToken);
+      await TokenStorage.saveTokens(
+        accessToken: authResponse.accessToken,
+        refreshToken: authResponse.refreshToken,
+      );
+    }
   }
 }

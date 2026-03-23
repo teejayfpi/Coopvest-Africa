@@ -49,6 +49,7 @@ const analyticsRoutes = require('./routes/analytics');
 const errorHandler = require('./middleware/errorHandler');
 const { enforceHTTPS, securityHeaders, securityLogger } = require('./middleware/httpsEnforcement');
 const { adminIPWhitelist } = require('./middleware/ipWhitelist');
+const { sanitizeMiddleware } = require('./middleware/sanitize');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -157,6 +158,9 @@ const authLimiter = rateLimit({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// NoSQL injection protection - sanitize all user input
+app.use(sanitizeMiddleware);
+
 // ==============================================================================
 // LOGGING
 // ==============================================================================
@@ -182,8 +186,9 @@ app.get('/health', (req, res) => {
   });
 });
 
-// WebSocket stats endpoint
-app.get('/ws/stats', (req, res) => {
+// WebSocket stats endpoint (requires authentication)
+const { authenticate } = require('./middleware/auth');
+app.get('/ws/stats', authenticate, (req, res) => {
   const stats = websocketService.getStats();
   res.json({
     success: true,

@@ -1,7 +1,15 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../utils/utils.dart';
 import '../../config/app_config.dart';
+
+/// Secure token storage keys
+const String _accessTokenKey = 'access_token';
+const String _refreshTokenKey = 'refresh_token';
+
+/// Secure storage instance for token persistence
+final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
 
 /// API Client Provider
 final apiClientProvider = Provider<ApiClient>((ref) {
@@ -350,19 +358,64 @@ class LoggingInterceptor extends Interceptor {
   }
 }
 
-/// Auth Interceptor
+/// Auth Interceptor — reads token from secure storage and attaches it
 class AuthInterceptor extends Interceptor {
   @override
-  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
-    // Token will be set by auth provider
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) async {
+    try {
+      final token = await _secureStorage.read(key: _accessTokenKey);
+      if (token != null && token.isNotEmpty) {
+        options.headers['Authorization'] = 'Bearer $token';
+      }
+    } catch (e) {
+      logger.e('AuthInterceptor: Failed to read token: $e');
+    }
     handler.next(options);
   }
 }
 
-/// Error Interceptor
+/// Error Interceptor — handles 401 responses and clears expired tokens
 class ErrorInterceptor extends Interceptor {
   @override
-  void onError(DioException err, ErrorInterceptorHandler handler) {
+  void onError(DioException err, ErrorInterceptorHandler handler) async {
+    if (err.response?.statusCode == 401) {
+      // Token expired or invalid — clear stored tokens
+      try {
+        await _secureStorage.delete(key: _accessTokenKey);
+        await _secureStorage.delete(key: _refreshTokenKey);
+      } catch (e) {
+        logger.e('ErrorInterceptor: Failed to clear tokens: $e');
+      }
+      logger.w('Received 401 — tokens cleared');
+    }
     handler.next(err);
+  }
+}
+
+/// Helper functions for token persistence
+class TokenStorage {
+  static Future<void> saveTokens({required String accessToken, String? refreshToken}) async {
+    await _secureStorage.write(key: _accessTokenKey, value: accessToken);
+    if (refreshToken != null) {
+      await _secureStorage.write(key: _refreshTokenKey, value: refreshToken);
+    }
+  }
+
+  static Future<String?> getAccessToken() async {
+    return _secureStorage.read(key: _accessTokenKey);
+  }
+
+  static Future<String?> getRefreshToken() async {
+    return _secureStorage.read(key: _refreshTokenKey);
+  }
+
+  static Future<void> clearTokens() async {
+    await _secureStorage.delete(key: _accessTokenKey);
+    await _secureStorage.delete(key: _refreshTokenKey);
+  }
+
+  static Future<bool> hasToken() async {
+    final token = await _secureStorage.read(key: _accessTokenKey);
+    return token != null && token.isNotEmpty;
   }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'config/app_config.dart';
 import 'config/theme_config.dart';
 import 'config/theme_enhanced.dart';
@@ -48,7 +49,11 @@ void main() async {
   }
   
   // Initialize Firebase, analytics, etc.
-  // await Firebase.initializeApp();
+  try {
+    await Firebase.initializeApp();
+  } catch (e) {
+    debugPrint('Firebase initialization failed: $e');
+  }
   
   runApp(
     const ProviderScope(
@@ -101,7 +106,7 @@ class CoopvestApp extends ConsumerWidget {
         '/support': (context) => const SupportHomeScreen(),
         '/create-ticket': (context) => const TicketCreationScreen(),
         '/tickets': (context) => const TicketListScreen(),
-        '/tickets/:id': (context) {
+        '/ticket-detail': (context) {
           final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
           return TicketDetailScreen(
             ticketId: args?['ticketId'] ?? '',
