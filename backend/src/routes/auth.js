@@ -9,6 +9,7 @@ const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const supabase = require('../config/supabase');
 const { authenticate } = require('../middleware/auth');
+const { User } = require('../models');
 const logger = require('../utils/logger');
 
 const validate = (req, res, next) => {
@@ -53,6 +54,29 @@ router.post('/register', [
         success: false,
         error: error.message
       });
+    }
+
+    // Create corresponding MongoDB user record
+    try {
+      const existingUser = await User.findOne({ email: email.toLowerCase() });
+      if (!existingUser) {
+        const newUser = new User({
+          userId,
+          email: email.toLowerCase(),
+          phone,
+          name,
+          password,
+          role: 'member',
+          referral: {
+            referredByCode: referralCode || null
+          }
+        });
+        await newUser.save();
+        logger.info(`MongoDB user created for ${email}`);
+      }
+    } catch (mongoError) {
+      logger.error('MongoDB user creation error:', mongoError);
+      // Continue even if MongoDB creation fails - Supabase auth user exists
     }
 
     res.status(201).json({
@@ -125,10 +149,15 @@ router.post('/login', [
  * POST /api/v1/auth/logout
  * Logout user
  */
-router.post('/logout', async (req, res) => {
+router.post('/logout', authenticate, async (req, res) => {
   try {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    // Server-side logout: sign out the specific user's session
+    // Using admin API to invalidate the user's sessions
+    const { error } = await supabase.auth.admin.signOut(req.token);
+    if (error) {
+      // Fallback: even if admin signOut fails, the client should discard the token
+      logger.warn('Admin signOut failed, client should discard token:', error.message);
+    }
 
     res.json({
       success: true,
@@ -136,9 +165,10 @@ router.post('/logout', async (req, res) => {
     });
   } catch (error) {
     logger.error('Logout error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
+    // Still return success - client should discard token regardless
+    res.json({
+      success: true,
+      message: 'Logged out successfully'
     });
   }
 });
