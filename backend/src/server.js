@@ -19,6 +19,7 @@ const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const http = require('http');
 const connectDB = require('./config/database');
+const supabase = require('./config/supabase');
 const logger = require('./utils/logger');
 
 // Import services
@@ -57,8 +58,17 @@ const PORT = process.env.PORT || 8080;
 // Create HTTP server
 const server = http.createServer(app);
 
-// Connect to MongoDB
-connectDB();
+// Connect to MongoDB (Optional if using Supabase)
+if (process.env.MONGODB_URI) {
+  connectDB();
+} else {
+  logger.info('ℹ️ MongoDB URI not provided, skipping connection');
+}
+
+// Log Supabase status
+if (process.env.SUPABASE_URL) {
+  logger.info('✅ Supabase integration active');
+}
 
 // Initialize WebSocket server
 websocketService.initialize(server);
