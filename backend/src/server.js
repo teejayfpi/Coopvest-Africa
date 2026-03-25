@@ -18,7 +18,7 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const http = require('http');
-const connectDB = require('./config/database');
+// const connectDB = require('./config/database'); // Removed for Supabase migration
 const supabase = require('./config/supabase');
 const logger = require('./utils/logger');
 
@@ -58,12 +58,8 @@ const PORT = process.env.PORT || 8080;
 // Create HTTP server
 const server = http.createServer(app);
 
-// Connect to MongoDB (Optional if using Supabase)
-if (process.env.MONGODB_URI) {
-  connectDB();
-} else {
-  logger.info('ℹ️ MongoDB URI not provided, skipping connection');
-}
+// MongoDB connection removed - project now uses Supabase for all data persistence
+logger.info('ℹ️ Using Supabase for data persistence');
 
 // Log Supabase status
 if (process.env.SUPABASE_URL) {
@@ -168,8 +164,8 @@ const authLimiter = rateLimit({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// NoSQL injection protection - sanitize all user input
-app.use(sanitizeMiddleware);
+// NoSQL injection protection removed - project now uses SQL (Supabase)
+// app.use(sanitizeMiddleware);
 
 // ==============================================================================
 // LOGGING
