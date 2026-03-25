@@ -9,7 +9,7 @@ const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const supabase = require('../config/supabase');
 const { authenticate } = require('../middleware/auth');
-const { User } = require('../models');
+// const { User } = require('../models'); // Removed for Supabase migration
 const logger = require('../utils/logger');
 
 const validate = (req, res, next) => {
@@ -56,28 +56,8 @@ router.post('/register', [
       });
     }
 
-    // Create corresponding MongoDB user record
-    try {
-      const existingUser = await User.findOne({ email: email.toLowerCase() });
-      if (!existingUser) {
-        const newUser = new User({
-          userId,
-          email: email.toLowerCase(),
-          phone,
-          name,
-          password,
-          role: 'member',
-          referral: {
-            referredByCode: referralCode || null
-          }
-        });
-        await newUser.save();
-        logger.info(`MongoDB user created for ${email}`);
-      }
-    } catch (mongoError) {
-      logger.error('MongoDB user creation error:', mongoError);
-      // Continue even if MongoDB creation fails - Supabase auth user exists
-    }
+    // MongoDB mirroring removed - project now uses Supabase for all data persistence
+    // Supabase trigger automatically creates a profile row in public.profiles
 
     res.status(201).json({
       success: true,
