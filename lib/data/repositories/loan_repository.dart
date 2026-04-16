@@ -103,10 +103,13 @@ class LoanRepository {
     // Try to get from cache first if offline
     if (!isOnline) {
       final cachedData = await _offlineDataManager.getCachedData('user_loans_$userId');
-      if (cachedData != null) {
-        // Return mock data for offline mode
-        return ApiResult.success(_getMockLoans(userId));
+      if (cachedData != null && cachedData['loans'] != null) {
+        final List<dynamic> loanList = cachedData['loans'];
+        final loans = loanList.map((e) => Loan.fromJson(e as Map<String, dynamic>)).toList();
+        return ApiResult.success(loans);
       }
+      // If no cache, return mock data for offline mode
+      return ApiResult.success(_getMockLoans(userId));
     }
 
     try {
@@ -131,18 +134,24 @@ class LoanRepository {
           );
         }).toList();
 
-        // Cache the data for offline access
-        if (!isOnline) {
-          await _offlineDataManager.cacheData('user_loans_$userId', {'loans': loans});
-        }
+        // Cache the data for offline access when online
+        await _offlineDataManager.cacheData('user_loans_$userId', {
+          'loans': loans.map((l) => l.toJson()).toList(),
+        });
 
         return ApiResult.success(loans);
       } else {
         return ApiResult.error('Failed to fetch loans');
       }
     } catch (e) {
-      // Return mock data on error
-      return ApiResult.success(_getMockLoans(userId));
+      // Try to fallback to cache on network error
+      final cachedData = await _offlineDataManager.getCachedData('user_loans_$userId');
+      if (cachedData != null && cachedData['loans'] != null) {
+        final List<dynamic> loanList = cachedData['loans'];
+        final loans = loanList.map((e) => Loan.fromJson(e as Map<String, dynamic>)).toList();
+        return ApiResult.success(loans);
+      }
+      return ApiResult.error('Network error and no cached data available: $e');
     }
   }
 

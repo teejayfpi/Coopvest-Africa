@@ -34,12 +34,27 @@ const authenticate = async (req, res, next) => {
       });
     }
 
-    // Attach user info to request
+    // Fetch trusted user profile from database to verify role
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('role, userId')
+      .eq('id', user.id)
+      .single();
+
+    if (profileError || !profile) {
+      logger.error('Failed to fetch user profile for role verification:', profileError);
+      return res.status(401).json({
+        success: false,
+        error: 'User profile not found'
+      });
+    }
+
+    // Attach trusted user info to request
     req.user = {
       id: user.id,
       email: user.email,
-      userId: user.user_metadata.userId || user.id, // Support both Supabase ID and custom userId
-      role: user.user_metadata.role || 'user'
+      userId: profile.userId || user.user_metadata.userId || user.id,
+      role: profile.role || 'user'
     };
 
     req.token = token;

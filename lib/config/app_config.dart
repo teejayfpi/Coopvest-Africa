@@ -1,18 +1,16 @@
+import 'env_config.dart';
+
 /// App Configuration
 /// Contains all app-level configuration constants
 
 class AppConfig {
   // App Info
-  static const String appName = 'Coopvest Africa';
+  static String get appName => EnvironmentContext.config.appName;
   static const String appVersion = '1.0.0';
   static const String appBuild = '1';
 
   // API Configuration
-  // For local testing on Android Emulator, use 'http://10.0.2.2:8080/api/v1'
-  // For local testing on iOS Simulator, use 'http://localhost:8080/api/v1'
-  // For physical devices, use your machine's local IP (e.g., 'http://192.168.x.x:8080/api/v1')
-  // For production, replace with your actual backend URL
-  static const String apiBaseUrl = String.fromEnvironment('API_BASE_URL', defaultValue: 'http://10.0.2.2:8080/api/v1');
+  static String get apiBaseUrl => EnvironmentContext.config.apiBaseUrl;
   static const Duration apiTimeout = Duration(seconds: 60);
   static const int maxRetries = 3;
 
@@ -71,11 +69,13 @@ class AppConfig {
 
   // Network Configuration
   static const bool enableSSLPinning = true;
+  static const String sslFingerprint = 'YOUR_SERVER_SSL_FINGERPRINT_HERE'; // TODO: Replace with actual SHA-256 fingerprint
   static const bool enableRequestLogging = true;
   static const bool enableResponseLogging = true;
 
   // Security
   static const bool enableJailbreakDetection = true;
+  static const bool terminateOnJailbreak = true;
   static const bool enableDebuggerDetection = true;
   static const bool enableCodeObfuscation = true;
 

@@ -5,6 +5,26 @@ import '../utils/utils.dart';
 class ErrorHandler {
   /// Handle error and return user-friendly message
   static String handleError(dynamic error) {
+    if (error is AuthException) {
+      return 'Authentication failed. Please check your credentials.';
+    }
+    
+    if (error is NetworkException) {
+      return 'Network connection error. Please check your internet and try again.';
+    }
+
+    if (error is ServerException) {
+      return 'The server is currently unavailable. Please try again in a few minutes.';
+    }
+
+    if (error is ValidationException) {
+      return error.message;
+    }
+
+    if (error is SessionExpiredException) {
+      return 'Your session has expired. Please log in again to continue.';
+    }
+
     if (error is AppException) {
       return error.message;
     }
@@ -14,23 +34,24 @@ class ErrorHandler {
     }
     
     if (error is FormatException) {
-      return 'Invalid data format. Please check your input.';
+      return 'We encountered a data formatting issue. Please try again or contact support.';
     }
     
-    if (error.toString().contains('Network error')) {
-      return 'Network error. Please check your internet connection.';
+    final errorStr = error.toString().toLowerCase();
+    if (errorStr.contains('network error') || errorStr.contains('socketexception')) {
+      return 'Connection lost. Please check your internet connection.';
     }
     
-    if (error.toString().contains('Connection refused')) {
-      return 'Cannot connect to server. Please try again later.';
+    if (errorStr.contains('connection refused') || errorStr.contains('handshake')) {
+      return 'Unable to reach our servers. Please try again later.';
     }
     
-    if (error.toString().contains('timeout')) {
-      return 'Request timed out. Please try again.';
+    if (errorStr.contains('timeout')) {
+      return 'The request took too long. Please try again.';
     }
     
     logger.e('Unhandled error type: ${error.runtimeType}', error: error);
-    return 'An unexpected error occurred. Please try again.';
+    return 'Something went wrong on our end. Please try again shortly.';
   }
 
   /// Show error snackbar

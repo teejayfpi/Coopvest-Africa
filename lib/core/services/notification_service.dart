@@ -3,6 +3,8 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:convert';
 import '../utils/utils.dart';
+import 'deep_link_service.dart';
+import '../../main.dart';
 
 /// Notification Service - Handles Firebase Cloud Messaging
 class NotificationService {
@@ -62,7 +64,14 @@ class NotificationService {
         iOS: iosSettings,
       );
 
-      await _localNotifications.initialize(initSettings);
+      await _localNotifications.initialize(
+        initSettings,
+        onDidReceiveNotificationResponse: (details) {
+          if (details.payload != null) {
+            _handleNotificationTap(details.payload!);
+          }
+        },
+      );
 
       // Create notification channels
       await _createNotificationChannels();
@@ -70,6 +79,17 @@ class NotificationService {
       // Set message handlers
       FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
       FirebaseMessaging.onBackgroundMessage(_handleBackgroundMessage);
+      
+      // Handle notification clicks when app is in background/terminated
+      FirebaseMessaging.onMessageOpenedApp.listen((message) {
+        _handleNotificationTap(jsonEncode(message.data));
+      });
+
+      // Check for initial message (app launched from notification)
+      final initialMessage = await _messaging.getInitialMessage();
+      if (initialMessage != null) {
+        _handleNotificationTap(jsonEncode(initialMessage.data));
+      }
 
       logger.i('Notification service initialized');
     } catch (e, stackTrace) {
@@ -152,6 +172,49 @@ class NotificationService {
   static Future<void> _handleBackgroundMessage(RemoteMessage message) async {
     logger.i('Background message received: ${message.messageId}');
     // Perform background work here if needed
+  }
+
+  /// Handle notification tap and navigate to relevant screen
+  void _handleNotificationTap(String payload) {
+    try {
+      final context = navigatorKey.currentContext;
+      if (context == null) {
+        logger.w('Navigator context is null, cannot route notification');
+        return;
+      }
+
+      final Map<String, dynamic> data = jsonDecode(payload);
+      
+      // Check if it's a deep link URL in the data
+      if (data.containsKey('link')) {
+        final deepLinkData = DeepLinkService.parseDeepLink(data['link']);
+        DeepLinkNavigator.navigateToScreen(context, deepLinkData);
+        return;
+      }
+
+      // Handle specific notification types
+      final type = data['type'] ?? payload;
+      switch (type) {
+        case 'loan_approved':
+        case 'loan_update':
+          if (data.containsKey('loanId')) {
+            navigatorKey.currentState?.pushNamed('/loan-details', arguments: {'loanId': data['loanId']});
+          }
+          break;
+        case 'guarantor_request':
+          if (data.containsKey('loanId')) {
+            navigatorKey.currentState?.pushNamed('/guarantor-verification', arguments: data);
+          }
+          break;
+        case 'savings_goal':
+          navigatorKey.currentState?.pushNamed('/savings-goal');
+          break;
+        default:
+          logger.i('Unknown notification type tapped: $type');
+      }
+    } catch (e) {
+      logger.e('Error handling notification tap: $e');
+    }
   }
 
   /// Set foreground message callback
