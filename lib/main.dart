@@ -5,6 +5,10 @@ import 'config/app_config.dart';
 import 'config/theme_config.dart';
 import 'config/theme_enhanced.dart';
 import 'core/services/feature_service.dart';
+import 'core/services/security_service.dart';
+import 'core/services/notification_service.dart';
+import 'data/repositories/auth_repository.dart';
+import 'presentation/providers/auth_provider.dart';
 import 'presentation/screens/auth/welcome_screen.dart';
 import 'presentation/screens/auth/login_screen.dart';
 import 'presentation/screens/auth/register_step1_screen.dart';
@@ -32,27 +36,43 @@ import 'presentation/screens/loan/guarantor_verification_screen.dart';
 import 'presentation/screens/loan/loan_details_screen.dart';
 import 'presentation/screens/profile/profile_settings_screen.dart';
 import 'presentation/screens/security/security_settings_screen.dart';
-import 'presentation/screens/savings/savings_goals_screen.dart';
-import 'presentation/screens/search/global_search_screen.dart';
-import 'presentation/providers/theme_provider.dart';
+import 'presentation/screens/saimport 'core/services/notification_service.dart';
+import 'data/repositories/auth_repository.dart';
+import 'presentation/providers/auth_provider.dart';
+import 'config/env_config.dart';
+
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Set environment from dart-define (e.g. --dart-define=ENV=prod)
+  const envString = String.fromEnvironment('ENV', defaultValue: 'dev');
+  final env = Environment.values.firstWhere(
+    (e) => e.toString().split('.').last == envString,
+    orElse: () => Environment.dev,
+  );
+  EnvironmentContext.setEnvironment(env);
+  
+  // Initialize Security Service
+  final securityService = SecurityService();
+  await securityService.initialize();
   
   // Initialize feature service first (connects to admin backend)
   final featureService = FeatureService();
   try {
     await featureService.init().timeout(const Duration(seconds: 5));
   } catch (e) {
-    // If timeout or error, continue anyway
     debugPrint('Feature service initialization failed: $e');
   }
   
   // Initialize Firebase, analytics, etc.
   try {
     await Firebase.initializeApp();
+    // Initialize Notification Service
+    await NotificationService().init();
   } catch (e) {
-    debugPrint('Firebase initialization failed: $e');
+    debugPrint('Firebase/Notification initialization failed: $e');
   }
   
   runApp(
@@ -62,20 +82,85 @@ void main() async {
   );
 }
 
-class CoopvestApp extends ConsumerWidget {
+class CoopvestApp extends ConsumerStatefulWidget {
   const CoopvestApp({Key? key}) : super(key: key);
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CoopvestApp> createState() => _CoopvestAppState();
+}
+
+class _CoopvestAppState extends ConsumerState<CoopvestApp> with WidgetsBindingObserver {
+  bool _isSessionRestored = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _restoreSession();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Trigger biometric check on app resume if enabled
+      _checkBiometricOnResume();
+    }
+  }
+
+  Future<void> _restoreSession() async {
+    final authRepo = ref.read(authRepositoryProvider);
+    final success = await authRepo.restoreSession();
+    if (success) {
+      await ref.read(authProvider.notifier).getCurrentUser();
+    }
+    setState(() {
+      _isSessionRestored = true;
+    });
+  }
+
+  Future<void> _checkBiometricOnResume() async {
+    final authStatus = ref.read(authStatusProvider);
+    if (authStatus != AuthStatus.authenticated) return;
+
+    final securityService = SecurityService();
+    final isBiometricEnabled = await securityService.isBiometricEnabled();
+    
+    if (isBiometricEnabled) {
+      final authenticated = await securityService.authenticate();
+      if (!authenticated) {
+        // If biometric fails on resume, logout for security
+        await ref.read(authProvider.notifier).logout();
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final themeMode = ref.watch(themeModeProvider);
+    final authStatus = ref.watch(authStatusProvider);
+
+    if (!_isSessionRestored) {
+      return const MaterialApp(
+        home: Scaffold(
+          body: Center(child: CircularProgressIndicator()),
+        ),
+      );
+    }
 
     return MaterialApp(
       title: AppConfig.appName,
+      navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
       theme: CoopvestTheme.lightTheme,
       darkTheme: CoopvestTheme.darkTheme,
       themeMode: themeMode,
-      home: const MainContainer(),
+      home: authStatus == AuthStatus.authenticated ? const MainContainer() : const WelcomeScreen(),
       routes: {
         // Auth Routes
         '/welcome': (context) => const WelcomeScreen(),

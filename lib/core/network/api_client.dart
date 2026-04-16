@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../utils/utils.dart';
 import '../../config/app_config.dart';
+import '../services/security_service.dart';
+import '../../data/repositories/auth_repository.dart';
 
 /// Secure token storage keys
 const String _accessTokenKey = 'access_token';
@@ -40,10 +42,13 @@ class ApiClient {
       ),
     );
 
+    // Apply SSL Pinning
+    SecurityService().applySSLPinning(_dio);
+
     // Add interceptors
     _dio.interceptors.add(LoggingInterceptor());
-    _dio.interceptors.add(ErrorInterceptor());
     _dio.interceptors.add(AuthInterceptor());
+    _dio.interceptors.add(ErrorInterceptor(this)); // Pass this for token refresh
     
     _initialized = true;
   }
@@ -374,19 +379,51 @@ class AuthInterceptor extends Interceptor {
   }
 }
 
-/// Error Interceptor — handles 401 responses and clears expired tokens
+/// Error Interceptor — handles 401 responses and attempts auto-refresh
 class ErrorInterceptor extends Interceptor {
+  final ApiClient _apiClient;
+  bool _isRefreshing = false;
+
+  ErrorInterceptor(this._apiClient);
+
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
-    if (err.response?.statusCode == 401) {
-      // Token expired or invalid — clear stored tokens
+    if (err.response?.statusCode == 401 && !_isRefreshing) {
+      _isRefreshing = true;
       try {
-        await _secureStorage.delete(key: _accessTokenKey);
-        await _secureStorage.delete(key: _refreshTokenKey);
+        final refreshToken = await TokenStorage.getRefreshToken();
+        if (refreshToken != null) {
+          logger.i('Token expired, attempting auto-refresh...');
+          
+          // Create a temporary repository to call refresh
+          final authRepo = AuthRepository(_apiClient);
+          final response = await authRepo.refreshToken(refreshToken);
+          
+          // Persist new tokens
+          await TokenStorage.saveTokens(
+            accessToken: response.accessToken,
+            refreshToken: response.refreshToken,
+          );
+          
+          // Update client auth header
+          _apiClient.setAuthToken(response.accessToken);
+          
+          // Retry the original request
+          final options = err.requestOptions;
+          options.headers['Authorization'] = 'Bearer ${response.accessToken}';
+          
+          final retryResponse = await _apiClient.dio.fetch(options);
+          _isRefreshing = false;
+          return handler.resolve(retryResponse);
+        }
       } catch (e) {
-        logger.e('ErrorInterceptor: Failed to clear tokens: $e');
+        logger.e('Auto-refresh failed: $e');
+        // Clear tokens on refresh failure
+        await TokenStorage.clearTokens();
+        _apiClient.clearAuthToken();
+      } finally {
+        _isRefreshing = false;
       }
-      logger.w('Received 401 — tokens cleared');
     }
     handler.next(err);
   }
