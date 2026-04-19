@@ -45,6 +45,7 @@ const transactionRoutes = require('./routes/transactions');
 const settingsRoutes = require('./routes/settings');
 const watchlistRoutes = require('./routes/watchlist');
 const analyticsRoutes = require('./routes/analytics');
+const adminApiRoutes = require('./routes/adminApi');
 
 // Import middleware
 const errorHandler = require('./middleware/errorHandler');
@@ -252,9 +253,14 @@ app.get('/api/wallet/balance', (req, res, next) => {
 // ==============================================================================
 // API ROUTES - ADMIN ENDPOINTS (With IP whitelist)
 // ==============================================================================
-// Apply IP whitelist to all admin routes
+// Cross-backend service-token endpoints used by the Admin Dashboard API
+// server. Authentication is via a shared secret (X-Service-Token) rather than
+// IP whitelisting, so the admin backend can be deployed anywhere.
+app.use('/api/v2/admin', adminApiRoutes);
+
+// In-app admin console endpoints (member JWT + IP whitelist)
 app.use('/api/v1/admin', adminIPWhitelist, adminRoutes);
-app.use('/api/v1/admin', adminIPWhitelist, adminTicketRoutes);
+app.use('/api/v1/admin-tickets', adminIPWhitelist, adminTicketRoutes);
 
 // ==============================================================================
 // 404 HANDLER

@@ -1,318 +1,207 @@
 /**
  * Notifications Routes
- * API endpoints for managing user notifications
+ *
+ * CRUD against the Supabase `notifications` table, scoped to the
+ * authenticated member (`profile_id`). Admin fan-out lives on
+ * /api/v1/admin/notifications.
  */
 
 const express = require('express');
 const router = express.Router();
-const { Notification } = require('../models');
-const { auth: authMiddleware } = require('../middleware/auth');
 
-// All routes require authentication
-router.use(authMiddleware);
+const supabase = require('../config/supabase');
+const { authenticate } = require('../middleware/auth');
+const logger = require('../utils/logger');
+
+router.use(authenticate);
+
+function parsePaging(req) {
+  const page = Math.max(1, parseInt(req.query.page) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+  return { page, limit };
+}
 
 /**
  * GET /api/v1/notifications
- * Get all notifications for the current user
  */
 router.get('/', async (req, res) => {
   try {
-    const {
-      page = 1,
-      limit = 20,
-      type,
-      isRead,
-      priority,
-      archived = false
-    } = req.query;
-
-    const query = { user: req.user.id };
-    
-    if (type) query.type = type;
-    if (isRead !== undefined) query.isRead = isRead === 'true';
-    if (priority) query.priority = priority;
-    if (archived === 'true') {
-      query.isArchived = true;
-    } else {
-      query.isArchived = false;
-    }
-
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-
-    const [notifications, total] = await Promise.all([
-      Notification.find(query)
-        .sort({ priority: -1, createdAt: -1 })
-        .skip(skip)
-        .limit(parseInt(limit))
-        .populate('reference.model', 'name title'),
-      Notification.countDocuments(query)
-    ]);
-
-    res.json({
-      success: true,
-      data: notifications,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        pages: Math.ceil(total / parseInt(limit))
-      }
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    const { page, limit } = parsePaging(req);
+    let q = supabase
+      .from('notifications')
+      .select('*', { count: 'exact' })
+      .eq('profile_id', req.user.id)
+      .eq('archived', false)
+      .order('created_at', { ascending: false })
+      .range((page - 1) * limit, page * limit - 1);
+    if (req.query.type) q = q.eq('type', req.query.type);
+    if (req.query.read === 'true') q = q.eq('read', true);
+    if (req.query.read === 'false') q = q.eq('read', false);
+    const { data, error, count } = await q;
+    if (error) throw error;
+    res.json({ success: true, notifications: data || [], pagination: { page, limit, total: count || 0 } });
+  } catch (err) {
+    logger.error('notif list error:', err);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
 /**
  * GET /api/v1/notifications/unread-count
- * Get unread notifications count
  */
 router.get('/unread-count', async (req, res) => {
   try {
-    const count = await Notification.getUnreadCount(req.user.id);
-
-    res.json({
-      success: true,
-      data: { count }
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    const { count, error } = await supabase
+      .from('notifications')
+      .select('id', { count: 'exact', head: true })
+      .eq('profile_id', req.user.id)
+      .eq('read', false)
+      .eq('archived', false);
+    if (error) throw error;
+    res.json({ success: true, count: count || 0 });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
 /**
  * GET /api/v1/notifications/unread
- * Get unread notifications
  */
 router.get('/unread', async (req, res) => {
   try {
-    const limit = parseInt(req.query.limit) || 20;
-    const notifications = await Notification.getUnread(req.user.id, limit);
-
-    res.json({
-      success: true,
-      data: notifications
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('profile_id', req.user.id)
+      .eq('read', false)
+      .eq('archived', false)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    res.json({ success: true, notifications: data || [] });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
 /**
  * GET /api/v1/notifications/:id
- * Get single notification
  */
 router.get('/:id', async (req, res) => {
   try {
-    const notification = await Notification.findOne({
-      _id: req.params.id,
-      user: req.user.id
-    });
-
-    if (!notification) {
-      return res.status(404).json({
-        success: false,
-        error: 'Notification not found'
-      });
-    }
-
-    res.json({
-      success: true,
-      data: notification
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('id', req.params.id)
+      .eq('profile_id', req.user.id)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ success: false, error: 'Notification not found' });
+    res.json({ success: true, notification: data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
 /**
  * PATCH /api/v1/notifications/:id/read
- * Mark notification as read
  */
 router.patch('/:id/read', async (req, res) => {
   try {
-    const notification = await Notification.findOne({
-      _id: req.params.id,
-      user: req.user.id
-    });
-
-    if (!notification) {
-      return res.status(404).json({
-        success: false,
-        error: 'Notification not found'
-      });
-    }
-
-    await notification.markAsRead();
-
-    res.json({
-      success: true,
-      message: 'Notification marked as read',
-      data: notification
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    const { data, error } = await supabase
+      .from('notifications')
+      .update({ read: true, read_at: new Date().toISOString() })
+      .eq('id', req.params.id)
+      .eq('profile_id', req.user.id)
+      .select('*')
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ success: false, error: 'Notification not found' });
+    res.json({ success: true, notification: data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
 /**
  * POST /api/v1/notifications/mark-all-read
- * Mark all notifications as read
  */
 router.post('/mark-all-read', async (req, res) => {
   try {
-    await Notification.updateMany(
-      {
-        user: req.user.id,
-        isRead: false,
-        isArchived: false
-      },
-      {
-        isRead: true,
-        readAt: new Date()
-      }
-    );
-
-    res.json({
-      success: true,
-      message: 'All notifications marked as read'
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    const { error } = await supabase
+      .from('notifications')
+      .update({ read: true, read_at: new Date().toISOString() })
+      .eq('profile_id', req.user.id)
+      .eq('read', false);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
 /**
  * PATCH /api/v1/notifications/:id/archive
- * Archive a notification
  */
 router.patch('/:id/archive', async (req, res) => {
   try {
-    const notification = await Notification.findOne({
-      _id: req.params.id,
-      user: req.user.id
-    });
-
-    if (!notification) {
-      return res.status(404).json({
-        success: false,
-        error: 'Notification not found'
-      });
-    }
-
-    await notification.archive();
-
-    res.json({
-      success: true,
-      message: 'Notification archived',
-      data: notification
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    const { data, error } = await supabase
+      .from('notifications')
+      .update({ archived: true })
+      .eq('id', req.params.id)
+      .eq('profile_id', req.user.id)
+      .select('*')
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ success: false, error: 'Notification not found' });
+    res.json({ success: true, notification: data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
 /**
  * POST /api/v1/notifications/archive-all
- * Archive all read notifications
  */
 router.post('/archive-all', async (req, res) => {
   try {
-    await Notification.updateMany(
-      {
-        user: req.user.id,
-        isRead: true,
-        isArchived: false
-      },
-      {
-        isArchived: true,
-        archivedAt: new Date()
-      }
-    );
-
-    res.json({
-      success: true,
-      message: 'All read notifications archived'
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    const { error } = await supabase
+      .from('notifications')
+      .update({ archived: true })
+      .eq('profile_id', req.user.id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
 /**
  * DELETE /api/v1/notifications/:id
- * Delete a notification
  */
 router.delete('/:id', async (req, res) => {
   try {
-    const result = await Notification.deleteOne({
-      _id: req.params.id,
-      user: req.user.id
-    });
-
-    if (result.deletedCount === 0) {
-      return res.status(404).json({
-        success: false,
-        error: 'Notification not found'
-      });
-    }
-
-    res.json({
-      success: true,
-      message: 'Notification deleted'
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    const { error } = await supabase
+      .from('notifications')
+      .delete()
+      .eq('id', req.params.id)
+      .eq('profile_id', req.user.id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
 /**
  * DELETE /api/v1/notifications
- * Delete all archived notifications
  */
 router.delete('/', async (req, res) => {
   try {
-    const result = await Notification.deleteMany({
-      user: req.user.id,
-      isArchived: true
-    });
-
-    res.json({
-      success: true,
-      message: `${result.deletedCount} notifications deleted`
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    const { error } = await supabase.from('notifications').delete().eq('profile_id', req.user.id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

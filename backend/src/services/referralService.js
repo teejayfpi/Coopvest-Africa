@@ -1,211 +1,21 @@
 /**
  * Referral Service
- * 
- * Handles referral logic, tier calculations, and bonus applications
+ *
+ * Handles referral logic, tier calculations, and bonus applications against
+ * the Supabase-backed schema (`profiles`, `referrals`, `referral_events`,
+ * `audit_logs`).
  */
 
-const { Referral, User } = require('../models');
+const supabase = require('../config/supabase');
 const logger = require('../utils/logger');
-const AuditLog = require('../models/AuditLog');
+
+// Interest rate table keyed by loan type
+const BASE_RATES = { 'Quick Loan': 15, 'Micro Loan': 18, 'Business Loan': 20, 'Emergency Loan': 12 };
+const MIN_FLOORS = { 'Quick Loan': 5, 'Micro Loan': 7, 'Business Loan': 8, 'Emergency Loan': 4 };
 
 class ReferralService {
-  /**
-   * Apply referral bonus to a loan
-   */
-  async applyBonusToLoan(userId, loanId, loanType) {
-    try {
-      // Get user's current tier bonus
-      const summary = await this.getReferralSummary(userId);
-      const bonusPercent = summary.summary.currentTierBonus;
-      const isBonusAvailable = summary.summary.isBonusAvailable;
-
-      if (!isBonusAvailable || bonusPercent <= 0) {
-        return {
-          success: false,
-          error: 'No referral bonus available',
-          bonusApplied: false
-        };
-      }
-
-      // Check minimum interest floor for loan type
-      const minimumFloor = this.getMinimumInterestFloor(loanType);
-      const baseRate = this.getBaseInterestRate(loanType);
-      
-      if (baseRate - bonusPercent < minimumFloor) {
-        return {
-          success: false,
-          error: `Cannot apply ${bonusPercent}% bonus. Minimum interest floor for ${loanType} is ${minimumFloor}%`,
-          bonusApplied: false,
-          minimumFloor
-        };
-      }
-
-      // Mark bonus as consumed
-      const referral = await Referral.findOne({
-        referrerId: userId,
-        confirmed: true,
-        isFlagged: false,
-        bonusConsumed: false,
-        lockInEndDate: { $lte: new Date() }
-      });
-
-      if (referral) {
-        await referral.applyBonusToLoan(loanId);
-        
-        // Update all referrals for this user to current tier
-        await Referral.updateUserTierBonuses(userId);
-
-        // Log the action
-        await this.logAuditEvent('BONUS_CONSUMED', referral.referralId, userId, null, loanId,
-          `Bonus of ${bonusPercent}% applied to loan ${loanId}`);
-
-        logger.info(`Bonus applied to loan ${loanId}: ${bonusPercent}%`);
-      }
-
-      return {
-        success: true,
-        bonusApplied: true,
-        bonusPercent,
-        effectiveInterestRate: baseRate - bonusPercent,
-        loanId,
-        message: `Referral bonus of ${bonusPercent}% applied successfully`
-      };
-    } catch (error) {
-      logger.error('Error applying bonus to loan:', error.message);
-      throw error;
-    }
-  }
-
-  /**
-   * Calculate loan interest with referral bonus
-   */
-  calculateInterestWithBonus(loanType, loanAmount, tenureMonths, bonusPercent) {
-    const baseRate = this.getBaseInterestRate(loanType);
-    const minimumFloor = this.getMinimumInterestFloor(loanType);
-    
-    // Calculate effective rate (cannot go below minimum floor)
-    const effectiveRate = bonusPercent > 0 
-      ? Math.max(baseRate - bonusPercent, minimumFloor)
-      : baseRate;
-
-    // Calculate EMI using standard formula
-    const monthlyRate = effectiveRate / 100 / 12;
-    const emi = loanAmount * monthlyRate * Math.pow(1 + monthlyRate, tenureMonths) / 
-                (Math.pow(1 + monthlyRate, tenureMonths) - 1);
-
-    const monthlyRateBefore = baseRate / 100 / 12;
-    const emiBeforeBonus = loanAmount * monthlyRateBefore * Math.pow(1 + monthlyRateBefore, tenureMonths) / 
-                           (Math.pow(1 + monthlyRateBefore, tenureMonths) - 1);
-
-    const totalSavingsFromBonus = (emiBeforeBonus - emi) * tenureMonths;
-
-    return {
-      loanType,
-      baseInterestRate: baseRate,
-      referralBonusPercent: bonusPercent,
-      effectiveInterestRate: effectiveRate,
-      loanAmount,
-      tenureMonths,
-      monthlyRepaymentBeforeBonus: emiBeforeBonus,
-      monthlyRepaymentAfterBonus: emi,
-      totalSavingsFromBonus,
-      minimumInterestFloor: minimumFloor,
-      bonusApplied: bonusPercent > 0
-    };
-  }
-
-  /**
-   * Get share link for referral
-   */
-  async getShareLink(userId) {
-    try {
-      const user = await User.findOne({ userId });
-      if (!user) {
-        throw new Error('User not found');
-      }
-
-      const referralCode = user.referral.myReferralCode;
-      const baseUrl = process.env.API_BASE_URL || 'https://coopvest.app';
-      const shareLink = `${baseUrl}/register?ref=${referralCode}`;
-
-      return {
-        success: true,
-        referralCode,
-        shareLink,
-        qrCodeUrl: `${baseUrl}/api/v1/referrals/qr/${referralCode}`
-      };
-    } catch (error) {
-      logger.error('Error getting share link:', error.message);
-      throw error;
-    }
-  }
-
-  /**
-   * Update referrer's tier after new confirmation
-   */
-  async updateReferrerTier(referrerId) {
-    try {
-      // Count confirmed referrals
-      const confirmedCount = await Referral.countDocuments({
-        referrerId,
-        confirmed: true,
-        isFlagged: false
-      });
-
-      // Calculate new tier bonus
-      const tierBonus = this.calculateTierBonus(confirmedCount);
-
-      // Update referrer's profile
-      await User.findOneAndUpdate(
-        { userId: referrerId },
-        {
-          'referral.confirmedReferralCount': confirmedCount,
-          'referral.currentTierBonus': tierBonus
-        }
-      );
-
-      // Update all unconsumed referrals for this user
-      await Referral.updateUserTierBonuses(referrerId);
-
-      // Log tier update
-      await this.logAuditEvent('TIER_UPDATED', null, referrerId, null,
-        `User reached ${confirmedCount} confirmed referrals. Tier bonus: ${tierBonus}%`);
-
-      return tierBonus;
-    } catch (error) {
-      logger.error('Error updating referrer tier:', error.message);
-      throw error;
-    }
-  }
-
-  /**
-   * Check for abuse (self-referral, duplicate accounts)
-   */
-  async checkForAbuse(referrerId, referredUserId) {
-    // Check self-referral
-    if (referrerId === referredUserId) {
-      return { isDuplicate: true, reason: 'Self-referral' };
-    }
-
-    // Check if referred user was already referred by someone else
-    const existingReferral = await Referral.findOne({ referredId: referredUserId });
-    if (existingReferral) {
-      return { isDuplicate: true, reason: 'Already referred by another user' };
-    }
-    
-    return { isDuplicate: false };
-  }
-
-  // Helper methods
-  getBaseInterestRate(loanType) {
-    const rates = { 'PERSONAL': 15, 'EMERGENCY': 12, 'BUSINESS': 18 };
-    return rates[loanType] || 15;
-  }
-
-  getMinimumInterestFloor(loanType) {
-    const floors = { 'PERSONAL': 5, 'EMERGENCY': 4, 'BUSINESS': 7 };
-    return floors[loanType] || 5;
-  }
+  getBaseInterestRate(loanType) { return BASE_RATES[loanType] ?? 15; }
+  getMinimumInterestFloor(loanType) { return MIN_FLOORS[loanType] ?? 5; }
 
   calculateTierBonus(count) {
     if (count >= 50) return 5;
@@ -215,26 +25,182 @@ class ReferralService {
     return 0;
   }
 
-  async getReferralSummary(userId) {
-    const user = await User.findOne({ userId });
+  calculateInterestWithBonus(loanType, loanAmount, tenureMonths, bonusPercent) {
+    const baseRate = this.getBaseInterestRate(loanType);
+    const minimumFloor = this.getMinimumInterestFloor(loanType);
+    const effectiveRate = bonusPercent > 0
+      ? Math.max(baseRate - bonusPercent, minimumFloor)
+      : baseRate;
+
+    const mRate = effectiveRate / 100 / 12;
+    const emi = mRate === 0
+      ? loanAmount / tenureMonths
+      : loanAmount * mRate * Math.pow(1 + mRate, tenureMonths) / (Math.pow(1 + mRate, tenureMonths) - 1);
+
+    const mRateBase = baseRate / 100 / 12;
+    const emiBase = mRateBase === 0
+      ? loanAmount / tenureMonths
+      : loanAmount * mRateBase * Math.pow(1 + mRateBase, tenureMonths) / (Math.pow(1 + mRateBase, tenureMonths) - 1);
+
     return {
-      summary: {
-        currentTierBonus: user?.referral?.currentTierBonus || 0,
-        isBonusAvailable: true
-      }
+      loanType,
+      baseInterestRate: baseRate,
+      referralBonusPercent: bonusPercent,
+      effectiveInterestRate: effectiveRate,
+      loanAmount,
+      tenureMonths,
+      monthlyRepaymentBeforeBonus: emiBase,
+      monthlyRepaymentAfterBonus: emi,
+      totalSavingsFromBonus: Math.max(0, (emiBase - emi) * tenureMonths),
+      minimumInterestFloor: minimumFloor,
+      bonusApplied: bonusPercent > 0,
     };
   }
 
-  async logAuditEvent(action, referralId, userId, adminId, loanId, details) {
-    await AuditLog.create({
-      action,
-      referralId,
-      userId,
-      adminId,
+  async getReferralSummary(profileId) {
+    const { data, error } = await supabase
+      .from('referrals')
+      .select('*')
+      .eq('profile_id', profileId)
+      .maybeSingle();
+    if (error && error.code !== 'PGRST116') throw error;
+
+    return {
+      summary: {
+        myReferralCode: data?.my_referral_code || null,
+        referralCount: data?.referral_count || 0,
+        confirmedReferralCount: data?.confirmed_referral_count || 0,
+        currentTierBonus: Number(data?.current_tier_bonus) || 0,
+        isBonusAvailable: (Number(data?.current_tier_bonus) || 0) > 0,
+      },
+    };
+  }
+
+  async applyBonusToLoan(profileId, loanId, loanType) {
+    const { summary } = await this.getReferralSummary(profileId);
+    const bonusPercent = summary.currentTierBonus;
+
+    if (!summary.isBonusAvailable || bonusPercent <= 0) {
+      return { success: false, bonusApplied: false, error: 'No referral bonus available' };
+    }
+
+    const minimumFloor = this.getMinimumInterestFloor(loanType);
+    const baseRate = this.getBaseInterestRate(loanType);
+    if (baseRate - bonusPercent < minimumFloor) {
+      return {
+        success: false,
+        bonusApplied: false,
+        minimumFloor,
+        error: `Cannot apply ${bonusPercent}% bonus. Minimum interest floor for ${loanType} is ${minimumFloor}%`,
+      };
+    }
+
+    // Consume the oldest unconsumed, confirmed, non-flagged referral for this user.
+    const { data: event } = await supabase
+      .from('referral_events')
+      .select('*')
+      .eq('referrer_id', profileId)
+      .eq('confirmed', true)
+      .eq('is_flagged', false)
+      .eq('bonus_consumed', false)
+      .order('confirmed_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (event) {
+      await supabase
+        .from('referral_events')
+        .update({ bonus_consumed: true, consumed_at: new Date().toISOString() })
+        .eq('id', event.id);
+
+      await this.logAuditEvent('BONUS_CONSUMED', profileId, {
+        referralId: event.referral_id,
+        loanId,
+        bonusPercent,
+      }, `Bonus of ${bonusPercent}% applied to loan ${loanId}`);
+    }
+
+    return {
+      success: true,
+      bonusApplied: true,
+      bonusPercent,
+      effectiveInterestRate: baseRate - bonusPercent,
       loanId,
-      details,
-      timestamp: new Date()
-    });
+      message: `Referral bonus of ${bonusPercent}% applied successfully`,
+    };
+  }
+
+  async updateReferrerTier(referrerProfileId) {
+    const { count, error: countError } = await supabase
+      .from('referral_events')
+      .select('id', { count: 'exact', head: true })
+      .eq('referrer_id', referrerProfileId)
+      .eq('confirmed', true)
+      .eq('is_flagged', false);
+    if (countError) throw countError;
+
+    const tierBonus = this.calculateTierBonus(count || 0);
+
+    await supabase
+      .from('referrals')
+      .upsert(
+        {
+          profile_id: referrerProfileId,
+          confirmed_referral_count: count || 0,
+          current_tier_bonus: tierBonus,
+        },
+        { onConflict: 'profile_id' }
+      );
+
+    await this.logAuditEvent('TIER_UPDATED', referrerProfileId, { count, tierBonus },
+      `User reached ${count} confirmed referrals. Tier bonus: ${tierBonus}%`);
+    return tierBonus;
+  }
+
+  async checkForAbuse(referrerProfileId, referredProfileId) {
+    if (referrerProfileId === referredProfileId) {
+      return { isDuplicate: true, reason: 'Self-referral' };
+    }
+    const { data: existing } = await supabase
+      .from('referral_events')
+      .select('id')
+      .eq('referred_id', referredProfileId)
+      .maybeSingle();
+    if (existing) return { isDuplicate: true, reason: 'Already referred by another user' };
+    return { isDuplicate: false };
+  }
+
+  async getShareLink(profileId) {
+    const { data: referral } = await supabase
+      .from('referrals')
+      .select('my_referral_code')
+      .eq('profile_id', profileId)
+      .maybeSingle();
+
+    const referralCode = referral?.my_referral_code;
+    if (!referralCode) throw new Error('Referral code not found');
+
+    const baseUrl = process.env.API_BASE_URL || 'https://coopvest.app';
+    return {
+      success: true,
+      referralCode,
+      shareLink: `${baseUrl}/register?ref=${referralCode}`,
+      qrCodeUrl: `${baseUrl}/api/v1/referrals/qr/${referralCode}`,
+    };
+  }
+
+  async logAuditEvent(action, actorProfileId, metadata = {}, details) {
+    try {
+      await supabase.from('audit_logs').insert({
+        actor_id: actorProfileId,
+        action,
+        target_model: 'Referral',
+        target_id: metadata.referralId || null,
+        metadata: { ...metadata, details: details || null },
+      });
+    } catch (err) {
+      logger.warn('audit_logs insert failed:', err.message);
+    }
   }
 }
 

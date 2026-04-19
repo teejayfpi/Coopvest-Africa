@@ -1,418 +1,251 @@
 /**
  * Wallet Routes
- * 
- * Wallet and transaction related endpoints
+ *
+ * Reads from Supabase tables: `wallets`, `transactions`. Monetary updates
+ * go through a small helper that updates the wallet row atomically using
+ * Postgres arithmetic.
  */
 
 const express = require('express');
+const { body } = require('express-validator');
 const router = express.Router();
-const mongoose = require('mongoose');
-const { body, validationResult } = require('express-validator');
-const { v4: uuidv4 } = require('uuid');
-const { Wallet, User, AuditLog } = require('../models');
+
+const supabase = require('../config/supabase');
 const { authenticate } = require('../middleware/auth');
+const validate = require('../middleware/validate');
 const logger = require('../utils/logger');
 
-const validate = (req, res, next) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ success: false, errors: errors.array() });
+const newRef = (prefix) => `${prefix}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+
+async function ensureWallet(profileId) {
+  const { data, error } = await supabase
+    .from('wallets')
+    .select('*')
+    .eq('profile_id', profileId)
+    .maybeSingle();
+  if (error) throw error;
+  if (data) return data;
+  const { data: created, error: cErr } = await supabase
+    .from('wallets')
+    .insert({ profile_id: profileId, balance: 0, currency: 'NGN' })
+    .select('*')
+    .single();
+  if (cErr) throw cErr;
+  return created;
+}
+
+async function adjustBalance(profileId, delta) {
+  const wallet = await ensureWallet(profileId);
+  const newBalance = Number(wallet.balance) + Number(delta);
+  if (newBalance < 0) {
+    const err = new Error('Insufficient wallet balance');
+    err.statusCode = 400;
+    throw err;
   }
-  next();
-};
+  const { data, error } = await supabase
+    .from('wallets')
+    .update({ balance: newBalance })
+    .eq('id', wallet.id)
+    .select('*')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+async function recordTransaction(profileId, row) {
+  const { data, error } = await supabase
+    .from('transactions')
+    .insert({ profile_id: profileId, reference: newRef('TXN'), status: 'completed', ...row })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return data;
+}
 
 /**
  * GET /api/v1/wallet/balance
- * Get user's wallet balance and recent transactions
  */
 router.get('/balance', authenticate, async (req, res) => {
   try {
-    const userId = req.user.userId;
-
-    let wallet = await Wallet.findOne({ userId });
-    
-    if (!wallet) {
-      wallet = new Wallet({
-        userId,
-        balance: 0,
-        transactions: []
-      });
-      await wallet.save();
-    }
-
-    res.json({
-      success: true,
-      balance: wallet.balance,
-      currency: wallet.currency,
-      recentTransactions: wallet.transactions.slice(-5).reverse(),
-      lastUpdated: wallet.lastUpdated
-    });
-  } catch (error) {
-    logger.error('Error getting wallet balance:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    const wallet = await ensureWallet(req.user.id);
+    res.json({ success: true, balance: Number(wallet.balance), currency: wallet.currency });
+  } catch (err) {
+    logger.error('wallet balance error:', err);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
 /**
  * GET /api/v1/wallet/transactions
- * Get user's transaction history
  */
 router.get('/transactions', authenticate, async (req, res) => {
   try {
-    const userId = req.user.userId;
-    const { page = 1, limit = 20, type } = req.query;
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+    const page = parseInt(req.query.page) || 1;
 
-    const wallet = await Wallet.findOne({ userId });
+    const { data, error, count } = await supabase
+      .from('transactions')
+      .select('*', { count: 'exact' })
+      .eq('profile_id', req.user.id)
+      .order('created_at', { ascending: false })
+      .range((page - 1) * limit, page * limit - 1);
 
-    if (!wallet) {
-      return res.json({
-        success: true,
-        transactions: [],
-        total: 0,
-        pagination: { page: 1, limit: 20 }
-      });
-    }
-
-    let transactions = wallet.transactions.reverse();
-    
-    if (type && type !== 'all') {
-      transactions = transactions.filter(t => t.type === type);
-    }
-
-    const startIndex = (page - 1) * limit;
-    const paginatedTransactions = transactions.slice(startIndex, startIndex + parseInt(limit));
-
+    if (error) throw error;
     res.json({
       success: true,
-      transactions: paginatedTransactions,
-      total: transactions.length,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total: transactions.length
-      }
+      transactions: data || [],
+      pagination: { page, limit, total: count || 0 },
     });
-  } catch (error) {
-    logger.error('Error getting transactions:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+  } catch (err) {
+    logger.error('wallet transactions error:', err);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
 /**
  * POST /api/v1/wallet/deposit
- * Add funds to wallet (simulated)
  */
-router.post('/deposit', authenticate, [
-  body('amount').isFloat({ min: 100 }),
-  body('paymentMethod').optional().isIn(['bank_transfer', 'card', 'mobile_money']),
-  body('description').optional().isLength({ max: 200 })
-], validate, async (req, res) => {
-  try {
-    const userId = req.user.userId;
-    const { amount, paymentMethod, description } = req.body;
-
-    let wallet = await Wallet.findOne({ userId });
-
-    if (!wallet) {
-      wallet = new Wallet({ userId });
-    }
-
-    const transactionId = `TXN-${uuidv4().substring(0, 8).toUpperCase()}`;
-    const transaction = {
-      transactionId,
-      type: 'deposit',
-      amount: amount,
-      currency: 'NGN',
-      status: 'completed',
-      description: description || 'Wallet deposit',
-      reference: `REF-${Date.now()}`,
-      metadata: { paymentMethod },
-      createdAt: new Date()
-    };
-
-    wallet.balance += amount;
-    wallet.transactions.push(transaction);
-    await wallet.save();
-
-    // Update user savings
-    await User.findOneAndUpdate(
-      { userId },
-      {
-        $inc: {
-          'savings.totalSaved': amount,
-          'savings.monthlySavings': amount
-        },
-        $set: { 'savings.lastSavingsDate': new Date() }
-      }
-    );
-
-    // Log audit
-    await AuditLog.log({
-      action: 'WALLET_DEPOSIT',
-      userId,
-      details: `Deposited ₦${amount} to wallet`
-    });
-
-    res.json({
-      success: true,
-      transaction: {
-        transactionId,
+router.post(
+  '/deposit',
+  authenticate,
+  [body('amount').isFloat({ min: 0.01 }), body('description').optional().isString()],
+  validate,
+  async (req, res) => {
+    try {
+      const { amount, description } = req.body;
+      const wallet = await adjustBalance(req.user.id, Number(amount));
+      const txn = await recordTransaction(req.user.id, {
+        type: 'credit',
+        category: 'deposit',
         amount,
-        balance: wallet.balance,
-        createdAt: transaction.createdAt
-      },
-      message: 'Deposit successful'
-    });
-  } catch (error) {
-    logger.error('Deposit error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+        description: description || 'Wallet deposit',
+      });
+      res.status(201).json({ success: true, wallet, transaction: txn });
+    } catch (err) {
+      logger.error('deposit error:', err);
+      res.status(err.statusCode || 500).json({ success: false, error: err.message });
+    }
   }
-});
+);
 
 /**
  * POST /api/v1/wallet/withdraw
- * Withdraw funds from wallet
  */
-router.post('/withdraw', authenticate, [
-  body('amount').isFloat({ min: 100 }),
-  body('bankAccount').notEmpty()
-], validate, async (req, res) => {
-  try {
-    const userId = req.user.userId;
-    const { amount, bankAccount } = req.body;
-
-    let wallet = await Wallet.findOne({ userId });
-
-    if (!wallet) {
-      return res.status(400).json({
-        success: false,
-        error: 'Wallet not found'
-      });
-    }
-
-    if (wallet.balance < amount) {
-      return res.status(400).json({
-        success: false,
-        error: 'Insufficient balance'
-      });
-    }
-
-    const transactionId = `TXN-${uuidv4().substring(0, 8).toUpperCase()}`;
-    const transaction = {
-      transactionId,
-      type: 'withdrawal',
-      amount: amount,
-      currency: 'NGN',
-      status: 'pending',
-      description: `Withdrawal to ${bankAccount}`,
-      reference: `REF-${Date.now()}`,
-      createdAt: new Date()
-    };
-
-    wallet.balance -= amount;
-    wallet.transactions.push(transaction);
-    await wallet.save();
-
-    // Log audit
-    await AuditLog.log({
-      action: 'WALLET_WITHDRAWAL',
-      userId,
-      details: `Withdrew ₦${amount} from wallet`
-    });
-
-    res.json({
-      success: true,
-      transaction: {
-        transactionId,
+router.post(
+  '/withdraw',
+  authenticate,
+  [body('amount').isFloat({ min: 0.01 }), body('description').optional().isString()],
+  validate,
+  async (req, res) => {
+    try {
+      const { amount, description } = req.body;
+      const wallet = await adjustBalance(req.user.id, -Number(amount));
+      const txn = await recordTransaction(req.user.id, {
+        type: 'debit',
+        category: 'withdrawal',
         amount,
-        status: 'pending',
-        estimatedProcessingTime: '24-48 hours'
-      },
-      message: 'Withdrawal request submitted'
-    });
-  } catch (error) {
-    logger.error('Withdrawal error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+        description: description || 'Wallet withdrawal',
+      });
+      res.status(201).json({ success: true, wallet, transaction: txn });
+    } catch (err) {
+      logger.error('withdraw error:', err);
+      res.status(err.statusCode || 500).json({ success: false, error: err.message });
+    }
   }
-});
+);
 
 /**
  * POST /api/v1/wallet/transfer
- * Transfer funds to another user
  */
-router.post('/transfer', authenticate, [
-  body('recipientId').notEmpty(),
-  body('amount').isFloat({ min: 100 }),
-  body('description').optional().isLength({ max: 200 })
-], validate, async (req, res) => {
-  try {
-    const userId = req.user.userId;
-    const { recipientId, amount, description } = req.body;
-
-    if (userId === recipientId) {
-      return res.status(400).json({
-        success: false,
-        error: 'Cannot transfer to yourself'
-      });
-    }
-
-    // Check recipient exists
-    const recipient = await User.findOne({ userId: recipientId });
-    if (!recipient) {
-      return res.status(404).json({
-        success: false,
-        error: 'Recipient not found'
-      });
-    }
-
-    let senderWallet = await Wallet.findOne({ userId });
-    if (!senderWallet || senderWallet.balance < amount) {
-      return res.status(400).json({
-        success: false,
-        error: 'Insufficient balance'
-      });
-    }
-
-    let recipientWallet = await Wallet.findOne({ userId: recipientId });
-    if (!recipientWallet) {
-      recipientWallet = new Wallet({ userId: recipientId });
-    }
-
-    const transactionId = `TXN-${uuidv4().substring(0, 8).toUpperCase()}`;
-
-    // Use MongoDB transaction to ensure atomicity
-    const session = await mongoose.startSession();
-    session.startTransaction();
-
+router.post(
+  '/transfer',
+  authenticate,
+  [
+    body('toUserId').isString().notEmpty(),
+    body('amount').isFloat({ min: 0.01 }),
+    body('description').optional().isString(),
+  ],
+  validate,
+  async (req, res) => {
     try {
-      // Deduct from sender
-      senderWallet.balance -= amount;
-      senderWallet.transactions.push({
-        transactionId,
-        type: 'transfer',
-        amount: -amount,
-        currency: 'NGN',
-        status: 'completed',
-        description: description || `Transfer to ${recipient.name}`,
-        reference: `REF-${Date.now()}`,
-        metadata: { recipientId },
-        createdAt: new Date()
-      });
-      await senderWallet.save({ session });
+      const { toUserId, amount, description } = req.body;
+      const { data: recipient, error: lookupErr } = await supabase
+        .from('profiles')
+        .select('id, user_id, name')
+        .or(`user_id.eq.${toUserId},id.eq.${toUserId}`)
+        .maybeSingle();
+      if (lookupErr || !recipient) {
+        return res.status(404).json({ success: false, error: 'Recipient not found' });
+      }
+      if (recipient.id === req.user.id) {
+        return res.status(400).json({ success: false, error: 'Cannot transfer to yourself' });
+      }
 
-      // Add to recipient
-      recipientWallet.balance += amount;
-      recipientWallet.transactions.push({
-        transactionId: `TXN-${uuidv4().substring(0, 8).toUpperCase()}`,
-        type: 'transfer',
-        amount: amount,
-        currency: 'NGN',
-        status: 'completed',
-        description: `Transfer from ${senderWallet.userId}`,
-        reference: `REF-${Date.now()}`,
-        metadata: { senderId: userId },
-        createdAt: new Date()
-      });
-      await recipientWallet.save({ session });
+      const ref = newRef('TRF');
+      const sender = await adjustBalance(req.user.id, -Number(amount));
+      await adjustBalance(recipient.id, Number(amount));
 
-      await session.commitTransaction();
-    } catch (txError) {
-      await session.abortTransaction();
-      throw txError;
-    } finally {
-      session.endSession();
-    }
-
-    // Log audit
-    await AuditLog.log({
-      action: 'WALLET_TRANSFER',
-      userId,
-      details: `Transferred ₦${amount} to ${recipientId}`
-    });
-
-    res.json({
-      success: true,
-      transaction: {
-        transactionId,
+      const senderTxn = await recordTransaction(req.user.id, {
+        type: 'debit',
+        category: 'transfer_out',
         amount,
-        recipient: recipient.name,
-        status: 'completed'
-      },
-      message: 'Transfer successful'
-    });
-  } catch (error) {
-    logger.error('Transfer error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+        description: description || `Transfer to ${recipient.name || recipient.user_id}`,
+        reference: ref,
+        counterparty_id: recipient.id,
+      });
+      await recordTransaction(recipient.id, {
+        type: 'credit',
+        category: 'transfer_in',
+        amount,
+        description: description || `Transfer from ${req.user.name || req.user.userId}`,
+        reference: ref,
+        counterparty_id: req.user.id,
+      });
+
+      res.status(201).json({ success: true, wallet: sender, transaction: senderTxn });
+    } catch (err) {
+      logger.error('transfer error:', err);
+      res.status(err.statusCode || 500).json({ success: false, error: err.message });
+    }
   }
-});
+);
 
 /**
  * GET /api/v1/wallet/statement
- * Get wallet statement
  */
 router.get('/statement', authenticate, async (req, res) => {
   try {
-    const userId = req.user.userId;
-    const { startDate, endDate, format } = req.query;
+    const from = req.query.from ? new Date(req.query.from).toISOString() : null;
+    const to = req.query.to ? new Date(req.query.to).toISOString() : null;
 
-    const wallet = await Wallet.findOne({ userId });
+    let q = supabase
+      .from('transactions')
+      .select('*')
+      .eq('profile_id', req.user.id)
+      .order('created_at', { ascending: false });
+    if (from) q = q.gte('created_at', from);
+    if (to) q = q.lte('created_at', to);
 
-    if (!wallet) {
-      return res.json({
-        success: true,
-        statement: {
-          openingBalance: 0,
-          closingBalance: 0,
-          transactions: []
-        }
-      });
-    }
+    const { data, error } = await q;
+    if (error) throw error;
 
-    let transactions = wallet.transactions;
+    const totals = (data || []).reduce(
+      (acc, t) => {
+        if (t.type === 'credit') acc.credits += Number(t.amount);
+        else acc.debits += Number(t.amount);
+        return acc;
+      },
+      { credits: 0, debits: 0 }
+    );
 
-    if (startDate) {
-      const start = new Date(startDate);
-      transactions = transactions.filter(t => new Date(t.createdAt) >= start);
-    }
-
-    if (endDate) {
-      const end = new Date(endDate);
-      transactions = transactions.filter(t => new Date(t.createdAt) <= end);
-    }
-
-    const openingBalance = wallet.balance - transactions.reduce((sum, t) => sum + (t.type === 'deposit' ? t.amount : -t.amount), 0);
-
-    res.json({
-      success: true,
-      statement: {
-        openingBalance,
-        closingBalance: wallet.balance,
-        transactions: transactions.reverse(),
-        generatedAt: new Date()
-      }
-    });
-  } catch (error) {
-    logger.error('Get statement error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    res.json({ success: true, transactions: data || [], totals });
+  } catch (err) {
+    logger.error('statement error:', err);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
 module.exports = router;
+module.exports.ensureWallet = ensureWallet;
+module.exports.adjustBalance = adjustBalance;
+module.exports.recordTransaction = recordTransaction;
