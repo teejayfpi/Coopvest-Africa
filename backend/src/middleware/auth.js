@@ -1,121 +1,137 @@
 /**
  * Authentication Middleware
- * 
- * Supabase-based authentication middleware
+ *
+ * Supabase-based authentication. Three modes:
+ *   - authenticate      -> requires a valid member JWT (Supabase Auth)
+ *   - optionalAuth      -> sets req.user if the JWT is valid, else continues
+ *   - requireAdmin      -> valid JWT + role in ('admin', 'superadmin', 'staff')
+ *   - requireService    -> valid `x-service-token` header matching
+ *                          MOBILE_API_SERVICE_TOKEN (used by the admin web
+ *                          portal for cross-backend proxy calls)
  */
 
 const supabase = require('../config/supabase');
 const logger = require('../utils/logger');
 
-/**
- * Authentication middleware
- * Verifies Supabase token and extracts user info
- */
 const authenticate = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
-    
+
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({
         success: false,
-        error: 'Authentication required. Provide Bearer token in Authorization header.'
+        error: 'Authentication required. Provide Bearer token in Authorization header.',
       });
     }
 
     const token = authHeader.split(' ')[1];
-
-    // Verify token with Supabase
     const { data: { user }, error } = await supabase.auth.getUser(token);
 
     if (error || !user) {
-      return res.status(401).json({
-        success: false,
-        error: 'Invalid or expired token'
-      });
+      return res.status(401).json({ success: false, error: 'Invalid or expired token' });
     }
 
-    // Fetch trusted user profile from database to verify role
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('role, userId')
+      .select('id, user_id, email, name, role, is_active, is_flagged')
       .eq('id', user.id)
-      .single();
+      .maybeSingle();
 
     if (profileError || !profile) {
       logger.error('Failed to fetch user profile for role verification:', profileError);
-      return res.status(401).json({
-        success: false,
-        error: 'User profile not found'
-      });
+      return res.status(401).json({ success: false, error: 'User profile not found' });
     }
 
-    // Attach trusted user info to request
+    if (profile.is_active === false) {
+      return res.status(403).json({ success: false, error: 'Account is disabled' });
+    }
+
     req.user = {
-      id: user.id,
-      email: user.email,
-      userId: profile.userId || user.user_metadata.userId || user.id,
-      role: profile.role || 'user'
+      id: profile.id,
+      email: profile.email,
+      userId: profile.user_id,
+      name: profile.name,
+      role: profile.role || 'member',
+      isFlagged: profile.is_flagged === true,
     };
 
     req.token = token;
     next();
   } catch (error) {
     logger.error('Authentication error:', error);
-    res.status(401).json({
-      success: false,
-      error: 'Authentication failed'
-    });
+    res.status(401).json({ success: false, error: 'Authentication failed' });
   }
 };
 
-/**
- * Optional authentication middleware
- */
 const optionalAuth = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return next();
-    }
+    if (!authHeader || !authHeader.startsWith('Bearer ')) return next();
 
     const token = authHeader.split(' ')[1];
     const { data: { user }, error } = await supabase.auth.getUser(token);
+    if (error || !user) return next();
 
-    if (!error && user) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id, user_id, email, name, role')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (profile) {
       req.user = {
-        id: user.id,
-        email: user.email,
-        userId: user.user_metadata.userId || user.id,
-        role: user.user_metadata.role || 'user'
+        id: profile.id,
+        email: profile.email,
+        userId: profile.user_id,
+        name: profile.name,
+        role: profile.role || 'member',
       };
       req.token = token;
     }
-
     next();
-  } catch (error) {
+  } catch (_) {
     next();
   }
 };
 
-/**
- * Admin-only middleware
- */
-const requireAdmin = async (req, res, next) => {
-  await authenticate(req, res, () => {
-    if (req.user && (req.user.role === 'admin' || req.user.role === 'superadmin')) {
-      next();
-    } else {
-      res.status(403).json({
-        success: false,
-        error: 'Admin access required'
-      });
+const requireAdmin = (req, res, next) => {
+  return authenticate(req, res, () => {
+    if (req.user && ['admin', 'superadmin', 'staff'].includes(req.user.role)) {
+      return next();
     }
+    res.status(403).json({ success: false, error: 'Admin access required' });
   });
+};
+
+/**
+ * Service-token auth for cross-backend calls (e.g. admin web portal). The
+ * caller provides a shared secret in the `x-service-token` header. The
+ * request is treated as if it came from a system actor and has full admin
+ * privileges on read-only bulk endpoints. Never expose this token to a
+ * browser; the admin web backend stores it in an env var and uses it from
+ * its server process only.
+ */
+const requireService = (req, res, next) => {
+  const expected = process.env.MOBILE_API_SERVICE_TOKEN;
+  const provided = req.headers['x-service-token'] || req.headers['X-Service-Token'];
+
+  if (!expected) {
+    return res.status(503).json({
+      success: false,
+      error: 'Service token auth is not configured on this backend',
+    });
+  }
+  if (!provided || provided !== expected) {
+    return res.status(401).json({ success: false, error: 'Invalid or missing service token' });
+  }
+
+  req.service = { name: 'admin-web', role: 'service' };
+  next();
 };
 
 module.exports = {
   authenticate,
   optionalAuth,
-  requireAdmin
+  requireAdmin,
+  requireService,
 };

@@ -1,280 +1,176 @@
 /**
  * KYC Routes
- * 
- * Know Your Customer verification endpoints
+ *
+ * Persists KYC state into Supabase tables `kyc` (one row per profile) and
+ * `kyc_documents` (N uploaded documents per profile).
  */
 
 const express = require('express');
+const { body } = require('express-validator');
 const router = express.Router();
-const { body, validationResult } = require('express-validator');
-const { User, KYC } = require('../models');
+
+const supabase = require('../config/supabase');
 const { authenticate } = require('../middleware/auth');
+const validate = require('../middleware/validate');
 const logger = require('../utils/logger');
 
-const validate = (req, res, next) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ success: false, errors: errors.array() });
-  }
-  next();
-};
+router.use(authenticate);
+
+async function getOrCreateKyc(profileId) {
+  const { data, error } = await supabase
+    .from('kyc')
+    .select('*')
+    .eq('profile_id', profileId)
+    .maybeSingle();
+  if (error) throw error;
+  if (data) return data;
+
+  const { data: created, error: cErr } = await supabase
+    .from('kyc')
+    .insert({ profile_id: profileId, status: 'pending' })
+    .select('*')
+    .single();
+  if (cErr) throw cErr;
+  return created;
+}
 
 /**
  * GET /api/v1/kyc/status
- * Get KYC status for current user
  */
-router.get('/status', authenticate, async (req, res) => {
+router.get('/status', async (req, res) => {
   try {
-    const userId = req.user.userId;
-
-    let kyc = await KYC.findOne({ userId });
-
-    if (!kyc) {
-      // Return basic status from user model
-      const user = await User.findOne({ userId });
-      return res.json({
-        success: true,
-        kyc: {
-          status: 'not_started',
-          completionPercentage: 0,
-          personalInfo: user?.kyc?.verified || false,
-          documents: [],
-          selfie: null
-        }
-      });
-    }
-
-    res.json({
-      success: true,
-      kyc: {
-        status: kyc.status,
-        completionPercentage: kyc.completionPercentage || 0,
-        verificationLevel: kyc.verificationLevel,
-        personalInfo: kyc.personalInfo.firstName ? true : false,
-        contactInfo: kyc.contactInfo.address.street ? true : false,
-        employment: kyc.employment.status ? true : false,
-        bankInfo: kyc.bankInfo.accountNumber ? true : false,
-        documents: kyc.documents.length,
-        selfie: kyc.selfie.imageUrl ? true : false,
-        verifiedAt: kyc.verifiedAt,
-        submittedAt: kyc.submittedAt
-      }
-    });
-  } catch (error) {
-    logger.error('Get KYC status error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    const kyc = await getOrCreateKyc(req.user.id);
+    res.json({ success: true, kyc });
+  } catch (err) {
+    logger.error('kyc status error:', err);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
 /**
  * POST /api/v1/kyc/submit
- * Submit KYC data
  */
-router.post('/submit', authenticate, [
-  body('personalInfo').isObject(),
-  body('contactInfo').isObject(),
-  body('employment').isObject(),
-  body('bankInfo').isObject()
-], validate, async (req, res) => {
-  try {
-    const userId = req.user.userId;
-    const { personalInfo, contactInfo, employment, bankInfo } = req.body;
-
-    let kyc = await KYC.findOne({ userId });
-
-    if (!kyc) {
-      kyc = new KYC({ userId });
+router.post(
+  '/submit',
+  [
+    body('personalInfo').isObject(),
+    body('address').optional().isObject(),
+    body('employmentInfo').optional().isObject(),
+  ],
+  validate,
+  async (req, res) => {
+    try {
+      const { personalInfo, address, employmentInfo, bvn, nin } = req.body;
+      const kyc = await getOrCreateKyc(req.user.id);
+      const { data, error } = await supabase
+        .from('kyc')
+        .update({
+          personal_info: personalInfo,
+          address: address || kyc.address,
+          employment_info: employmentInfo || kyc.employment_info,
+          bvn: bvn || kyc.bvn,
+          nin: nin || kyc.nin,
+          status: 'submitted',
+          submitted_at: new Date().toISOString(),
+        })
+        .eq('id', kyc.id)
+        .select('*')
+        .single();
+      if (error) throw error;
+      res.json({ success: true, kyc: data });
+    } catch (err) {
+      logger.error('kyc submit error:', err);
+      res.status(500).json({ success: false, error: err.message });
     }
-
-    kyc.personalInfo = { ...kyc.personalInfo, ...personalInfo };
-    kyc.contactInfo = { ...kyc.contactInfo, ...contactInfo };
-    kyc.employment = { ...kyc.employment, ...employment };
-    kyc.bankInfo = { ...kyc.bankInfo, ...bankInfo };
-    kyc.status = 'submitted';
-    kyc.submittedAt = new Date();
-
-    await kyc.save();
-
-    // Update user KYC status
-    await User.findOneAndUpdate(
-      { userId },
-      { $set: { 'kyc.verified': false } }
-    );
-
-    res.json({
-      success: true,
-      message: 'KYC submitted for verification',
-      completionPercentage: kyc.completionPercentage
-    });
-  } catch (error) {
-    logger.error('Submit KYC error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
   }
-});
+);
 
 /**
  * POST /api/v1/kyc/document
- * Upload KYC document
  */
-router.post('/document', authenticate, async (req, res) => {
+router.post('/document', async (req, res) => {
   try {
-    const userId = req.user.userId;
-    const { type, documentNumber, expiryDate, frontImageUrl, backImageUrl } = req.body;
-
-    let kyc = await KYC.findOne({ userId });
-
-    if (!kyc) {
-      kyc = new KYC({ userId });
+    const { type, url, meta } = req.body || {};
+    if (!type || !url) {
+      return res.status(400).json({ success: false, error: 'type and url are required' });
     }
-
-    const newDocument = {
-      type,
-      documentNumber,
-      expiryDate: expiryDate ? new Date(expiryDate) : null,
-      frontImageUrl,
-      backImageUrl,
-      uploadedAt: new Date(),
-      status: 'pending'
-    };
-
-    kyc.documents.push(newDocument);
-    await kyc.save();
-
-    res.json({
-      success: true,
-      message: 'Document uploaded successfully',
-      documentCount: kyc.documents.length
-    });
-  } catch (error) {
-    logger.error('Upload document error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    await getOrCreateKyc(req.user.id);
+    const { data, error } = await supabase
+      .from('kyc_documents')
+      .insert({ profile_id: req.user.id, type, url, meta: meta || {} })
+      .select('*')
+      .single();
+    if (error) throw error;
+    res.status(201).json({ success: true, document: data });
+  } catch (err) {
+    logger.error('kyc document error:', err);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
 /**
  * POST /api/v1/kyc/selfie
- * Upload selfie for verification
  */
-router.post('/selfie', authenticate, async (req, res) => {
+router.post('/selfie', async (req, res) => {
   try {
-    const userId = req.user.userId;
-    const { imageUrl } = req.body;
-
-    let kyc = await KYC.findOne({ userId });
-
-    if (!kyc) {
-      kyc = new KYC({ userId });
-    }
-
-    kyc.selfie = {
-      imageUrl,
-      uploadedAt: new Date(),
-      status: 'pending'
-    };
-
-    await kyc.save();
-
-    res.json({
-      success: true,
-      message: 'Selfie uploaded successfully'
-    });
-  } catch (error) {
-    logger.error('Upload selfie error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    const { url } = req.body || {};
+    if (!url) return res.status(400).json({ success: false, error: 'url is required' });
+    const kyc = await getOrCreateKyc(req.user.id);
+    const { data, error } = await supabase
+      .from('kyc')
+      .update({ selfie_url: url })
+      .eq('id', kyc.id)
+      .select('*')
+      .single();
+    if (error) throw error;
+    res.json({ success: true, kyc: data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
 /**
  * GET /api/v1/kyc/documents
- * Get uploaded documents
  */
-router.get('/documents', authenticate, async (req, res) => {
+router.get('/documents', async (req, res) => {
   try {
-    const userId = req.user.userId;
-
-    const kyc = await KYC.findOne({ userId });
-
-    if (!kyc) {
-      return res.json({
-        success: true,
-        documents: []
-      });
-    }
-
-    const documents = kyc.documents.map(doc => ({
-      type: doc.type,
-      status: doc.status,
-      uploadedAt: doc.uploadedAt,
-      verifiedAt: doc.verifiedAt
-    }));
-
-    res.json({
-      success: true,
-      documents
-    });
-  } catch (error) {
-    logger.error('Get documents error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    const { data, error } = await supabase
+      .from('kyc_documents')
+      .select('*')
+      .eq('profile_id', req.user.id)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    res.json({ success: true, documents: data || [] });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
 /**
  * PUT /api/v1/kyc/bank
- * Update bank information
  */
-router.put('/bank', authenticate, [
-  body('bankName').notEmpty(),
-  body('accountNumber').isLength({ min: 10, max: 10 }),
-  body('accountName').notEmpty(),
-  body('bvn').isLength({ min: 11, max: 11 })
-], validate, async (req, res) => {
-  try {
-    const userId = req.user.userId;
-    const { bankName, accountNumber, accountName, accountType, bvn } = req.body;
-
-    let kyc = await KYC.findOne({ userId });
-
-    if (!kyc) {
-      kyc = new KYC({ userId });
+router.put(
+  '/bank',
+  [body('bankName').isString(), body('accountNumber').isString(), body('accountName').isString()],
+  validate,
+  async (req, res) => {
+    try {
+      const { bankName, accountNumber, accountName } = req.body;
+      const kyc = await getOrCreateKyc(req.user.id);
+      const { data, error } = await supabase
+        .from('kyc')
+        .update({
+          bank_info: { bankName, accountNumber, accountName },
+        })
+        .eq('id', kyc.id)
+        .select('*')
+        .single();
+      if (error) throw error;
+      res.json({ success: true, kyc: data });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
     }
-
-    kyc.bankInfo = {
-      bankName,
-      accountNumber,
-      accountName,
-      accountType: accountType || 'savings',
-      bvn,
-      bankVerificationVerified: false
-    };
-
-    await kyc.save();
-
-    res.json({
-      success: true,
-      message: 'Bank information updated'
-    });
-  } catch (error) {
-    logger.error('Update bank info error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
   }
-});
+);
 
 module.exports = router;

@@ -1,316 +1,160 @@
 /**
- * Admin Ticket Routes
- * 
- * Routes for admin/support staff to manage tickets
+ * Support Ticket Routes (admin-facing)
+ *
+ * Used by the admin web portal (via the member-role JWT of an admin user).
+ * Cross-backend calls from the admin API server use /api/v1/admin/tickets
+ * instead, which is service-token authenticated.
  */
 
 const express = require('express');
+const { body, param } = require('express-validator');
 const router = express.Router();
-const { query, body, validationResult } = require('express-validator');
-const ticketService = require('../services/ticketService');
-const { TICKET_CATEGORY, TICKET_PRIORITY, TICKET_STATUS } = require('../models/Ticket');
+
+const supabase = require('../config/supabase');
+const { requireAdmin } = require('../middleware/auth');
+const validate = require('../middleware/validate');
 const logger = require('../utils/logger');
 
-const validate = (req, res, next) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ success: false, errors: errors.array() });
-  }
-  next();
-};
-
-// Middleware to check admin role
-const requireAdmin = async (req, res, next) => {
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ success: false, error: 'Authentication required' });
-    }
-
-    const token = authHeader.split(' ')[1];
-    const jwt = require('jsonwebtoken');
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
-    // Check if user is admin
-    const { User } = require('../models');
-    const user = await User.findOne({ userId: decoded.userId });
-    
-    if (!user || !['admin', 'superadmin', 'support'].includes(user.role)) {
-      return res.status(403).json({ success: false, error: 'Admin access required' });
-    }
-
-    req.userId = decoded.userId;
-    req.userRole = user.role;
-    next();
-  } catch (error) {
-    logger.error('Admin auth error:', error);
-    res.status(401).json({ success: false, error: 'Invalid token' });
-  }
-};
+router.use(requireAdmin);
 
 /**
- * GET /api/v1/admin/tickets
- * Get all tickets with filtering (admin)
+ * GET /api/v1/admin-tickets
  */
-router.get('/tickets', [
-  requireAdmin,
-  query('status').optional().isIn(Object.values(TICKET_STATUS)),
-  query('category').optional().isIn(Object.values(TICKET_CATEGORY)),
-  query('priority').optional().isIn(Object.values(TICKET_PRIORITY)),
-  query('assignedStaffId').optional().isString(),
-  query('page').optional().isInt({ min: 1 }),
-  query('limit').optional().isInt({ min: 1, max: 100 })
-], validate, async (req, res) => {
+router.get('/', async (req, res) => {
   try {
-    const options = {
-      status: req.query.status,
-      category: req.query.category,
-      priority: req.query.priority,
-      assignedStaffId: req.query.assignedStaffId,
-      page: parseInt(req.query.page) || 1,
-      limit: parseInt(req.query.limit) || 20,
-      sortBy: req.query.sortBy || 'createdAt',
-      sortOrder: req.query.sortOrder || 'desc'
-    };
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, parseInt(req.query.limit) || 20);
+    let q = supabase
+      .from('tickets')
+      .select('*, profile:profiles(id, user_id, name, email)', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range((page - 1) * limit, page * limit - 1);
+    if (req.query.status) q = q.eq('status', req.query.status);
+    if (req.query.priority) q = q.eq('priority', req.query.priority);
+    if (req.query.category) q = q.eq('category', req.query.category);
+    if (req.query.assignedTo) q = q.eq('assigned_to', req.query.assignedTo);
+    const { data, error, count } = await q;
+    if (error) throw error;
+    res.json({
+      success: true,
+      tickets: data || [],
+      pagination: { page, limit, total: count || 0 },
+    });
+  } catch (err) {
+    logger.error('admin tickets list error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
-    // For admins, get all tickets
-    const { Ticket } = require('../models');
-    const query = {};
-    
-    if (options.status) query.status = options.status;
-    if (options.category) query.category = options.category;
-    if (options.priority) query.priority = options.priority;
-    if (options.assignedStaffId) query.assignedStaffId = options.assignedStaffId;
+/**
+ * GET /api/v1/admin-tickets/:id
+ */
+router.get('/:id', [param('id').isUUID()], validate, async (req, res) => {
+  try {
+    const { data: ticket, error } = await supabase
+      .from('tickets')
+      .select('*, profile:profiles(id, user_id, name, email)')
+      .eq('id', req.params.id)
+      .maybeSingle();
+    if (error) throw error;
+    if (!ticket) return res.status(404).json({ success: false, error: 'Ticket not found' });
 
-    const skip = (options.page - 1) * options.limit;
-    const sort = { [options.sortBy]: options.sortOrder === 'desc' ? -1 : 1 };
-
-    const [tickets, total] = await Promise.all([
-      Ticket.find(query)
-        .sort(sort)
-        .skip(skip)
-        .limit(options.limit)
-        .select('-statusHistory'),
-      Ticket.countDocuments(query)
+    const [msgs, atts, hist] = await Promise.all([
+      supabase.from('ticket_messages').select('*').eq('ticket_id', ticket.id).order('created_at', { ascending: true }),
+      supabase.from('ticket_attachments').select('*').eq('ticket_id', ticket.id),
+      supabase.from('ticket_status_history').select('*').eq('ticket_id', ticket.id).order('created_at', { ascending: true }),
     ]);
-
     res.json({
       success: true,
-      tickets,
-      pagination: {
-        page: options.page,
-        limit: options.limit,
-        total,
-        pages: Math.ceil(total / options.limit)
+      ticket: {
+        ...ticket,
+        messages: msgs.data || [],
+        attachments: atts.data || [],
+        statusHistory: hist.data || [],
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/v1/admin-tickets/:id/reply
+ */
+router.post(
+  '/:id/reply',
+  [param('id').isUUID(), body('body').isString().isLength({ min: 1, max: 5000 })],
+  validate,
+  async (req, res) => {
+    try {
+      const { data: msg, error } = await supabase
+        .from('ticket_messages')
+        .insert({
+          ticket_id: req.params.id,
+          sender_id: req.user.id,
+          sender_role: 'admin',
+          body: req.body.body,
+        })
+        .select('*')
+        .single();
+      if (error) throw error;
+      await supabase
+        .from('tickets')
+        .update({ status: 'awaiting_member', last_activity_at: new Date().toISOString() })
+        .eq('id', req.params.id);
+      res.status(201).json({ success: true, message: msg });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+);
+
+/**
+ * PATCH /api/v1/admin-tickets/:id
+ */
+router.patch(
+  '/:id',
+  [
+    param('id').isUUID(),
+    body('status').optional().isIn(['open', 'awaiting_member', 'awaiting_support', 'resolved', 'closed']),
+    body('priority').optional().isIn(['low', 'medium', 'high', 'urgent']),
+    body('category').optional().isString(),
+    body('assignedTo').optional().isString(),
+  ],
+  validate,
+  async (req, res) => {
+    try {
+      const update = {};
+      if (req.body.status !== undefined) update.status = req.body.status;
+      if (req.body.priority !== undefined) update.priority = req.body.priority;
+      if (req.body.category !== undefined) update.category = req.body.category;
+      if (req.body.assignedTo !== undefined) update.assigned_to = req.body.assignedTo;
+      if (req.body.status === 'closed' || req.body.status === 'resolved') {
+        update.closed_at = new Date().toISOString();
       }
-    });
-  } catch (error) {
-    logger.error('Get all tickets error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
+      update.last_activity_at = new Date().toISOString();
 
-/**
- * GET /api/v1/admin/tickets/stats
- * Get ticket statistics (admin)
- */
-router.get('/tickets/stats', [
-  requireAdmin
-], async (req, res) => {
-  try {
-    const result = await ticketService.getStats(req.query);
-    res.json(result);
-  } catch (error) {
-    logger.error('Get ticket stats error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
+      const { data, error } = await supabase
+        .from('tickets')
+        .update(update)
+        .eq('id', req.params.id)
+        .select('*')
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) return res.status(404).json({ success: false, error: 'Ticket not found' });
 
-/**
- * GET /api/v1/admin/tickets/:ticketId
- * Get ticket details (admin)
- */
-router.get('/tickets/:ticketId', [
-  requireAdmin
-], async (req, res) => {
-  try {
-    const result = await ticketService.getTicketById(req.params.ticketId, req.userId, true);
-
-    if (!result.success) {
-      return res.status(404).json(result);
-    }
-
-    res.json(result);
-  } catch (error) {
-    logger.error('Get ticket error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-/**
- * PATCH /api/v1/admin/tickets/:ticketId/status
- * Update ticket status (admin)
- */
-router.patch('/tickets/:ticketId/status', [
-  requireAdmin,
-  body('status').isIn(Object.values(TICKET_STATUS)).withMessage('Invalid status'),
-  body('note').optional().isString().isLength({ max: 500 })
-], validate, async (req, res) => {
-  try {
-    const result = await ticketService.updateStatus(
-      req.params.ticketId,
-      req.body.status,
-      req.userId,
-      req.body.note
-    );
-
-    if (!result.success) {
-      return res.status(400).json(result);
-    }
-
-    res.json(result);
-  } catch (error) {
-    logger.error('Update status error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-/**
- * POST /api/v1/admin/tickets/:ticketId/assign
- * Assign ticket to staff (admin)
- */
-router.post('/tickets/:ticketId/assign', [
-  requireAdmin,
-  body('staffId').notEmpty().withMessage('Staff ID is required')
-], validate, async (req, res) => {
-  try {
-    const result = await ticketService.assignTicket(
-      req.params.ticketId,
-      req.body.staffId,
-      req.userId
-    );
-
-    if (!result.success) {
-      return res.status(400).json(result);
-    }
-
-    res.json(result);
-  } catch (error) {
-    logger.error('Assign ticket error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-/**
- * POST /api/v1/admin/tickets/:ticketId/messages
- * Add admin message to ticket
- */
-router.post('/tickets/:ticketId/messages', [
-  requireAdmin,
-  body('content').notEmpty().withMessage('Message content is required').isLength({ max: 10000 }),
-  body('isInternalNote').optional().isBoolean()
-], validate, async (req, res) => {
-  try {
-    const senderType = req.body.isInternalNote ? 'staff' : 'staff';
-    
-    const result = await ticketService.addMessage(
-      req.params.ticketId,
-      req.userId,
-      senderType,
-      req.body.content,
-      req.body.attachments
-    );
-
-    if (!result.success) {
-      return res.status(400).json(result);
-    }
-
-    res.status(201).json(result);
-  } catch (error) {
-    logger.error('Add admin message error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-/**
- * POST /api/v1/admin/tickets/:ticketId/restrict-user
- * Restrict user from creating tickets
- */
-router.post('/tickets/:ticketId/restrict-user', [
-  requireAdmin,
-  body('durationDays').optional().isInt({ min: 1, max: 30 })
-], validate, async (req, res) => {
-  try {
-    const ticket = await ticketService.getTicketById(req.params.ticketId, req.userId, true);
-    
-    if (!ticket.success) {
-      return res.status(404).json(ticket);
-    }
-
-    const result = await ticketService.restrictUser(
-      ticket.ticket.userId,
-      req.userId,
-      req.body.durationDays || 7
-    );
-
-    res.json(result);
-  } catch (error) {
-    logger.error('Restrict user error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-/**
- * GET /api/v1/admin/tickets/search
- * Search tickets
- */
-router.get('/tickets/search', [
-  requireAdmin,
-  query('q').notEmpty().withMessage('Search query is required'),
-  query('page').optional().isInt({ min: 1 }),
-  query('limit').optional().isInt({ min: 1, max: 50 })
-], validate, async (req, res) => {
-  try {
-    const { Ticket } = require('../models');
-    const searchQuery = req.query.q;
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 20;
-    const skip = (page - 1) * limit;
-
-    const tickets = await Ticket.find({
-      $or: [
-        { ticketId: { $regex: searchQuery, $options: 'i' } },
-        { title: { $regex: searchQuery, $options: 'i' } },
-        { description: { $regex: searchQuery, $options: 'i' } }
-      ]
-    })
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .select('-statusHistory');
-
-    const total = await Ticket.countDocuments({
-      $or: [
-        { ticketId: { $regex: searchQuery, $options: 'i' } },
-        { title: { $regex: searchQuery, $options: 'i' } },
-        { description: { $regex: searchQuery, $options: 'i' } }
-      ]
-    });
-
-    res.json({
-      success: true,
-      tickets,
-      pagination: {
-        page,
-        limit,
-        total,
-        pages: Math.ceil(total / limit)
+      if (req.body.status) {
+        await supabase.from('ticket_status_history').insert({
+          ticket_id: data.id,
+          changed_by: req.user.id,
+          new_status: req.body.status,
+        });
       }
-    });
-  } catch (error) {
-    logger.error('Search tickets error:', error);
-    res.status(500).json({ success: false, error: error.message });
+      res.json({ success: true, ticket: data });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
   }
-});
+);
 
 module.exports = router;

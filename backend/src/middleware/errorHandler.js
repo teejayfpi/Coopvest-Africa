@@ -1,94 +1,63 @@
 /**
  * Error Handler Middleware
- * 
- * Centralized error handling with AuditLog integration for critical errors.
+ *
+ * Centralized error handling. Best-effort audit logging to Supabase
+ * (`audit_logs`) is non-blocking; failures are logged but never surface to
+ * the caller.
  */
 
 const logger = require('../utils/logger');
-const AuditLog = require('../models/AuditLog');
+const supabase = require('../config/supabase');
 
 const errorHandler = async (err, req, res, next) => {
-  // Log to winston logger
   logger.error(`${req.method} ${req.path} - Error:`, {
     message: err.message,
     stack: err.stack,
     userId: req.user?.userId || 'anonymous',
-    ip: req.ip
+    ip: req.ip,
   });
 
-  // Handle specific error types
-  
-  // Mongoose validation error
   if (err.name === 'ValidationError') {
-    const errors = Object.values(err.errors).map(e => e.message);
-    return res.status(400).json({
-      success: false,
-      error: 'Validation Error',
-      details: errors
-    });
+    return res.status(400).json({ success: false, error: 'Validation Error', details: err.message });
+  }
+  if (err.name === 'UnauthorizedError' || err.name === 'JsonWebTokenError') {
+    return res.status(401).json({ success: false, error: 'Unauthorized' });
   }
 
-  // Mongoose duplicate key error
-  if (err.code === 11000) {
-    const field = Object.keys(err.keyValue)[0];
-    return res.status(400).json({
-      success: false,
-      error: `${field} already exists`
-    });
+  // Postgres unique-violation
+  if (err.code === '23505') {
+    return res.status(409).json({ success: false, error: 'Duplicate entry' });
+  }
+  // Postgres FK violation
+  if (err.code === '23503') {
+    return res.status(400).json({ success: false, error: 'Related record not found' });
   }
 
-  // Mongoose cast error (invalid ObjectId)
-  if (err.name === 'CastError') {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid ID format'
-    });
-  }
-
-  // JWT errors
-  if (err.name === 'JsonWebTokenError') {
-    return res.status(401).json({
-      success: false,
-      error: 'Invalid token'
-    });
-  }
-
-  if (err.name === 'TokenExpiredError') {
-    return res.status(401).json({
-      success: false,
-      error: 'Token expired'
-    });
-  }
-
-  // Default error
   const statusCode = err.statusCode || 500;
-  const isCritical = statusCode === 500;
 
-  // Log critical 500 errors to AuditLog for alerting
-  if (isCritical) {
+  // Best-effort audit for server errors
+  if (statusCode >= 500) {
     try {
-      await AuditLog.log({
-        action: 'SYSTEM_ERROR_CRITICAL',
-        userId: req.user?.userId || null,
-        details: `Critical System Error: ${err.message}`,
-        riskLevel: 'critical',
+      await supabase.from('audit_logs').insert({
+        actor_id: req.user?.id || null,
+        action: 'SERVER_ERROR',
+        target_model: 'Request',
+        target_id: null,
         metadata: {
-          path: req.path,
           method: req.method,
-          stack: err.stack,
-          ipAddress: req.ip,
-          userAgent: req.headers['user-agent']
-        }
+          path: req.path,
+          error: err.message,
+          ip: req.ip,
+        },
       });
-    } catch (logError) {
-      logger.error('Failed to log critical error to AuditLog:', logError);
+    } catch (logErr) {
+      logger.warn('Failed to write error to audit_logs:', logErr.message);
     }
   }
 
   res.status(statusCode).json({
     success: false,
-    error: process.env.NODE_ENV === 'production' ? 'Internal Server Error' : (err.message || 'Internal Server Error'),
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+    error: err.message || 'Internal server error',
   });
 };
 
