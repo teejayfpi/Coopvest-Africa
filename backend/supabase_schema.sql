@@ -38,8 +38,14 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS department TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS access_level TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS last_password_change_at TIMESTAMPTZ;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN DEFAULT false;
+
 CREATE INDEX IF NOT EXISTS idx_profiles_user_id ON public.profiles(user_id);
 CREATE INDEX IF NOT EXISTS idx_profiles_role ON public.profiles(role);
+CREATE INDEX IF NOT EXISTS idx_profiles_department ON public.profiles(department);
 
 -- -----------------------------------------------------------------------------
 -- KYC
@@ -515,6 +521,72 @@ CREATE TABLE IF NOT EXISTS public.watchlist (
 
 CREATE INDEX IF NOT EXISTS idx_watchlist_profile ON public.watchlist(profile_id);
 
+-- -----------------------------------------------------------------------------
+-- Loan repayments (every installment a member pays back)
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.loan_repayments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  loan_id UUID REFERENCES public.loans(id) ON DELETE CASCADE,
+  profile_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+  amount DECIMAL(18, 2) NOT NULL,
+  principal_component DECIMAL(18, 2),
+  interest_component DECIMAL(18, 2),
+  due_date DATE,
+  paid_at TIMESTAMPTZ,
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'paid', 'overdue', 'waived', 'restructured')),
+  reference TEXT,
+  recorded_by UUID REFERENCES public.profiles(id),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_loan_repayments_loan ON public.loan_repayments(loan_id);
+CREATE INDEX IF NOT EXISTS idx_loan_repayments_status ON public.loan_repayments(status);
+
+-- -----------------------------------------------------------------------------
+-- Scheduled notifications (queued for a future send time)
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.scheduled_notifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  type TEXT DEFAULT 'announcement',
+  category TEXT DEFAULT 'info',
+  priority TEXT DEFAULT 'normal' CHECK (priority IN ('low','normal','high','urgent')),
+  audience TEXT NOT NULL DEFAULT 'all' CHECK (audience IN ('all', 'active', 'specific')),
+  target_profile_ids UUID[],
+  channels TEXT[] DEFAULT ARRAY['in_app']::TEXT[],
+  scheduled_for TIMESTAMPTZ NOT NULL,
+  status TEXT DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'sent', 'cancelled', 'failed')),
+  sent_at TIMESTAMPTZ,
+  sent_count INTEGER DEFAULT 0,
+  error TEXT,
+  created_by UUID REFERENCES public.profiles(id),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_scheduled_notifications_status_time ON public.scheduled_notifications(status, scheduled_for);
+
+-- -----------------------------------------------------------------------------
+-- Backup snapshots (manual/auto backup log)
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.backup_snapshots (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  label TEXT,
+  kind TEXT DEFAULT 'manual' CHECK (kind IN ('manual', 'auto')),
+  status TEXT DEFAULT 'running' CHECK (status IN ('running', 'succeeded', 'failed')),
+  storage_url TEXT,
+  size_bytes BIGINT,
+  started_at TIMESTAMPTZ DEFAULT NOW(),
+  finished_at TIMESTAMPTZ,
+  error TEXT,
+  created_by UUID REFERENCES public.profiles(id),
+  metadata JSONB DEFAULT '{}'::jsonb
+);
+
+CREATE INDEX IF NOT EXISTS idx_backup_snapshots_kind ON public.backup_snapshots(kind);
+
 -- =============================================================================
 -- Row Level Security
 -- =============================================================================
@@ -543,6 +615,9 @@ ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.system_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.watchlist ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.loan_repayments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.scheduled_notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.backup_snapshots ENABLE ROW LEVEL SECURITY;
 
 -- Helper: check if current JWT is admin/staff
 CREATE OR REPLACE FUNCTION public.is_staff()
@@ -673,7 +748,8 @@ DECLARE
     'profiles','kyc','savings','savings_goals','referrals','referral_events',
     'wallets','transactions','bank_accounts','loans','loan_qrs','loan_guarantors',
     'rollovers','investment_pools','investment_participations','notifications',
-    'tickets','ticket_messages','user_settings'
+    'tickets','ticket_messages','user_settings','loan_repayments',
+    'scheduled_notifications'
   ];
 BEGIN
   FOREACH tbl IN ARRAY tables LOOP

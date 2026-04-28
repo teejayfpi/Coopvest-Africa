@@ -204,20 +204,30 @@ app.get('/ws/stats', authenticate, (req, res) => {
 });
 
 // ==============================================================================
+// SYSTEM STATUS (maintenance mode + minimum app version enforcement)
+// ==============================================================================
+const { enforceSystemStatus } = require('./middleware/systemStatus');
+app.use(enforceSystemStatus);
+
+const { requireFeatureFlag, seedRequiredFlags } = require('./middleware/featureFlags');
+// Seed the 10 required feature flags (idempotent).
+seedRequiredFlags();
+
+// ==============================================================================
 // API ROUTES - MEMBER ENDPOINTS (No IP whitelist)
 // ==============================================================================
 app.use('/api/v1/auth', authLimiter, authRoutes);
 app.use('/api/v1/auth', emailVerificationRoutes);
-app.use('/api/v1/referrals', referralRoutes);
+app.use('/api/v1/referrals', requireFeatureFlag('referralSystem'), referralRoutes);
 app.use('/api/v1/tickets', ticketRoutes);
-app.use('/api/v1/loans', loanRoutes);
+app.use('/api/v1/loans', requireFeatureFlag('loanModule'), loanRoutes);
 app.use('/api/v1/wallet', walletRoutes);
 app.use('/api/v1/user', userRoutes);
 app.use('/api/v1/kyc', kycRoutes);
-app.use('/api/v1/savings', savingsRoutes);
+app.use('/api/v1/savings', requireFeatureFlag('savingsModule'), savingsRoutes);
 app.use('/api/v1/rollover', rolloverRoutes);
-app.use('/api/v1/investments', investmentsRoutes);
-app.use('/api/v1/notifications', notificationRoutes);
+app.use('/api/v1/investments', requireFeatureFlag('investmentModule'), investmentsRoutes);
+app.use('/api/v1/notifications', requireFeatureFlag('notifications'), notificationRoutes);
 app.use('/api/v1/bank-accounts', bankAccountRoutes);
 app.use('/api/v1/transactions', transactionRoutes);
 app.use('/api/v1/settings', settingsRoutes);
@@ -281,6 +291,10 @@ app.use(errorHandler);
 // ==============================================================================
 // START SERVER
 // ==============================================================================
+// Start background workers.
+const scheduledNotificationsWorker = require('./workers/scheduledNotificationsWorker');
+scheduledNotificationsWorker.start();
+
 server.listen(PORT, '0.0.0.0', () => {
   logger.info(`🚀 Coopvest Referral API running on port ${PORT}`);
   logger.info(`🌐 WebSocket endpoint: ws://localhost:${PORT}/ws`);
