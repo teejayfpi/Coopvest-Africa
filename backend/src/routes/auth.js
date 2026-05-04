@@ -343,11 +343,12 @@ router.post('/request-password-reset', [
       redirectTo: process.env.PASSWORD_RESET_REDIRECT_URL || 'https://coopvest.africa/reset-password',
     });
 
+    // Always return success — never reveal whether the email is registered (prevents enumeration).
+    // Log SMTP failures internally so they can be diagnosed without leaking info to the client.
     if (error) {
-      return res.status(400).json({ success: false, error: error.message });
+      logger.warn('Password reset email failed (SMTP/config issue):', error.message);
     }
 
-    // Always return success to prevent email enumeration
     return res.json({ success: true, message: 'If that email is registered, a reset link has been sent.' });
   } catch (err) {
     logger.error('Request password reset error:', err);
