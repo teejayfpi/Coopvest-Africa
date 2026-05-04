@@ -62,12 +62,34 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          echo "$KEYSTORE_BASE64" | base64 --decode > android/keystore/release-keystore.jks
-          cat > android/key.properties <<EOF
+          mkdir -p android/keystore
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "Using keystore from secrets..."
+            echo "$KEYSTORE_BASE64" | base64 --decode > android/keystore/release-keystore.jks
+            STORE_PASS="$KEY_STORE_PASSWORD"
+            ALIAS="$KEY_ALIAS"
+            KEY_PASS="$KEY_PASSWORD"
+          else
+            echo "No keystore secret found. Generating a CI keystore for this build..."
+            keytool -genkey -v \
+              -keystore android/keystore/release-keystore.jks \
+              -alias coopvest \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -storepass coopvest_ci_2024 \
+              -keypass coopvest_ci_2024 \
+              -dname "CN=CoopVest CI Build, OU=Mobile, O=CoopVest Africa, L=Lagos, ST=Lagos, C=NG" \
+              -storetype JKS
+            STORE_PASS="coopvest_ci_2024"
+            ALIAS="coopvest"
+            KEY_PASS="coopvest_ci_2024"
+          fi
+          cat > android/key.properties << EOF
           storeFile=keystore/release-keystore.jks
-          storePassword=$KEY_STORE_PASSWORD
-          keyAlias=$KEY_ALIAS
-          keyPassword=$KEY_PASSWORD
+          storePassword=$STORE_PASS
+          keyAlias=$ALIAS
+          keyPassword=$KEY_PASS
           EOF
 
       - name: Build debug APK
@@ -79,41 +101,32 @@ jobs:
         run: flutter build apk --release --no-tree-shake-icons
 
       - name: Rename APK
+        if: ${{ github.event.inputs.build_type != 'debug' }}
         run: |
-          BUILD_TYPE="${{ github.event.inputs.build_type || 'release' }}"
-          VERSION=$(grep 'version:' pubspec.yaml | head -1 | awk '{print $2}')
-          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
-          mkdir -p dist
-          cp build/app/outputs/flutter-apk/app-${BUILD_TYPE}.apk \
-             dist/coopvest-africa-${BUILD_TYPE}-${VERSION}-${SHORT_SHA}.apk
-          echo "APK_PATH=dist/coopvest-africa-${BUILD_TYPE}-${VERSION}-${SHORT_SHA}.apk" >> $GITHUB_ENV
-          echo "APK_NAME=coopvest-africa-${BUILD_TYPE}-${VERSION}-${SHORT_SHA}.apk" >> $GITHUB_ENV
+          APK_PATH=$(find build/app/outputs/flutter-apk -name "*.apk" | head -1)
+          if [ -n "$APK_PATH" ]; then
+            cp "$APK_PATH" "coopvest-release-$(date +%Y%m%d-%H%M%S).apk"
+            echo "APK_FILE=coopvest-release-$(date +%Y%m%d-%H%M%S).apk" >> $GITHUB_ENV
+          fi
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
+        if: ${{ github.event.inputs.build_type != 'debug' }}
         with:
-          name: ${{ env.APK_NAME }}
-          path: ${{ env.APK_PATH }}
+          name: coopvest-release-apk
+          path: "*.apk"
           retention-days: 30
 
       - name: Create GitHub Release (on tag push)
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
         with:
-          files: ${{ env.APK_PATH }}
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          files: "*.apk"
 
       - name: Build summary
+        if: always()
         run: |
-          echo "## Build Complete ✅" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| APK | \`${{ env.APK_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Build type | ${{ github.event.inputs.build_type || 'release' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Flutter | ${{ env.FLUTTER_VERSION }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Commit | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Download the APK from the **Artifacts** section of this workflow run." >> $GITHUB_STEP_SUMMARY
+          echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- Branch: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Build type: ${{ github.event.inputs.build_type || 'release' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Flutter version: ${{ env.FLUTTER_VERSION }}" >> $GITHUB_STEP_SUMMARY
