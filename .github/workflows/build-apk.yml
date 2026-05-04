@@ -63,14 +63,15 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           mkdir -p android/keystore
+          rm -f android/keystore/release-keystore.jks
           if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "Using keystore from secrets..."
+            echo "Using keystore from repository secrets..."
             echo "$KEYSTORE_BASE64" | base64 --decode > android/keystore/release-keystore.jks
             STORE_PASS="$KEY_STORE_PASSWORD"
-            ALIAS="$KEY_ALIAS"
-            KEY_PASS="$KEY_PASSWORD"
+            ALIAS_NAME="$KEY_ALIAS"
+            KEY_PASS_VAL="$KEY_PASSWORD"
           else
-            echo "No keystore secret found. Generating a CI keystore for this build..."
+            echo "No KEYSTORE_BASE64 secret found. Generating a temporary CI keystore..."
             keytool -genkey -v \
               -keystore android/keystore/release-keystore.jks \
               -alias coopvest \
@@ -82,14 +83,14 @@ jobs:
               -dname "CN=CoopVest CI Build, OU=Mobile, O=CoopVest Africa, L=Lagos, ST=Lagos, C=NG" \
               -storetype JKS
             STORE_PASS="coopvest_ci_2024"
-            ALIAS="coopvest"
-            KEY_PASS="coopvest_ci_2024"
+            ALIAS_NAME="coopvest"
+            KEY_PASS_VAL="coopvest_ci_2024"
           fi
           cat > android/key.properties << EOF
           storeFile=keystore/release-keystore.jks
           storePassword=$STORE_PASS
-          keyAlias=$ALIAS
-          keyPassword=$KEY_PASS
+          keyAlias=$ALIAS_NAME
+          keyPassword=$KEY_PASS_VAL
           EOF
 
       - name: Build debug APK
@@ -106,7 +107,6 @@ jobs:
           APK_PATH=$(find build/app/outputs/flutter-apk -name "*.apk" | head -1)
           if [ -n "$APK_PATH" ]; then
             cp "$APK_PATH" "coopvest-release-$(date +%Y%m%d-%H%M%S).apk"
-            echo "APK_FILE=coopvest-release-$(date +%Y%m%d-%H%M%S).apk" >> $GITHUB_ENV
           fi
 
       - name: Upload APK artifact
