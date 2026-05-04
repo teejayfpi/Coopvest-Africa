@@ -6,7 +6,6 @@ import 'package:coopvest_mobile/data/repositories/auth_repository.dart';
 import 'package:coopvest_mobile/core/network/api_client.dart';
 import 'package:coopvest_mobile/data/models/auth_models.dart';
 
-@GenerateMocks([AuthRepository, ApiClient])
 void main() {
   late AuthNotifier authNotifier;
   late MockAuthRepository mockAuthRepository;
