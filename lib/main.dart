@@ -7,6 +7,7 @@ import 'config/theme_enhanced.dart';
 import 'core/services/feature_service.dart';
 import 'core/services/security_service.dart';
 import 'core/services/notification_service.dart';
+import 'data/models/auth_models.dart';
 import 'data/repositories/auth_repository.dart';
 import 'presentation/providers/auth_provider.dart';
 import 'presentation/screens/auth/welcome_screen.dart';
