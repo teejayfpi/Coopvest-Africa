@@ -9,7 +9,8 @@ import '../../widgets/common/cards.dart';
 class NotificationsScreen extends ConsumerStatefulWidget {
   const NotificationsScreen({super.key});
 
-  @override\n  ConsumerState<NotificationsScreen> createState() => _NotificationsScreenState();
+  @override
+  ConsumerState<NotificationsScreen> createState() => _NotificationsScreenState();
 }
 
 class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
