@@ -36,10 +36,10 @@ import 'presentation/screens/loan/guarantor_verification_screen.dart';
 import 'presentation/screens/loan/loan_details_screen.dart';
 import 'presentation/screens/profile/profile_settings_screen.dart';
 import 'presentation/screens/security/security_settings_screen.dart';
-import 'presentation/screens/saimport 'core/services/notification_service.dart';
-import 'data/repositories/auth_repository.dart';
-import 'presentation/providers/auth_provider.dart';
+import 'presentation/screens/savings/savings_goals_screen.dart';
+import 'presentation/screens/search/global_search_screen.dart';
 import 'config/env_config.dart';
+import 'presentation/providers/theme_provider.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
