@@ -14,10 +14,13 @@ class EnvConfig {
   });
 
   static EnvConfig get dev => EnvConfig(
-        apiBaseUrl: 'https://dev-api.coopvest.africa/api/v1',
+        // Android emulator: use http://10.0.2.2:5000/api/v1
+        // iOS simulator:    use http://localhost:5000/api/v1
+        // Physical device:  use https://<your-replit-domain>/api/v1
+        apiBaseUrl: 'http://10.0.2.2:5000/api/v1',
         appName: 'Coopvest Dev',
         enableLogging: true,
-        useMockData: true,
+        useMockData: false,
       );
 
   static EnvConfig get staging => EnvConfig(
