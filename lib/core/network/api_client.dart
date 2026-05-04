@@ -212,7 +212,7 @@ class ApiClient {
       ),
     );
     _dio.interceptors.add(LoggingInterceptor());
-    _dio.interceptors.add(ErrorInterceptor());
+    _dio.interceptors.add(ErrorInterceptor(this));
     _dio.interceptors.add(AuthInterceptor());
   }
 
