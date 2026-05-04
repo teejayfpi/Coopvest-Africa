@@ -640,10 +640,9 @@ DECLARE
   tbl TEXT;
   tables TEXT[] := ARRAY[
     'kyc','kyc_documents','savings','savings_goals','referrals',
-    'wallets','transactions','bank_accounts','loans','loan_qrs',
-    'loan_guarantors','rollovers','investment_participations','notifications',
-    'tickets','ticket_messages','ticket_attachments','ticket_status_history',
-    'user_settings','watchlist'
+    'wallets','transactions','bank_accounts','loans',
+    'rollovers','investment_participations','notifications',
+    'tickets','user_settings','watchlist'
   ];
 BEGIN
   FOREACH tbl IN ARRAY tables LOOP
@@ -659,6 +658,36 @@ BEGIN
     );
   END LOOP;
 END$$;
+
+-- Custom RLS for loan_qrs (uses applicant_id)
+DROP POLICY IF EXISTS loan_qrs_self_select ON public.loan_qrs;
+DROP POLICY IF EXISTS loan_qrs_self_modify ON public.loan_qrs;
+CREATE POLICY loan_qrs_self_select ON public.loan_qrs FOR SELECT USING (applicant_id = auth.uid() OR public.is_staff());
+CREATE POLICY loan_qrs_self_modify ON public.loan_qrs FOR ALL USING (applicant_id = auth.uid() OR public.is_staff()) WITH CHECK (applicant_id = auth.uid() OR public.is_staff());
+
+-- Custom RLS for loan_guarantors (uses guarantor_id)
+DROP POLICY IF EXISTS loan_guarantors_self_select ON public.loan_guarantors;
+DROP POLICY IF EXISTS loan_guarantors_self_modify ON public.loan_guarantors;
+CREATE POLICY loan_guarantors_self_select ON public.loan_guarantors FOR SELECT USING (guarantor_id = auth.uid() OR public.is_staff());
+CREATE POLICY loan_guarantors_self_modify ON public.loan_guarantors FOR ALL USING (guarantor_id = auth.uid() OR public.is_staff()) WITH CHECK (guarantor_id = auth.uid() OR public.is_staff());
+
+-- Custom RLS for ticket_messages (uses author_id)
+DROP POLICY IF EXISTS ticket_messages_self_select ON public.ticket_messages;
+DROP POLICY IF EXISTS ticket_messages_self_modify ON public.ticket_messages;
+CREATE POLICY ticket_messages_self_select ON public.ticket_messages FOR SELECT USING (author_id = auth.uid() OR public.is_staff());
+CREATE POLICY ticket_messages_self_modify ON public.ticket_messages FOR ALL USING (author_id = auth.uid() OR public.is_staff()) WITH CHECK (author_id = auth.uid() OR public.is_staff());
+
+-- Custom RLS for ticket_attachments (uses uploaded_by)
+DROP POLICY IF EXISTS ticket_attachments_self_select ON public.ticket_attachments;
+DROP POLICY IF EXISTS ticket_attachments_self_modify ON public.ticket_attachments;
+CREATE POLICY ticket_attachments_self_select ON public.ticket_attachments FOR SELECT USING (uploaded_by = auth.uid() OR public.is_staff());
+CREATE POLICY ticket_attachments_self_modify ON public.ticket_attachments FOR ALL USING (uploaded_by = auth.uid() OR public.is_staff()) WITH CHECK (uploaded_by = auth.uid() OR public.is_staff());
+
+-- Custom RLS for ticket_status_history (uses changed_by)
+DROP POLICY IF EXISTS ticket_status_history_self_select ON public.ticket_status_history;
+DROP POLICY IF EXISTS ticket_status_history_self_modify ON public.ticket_status_history;
+CREATE POLICY ticket_status_history_self_select ON public.ticket_status_history FOR SELECT USING (changed_by = auth.uid() OR public.is_staff());
+CREATE POLICY ticket_status_history_self_modify ON public.ticket_status_history FOR ALL USING (changed_by = auth.uid() OR public.is_staff()) WITH CHECK (changed_by = auth.uid() OR public.is_staff());
 
 -- Profiles, referral_events, investment_pools, audit_logs, system_settings
 -- have their own custom policies:
