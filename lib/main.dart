@@ -18,6 +18,7 @@ import 'presentation/screens/auth/google_complete_screen.dart';
 import 'presentation/screens/auth/salary_deduction_consent_screen.dart';
 import 'presentation/screens/auth/account_activation_screen.dart';
 import 'presentation/screens/auth/forgot_password_screen.dart';
+import 'presentation/screens/auth/reset_password_otp_screen.dart';
 import 'presentation/screens/auth/email_verification_screen.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'presentation/screens/support/support_home_screen.dart';
@@ -182,6 +183,10 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp> with WidgetsBindingOb
         },
         '/account-activation': (context) => const AccountActivationScreen(),
         '/forgot-password': (context) => const ForgotPasswordScreen(),
+        '/reset-password-otp': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+          return ResetPasswordOtpScreen(email: args?['email'] ?? '');
+        },
         '/verify-email': (context) => const EmailVerificationScreen(),
         '/google-complete': (context) {
           final googleUser = ModalRoute.of(context)?.settings.arguments as GoogleSignInAccount?;
