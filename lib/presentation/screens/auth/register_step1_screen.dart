@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
+import '../../../core/network/api_client.dart';
 import '../../../core/utils/utils.dart';
 import '../../widgets/common/buttons.dart';
 import '../../widgets/common/inputs.dart';
@@ -26,6 +26,7 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _agreeToTerms = false;
+  bool _isLoading = false;
 
   String? _nameError;
   String? _phoneError;
@@ -34,10 +35,6 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
   String? _confirmPasswordError;
 
   double _passwordStrength = 0;
-  bool _isLoadingGoogle = false;
-  final GoogleSignIn _googleSignIn = GoogleSignIn(
-    serverClientId: '1040576298736-991ja94slls4f6csarfheerlkg7bfpon.apps.googleusercontent.com',
-  );
 
   @override
   void initState() {
@@ -70,7 +67,7 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
     setState(() => _passwordStrength = strength);
   }
 
-  void _validateAndContinue() {
+  Future<void> _validateAndContinue() async {
     setState(() {
       _nameError = Validators.validateName(_nameController.text);
       _phoneError = Validators.validatePhone(_phoneController.text);
@@ -79,15 +76,38 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
       _confirmPasswordError = _passwordController.text != _confirmPasswordController.text ? 'Passwords do not match' : null;
     });
 
-    if (_nameError == null && _phoneError == null && _emailError == null && _passwordError == null && _confirmPasswordError == null && _agreeToTerms) {
-      Navigator.of(context).pushNamed('/register-step2', arguments: {
-        'name': _nameController.text,
-        'phone': _phoneController.text,
-        'email': _emailController.text,
+    if (_nameError != null || _phoneError != null || _emailError != null || _passwordError != null || _confirmPasswordError != null) return;
+
+    if (!_agreeToTerms) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please accept Terms & Privacy Policy'), backgroundColor: CoopvestColors.error));
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    try {
+      final apiClient = ref.read(apiClientProvider);
+      await apiClient.post('/auth/register', data: {
+        'name': _nameController.text.trim(),
+        'phone': _phoneController.text.trim(),
+        'email': _emailController.text.trim().toLowerCase(),
         'password': _passwordController.text,
       });
-    } else if (!_agreeToTerms) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please accept Terms & Privacy Policy'), backgroundColor: CoopvestColors.error));
+
+      if (mounted) {
+        Navigator.of(context).pushNamed('/register-step2', arguments: {
+          'name': _nameController.text.trim(),
+          'phone': _phoneController.text.trim(),
+          'email': _emailController.text.trim().toLowerCase(),
+          'password': _passwordController.text,
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        final msg = e.toString().replaceFirst('Exception: ', '');
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: CoopvestColors.error));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -137,9 +157,42 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
               const SizedBox(height: 20),
               AppTextField(label: 'Email Address', hint: 'your.email@example.com', controller: _emailController, keyboardType: TextInputType.emailAddress, errorText: _emailError),
               const SizedBox(height: 20),
-              AppTextField(label: 'Password', hint: 'Enter your password', controller: _passwordController, obscureText: _obscurePassword, errorText: _passwordError),
+              AppTextField(
+                label: 'Password',
+                hint: 'Enter your password',
+                controller: _passwordController,
+                obscureText: _obscurePassword,
+                errorText: _passwordError,
+                suffixIcon: IconButton(
+                  icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility, color: context.textSecondary),
+                  onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                ),
+              ),
+              if (_passwordController.text.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                LinearProgressIndicator(
+                  value: _passwordStrength,
+                  backgroundColor: context.dividerColor,
+                  color: _passwordStrength < 0.5 ? CoopvestColors.error : _passwordStrength < 0.75 ? Colors.orange : CoopvestColors.success,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _passwordStrength < 0.25 ? 'Very Weak' : _passwordStrength < 0.5 ? 'Weak' : _passwordStrength < 0.75 ? 'Medium' : 'Strong',
+                  style: TextStyle(fontSize: 12, color: context.textSecondary),
+                ),
+              ],
               const SizedBox(height: 20),
-              AppTextField(label: 'Confirm Password', hint: 'Re-enter your password', controller: _confirmPasswordController, obscureText: _obscureConfirmPassword, errorText: _confirmPasswordError),
+              AppTextField(
+                label: 'Confirm Password',
+                hint: 'Re-enter your password',
+                controller: _confirmPasswordController,
+                obscureText: _obscureConfirmPassword,
+                errorText: _confirmPasswordError,
+                suffixIcon: IconButton(
+                  icon: Icon(_obscureConfirmPassword ? Icons.visibility_off : Icons.visibility, color: context.textSecondary),
+                  onPressed: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
+                ),
+              ),
               const SizedBox(height: 24),
               Row(
                 children: [
@@ -160,7 +213,7 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
                 ],
               ),
               const SizedBox(height: 32),
-              PrimaryButton(label: 'Continue', onPressed: _validateAndContinue, width: double.infinity),
+              PrimaryButton(label: 'Continue', onPressed: _validateAndContinue, isLoading: _isLoading, width: double.infinity),
               const SizedBox(height: 24),
             ],
           ),
