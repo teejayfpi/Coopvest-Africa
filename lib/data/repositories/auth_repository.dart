@@ -95,6 +95,21 @@ class AuthRepository {
     }
   }
 
+  /// Register the device's FCM token with the backend so the server can send
+  /// targeted push notifications to this device.
+  Future<void> registerFcmToken(String fcmToken) async {
+    try {
+      await _apiClient.post(
+        '/notifications/fcm-token',
+        data: {'token': fcmToken},
+      );
+      logger.i('FCM token registered with backend');
+    } catch (e) {
+      // Non-fatal — the app still works without push; log and continue.
+      logger.w('FCM token registration failed (non-fatal): $e');
+    }
+  }
+
   /// Submit KYC
   Future<void> submitKYC({
     required KYCSubmission submission,
@@ -156,7 +171,6 @@ class AuthRepository {
     }
     try {
       final response = await _apiClient.get('/auth/me');
-      // The backend returns { success: true, user: { ... } }
       if (response is Map<String, dynamic> && response.containsKey('user')) {
         _cachedUser = User.fromJson(response['user'] as Map<String, dynamic>);
       } else {
@@ -245,19 +259,17 @@ class AuthRepository {
       rethrow;
     }
   }
-  /// Get user ID from cache (avoids redundant API calls)
+
   Future<String> getUserId() async {
     final user = await getCurrentUser();
     return user.id;
   }
 
-  /// Get user name from cache (avoids redundant API calls)
   Future<String> getUserName() async {
     final user = await getCurrentUser();
     return user.name;
   }
 
-  /// Get user phone from cache (avoids redundant API calls)
   Future<String?> getUserPhone() async {
     final user = await getCurrentUser();
     return user.phone;
@@ -272,7 +284,6 @@ class AuthRepository {
       final token = await TokenStorage.getAccessToken();
       if (token != null) {
         _apiClient.setAuthToken(token);
-        // Validate the token by fetching current user
         await getCurrentUser(forceRefresh: true);
         return true;
       }
@@ -285,7 +296,6 @@ class AuthRepository {
     }
   }
 
-  /// Persist tokens from auth response to secure storage
   Future<void> _persistTokens(AuthResponse authResponse) async {
     if (authResponse.accessToken.isNotEmpty) {
       _apiClient.setAuthToken(authResponse.accessToken);
