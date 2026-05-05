@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/network/api_client.dart';
+import '../../core/services/notification_service.dart';
 import '../../core/utils/utils.dart';
 import '../../data/models/auth_models.dart';
 import '../../data/models/kyc_models.dart';
@@ -12,15 +13,23 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   AuthNotifier(this._authRepository, this._apiClient) : super(const AuthState());
 
+  /// Register the FCM token with the backend after a successful auth event.
+  Future<void> _registerFcmToken() async {
+    try {
+      final token = await NotificationService().getDeviceToken();
+      if (token != null && token.isNotEmpty) {
+        await _authRepository.registerFcmToken(token);
+      }
+    } catch (e) {
+      logger.w('FCM token registration skipped: $e');
+    }
+  }
+
   /// Google Sign-In
   Future<void> googleSignIn(String idToken) async {
     state = state.copyWith(status: AuthStatus.loading);
     try {
-      final response = await _authRepository.googleSignIn(
-        idToken: idToken,
-      );
-
-      // Set auth token in ApiClient for subsequent API calls
+      final response = await _authRepository.googleSignIn(idToken: idToken);
       _apiClient.setAuthToken(response.accessToken);
 
       state = state.copyWith(
@@ -29,12 +38,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
         accessToken: response.accessToken,
         refreshToken: response.refreshToken,
       );
+
+      // Register FCM token after successful login (non-blocking)
+      _registerFcmToken();
     } catch (e) {
       logger.e('Google Sign-In error: $e');
-      state = state.copyWith(
-        status: AuthStatus.error,
-        error: e.toString(),
-      );
+      state = state.copyWith(status: AuthStatus.error, error: e.toString());
       rethrow;
     }
   }
@@ -46,12 +55,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }) async {
     state = state.copyWith(status: AuthStatus.loading);
     try {
-      final response = await _authRepository.login(
-        email: email,
-        password: password,
-      );
-
-      // Set auth token in ApiClient for subsequent API calls
+      final response = await _authRepository.login(email: email, password: password);
       _apiClient.setAuthToken(response.accessToken);
 
       state = state.copyWith(
@@ -60,12 +64,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
         accessToken: response.accessToken,
         refreshToken: response.refreshToken,
       );
+
+      // Register FCM token after successful login (non-blocking)
+      _registerFcmToken();
     } catch (e) {
       logger.e('Login error: $e');
-      state = state.copyWith(
-        status: AuthStatus.error,
-        error: e.toString(),
-      );
+      state = state.copyWith(status: AuthStatus.error, error: e.toString());
       rethrow;
     }
   }
@@ -85,8 +89,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
         name: name,
         phone: phone,
       );
-
-      // Set auth token in ApiClient for subsequent API calls
       _apiClient.setAuthToken(response.accessToken);
 
       state = state.copyWith(
@@ -95,34 +97,28 @@ class AuthNotifier extends StateNotifier<AuthState> {
         accessToken: response.accessToken,
         refreshToken: response.refreshToken,
       );
+
+      // Register FCM token after registration
+      _registerFcmToken();
     } catch (e) {
       logger.e('Register error: $e');
-      state = state.copyWith(
-        status: AuthStatus.error,
-        error: e.toString(),
-      );
+      state = state.copyWith(status: AuthStatus.error, error: e.toString());
       rethrow;
     }
   }
 
   /// Submit KYC
-  Future<void> submitKYC({
-    required KYCSubmission submission,
-  }) async {
+  Future<void> submitKYC({required KYCSubmission submission}) async {
     state = state.copyWith(status: AuthStatus.loading);
     try {
       await _authRepository.submitKYC(submission: submission);
-
       state = state.copyWith(
         status: AuthStatus.kycPending,
         user: state.user?.copyWith(kycStatus: 'pending'),
       );
     } catch (e) {
       logger.e('Submit KYC error: $e');
-      state = state.copyWith(
-        status: AuthStatus.error,
-        error: e.toString(),
-      );
+      state = state.copyWith(status: AuthStatus.error, error: e.toString());
       rethrow;
     }
   }
@@ -131,7 +127,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> checkKYCStatus() async {
     try {
       final status = await _authRepository.getKYCStatus();
-
       if (status == 'approved') {
         state = state.copyWith(
           status: AuthStatus.authenticated,
@@ -150,10 +145,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       }
     } catch (e) {
       logger.e('Check KYC status error: $e');
-      state = state.copyWith(
-        status: AuthStatus.error,
-        error: e.toString(),
-      );
+      state = state.copyWith(status: AuthStatus.error, error: e.toString());
     }
   }
 
@@ -162,15 +154,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = state.copyWith(status: AuthStatus.loading);
     try {
       await _authRepository.logout();
-      // Clear auth token
       _apiClient.clearAuthToken();
       state = const AuthState(status: AuthStatus.unauthenticated);
     } catch (e) {
       logger.e('Logout error: $e');
-      state = state.copyWith(
-        status: AuthStatus.error,
-        error: e.toString(),
-      );
+      state = state.copyWith(status: AuthStatus.error, error: e.toString());
       rethrow;
     }
   }
@@ -181,20 +169,15 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = const AuthState(status: AuthStatus.unauthenticated);
       return;
     }
-
     try {
       final response = await _authRepository.refreshToken(state.refreshToken!);
-
-      // Update auth token in ApiClient
       _apiClient.setAuthToken(response.accessToken);
-
       state = state.copyWith(
         accessToken: response.accessToken,
         refreshToken: response.refreshToken,
       );
     } catch (e) {
       logger.e('Refresh token error: $e');
-      // Clear token and set unauthenticated on refresh failure
       _apiClient.clearAuthToken();
       state = const AuthState(status: AuthStatus.unauthenticated);
       rethrow;
@@ -219,10 +202,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = state.copyWith(status: AuthStatus.authenticated);
     } catch (e) {
       logger.e('Verify email error: $e');
-      state = state.copyWith(
-        status: AuthStatus.error,
-        error: e.toString(),
-      );
+      state = state.copyWith(status: AuthStatus.error, error: e.toString());
       rethrow;
     }
   }
@@ -254,17 +234,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }) async {
     state = state.copyWith(status: AuthStatus.loading);
     try {
-      await _authRepository.resetPassword(
-        code: code,
-        newPassword: newPassword,
-      );
+      await _authRepository.resetPassword(code: code, newPassword: newPassword);
       state = state.copyWith(status: AuthStatus.unauthenticated);
     } catch (e) {
       logger.e('Reset password error: $e');
-      state = state.copyWith(
-        status: AuthStatus.error,
-        error: e.toString(),
-      );
+      state = state.copyWith(status: AuthStatus.error, error: e.toString());
       rethrow;
     }
   }
@@ -283,15 +257,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = state.copyWith(status: AuthStatus.authenticated);
     } catch (e) {
       logger.e('Change password error: $e');
-      state = state.copyWith(
-        status: AuthStatus.error,
-        error: e.toString(),
-      );
+      state = state.copyWith(status: AuthStatus.error, error: e.toString());
       rethrow;
     }
   }
 
-  /// Clear error
   void clearError() {
     state = state.copyWith(error: null);
   }
@@ -304,38 +274,26 @@ final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
   return AuthNotifier(authRepository, apiClient);
 });
 
-/// Is authenticated provider
 final isAuthenticatedProvider = Provider<bool>((ref) {
-  final authState = ref.watch(authProvider);
-  return authState.isAuthenticated;
+  return ref.watch(authProvider).isAuthenticated;
 });
 
-/// Current user provider
 final currentUserProvider = Provider<User?>((ref) {
-  final authState = ref.watch(authProvider);
-  return authState.user;
+  return ref.watch(authProvider).user;
 });
 
-/// Auth status provider
 final authStatusProvider = Provider<AuthStatus>((ref) {
-  final authState = ref.watch(authProvider);
-  return authState.status;
+  return ref.watch(authProvider).status;
 });
 
-/// Is KYC pending provider
 final isKycPendingProvider = Provider<bool>((ref) {
-  final authState = ref.watch(authProvider);
-  return authState.isKycPending;
+  return ref.watch(authProvider).isKycPending;
 });
 
-/// Is KYC rejected provider
 final isKycRejectedProvider = Provider<bool>((ref) {
-  final authState = ref.watch(authProvider);
-  return authState.isKycRejected;
+  return ref.watch(authProvider).isKycRejected;
 });
 
-/// Auth error provider
 final authErrorProvider = Provider<String?>((ref) {
-  final authState = ref.watch(authProvider);
-  return authState.error;
+  return ref.watch(authProvider).error;
 });

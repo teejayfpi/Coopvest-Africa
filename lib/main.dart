@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'config/app_config.dart';
 import 'config/theme_config.dart';
 import 'config/theme_enhanced.dart';
@@ -45,10 +46,18 @@ import 'presentation/providers/theme_provider.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
+/// Top-level FCM background message handler.
+/// MUST be a top-level function — FCM runs it in a separate isolate.
+@pragma('vm:entry-point')
+Future<void> _fcmBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  debugPrint('[FCM Background] Message received: ${message.messageId}');
+  debugPrint('[FCM Background] Type: ${message.data['type']}');
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Set environment from dart-define (e.g. --dart-define=ENV=prod)
   const envString = String.fromEnvironment('ENV', defaultValue: 'dev');
   final env = Environment.values.firstWhere(
     (e) => e.toString().split('.').last == envString,
@@ -56,11 +65,9 @@ void main() async {
   );
   EnvironmentContext.setEnvironment(env);
   
-  // Initialize Security Service
   final securityService = SecurityService();
   await securityService.initialize();
   
-  // Initialize feature service first (connects to admin backend)
   final featureService = FeatureService();
   try {
     await featureService.init().timeout(const Duration(seconds: 5));
@@ -68,10 +75,9 @@ void main() async {
     debugPrint('Feature service initialization failed: $e');
   }
   
-  // Initialize Firebase, analytics, etc.
   try {
     await Firebase.initializeApp();
-    // Initialize Notification Service
+    FirebaseMessaging.onBackgroundMessage(_fcmBackgroundHandler);
     await NotificationService().init();
   } catch (e) {
     debugPrint('Firebase/Notification initialization failed: $e');
@@ -110,7 +116,6 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp> with WidgetsBindingOb
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // Trigger biometric check on app resume if enabled
       _checkBiometricOnResume();
     }
   }
@@ -136,7 +141,6 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp> with WidgetsBindingOb
     if (isBiometricEnabled) {
       final authenticated = await securityService.authenticate();
       if (!authenticated) {
-        // If biometric fails on resume, logout for security
         await ref.read(authProvider.notifier).logout();
       }
     }
@@ -164,7 +168,6 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp> with WidgetsBindingOb
       themeMode: themeMode,
       home: authStatus == AuthStatus.authenticated ? const MainContainer() : const WelcomeScreen(),
       routes: {
-        // Auth Routes
         '/welcome': (context) => const WelcomeScreen(),
         '/login': (context) => const LoginScreen(),
         '/register': (context) => const RegisterStep1Screen(),
@@ -193,7 +196,6 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp> with WidgetsBindingOb
           return CompleteRegistrationScreen(googleUser: googleUser!);
         },
         
-        // Support/Ticket Routes
         '/support': (context) => const SupportHomeScreen(),
         '/create-ticket': (context) => const TicketCreationScreen(),
         '/tickets': (context) => const TicketListScreen(),
@@ -204,7 +206,6 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp> with WidgetsBindingOb
           );
         },
         
-        // KYC Routes
         '/kyc-employment-details': (context) => const KYCEmploymentDetailsScreen(),
         '/kyc-id-upload': (context) => const KYCIDUploadScreen(),
         '/kyc-selfie': (context) => const KYCSelfieScreen(),
@@ -212,10 +213,8 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp> with WidgetsBindingOb
         '/kyc-success': (context) => const KYCSuccessScreen(),
         '/kyc-complete': (context) => const KYCSuccessScreen(),
         
-        // Home & Dashboard Routes
         '/home': (context) => const MainContainer(),
         
-        // Loan Routes
         '/loan-dashboard': (context) {
           final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
           return LoanDashboardScreen(
@@ -251,11 +250,9 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp> with WidgetsBindingOb
           );
         },
         
-        // Profile Routes
         '/profile': (context) => const ProfileSettingsScreen(),
         '/security': (context) => const SecuritySettingsScreen(),
         
-        // Savings Routes
         '/savings-goal': (context) {
           final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
           return SavingsGoalsScreen(
@@ -263,7 +260,6 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp> with WidgetsBindingOb
           );
         },
 
-        // Search Route
         '/search': (context) => const GlobalSearchScreen(),
       },
     );

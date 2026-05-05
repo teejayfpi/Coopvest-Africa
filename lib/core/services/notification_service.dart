@@ -6,7 +6,7 @@ import '../utils/utils.dart';
 import 'deep_link_service.dart';
 import '../../main.dart';
 
-/// Notification Service - Handles Firebase Cloud Messaging
+/// Notification Service — handles FCM + local notifications.
 class NotificationService {
   static final NotificationService _instance = NotificationService._();
   factory NotificationService() => _instance;
@@ -14,20 +14,23 @@ class NotificationService {
 
   late final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   late final FlutterLocalNotificationsPlugin _localNotifications;
-  
+
   Function(RemoteMessage)? _onMessageReceived;
-  // final _onBackgroundMessage = _handleBackgroundMessage;
 
-  // Channel IDs
-  static const String _channelLoanId = 'loan_notifications';
-  static const String _channelGuarantorId = 'guarantor_notifications';
-  static const String _channelSavingsId = 'savings_notifications';
+  // ── Channel IDs ──────────────────────────────────────────────────────────────
+  static const String _channelLoanId       = 'loan_notifications';
+  static const String _channelGuarantorId  = 'guarantor_notifications';
+  static const String _channelSavingsId    = 'savings_notifications';
+  static const String _channelWalletId     = 'wallet_notifications';
+  static const String _channelOtpId        = 'otp_notifications';
+  static const String _channelGeneralId    = 'coopvest_notifications';
 
-  /// Initialize notification service
+  // ── Init ─────────────────────────────────────────────────────────────────────
+
   Future<void> init() async {
     try {
       _localNotifications = FlutterLocalNotificationsPlugin();
-      
+
       // Request permission
       final settings = await _messaging.requestPermission(
         alert: true,
@@ -47,18 +50,17 @@ class NotificationService {
         logger.w('Notification permission denied');
       }
 
-      // Get FCM token
+      // Log FCM token for debugging
       final token = await _messaging.getToken();
       logger.i('FCM Token: $token');
 
-      // Set up local notifications
+      // Local notifications init
       const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
       const iosSettings = DarwinInitializationSettings(
         requestAlertPermission: true,
         requestBadgePermission: true,
         requestSoundPermission: true,
       );
-
       const initSettings = InitializationSettings(
         android: androidSettings,
         iOS: iosSettings,
@@ -73,108 +75,142 @@ class NotificationService {
         },
       );
 
-      // Create notification channels
       await _createNotificationChannels();
 
-      // Set message handlers
+      // Foreground messages
       FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
-      FirebaseMessaging.onBackgroundMessage(_handleBackgroundMessage);
-      
-      // Handle notification clicks when app is in background/terminated
+
+      // Background / terminated tap-through
       FirebaseMessaging.onMessageOpenedApp.listen((message) {
         _handleNotificationTap(jsonEncode(message.data));
       });
 
-      // Check for initial message (app launched from notification)
+      // App launched from a terminated-state notification
       final initialMessage = await _messaging.getInitialMessage();
       if (initialMessage != null) {
         _handleNotificationTap(jsonEncode(initialMessage.data));
       }
 
-      logger.i('Notification service initialized');
+      // Token refresh — re-register with backend whenever it changes
+      _messaging.onTokenRefresh.listen((newToken) {
+        logger.i('FCM token refreshed');
+      });
+
+      logger.i('Notification service initialised');
     } catch (e, stackTrace) {
-      logger.e('Error initializing notification service', error: e, stackTrace: stackTrace);
+      logger.e('Error initialising notification service', error: e, stackTrace: stackTrace);
       rethrow;
     }
   }
 
-  /// Create notification channels for Android
+  // ── Channels ─────────────────────────────────────────────────────────────────
+
   Future<void> _createNotificationChannels() async {
     try {
-      const loanChannel = AndroidNotificationChannel(
-        _channelLoanId,
-        'Loan Notifications',
-        description: 'Notifications for loan applications and updates',
-        importance: Importance.high,
-        enableVibration: true,
-      );
+      final plugin = _localNotifications
+          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
 
-      const guarantorChannel = AndroidNotificationChannel(
-        _channelGuarantorId,
-        'Guarantor Notifications',
-        description: 'Notifications for guarantor requests',
-        importance: Importance.high,
-        enableVibration: true,
-      );
+      const channels = [
+        AndroidNotificationChannel(
+          _channelLoanId,
+          'Loan Notifications',
+          description: 'Loan application and approval alerts',
+          importance: Importance.high,
+          enableVibration: true,
+        ),
+        AndroidNotificationChannel(
+          _channelGuarantorId,
+          'Guarantor Notifications',
+          description: 'Guarantor request alerts',
+          importance: Importance.high,
+          enableVibration: true,
+        ),
+        AndroidNotificationChannel(
+          _channelSavingsId,
+          'Savings Notifications',
+          description: 'Savings goal alerts',
+          importance: Importance.defaultImportance,
+          enableVibration: false,
+        ),
+        AndroidNotificationChannel(
+          _channelWalletId,
+          'Wallet Notifications',
+          description: 'Wallet credit and debit alerts',
+          importance: Importance.high,
+          enableVibration: true,
+        ),
+        AndroidNotificationChannel(
+          _channelOtpId,
+          'OTP Notifications',
+          description: 'One-time password delivery',
+          importance: Importance.max,
+          enableVibration: true,
+        ),
+        AndroidNotificationChannel(
+          _channelGeneralId,
+          'General Notifications',
+          description: 'General Coopvest Africa alerts',
+          importance: Importance.high,
+          enableVibration: true,
+        ),
+      ];
 
-      const savingsChannel = AndroidNotificationChannel(
-        _channelSavingsId,
-        'Savings Notifications',
-        description: 'Notifications for savings goals',
-        importance: Importance.low,
-        enableVibration: false,
-      );
-
-      await _localNotifications
-          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-          ?.createNotificationChannel(loanChannel);
-
-      await _localNotifications
-          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-          ?.createNotificationChannel(guarantorChannel);
-
-      await _localNotifications
-          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-          ?.createNotificationChannel(savingsChannel);
+      for (final ch in channels) {
+        await plugin?.createNotificationChannel(ch);
+      }
     } catch (e, stackTrace) {
       logger.e('Error creating notification channels', error: e, stackTrace: stackTrace);
     }
   }
 
-  /// Handle foreground messages
+  // ── Handlers ─────────────────────────────────────────────────────────────────
+
   Future<void> _handleForegroundMessage(RemoteMessage message) async {
-    logger.i('Foreground message received: ${message.messageId}');
-    
+    logger.i('Foreground FCM message: ${message.messageId} type=${message.data['type']}');
     try {
-      // Show local notification
-      _showLocalNotification(
+      final type = message.data['type'] as String? ?? '';
+      final channelId = _channelForType(type);
+
+      await _showLocalNotification(
         title: message.notification?.title ?? 'Coopvest Africa',
         body: message.notification?.body ?? '',
         payload: jsonEncode(message.data),
-      ).catchError((e) {
-        logger.e('Error showing local notification', error: e);
-      });
+        channelId: channelId,
+      );
 
-      // Call callback
-      if (_onMessageReceived != null) {
-        try {
-          _onMessageReceived!(message);
-        } catch (e) {
-          logger.e('Error in onMessageReceived callback', error: e);
-        }
-      }
+      _onMessageReceived?.call(message);
     } catch (e, stackTrace) {
       logger.e('Error handling foreground message', error: e, stackTrace: stackTrace);
     }
   }
 
-  /// Handle background messages
-  static Future<void> _handleBackgroundMessage(RemoteMessage message) async {
-    logger.i('Background message received: ${message.messageId}');
-    // Perform background work here if needed
+  /// Maps a notification type string to the appropriate Android channel.
+  String _channelForType(String type) {
+    switch (type) {
+      case 'loan_approved':
+      case 'loan_update':
+      case 'loan_rejected':
+      case 'loan_application':
+        return _channelLoanId;
+      case 'guarantor_request':
+      case 'guarantor_confirmed':
+        return _channelGuarantorId;
+      case 'savings_goal':
+      case 'savings_contribution':
+        return _channelSavingsId;
+      case 'wallet_credited':
+      case 'wallet_debited':
+      case 'deposit':
+      case 'withdrawal':
+        return _channelWalletId;
+      case 'otp':
+      case 'otp_sent':
+        return _channelOtpId;
+      default:
+        return _channelGeneralId;
+    }
   }
 
-  /// Handle notification tap and navigate to relevant screen
   void _handleNotificationTap(String payload) {
     try {
       final context = navigatorKey.currentContext;
@@ -184,16 +220,15 @@ class NotificationService {
       }
 
       final Map<String, dynamic> data = jsonDecode(payload);
-      
-      // Check if it's a deep link URL in the data
+
+      // Deep link takes priority
       if (data.containsKey('link')) {
-        final deepLinkData = DeepLinkService.parseDeepLink(data['link']);
+        final deepLinkData = DeepLinkService.parseDeepLink(data['link'] as String);
         DeepLinkNavigator.navigateToScreen(context, deepLinkData);
         return;
       }
 
-      // Handle specific notification types
-      final type = data['type'] ?? payload;
+      final type = data['type'] as String? ?? payload;
       switch (type) {
         case 'loan_approved':
         case 'loan_update':
@@ -207,63 +242,43 @@ class NotificationService {
           }
           break;
         case 'savings_goal':
+        case 'savings_contribution':
           navigatorKey.currentState?.pushNamed('/savings-goal');
           break;
+        case 'wallet_credited':
+        case 'wallet_debited':
+        case 'deposit':
+        case 'withdrawal':
+          navigatorKey.currentState?.pushNamed('/home');
+          break;
+        case 'otp':
+        case 'otp_sent':
+          // OTP arrives in the notification body — no navigation needed,
+          // the user reads it from the notification shade.
+          break;
         default:
-          logger.i('Unknown notification type tapped: $type');
+          logger.i('Unhandled notification type tapped: $type');
       }
     } catch (e) {
       logger.e('Error handling notification tap: $e');
     }
   }
 
-  /// Set foreground message callback
-  void setOnMessageReceivedCallback(Function(RemoteMessage) callback) {
-    _onMessageReceived = callback;
-  }
-
-  /// Get device notification token
-  Future<String?> getDeviceToken() async {
-    try {
-      return await _messaging.getToken();
-    } catch (e) {
-      logger.e('Error getting device token', error: e);
-      return null;
-    }
-  }
-
-  /// Subscribe to topic
-  Future<void> subscribeToTopic(String topic) async {
-    try {
-      await _messaging.subscribeToTopic(topic);
-      logger.i('Subscribed to topic: $topic');
-    } catch (e) {
-      logger.e('Error subscribing to topic', error: e);
-    }
-  }
-
-  /// Unsubscribe from topic
-  Future<void> unsubscribeFromTopic(String topic) async {
-    try {
-      await _messaging.unsubscribeFromTopic(topic);
-      logger.i('Unsubscribed from topic: $topic');
-    } catch (e) {
-      logger.e('Error unsubscribing from topic', error: e);
-    }
-  }
+  // ── Local notification display ────────────────────────────────────────────────
 
   Future<void> _showLocalNotification({
     required String title,
     required String body,
     required String payload,
+    String channelId = _channelGeneralId,
   }) async {
     try {
-      const androidDetails = AndroidNotificationDetails(
-        'coopvest_notifications',
-        'Coopvest Africa Notifications',
-        channelDescription: 'General notifications',
-        importance: Importance.high,
-        priority: Priority.high,
+      final androidDetails = AndroidNotificationDetails(
+        channelId,
+        _channelNameForId(channelId),
+        importance: channelId == _channelOtpId ? Importance.max : Importance.high,
+        priority: channelId == _channelOtpId ? Priority.max : Priority.high,
+        enableVibration: true,
       );
 
       const iosDetails = DarwinNotificationDetails(
@@ -272,13 +287,10 @@ class NotificationService {
         presentSound: true,
       );
 
-      const details = NotificationDetails(
-        android: androidDetails,
-        iOS: iosDetails,
-      );
+      final details = NotificationDetails(android: androidDetails, iOS: iosDetails);
 
       await _localNotifications.show(
-        DateTime.now().millisecond,
+        DateTime.now().millisecondsSinceEpoch.remainder(100000),
         title,
         body,
         details,
@@ -290,111 +302,151 @@ class NotificationService {
     }
   }
 
-  // Notification types
-  // static const int _loanApplicationId = 1001;
-  // static const int _loanApprovedId = 1002;
-  // static const int _loanRepaymentId = 1003;
-  // static const int _guarantorRequestId = 2001;
-  // static const int _guarantorConfirmedId = 2002;
-  // static const int _savingsGoalId = 3001;
-  // static const int _savingsContributionId = 3002;
-
-  // Show specific notifications
-  Future<void> showLoanApplicationNotification(String loanType, double amount) async {
-    try {
-      await _showLocalNotification(
-        title: 'Loan Application Received',
-        body: 'Your $loanType application for ₦${amount.formatNumber()} has been received.',
-        payload: 'loan_application',
-      );
-      logger.i('Shown loan application notification');
-    } catch (e, stackTrace) {
-      logger.e('Error showing loan application notification', error: e, stackTrace: stackTrace);
+  String _channelNameForId(String id) {
+    switch (id) {
+      case _channelLoanId:       return 'Loan Notifications';
+      case _channelGuarantorId:  return 'Guarantor Notifications';
+      case _channelSavingsId:    return 'Savings Notifications';
+      case _channelWalletId:     return 'Wallet Notifications';
+      case _channelOtpId:        return 'OTP Notifications';
+      default:                   return 'Coopvest Africa Notifications';
     }
+  }
+
+  // ── Public API ────────────────────────────────────────────────────────────────
+
+  void setOnMessageReceivedCallback(Function(RemoteMessage) callback) {
+    _onMessageReceived = callback;
+  }
+
+  void setOnTokenRefreshCallback(Function(String) callback) {
+    _messaging.onTokenRefresh.listen(callback);
+  }
+
+  Future<String?> getDeviceToken() async {
+    try {
+      return await _messaging.getToken();
+    } catch (e) {
+      logger.e('Error getting device token', error: e);
+      return null;
+    }
+  }
+
+  Future<void> subscribeToTopic(String topic) async {
+    try {
+      await _messaging.subscribeToTopic(topic);
+      logger.i('Subscribed to FCM topic: $topic');
+    } catch (e) {
+      logger.e('Error subscribing to topic', error: e);
+    }
+  }
+
+  Future<void> unsubscribeFromTopic(String topic) async {
+    try {
+      await _messaging.unsubscribeFromTopic(topic);
+      logger.i('Unsubscribed from FCM topic: $topic');
+    } catch (e) {
+      logger.e('Error unsubscribing from topic', error: e);
+    }
+  }
+
+  // ── Convenience show methods ──────────────────────────────────────────────────
+
+  Future<void> showLoanApplicationNotification(String loanType, double amount) async {
+    await _showLocalNotification(
+      title: 'Loan Application Received',
+      body: 'Your $loanType application for \u20a6${amount.formatNumber()} has been received.',
+      payload: jsonEncode({'type': 'loan_application'}),
+      channelId: _channelLoanId,
+    );
   }
 
   Future<void> showLoanApprovedNotification(String loanType, double approvedAmount) async {
-    try {
-      await _showLocalNotification(
-        title: 'Loan Approved! 🎉',
-        body: 'Congratulations! Your $loanType for ₦${approvedAmount.formatNumber()} has been approved.',
-        payload: 'loan_approved',
-      );
-      logger.i('Shown loan approved notification');
-    } catch (e, stackTrace) {
-      logger.e('Error showing loan approved notification', error: e, stackTrace: stackTrace);
-    }
+    await _showLocalNotification(
+      title: 'Loan Approved!',
+      body: 'Congratulations! Your $loanType for \u20a6${approvedAmount.formatNumber()} has been approved.',
+      payload: jsonEncode({'type': 'loan_approved'}),
+      channelId: _channelLoanId,
+    );
   }
 
   Future<void> showLoanRepaymentReminder(double amount, DateTime dueDate) async {
-    try {
-      final daysUntilDue = dueDate.difference(DateTime.now()).inDays;
-      await _showLocalNotification(
-        title: 'Loan Repayment Reminder',
-        body: 'Payment of ₦${amount.formatNumber()} is due in $daysUntilDue days.',
-        payload: 'loan_repayment_reminder',
-      );
-      logger.i('Shown loan repayment reminder notification');
-    } catch (e, stackTrace) {
-      logger.e('Error showing loan repayment reminder', error: e, stackTrace: stackTrace);
-    }
+    final daysUntilDue = dueDate.difference(DateTime.now()).inDays;
+    await _showLocalNotification(
+      title: 'Loan Repayment Reminder',
+      body: 'Payment of \u20a6${amount.formatNumber()} is due in $daysUntilDue day${daysUntilDue == 1 ? '' : 's'}.',
+      payload: jsonEncode({'type': 'loan_repayment_reminder'}),
+      channelId: _channelLoanId,
+    );
   }
 
   Future<void> showGuarantorRequestNotification(String borrowerName, double loanAmount) async {
-    try {
-      await _showLocalNotification(
-        title: 'Guarantee Request',
-        body: '$borrowerName is requesting your guarantee for ₦${loanAmount.formatNumber()}.',
-        payload: 'guarantor_request',
-      );
-      logger.i('Shown guarantor request notification');
-    } catch (e, stackTrace) {
-      logger.e('Error showing guarantor request notification', error: e, stackTrace: stackTrace);
-    }
+    await _showLocalNotification(
+      title: 'Guarantee Request',
+      body: '$borrowerName is requesting your guarantee for \u20a6${loanAmount.formatNumber()}.',
+      payload: jsonEncode({'type': 'guarantor_request'}),
+      channelId: _channelGuarantorId,
+    );
   }
 
   Future<void> showGuarantorConfirmedNotification(String guarantorName) async {
-    try {
-      await _showLocalNotification(
-        title: 'Guarantee Confirmed ✓',
-        body: '$guarantorName has confirmed their guarantee.',
-        payload: 'guarantor_confirmed',
-      );
-      logger.i('Shown guarantor confirmed notification');
-    } catch (e, stackTrace) {
-      logger.e('Error showing guarantor confirmed notification', error: e, stackTrace: stackTrace);
-    }
+    await _showLocalNotification(
+      title: 'Guarantee Confirmed',
+      body: '$guarantorName has confirmed their guarantee.',
+      payload: jsonEncode({'type': 'guarantor_confirmed'}),
+      channelId: _channelGuarantorId,
+    );
   }
 
   Future<void> showSavingsGoalCompletedNotification(String goalName) async {
-    try {
-      await _showLocalNotification(
-        title: 'Savings Goal Completed! 🎉',
-        body: 'Congratulations! You\'ve reached your "$goalName" savings goal.',
-        payload: 'savings_goal_completed',
-      );
-      logger.i('Shown savings goal completed notification');
-    } catch (e, stackTrace) {
-      logger.e('Error showing savings goal notification', error: e, stackTrace: stackTrace);
-    }
+    await _showLocalNotification(
+      title: 'Savings Goal Completed!',
+      body: 'You\'ve reached your "$goalName" savings goal. Well done!',
+      payload: jsonEncode({'type': 'savings_goal'}),
+      channelId: _channelSavingsId,
+    );
   }
 
   Future<void> showSavingsContributionNotification(double amount, String goalName) async {
-    try {
-      await _showLocalNotification(
-        title: 'Savings Contribution Recorded',
-        body: 'Your contribution of ₦${amount.formatNumber()} to "$goalName" has been recorded.',
-        payload: 'savings_contribution',
-      );
-      logger.i('Shown savings contribution notification');
-    } catch (e, stackTrace) {
-      logger.e('Error showing savings contribution notification', error: e, stackTrace: stackTrace);
-    }
+    await _showLocalNotification(
+      title: 'Savings Contribution Recorded',
+      body: 'Your contribution of \u20a6${amount.formatNumber()} to "$goalName" has been recorded.',
+      payload: jsonEncode({'type': 'savings_contribution'}),
+      channelId: _channelSavingsId,
+    );
   }
 
-  // Set callbacks
-  void setOnTokenRefreshCallback(Function(String) callback) {
-    _messaging.onTokenRefresh.listen(callback);
+  /// Show a wallet credit notification when funds land in the user's wallet.
+  Future<void> showWalletCreditedNotification(double amount, {String? description}) async {
+    final desc = description != null ? ' — $description' : '';
+    await _showLocalNotification(
+      title: 'Wallet Credited',
+      body: '\u20a6${amount.formatNumber()} has been added to your wallet$desc.',
+      payload: jsonEncode({'type': 'wallet_credited'}),
+      channelId: _channelWalletId,
+    );
+  }
+
+  /// Show a wallet debit notification.
+  Future<void> showWalletDebitedNotification(double amount, {String? description}) async {
+    final desc = description != null ? ' — $description' : '';
+    await _showLocalNotification(
+      title: 'Wallet Debited',
+      body: '\u20a6${amount.formatNumber()} was deducted from your wallet$desc.',
+      payload: jsonEncode({'type': 'wallet_debited'}),
+      channelId: _channelWalletId,
+    );
+  }
+
+  /// Show an OTP notification — used when the OTP is delivered via push
+  /// instead of (or in addition to) SMS/email.
+  Future<void> showOtpNotification(String otp, {String purpose = 'verification'}) async {
+    await _showLocalNotification(
+      title: 'Your OTP Code',
+      body: 'Your Coopvest $purpose code is $otp. It expires in 10 minutes. Do not share it.',
+      payload: jsonEncode({'type': 'otp_sent'}),
+      channelId: _channelOtpId,
+    );
   }
 }
 

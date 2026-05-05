@@ -4,6 +4,10 @@
  * CRUD against the Supabase `notifications` table, scoped to the
  * authenticated member (`profile_id`). Admin fan-out lives on
  * /api/v1/admin/notifications.
+ *
+ * Also exposes:
+ *   POST /fcm-token   — register / refresh a device FCM token
+ *   DELETE /fcm-token — remove a device FCM token on logout
  */
 
 const express = require('express');
@@ -20,6 +24,85 @@ function parsePaging(req) {
   const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
   return { page, limit };
 }
+
+// ── FCM Token Management ──────────────────────────────────────────────────────
+
+/**
+ * POST /api/v1/notifications/fcm-token
+ * Body: { token: string }
+ *
+ * Upserts the FCM device token for the authenticated user.
+ * Called by the Flutter app right after a successful login.
+ */
+router.post('/fcm-token', async (req, res) => {
+  try {
+    const { token } = req.body;
+    if (!token || typeof token !== 'string' || token.trim().length === 0) {
+      return res.status(400).json({ success: false, error: 'token is required' });
+    }
+
+    // Upsert: if this exact token already exists for the profile, update
+    // updated_at; otherwise insert a new row. This keeps the table clean even
+    // when the device refreshes its FCM registration token.
+    const { error } = await supabase
+      .from('device_tokens')
+      .upsert(
+        {
+          profile_id: req.user.id,
+          token: token.trim(),
+          active: true,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'token' },
+      );
+
+    if (error) {
+      // If the device_tokens table does not exist yet, log a warning and
+      // return a graceful response so the client is not broken.
+      if (error.code === '42P01') {
+        logger.warn('device_tokens table does not exist — run the migration to create it');
+        return res.json({ success: true, note: 'table_not_found_skipped' });
+      }
+      throw error;
+    }
+
+    logger.info(`FCM token registered for profile ${req.user.id}`);
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('FCM token registration error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * DELETE /api/v1/notifications/fcm-token
+ * Body: { token: string }
+ *
+ * Marks a specific device token as inactive (e.g. on logout).
+ */
+router.delete('/fcm-token', async (req, res) => {
+  try {
+    const { token } = req.body;
+    if (!token) {
+      return res.status(400).json({ success: false, error: 'token is required' });
+    }
+
+    const { error } = await supabase
+      .from('device_tokens')
+      .update({ active: false, updated_at: new Date().toISOString() })
+      .eq('profile_id', req.user.id)
+      .eq('token', token);
+
+    if (error && error.code !== '42P01') throw error;
+
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('FCM token deactivation error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── Notification CRUD ─────────────────────────────────────────────────────────
 
 /**
  * GET /api/v1/notifications
