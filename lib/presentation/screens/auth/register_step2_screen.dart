@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
-import '../../../core/services/api_service.dart';
+import '../../../core/network/api_client.dart';
 import '../../widgets/common/buttons.dart';
 
 /// Registration Step 2 - Email Verification with OTP
@@ -27,8 +27,6 @@ class _RegisterStep2ScreenState extends ConsumerState<RegisterStep2Screen> {
   bool _canResend = false;
   bool _isVerifying = false;
   bool _isResending = false;
-
-  final ApiService _apiService = ApiService();
 
   @override
   void initState() {
@@ -69,13 +67,17 @@ class _RegisterStep2ScreenState extends ConsumerState<RegisterStep2Screen> {
     });
     _startTimer();
     try {
-      await _apiService.post('/auth/resend-otp', data: {'email': widget.email});
+      await ApiClient().post('/auth/resend-verification', data: {'email': widget.email});
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('OTP sent successfully'), backgroundColor: CoopvestColors.success));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('OTP sent successfully'), backgroundColor: CoopvestColors.success),
+        );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to resend OTP: $e'), backgroundColor: CoopvestColors.error));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to resend OTP: $e'), backgroundColor: CoopvestColors.error),
+        );
       }
     } finally {
       if (mounted) setState(() => _isResending = false);
@@ -102,7 +104,7 @@ class _RegisterStep2ScreenState extends ConsumerState<RegisterStep2Screen> {
     }
     setState(() => _isVerifying = true);
     try {
-      final response = await _apiService.post('/auth/verify-otp', data: {'email': widget.email, 'otp': otp});
+      final response = await ApiClient().post('/auth/verify-email', data: {'email': widget.email, 'code': otp});
       if (response['success'] == true && mounted) {
         Navigator.of(context).pushNamed('/register-step3', arguments: widget.registrationData);
       } else {
