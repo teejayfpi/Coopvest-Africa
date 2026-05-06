@@ -166,14 +166,22 @@ class ApiClient {
             statusCode: statusCode,
           );
       }
-    } else if (error.type == DioExceptionType.connectionTimeout) {
-      return NetworkException('Connection timeout. Please check your internet.');
+    } else if (error.type == DioExceptionType.connectionTimeout ||
+        error.type == DioExceptionType.sendTimeout) {
+      return NetworkException(
+          'Unable to reach the server. Please try again in a moment.');
     } else if (error.type == DioExceptionType.receiveTimeout) {
-      return NetworkException('Request timeout. Please try again.');
+      return NetworkException('The server took too long to respond. Please try again.');
     } else if (error.type == DioExceptionType.connectionError) {
-      return NetworkException('Unable to connect to the server. Please check if the backend is running and the API URL in AppConfig is correct.');
+      return NetworkException(
+          'Could not connect to the server. Please check your internet connection and try again.');
     } else if (error.type == DioExceptionType.unknown) {
-      return NetworkException('Network error. Please check your connection.');
+      final msg = error.message ?? '';
+      if (msg.contains('SocketException') || msg.contains('HandshakeException')) {
+        return NetworkException(
+            'Could not connect to the server. Please check your internet connection.');
+      }
+      return NetworkException('Something went wrong. Please try again.');
     }
 
     return NetworkException(error.message ?? 'An error occurred');
