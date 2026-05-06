@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
@@ -7,6 +8,11 @@ import '../../../presentation/providers/wallet_provider.dart';
 import '../../../presentation/widgets/common/buttons.dart';
 import '../../../presentation/widgets/common/cards.dart';
 import '../../../presentation/widgets/common/inputs.dart';
+
+/// Payment account details for bank transfers
+const _paymentBank = 'Opay';
+const _paymentAccountName = 'Ayanlowo Olatunji Ayobami';
+const _paymentAccountNumber = '7038193753';
 
 /// Deposit Screen
 class DepositScreen extends ConsumerStatefulWidget {
@@ -49,6 +55,17 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
     }
   }
 
+  void _copyToClipboard(String text, String label) {
+    Clipboard.setData(ClipboardData(text: text));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('$label copied to clipboard'),
+        backgroundColor: CoopvestColors.success,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
   void _showSuccessDialog() {
     showDialog(
       context: context,
@@ -59,30 +76,44 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
           children: [
             const Icon(Icons.check_circle, color: CoopvestColors.success),
             const SizedBox(width: 8),
-            Text('Deposit Successful', style: TextStyle(color: context.textPrimary)),
+            Text('Deposit Submitted', style: TextStyle(color: context.textPrimary)),
           ],
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'Your deposit of ₦${_amountController.text} has been processed successfully.',
+              'Your deposit of ₦${_amountController.text} has been submitted.',
               textAlign: TextAlign.center,
               style: TextStyle(color: context.textSecondary),
             ),
             const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: CoopvestColors.info.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
+            if (_selectedPaymentMethod == 'bank_transfer')
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: CoopvestColors.primary.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  'Please transfer the exact amount to the account details shown. Your wallet will be credited once payment is confirmed.',
+                  style: TextStyle(color: CoopvestColors.primary, fontSize: 12),
+                  textAlign: TextAlign.center,
+                ),
+              )
+            else
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: CoopvestColors.info.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  'Your wallet will be credited once payment is confirmed.',
+                  style: TextStyle(color: CoopvestColors.info, fontSize: 12),
+                  textAlign: TextAlign.center,
+                ),
               ),
-              child: const Text(
-                'Funds have been added to your wallet balance.',
-                style: TextStyle(color: CoopvestColors.info, fontSize: 12),
-                textAlign: TextAlign.center,
-              ),
-            ),
           ],
         ),
         actions: [
@@ -106,6 +137,122 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
   void dispose() {
     _amountController.dispose();
     super.dispose();
+  }
+
+  Widget _buildBankTransferDetails(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(top: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: CoopvestColors.primary.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: CoopvestColors.primary.withOpacity(0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.account_balance, color: CoopvestColors.primary, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                'Bank Transfer Details',
+                style: TextStyle(
+                  color: CoopvestColors.primary,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _buildDetailRow(
+            context,
+            label: 'Bank',
+            value: _paymentBank,
+            canCopy: false,
+          ),
+          const SizedBox(height: 10),
+          _buildDetailRow(
+            context,
+            label: 'Account Name',
+            value: _paymentAccountName,
+            canCopy: true,
+          ),
+          const SizedBox(height: 10),
+          _buildDetailRow(
+            context,
+            label: 'Account Number',
+            value: _paymentAccountNumber,
+            canCopy: true,
+            isHighlighted: true,
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: CoopvestColors.warning.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.warning_amber_rounded, color: CoopvestColors.warning, size: 16),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Transfer the exact amount and use your registered name as the narration. Account details are subject to change.',
+                    style: TextStyle(color: CoopvestColors.warning, fontSize: 11),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(
+    BuildContext context, {
+    required String label,
+    required String value,
+    required bool canCopy,
+    bool isHighlighted = false,
+  }) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 110,
+          child: Text(
+            label,
+            style: TextStyle(
+              color: context.textSecondary,
+              fontSize: 13,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: TextStyle(
+              color: isHighlighted ? CoopvestColors.primary : context.textPrimary,
+              fontWeight: isHighlighted ? FontWeight.w800 : FontWeight.w600,
+              fontSize: isHighlighted ? 16 : 13,
+              letterSpacing: isHighlighted ? 1.5 : 0,
+            ),
+          ),
+        ),
+        if (canCopy)
+          GestureDetector(
+            onTap: () => _copyToClipboard(value, label),
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              child: const Icon(Icons.copy, color: CoopvestColors.primary, size: 16),
+            ),
+          ),
+      ],
+    );
   }
 
   @override
@@ -171,7 +318,7 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
 
                 Text('Payment Method', style: TextStyle(fontWeight: FontWeight.bold, color: context.textPrimary)),
                 const SizedBox(height: 12),
-                
+
                 Column(
                   children: _paymentMethods.map((method) {
                     final isSelected = _selectedPaymentMethod == method['value'];
@@ -213,6 +360,10 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
                   }).toList(),
                 ),
 
+                // Bank transfer details panel
+                if (_selectedPaymentMethod == 'bank_transfer')
+                  _buildBankTransferDetails(context),
+
                 const SizedBox(height: 24),
 
                 AppCard(
@@ -223,7 +374,9 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          'Deposits are processed instantly. Bank transfers may take 1-2 minutes to reflect.',
+                          _selectedPaymentMethod == 'bank_transfer'
+                              ? 'After transferring, submit this form and your wallet will be credited once payment is confirmed.'
+                              : 'Deposits are processed instantly. Bank transfers may take 1-2 minutes to reflect.',
                           style: TextStyle(color: context.textPrimary, fontSize: 12),
                         ),
                       ),
