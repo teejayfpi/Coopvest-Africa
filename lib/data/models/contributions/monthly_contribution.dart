@@ -1,5 +1,32 @@
 import 'package:equatable/equatable.dart';
 
+/// Contribution payment method (how member contributes)
+enum ContributionMethod {
+  manual,
+  payroll,
+}
+
+/// Extension for contribution method display
+extension ContributionMethodExtension on ContributionMethod {
+  String get displayName {
+    switch (this) {
+      case ContributionMethod.manual:
+        return 'Monthly Self Contribution';
+      case ContributionMethod.payroll:
+        return 'Salary Deduction';
+    }
+  }
+
+  String get shortName {
+    switch (this) {
+      case ContributionMethod.manual:
+        return 'Manual';
+      case ContributionMethod.payroll:
+        return 'Payroll';
+    }
+  }
+}
+
 /// Status types for contributions
 enum ContributionStatus {
   successful,
