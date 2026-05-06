@@ -14,17 +14,16 @@ class EnvConfig {
   });
 
   static EnvConfig get dev => EnvConfig(
-        // Android emulator: use http://10.0.2.2:5000/api/v1
-        // iOS simulator:    use http://localhost:5000/api/v1
-        // Physical device:  use https://<your-replit-domain>/api/v1
-        apiBaseUrl: 'http://10.0.2.2:5000/api/v1',
+        // Replit-hosted backend (works on physical devices and emulators)
+        apiBaseUrl: 'https://4c670c48-4a19-4dab-ba0c-6e3e4151ea8e-00-17gtyzo9gaaeh.janeway.replit.dev/api/v1',
         appName: 'Coopvest Dev',
         enableLogging: true,
         useMockData: false,
       );
 
   static EnvConfig get staging => EnvConfig(
-        apiBaseUrl: 'https://staging-api.coopvest.africa/api/v1',
+        // Replit-hosted backend — use this until production API is deployed
+        apiBaseUrl: 'https://4c670c48-4a19-4dab-ba0c-6e3e4151ea8e-00-17gtyzo9gaaeh.janeway.replit.dev/api/v1',
         appName: 'Coopvest Staging',
         enableLogging: true,
       );
