@@ -245,11 +245,11 @@ class CoopvestTheme {
         color: CoopvestColors.mediumGray,
       ),
     ),
-    cardTheme: CardThemeData(
+    cardTheme: const CardTheme(
       color: CoopvestColors.white,
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      margin: const EdgeInsets.all(0),
+      margin: EdgeInsets.all(0),
     ),
     dividerTheme: const DividerThemeData(
       color: CoopvestColors.lightGray,
@@ -354,11 +354,11 @@ class CoopvestTheme {
         color: CoopvestColors.darkTextSecondary,
       ),
     ),
-    cardTheme: CardThemeData(
+    cardTheme: const CardTheme(
       color: CoopvestColors.darkSurface,
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      margin: const EdgeInsets.all(0),
+      margin: EdgeInsets.all(0),
     ),
     dividerTheme: const DividerThemeData(
       color: CoopvestColors.darkDivider,
