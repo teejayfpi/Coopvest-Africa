@@ -11,7 +11,7 @@ class AppConfig {
 
   // API Configuration
   static String get apiBaseUrl => EnvironmentContext.config.apiBaseUrl;
-  static const Duration apiTimeout = Duration(seconds: 60);
+  static const Duration apiTimeout = Duration(seconds: 15);
   static const int maxRetries = 3;
 
   // Session Configuration
