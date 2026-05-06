@@ -6,5 +6,11 @@
     </style>
     <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
         <item name="android:windowBackground">@android:color/white</item>
+        <item name="android:windowAnimationStyle">@style/FadeWindowAnimation</item>
+    </style>
+    <style name="FadeWindowAnimation" parent="@android:style/Animation.Activity">
+        <item name="android:activityOpenEnterAnimation">@anim/fade_in</item>
+        <item name="android:activityOpenExitAnimation">@anim/hold</item>
+        <item name="android:windowEnterAnimation">@anim/fade_in</item>
     </style>
 </resources>
