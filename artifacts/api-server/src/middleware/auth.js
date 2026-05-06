@@ -1,7 +1,7 @@
 const { verifyAccess } = require('../jwt');
-const db = require('../db');
+const supabase = require('../supabase');
 
-function requireAuth(req, res, next) {
+async function requireAuth(req, res, next) {
   const authHeader = req.headers['authorization'];
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Missing or invalid Authorization header' });
@@ -10,8 +10,13 @@ function requireAuth(req, res, next) {
   const token = authHeader.slice(7);
   try {
     const payload = verifyAccess(token);
-    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(payload.sub);
-    if (!user) {
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', payload.sub)
+      .single();
+
+    if (error || !user) {
       return res.status(401).json({ error: 'User not found' });
     }
     req.user = user;
