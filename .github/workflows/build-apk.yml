@@ -175,15 +175,13 @@ jobs:
             fi
             echo ""
             if [ "${{ steps.locate_apk.outputs.apk_found }}" = "true" ]; then
-              echo "### How to download the APK"
+              echo "### ⬇️ Download your APK"
               echo ""
-              echo "1. Go to the **Actions** tab of this repository."
-              echo "2. Click on this workflow run: **Build Flutter APK #${{ github.run_number }}**."
-              echo "3. Scroll to the **Artifacts** section at the bottom of the run page."
-              echo "4. Click \`coopvest-${{ github.event.inputs.build_type || 'release' }}-apk-${{ github.run_number }}\` to download."
+              echo "**[Click here → go to this run and scroll to Artifacts at the bottom](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})**"
               echo ""
-              echo "> **Note:** Artifacts are kept for ${{ github.event.inputs.build_type == 'debug' && '30' || '90' }} days."
-              echo "> If the download link shows 404, the retention period has expired — trigger a new build."
+              echo "The file is named: \`coopvest-${{ github.event.inputs.build_type || 'release' }}-apk-${{ github.run_number }}\`"
+              echo ""
+              echo "> Artifacts are kept for ${{ github.event.inputs.build_type == 'debug' && '30' || '90' }} days. If the link shows 404, trigger a new build."
             else
               echo "### Build failed — no APK was produced"
               echo ""
