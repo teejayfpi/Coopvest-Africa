@@ -1,0 +1,18 @@
+# This file is used to override default values used by the Gradle build system.
+# For more details on how to customize your build, read the documentation at
+# https://developer.android.com/studio/build
+
+# The following line sets your Android SDK location.
+# Uncomment this if you have a custom Android SDK location.
+# sdk.dir=/path/to/android-sdk
+
+# The following line sets your Flutter SDK location.
+# Uncomment this if you have a custom Flutter SDK location.
+# flutter.sdk=/path/to/flutter
+
+# Build mode (debug or release)
+flutter.buildMode=debug
+
+# Version information
+flutter.versionName=1.0.0
+flutter.versionCode=1

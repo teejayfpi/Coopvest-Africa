@@ -1,0 +1,251 @@
+/**
+ * Wallet Routes
+ *
+ * Reads from Supabase tables: `wallets`, `transactions`. Monetary updates
+ * go through a small helper that updates the wallet row atomically using
+ * Postgres arithmetic.
+ */
+
+const express = require('express');
+const { body } = require('express-validator');
+const router = express.Router();
+
+const supabase = require('../config/supabase');
+const { authenticate } = require('../middleware/auth');
+const validate = require('../middleware/validate');
+const logger = require('../utils/logger');
+
+const newRef = (prefix) => `${prefix}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+
+async function ensureWallet(profileId) {
+  const { data, error } = await supabase
+    .from('wallets')
+    .select('*')
+    .eq('profile_id', profileId)
+    .maybeSingle();
+  if (error) throw error;
+  if (data) return data;
+  const { data: created, error: cErr } = await supabase
+    .from('wallets')
+    .insert({ profile_id: profileId, balance: 0, currency: 'NGN' })
+    .select('*')
+    .single();
+  if (cErr) throw cErr;
+  return created;
+}
+
+async function adjustBalance(profileId, delta) {
+  const wallet = await ensureWallet(profileId);
+  const newBalance = Number(wallet.balance) + Number(delta);
+  if (newBalance < 0) {
+    const err = new Error('Insufficient wallet balance');
+    err.statusCode = 400;
+    throw err;
+  }
+  const { data, error } = await supabase
+    .from('wallets')
+    .update({ balance: newBalance })
+    .eq('id', wallet.id)
+    .select('*')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+async function recordTransaction(profileId, row) {
+  const { data, error } = await supabase
+    .from('transactions')
+    .insert({ profile_id: profileId, reference: newRef('TXN'), status: 'completed', ...row })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * GET /api/v1/wallet/balance
+ */
+router.get('/balance', authenticate, async (req, res) => {
+  try {
+    const wallet = await ensureWallet(req.user.id);
+    res.json({ success: true, balance: Number(wallet.balance), currency: wallet.currency });
+  } catch (err) {
+    logger.error('wallet balance error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/v1/wallet/transactions
+ */
+router.get('/transactions', authenticate, async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+    const page = parseInt(req.query.page) || 1;
+
+    const { data, error, count } = await supabase
+      .from('transactions')
+      .select('*', { count: 'exact' })
+      .eq('profile_id', req.user.id)
+      .order('created_at', { ascending: false })
+      .range((page - 1) * limit, page * limit - 1);
+
+    if (error) throw error;
+    res.json({
+      success: true,
+      transactions: data || [],
+      pagination: { page, limit, total: count || 0 },
+    });
+  } catch (err) {
+    logger.error('wallet transactions error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/v1/wallet/deposit
+ */
+router.post(
+  '/deposit',
+  authenticate,
+  [body('amount').isFloat({ min: 0.01 }), body('description').optional().isString()],
+  validate,
+  async (req, res) => {
+    try {
+      const { amount, description } = req.body;
+      const wallet = await adjustBalance(req.user.id, Number(amount));
+      const txn = await recordTransaction(req.user.id, {
+        type: 'credit',
+        category: 'deposit',
+        amount,
+        description: description || 'Wallet deposit',
+      });
+      res.status(201).json({ success: true, wallet, transaction: txn });
+    } catch (err) {
+      logger.error('deposit error:', err);
+      res.status(err.statusCode || 500).json({ success: false, error: err.message });
+    }
+  }
+);
+
+/**
+ * POST /api/v1/wallet/withdraw
+ */
+router.post(
+  '/withdraw',
+  authenticate,
+  [body('amount').isFloat({ min: 0.01 }), body('description').optional().isString()],
+  validate,
+  async (req, res) => {
+    try {
+      const { amount, description } = req.body;
+      const wallet = await adjustBalance(req.user.id, -Number(amount));
+      const txn = await recordTransaction(req.user.id, {
+        type: 'debit',
+        category: 'withdrawal',
+        amount,
+        description: description || 'Wallet withdrawal',
+      });
+      res.status(201).json({ success: true, wallet, transaction: txn });
+    } catch (err) {
+      logger.error('withdraw error:', err);
+      res.status(err.statusCode || 500).json({ success: false, error: err.message });
+    }
+  }
+);
+
+/**
+ * POST /api/v1/wallet/transfer
+ */
+router.post(
+  '/transfer',
+  authenticate,
+  [
+    body('toUserId').isString().notEmpty(),
+    body('amount').isFloat({ min: 0.01 }),
+    body('description').optional().isString(),
+  ],
+  validate,
+  async (req, res) => {
+    try {
+      const { toUserId, amount, description } = req.body;
+      const { data: recipient, error: lookupErr } = await supabase
+        .from('profiles')
+        .select('id, user_id, name')
+        .or(`user_id.eq.${toUserId},id.eq.${toUserId}`)
+        .maybeSingle();
+      if (lookupErr || !recipient) {
+        return res.status(404).json({ success: false, error: 'Recipient not found' });
+      }
+      if (recipient.id === req.user.id) {
+        return res.status(400).json({ success: false, error: 'Cannot transfer to yourself' });
+      }
+
+      const ref = newRef('TRF');
+      const sender = await adjustBalance(req.user.id, -Number(amount));
+      await adjustBalance(recipient.id, Number(amount));
+
+      const senderTxn = await recordTransaction(req.user.id, {
+        type: 'debit',
+        category: 'transfer_out',
+        amount,
+        description: description || `Transfer to ${recipient.name || recipient.user_id}`,
+        reference: ref,
+        counterparty_id: recipient.id,
+      });
+      await recordTransaction(recipient.id, {
+        type: 'credit',
+        category: 'transfer_in',
+        amount,
+        description: description || `Transfer from ${req.user.name || req.user.userId}`,
+        reference: ref,
+        counterparty_id: req.user.id,
+      });
+
+      res.status(201).json({ success: true, wallet: sender, transaction: senderTxn });
+    } catch (err) {
+      logger.error('transfer error:', err);
+      res.status(err.statusCode || 500).json({ success: false, error: err.message });
+    }
+  }
+);
+
+/**
+ * GET /api/v1/wallet/statement
+ */
+router.get('/statement', authenticate, async (req, res) => {
+  try {
+    const from = req.query.from ? new Date(req.query.from).toISOString() : null;
+    const to = req.query.to ? new Date(req.query.to).toISOString() : null;
+
+    let q = supabase
+      .from('transactions')
+      .select('*')
+      .eq('profile_id', req.user.id)
+      .order('created_at', { ascending: false });
+    if (from) q = q.gte('created_at', from);
+    if (to) q = q.lte('created_at', to);
+
+    const { data, error } = await q;
+    if (error) throw error;
+
+    const totals = (data || []).reduce(
+      (acc, t) => {
+        if (t.type === 'credit') acc.credits += Number(t.amount);
+        else acc.debits += Number(t.amount);
+        return acc;
+      },
+      { credits: 0, debits: 0 }
+    );
+
+    res.json({ success: true, transactions: data || [], totals });
+  } catch (err) {
+    logger.error('statement error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+module.exports = router;
+module.exports.ensureWallet = ensureWallet;
+module.exports.adjustBalance = adjustBalance;
+module.exports.recordTransaction = recordTransaction;

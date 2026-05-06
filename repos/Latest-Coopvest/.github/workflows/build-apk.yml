@@ -1,0 +1,193 @@
+name: Build Flutter APK
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - 'devin/**'
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type (debug or release)'
+        required: true
+        default: 'release'
+        type: choice
+        options:
+          - release
+          - debug
+
+env:
+  FLUTTER_VERSION: '3.24.5'
+  JAVA_VERSION: '17'
+
+jobs:
+  build:
+    name: Build APK (${{ github.event.inputs.build_type || 'release' }})
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: 'gradle'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Run code generation (build_runner)
+        continue-on-error: true
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Set up release keystore
+        if: ${{ github.event.inputs.build_type != 'debug' }}
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          mkdir -p android/keystore
+          rm -f android/keystore/release-keystore.jks
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "Using keystore from repository secrets..."
+            echo "$KEYSTORE_BASE64" | base64 --decode > android/keystore/release-keystore.jks
+            STORE_PASS="$KEY_STORE_PASSWORD"
+            ALIAS_NAME="$KEY_ALIAS"
+            KEY_PASS_VAL="$KEY_PASSWORD"
+          else
+            echo "No KEYSTORE_BASE64 secret found — generating a temporary CI keystore..."
+            keytool -genkey -v \
+              -keystore android/keystore/release-keystore.jks \
+              -alias coopvest \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -storepass coopvest_ci_2024 \
+              -keypass coopvest_ci_2024 \
+              -dname "CN=CoopVest CI Build, OU=Mobile, O=CoopVest Africa, L=Lagos, ST=Lagos, C=NG" \
+              -storetype JKS
+            STORE_PASS="coopvest_ci_2024"
+            ALIAS_NAME="coopvest"
+            KEY_PASS_VAL="coopvest_ci_2024"
+          fi
+          printf 'storeFile=keystore/release-keystore.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
+            "$STORE_PASS" "$ALIAS_NAME" "$KEY_PASS_VAL" > android/key.properties
+          echo "key.properties written:"
+          cat android/key.properties
+
+      - name: Build debug APK
+        if: ${{ github.event.inputs.build_type == 'debug' }}
+        run: flutter build apk --debug --no-tree-shake-icons
+
+      - name: Build release APK
+        if: ${{ github.event.inputs.build_type != 'debug' }}
+        run: flutter build apk --release --no-tree-shake-icons
+
+      - name: Locate built APK
+        id: locate_apk
+        if: always()
+        run: |
+          BUILD_DIR="build/app/outputs/flutter-apk"
+          if [ "${{ github.event.inputs.build_type }}" = "debug" ]; then
+            APK_FILE="$BUILD_DIR/app-debug.apk"
+          else
+            APK_FILE="$BUILD_DIR/app-release.apk"
+          fi
+          if [ -f "$APK_FILE" ]; then
+            echo "apk_path=$APK_FILE" >> $GITHUB_OUTPUT
+            echo "apk_found=true" >> $GITHUB_OUTPUT
+            APK_SIZE=$(du -sh "$APK_FILE" | cut -f1)
+            echo "apk_size=$APK_SIZE" >> $GITHUB_OUTPUT
+            echo "APK found at: $APK_FILE ($APK_SIZE)"
+          else
+            echo "apk_found=false" >> $GITHUB_OUTPUT
+            echo "APK not found at expected path: $APK_FILE"
+            echo "Contents of build dir (if any):"
+            find build -name "*.apk" 2>/dev/null || echo "(no apk files found)"
+          fi
+
+      # ── Upload release APK ──────────────────────────────────────────────────
+      # Artifact names include the run number so every build produces a unique
+      # artifact. Retention is 90 days for release, 30 days for debug.
+      # To download: go to Actions → select the run → Artifacts section at the
+      # bottom of the run summary page and click the artifact name.
+      - name: Upload release APK artifact
+        id: upload_release
+        uses: actions/upload-artifact@v4
+        if: ${{ steps.locate_apk.outputs.apk_found == 'true' && github.event.inputs.build_type != 'debug' }}
+        with:
+          name: coopvest-release-apk-${{ github.run_number }}
+          path: ${{ steps.locate_apk.outputs.apk_path }}
+          retention-days: 90
+          if-no-files-found: error
+          compression-level: 6
+
+      - name: Upload debug APK artifact
+        id: upload_debug
+        uses: actions/upload-artifact@v4
+        if: ${{ steps.locate_apk.outputs.apk_found == 'true' && github.event.inputs.build_type == 'debug' }}
+        with:
+          name: coopvest-debug-apk-${{ github.run_number }}
+          path: ${{ steps.locate_apk.outputs.apk_path }}
+          retention-days: 30
+          if-no-files-found: error
+          compression-level: 6
+
+      - name: Create GitHub Release (on tag push)
+        if: startsWith(github.ref, 'refs/tags/') && steps.locate_apk.outputs.apk_found == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ${{ steps.locate_apk.outputs.apk_path }}
+
+      # ── Build summary ───────────────────────────────────────────────────────
+      - name: Build summary
+        if: always()
+        run: |
+          {
+            echo "## Build Summary"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| Branch | \`${{ github.ref_name }}\` |"
+            echo "| Build type | \`${{ github.event.inputs.build_type || 'release' }}\` |"
+            echo "| Flutter version | \`${{ env.FLUTTER_VERSION }}\` |"
+            echo "| Run number | \`${{ github.run_number }}\` |"
+            echo "| APK found | \`${{ steps.locate_apk.outputs.apk_found }}\` |"
+            if [ "${{ steps.locate_apk.outputs.apk_found }}" = "true" ]; then
+              echo "| APK size | \`${{ steps.locate_apk.outputs.apk_size }}\` |"
+            fi
+            echo ""
+            if [ "${{ steps.locate_apk.outputs.apk_found }}" = "true" ]; then
+              echo "### ⬇️ Download your APK"
+              echo ""
+              echo "**[Click here → go to this run and scroll to Artifacts at the bottom](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})**"
+              echo ""
+              echo "The file is named: \`coopvest-${{ github.event.inputs.build_type || 'release' }}-apk-${{ github.run_number }}\`"
+              echo ""
+              echo "> Artifacts are kept for ${{ github.event.inputs.build_type == 'debug' && '30' || '90' }} days. If the link shows 404, trigger a new build."
+            else
+              echo "### Build failed — no APK was produced"
+              echo ""
+              echo "Check the build logs above for errors. Common causes:"
+              echo "- Dart/Flutter compile errors"
+              echo "- Missing google-services.json"
+              echo "- Keystore misconfiguration"
+            fi
+          } >> $GITHUB_STEP_SUMMARY
