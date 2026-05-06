@@ -5,14 +5,10 @@ import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/utils/utils.dart';
 import '../../../presentation/providers/wallet_provider.dart';
+import '../../../presentation/providers/payment_settings_provider.dart';
 import '../../../presentation/widgets/common/buttons.dart';
 import '../../../presentation/widgets/common/cards.dart';
 import '../../../presentation/widgets/common/inputs.dart';
-
-/// Payment account details for bank transfers
-const _paymentBank = 'Opay';
-const _paymentAccountName = 'Ayanlowo Olatunji Ayobami';
-const _paymentAccountNumber = '7038193753';
 
 /// Deposit Screen
 class DepositScreen extends ConsumerStatefulWidget {
@@ -140,6 +136,7 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
   }
 
   Widget _buildBankTransferDetails(BuildContext context) {
+    final account = ref.watch(paymentSettingsProvider);
     return Container(
       margin: const EdgeInsets.only(top: 16),
       padding: const EdgeInsets.all(16),
@@ -169,21 +166,21 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
           _buildDetailRow(
             context,
             label: 'Bank',
-            value: _paymentBank,
+            value: account.bank,
             canCopy: false,
           ),
           const SizedBox(height: 10),
           _buildDetailRow(
             context,
             label: 'Account Name',
-            value: _paymentAccountName,
+            value: account.accountName,
             canCopy: true,
           ),
           const SizedBox(height: 10),
           _buildDetailRow(
             context,
             label: 'Account Number',
-            value: _paymentAccountNumber,
+            value: account.accountNumber,
             canCopy: true,
             isHighlighted: true,
           ),
