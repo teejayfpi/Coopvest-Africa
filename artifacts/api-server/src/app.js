@@ -3,6 +3,7 @@ const cors = require('cors');
 
 const authRouter = require('./routes/auth');
 const notificationsRouter = require('./routes/notifications');
+const adminRouter = require('./routes/admin');
 
 const app = express();
 
@@ -21,6 +22,7 @@ app.get('/api/v1/healthz', (_req, res) => {
 
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/notifications', notificationsRouter);
+app.use('/api/v1/admin', adminRouter);
 
 app.use((_req, res) => {
   res.status(404).json({ error: 'Endpoint not found' });
