@@ -1,31 +1,54 @@
-const SUPABASE_URL = process.env.SUPABASE_URL || '';
-const PROJECT_REF = SUPABASE_URL.split('.')[0].replace('https://', '');
+const nodemailer = require('nodemailer');
+
+let transporter = null;
+
+function getTransporter() {
+  if (transporter) return transporter;
+
+  const host = process.env.SMTP_HOST;
+  const port = parseInt(process.env.SMTP_PORT || '587', 10);
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+
+  if (host && user && pass) {
+    transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure: port === 465,
+      auth: { user, pass },
+    });
+    console.log(`[EMAIL] SMTP configured via ${host}:${port}`);
+  } else {
+    console.warn('[EMAIL] No SMTP_HOST/SMTP_USER/SMTP_PASS set — OTPs will be logged to console only');
+    transporter = null;
+  }
+
+  return transporter;
+}
 
 async function sendEmail({ to, subject, html }) {
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!key) {
-    console.log(`[EMAIL] Would send to ${to}: ${subject}`);
+  const t = getTransporter();
+  const from = process.env.SMTP_FROM || process.env.SMTP_USER || 'noreply@coopvest.africa';
+
+  if (!t) {
+    console.log(`[EMAIL-OTP] To: ${to} | Subject: ${subject}`);
+    console.log(`[EMAIL-OTP] (SMTP not configured — OTP delivered via console only)`);
     return;
   }
 
   try {
-    const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/generate_link`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': key,
-        'Authorization': `Bearer ${key}`,
-      },
-      body: JSON.stringify({ type: 'recovery', email: to }),
-    });
-  } catch (_) {}
-
-  console.log(`[EMAIL] Sent "${subject}" to ${to}`);
+    await t.sendMail({ from: `"Coopvest Africa" <${from}>`, to, subject, html });
+    console.log(`[EMAIL] Sent "${subject}" to ${to}`);
+  } catch (err) {
+    console.error(`[EMAIL] Failed to send to ${to}:`, err.message);
+  }
 }
 
 async function sendOTPEmail({ to, name, otp, type }) {
   const isReset = type === 'password_reset';
-  const subject = isReset ? 'Coopvest Africa — Password Reset Code' : 'Coopvest Africa — Verify Your Email';
+  const subject = isReset
+    ? 'Coopvest Africa — Password Reset Code'
+    : 'Coopvest Africa — Verify Your Email';
   const action = isReset ? 'reset your password' : 'verify your email address';
   const expiry = isReset ? '15 minutes' : '30 minutes';
 
@@ -43,11 +66,13 @@ async function sendOTPEmail({ to, name, otp, type }) {
         </div>
         <p style="color:#888;font-size:13px;text-align:center;">This code expires in <strong>${expiry}</strong>. Do not share it with anyone.</p>
       </div>
-      <p style="color:#aaa;font-size:12px;text-align:center;margin-top:20px;">If you did not request this, you can safely ignore this email.</p>
+      <p style="color:#aaa;font-size:12px;text-align:center;margin-top:20px;">
+        If you did not request this, you can safely ignore this email.
+      </p>
     </div>
   `;
 
-  console.log(`[EMAIL] Sending OTP ${otp} to ${to} (${subject})`);
+  console.log(`[EMAIL] Dispatching OTP ${otp} → ${to}`);
   await sendEmail({ to, subject, html });
 }
 

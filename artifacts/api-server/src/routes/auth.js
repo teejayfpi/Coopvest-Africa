@@ -142,24 +142,31 @@ router.post('/google', (_req, res) => {
   res.status(501).json({ error: 'Google sign-in requires Firebase Admin SDK. Use email/password for now.' });
 });
 
-// POST /auth/verify-email
-router.post('/verify-email', requireAuth, async (req, res) => {
-  const { code } = req.body;
-  if (!code) return res.status(400).json({ error: 'OTP code is required' });
+// POST /auth/verify-email  (public — no auth required)
+router.post('/verify-email', async (req, res) => {
+  const { email, otp, code } = req.body;
+  const otpCode = (otp || code || '').toString();
+  if (!email || !otpCode) {
+    return res.status(400).json({ error: 'email and otp are required' });
+  }
 
-  const { data: otp } = await supabase.from('otp_codes')
+  const { data: user } = await supabase
+    .from('users').select('id').eq('email', email.toLowerCase().trim()).single();
+  if (!user) return res.status(404).json({ error: 'No account found with this email' });
+
+  const { data: storedOtp } = await supabase.from('otp_codes')
     .select('*')
-    .eq('user_id', req.user.id)
-    .eq('code', code.toString())
+    .eq('user_id', user.id)
+    .eq('code', otpCode)
     .eq('type', 'email_verification')
     .eq('used', false)
     .gt('expires_at', new Date().toISOString())
     .single();
 
-  if (!otp) return res.status(400).json({ error: 'Invalid or expired verification code' });
+  if (!storedOtp) return res.status(400).json({ error: 'Invalid or expired verification code' });
 
-  await supabase.from('otp_codes').update({ used: true }).eq('id', otp.id);
-  await supabase.from('users').update({ email_verified: true }).eq('id', req.user.id);
+  await supabase.from('otp_codes').update({ used: true }).eq('id', storedOtp.id);
+  await supabase.from('users').update({ email_verified: true }).eq('id', user.id);
 
   res.json({ message: 'Email verified successfully' });
 });
