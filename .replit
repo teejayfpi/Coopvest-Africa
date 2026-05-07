@@ -43,3 +43,4 @@ externalPort = 8080
 SMTP_HOST = "smtp.gmail.com"
 SMTP_USER = "coopvestafrica@gmail.com"
 SMTP_FROM = "noreply@coopvestafrica.com"
+ADMIN_API_KEY = "cvadm_oneo6ywmjefo1p0zjxyxal"
