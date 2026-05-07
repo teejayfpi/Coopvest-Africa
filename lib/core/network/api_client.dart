@@ -379,7 +379,7 @@ class AuthInterceptor extends Interceptor {
   }
 }
 
-/// Error Interceptor — handles 401 responses and attempts auto-refresh
+/// Error Interceptor — handles 401 responses via Firebase ID token refresh
 class ErrorInterceptor extends Interceptor {
   final ApiClient _apiClient;
   bool _isRefreshing = false;
@@ -391,34 +391,22 @@ class ErrorInterceptor extends Interceptor {
     if (err.response?.statusCode == 401 && !_isRefreshing) {
       _isRefreshing = true;
       try {
-        final refreshToken = await TokenStorage.getRefreshToken();
-        if (refreshToken != null) {
-          logger.i('Token expired, attempting auto-refresh...');
-          
-          // Create a temporary repository to call refresh
-          final authRepo = AuthRepository(_apiClient);
-          final response = await authRepo.refreshToken(refreshToken);
-          
-          // Persist new tokens
-          await TokenStorage.saveTokens(
-            accessToken: response.accessToken,
-            refreshToken: response.refreshToken,
-          );
-          
-          // Update client auth header
-          _apiClient.setAuthToken(response.accessToken);
-          
-          // Retry the original request
-          final options = err.requestOptions;
-          options.headers['Authorization'] = 'Bearer ${response.accessToken}';
-          
-          final retryResponse = await _apiClient.dio.fetch(options);
-          _isRefreshing = false;
-          return handler.resolve(retryResponse);
-        }
+        // Firebase handles token refresh natively — force a fresh ID token
+        // via the AuthRepository which wraps FirebaseAuth.currentUser.getIdToken(true)
+        final authRepo = AuthRepository(_apiClient);
+        final response = await authRepo.refreshToken('');
+
+        await TokenStorage.saveTokens(accessToken: response.accessToken);
+        _apiClient.setAuthToken(response.accessToken);
+
+        final options = err.requestOptions;
+        options.headers['Authorization'] = 'Bearer ${response.accessToken}';
+
+        final retryResponse = await _apiClient.dio.fetch(options);
+        _isRefreshing = false;
+        return handler.resolve(retryResponse);
       } catch (e) {
         logger.e('Auto-refresh failed: $e');
-        // Clear tokens on refresh failure
         await TokenStorage.clearTokens();
         _apiClient.clearAuthToken();
       } finally {

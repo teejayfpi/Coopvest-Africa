@@ -1,14 +1,23 @@
 /**
- * Auth Routes
+ * Auth Routes — Firebase Auth backend
  *
- * All authentication endpoints — Supabase-backed.
- * Response shapes are aligned with the Flutter AuthResponse.fromJson contract:
- *   { token, refresh_token, user: { userId, id, email, name, phone, ... }, expires_at }
+ * Flutter signs users in directly with Firebase Auth SDK and sends the
+ * Firebase ID token to this backend.  These routes:
+ *   - POST /register   — create a Supabase profile row after Firebase signup
+ *   - POST /sync       — sync / upsert profile after any Firebase sign-in
+ *   - GET  /me         — return the current user's full profile
+ *   - POST /logout     — revoke Firebase refresh tokens server-side (optional)
+ *   - POST /change-password — handled entirely client-side via Firebase SDK
+ *
+ * Password reset, email verification, and Google sign-in are all managed
+ * entirely by the Firebase Auth SDK on the Flutter client — no backend
+ * endpoints are needed for those flows.
  */
 
 const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
+const { getFirebaseAdmin } = require('../config/firebase');
 const supabase = require('../config/supabase');
 const { authenticate } = require('../middleware/auth');
 const logger = require('../utils/logger');
@@ -22,58 +31,46 @@ const validate = (req, res, next) => {
 };
 
 /**
- * Build the user object returned to the Flutter app.
- * Merges Supabase auth.user metadata with the public.profiles row.
+ * Build the user payload returned to the Flutter app.
+ * Mirrors the shape expected by User.fromJson in auth_models.dart.
  */
-const buildUserPayload = (authUser, profile) => ({
-  userId: profile?.user_id || authUser.user_metadata?.userId || authUser.id,
-  id: authUser.id,
-  email: authUser.email,
-  name: profile?.name || authUser.user_metadata?.name || '',
-  phone: profile?.phone || authUser.user_metadata?.phone || null,
-  role: profile?.role || authUser.user_metadata?.role || 'member',
+const buildUserPayload = (firebaseUser, profile) => ({
+  userId: profile?.user_id || firebaseUser.uid,
+  id: firebaseUser.uid,
+  email: firebaseUser.email || profile?.email || '',
+  name: profile?.name || firebaseUser.displayName || '',
+  phone: profile?.phone || firebaseUser.phoneNumber || null,
+  role: profile?.role || 'member',
   kycStatus: profile?.kyc_verified ? 'approved' : 'pending',
   membershipStatus: profile?.is_active === false ? 'inactive' : 'active',
-  emailVerified: authUser.email_confirmed_at ? true : false,
-  created_at: profile?.created_at || authUser.created_at,
-  updated_at: profile?.updated_at || authUser.updated_at || authUser.created_at,
+  emailVerified: firebaseUser.emailVerified || false,
+  created_at: profile?.created_at || new Date().toISOString(),
+  updated_at: profile?.updated_at || new Date().toISOString(),
 });
 
 /**
- * Build a standardised success response that AuthResponse.fromJson can parse.
+ * Ensure a profile row exists for a Firebase user.
+ * Creates one if missing — idempotent via ON CONFLICT DO NOTHING.
  */
-const buildAuthResponse = (session, userPayload) => ({
-  success: true,
-  token: session.access_token,
-  refresh_token: session.refresh_token,
-  expires_at: session.expires_at
-    ? new Date(session.expires_at * 1000).toISOString()
-    : new Date(Date.now() + 3600 * 1000).toISOString(),
-  user: userPayload,
-});
-
-/**
- * Ensure a profile row exists for a Supabase auth user.
- * Creates one if missing (idempotent via ON CONFLICT DO NOTHING).
- */
-const ensureProfile = async (authUser, extra = {}) => {
-  const userId = extra.userId || `USR-${Date.now().toString(36).toUpperCase()}`;
+const ensureProfile = async (firebaseUser, extra = {}) => {
   const { data: existing } = await supabase
     .from('profiles')
     .select('id, user_id, email, name, phone, role, kyc_verified, is_active, created_at, updated_at')
-    .eq('id', authUser.id)
+    .eq('firebase_uid', firebaseUser.uid)
     .maybeSingle();
 
   if (existing) return existing;
 
+  const userId = extra.userId || `USR-${Date.now().toString(36).toUpperCase()}`;
+
   const { data: created, error } = await supabase
     .from('profiles')
     .insert({
-      id: authUser.id,
+      firebase_uid: firebaseUser.uid,
       user_id: userId,
-      email: authUser.email,
-      name: extra.name || authUser.user_metadata?.name || '',
-      phone: extra.phone || authUser.user_metadata?.phone || null,
+      email: firebaseUser.email || extra.email || '',
+      name: extra.name || firebaseUser.displayName || '',
+      phone: extra.phone || firebaseUser.phoneNumber || null,
       role: 'member',
       is_active: true,
     })
@@ -89,46 +86,45 @@ const ensureProfile = async (authUser, extra = {}) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/v1/auth/register
+// Called after Firebase createUserWithEmailAndPassword to create the backend
+// profile row and set display name. The request must include a valid Firebase
+// ID token in Authorization: Bearer <token>.
 // ─────────────────────────────────────────────────────────────────────────────
 router.post('/register', [
-  body('email').isEmail().withMessage('Valid email is required'),
   body('name').notEmpty().withMessage('Name is required'),
-  body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
-], validate, async (req, res) => {
+], validate, authenticate, async (req, res) => {
   try {
-    const { email, phone, name, password, referralCode } = req.body;
-    const userId = `USR-${Date.now().toString(36).toUpperCase()}`;
+    const { name, phone, referralCode } = req.body;
+    const admin = getFirebaseAdmin();
 
-    const { data, error } = await supabase.auth.signUp({
-      email: email.toLowerCase(),
-      password,
-      options: {
-        data: { name, phone: phone || null, userId, role: 'member', referralCode: referralCode || null },
-      },
+    // Update Firebase display name
+    await admin.auth().updateUser(req.user.firebaseUid, {
+      displayName: name,
     });
 
-    if (error) {
-      return res.status(400).json({ success: false, error: error.message });
+    const firebaseUser = await admin.auth().getUser(req.user.firebaseUid);
+    const userId = `USR-${Date.now().toString(36).toUpperCase()}`;
+
+    const profile = await ensureProfile(firebaseUser, {
+      userId,
+      name,
+      phone: phone || null,
+      email: firebaseUser.email,
+    });
+
+    // Store referral code if provided
+    if (referralCode && profile) {
+      await supabase
+        .from('referrals')
+        .upsert({ profile_id: profile.id, referred_by_code: referralCode }, { onConflict: 'profile_id' });
     }
 
-    const authUser = data.user;
-
-    // Supabase may not have a DB trigger — always ensure the profile row exists.
-    const profile = await ensureProfile(authUser, { userId, name, phone: phone || null });
-
-    // If no session (email confirmation required), return minimal response.
-    if (!data.session) {
-      return res.status(201).json({
-        success: true,
-        requiresEmailVerification: true,
-        message: 'Registration successful. Please check your email to verify your account.',
-        user: buildUserPayload(authUser, profile),
-        token: null,
-        refresh_token: null,
-      });
-    }
-
-    return res.status(201).json(buildAuthResponse(data.session, buildUserPayload(authUser, profile)));
+    return res.status(201).json({
+      success: true,
+      requiresEmailVerification: !firebaseUser.emailVerified,
+      message: 'Registration successful.',
+      user: buildUserPayload(firebaseUser, profile),
+    });
   } catch (err) {
     logger.error('Registration error:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -136,108 +132,29 @@ router.post('/register', [
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// POST /api/v1/auth/login
+// POST /api/v1/auth/sync
+// Called after any Firebase sign-in (email/password, Google, etc.) to ensure
+// the profile row exists and return the full user payload.
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/login', [
-  body('email').isEmail().withMessage('Valid email is required'),
-  body('password').notEmpty().withMessage('Password is required'),
-], validate, async (req, res) => {
+router.post('/sync', authenticate, async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const admin = getFirebaseAdmin();
+    const firebaseUser = await admin.auth().getUser(req.user.firebaseUid);
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: email.toLowerCase(),
-      password,
+    const profile = await ensureProfile(firebaseUser, {
+      name: firebaseUser.displayName,
+      email: firebaseUser.email,
+      phone: firebaseUser.phoneNumber,
     });
 
-    if (error) {
-      return res.status(401).json({ success: false, error: 'Invalid email or password' });
-    }
-
-    const authUser = data.user;
-
-    // Fetch profile (create if missing — handles legacy accounts)
-    const profile = await ensureProfile(authUser, {
-      name: authUser.user_metadata?.name,
-      phone: authUser.user_metadata?.phone,
+    return res.json({
+      success: true,
+      user: buildUserPayload(firebaseUser, profile),
     });
-
-    return res.json(buildAuthResponse(data.session, buildUserPayload(authUser, profile)));
   } catch (err) {
-    logger.error('Login error:', err);
+    logger.error('Sync error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /api/v1/auth/refresh
-// ─────────────────────────────────────────────────────────────────────────────
-router.post('/refresh', [
-  body('refresh_token').notEmpty().withMessage('refresh_token is required'),
-], validate, async (req, res) => {
-  try {
-    const { refresh_token } = req.body;
-
-    const { data, error } = await supabase.auth.refreshSession({ refresh_token });
-    if (error || !data.session) {
-      return res.status(401).json({ success: false, error: 'Invalid or expired refresh token' });
-    }
-
-    const authUser = data.user;
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('id, user_id, email, name, phone, role, kyc_verified, is_active, created_at, updated_at')
-      .eq('id', authUser.id)
-      .maybeSingle();
-
-    return res.json(buildAuthResponse(data.session, buildUserPayload(authUser, profile)));
-  } catch (err) {
-    logger.error('Refresh token error:', err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /api/v1/auth/google
-// ─────────────────────────────────────────────────────────────────────────────
-router.post('/google', [
-  body('idToken').notEmpty().withMessage('idToken is required'),
-], validate, async (req, res) => {
-  try {
-    const { idToken } = req.body;
-
-    const { data, error } = await supabase.auth.signInWithIdToken({
-      provider: 'google',
-      token: idToken,
-    });
-
-    if (error || !data.session) {
-      return res.status(401).json({ success: false, error: error?.message || 'Google sign-in failed' });
-    }
-
-    const authUser = data.user;
-    const profile = await ensureProfile(authUser, {
-      name: authUser.user_metadata?.full_name || authUser.user_metadata?.name,
-      phone: authUser.user_metadata?.phone,
-    });
-
-    return res.json(buildAuthResponse(data.session, buildUserPayload(authUser, profile)));
-  } catch (err) {
-    logger.error('Google sign-in error:', err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /api/v1/auth/logout
-// ─────────────────────────────────────────────────────────────────────────────
-router.post('/logout', authenticate, async (req, res) => {
-  try {
-    await supabase.auth.admin.signOut(req.token);
-  } catch (err) {
-    logger.warn('Admin signOut error (non-fatal):', err.message);
-  }
-  return res.json({ success: true, message: 'Logged out successfully' });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -245,33 +162,19 @@ router.post('/logout', authenticate, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 router.get(['/me', '/profile'], authenticate, async (req, res) => {
   try {
-    // req.user is populated by the authenticate middleware from public.profiles
-    const user = {
-      userId: req.user.userId,
-      id: req.user.id,
-      email: req.user.email,
-      name: req.user.name,
-      role: req.user.role,
-    };
+    const admin = getFirebaseAdmin();
+    const firebaseUser = await admin.auth().getUser(req.user.firebaseUid);
 
-    // Enrich with full profile data
     const { data: profile } = await supabase
       .from('profiles')
       .select('*')
-      .eq('id', req.user.id)
+      .eq('firebase_uid', req.user.firebaseUid)
       .maybeSingle();
 
-    if (profile) {
-      Object.assign(user, {
-        phone: profile.phone,
-        kycStatus: profile.kyc_verified ? 'approved' : 'pending',
-        membershipStatus: profile.is_active === false ? 'inactive' : 'active',
-        created_at: profile.created_at,
-        updated_at: profile.updated_at,
-      });
-    }
-
-    return res.json({ success: true, user });
+    return res.json({
+      success: true,
+      user: buildUserPayload(firebaseUser, profile),
+    });
   } catch (err) {
     logger.error('Get profile error:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -279,160 +182,36 @@ router.get(['/me', '/profile'], authenticate, async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// POST /api/v1/auth/verify-email
+// POST /api/v1/auth/logout
+// Revoke all Firebase refresh tokens for the user server-side.
+// The Flutter app must also call FirebaseAuth.instance.signOut().
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/verify-email', [
-  body('email').isEmail().withMessage('Valid email is required'),
-  body('code').notEmpty().withMessage('Verification code is required'),
-], validate, async (req, res) => {
+router.post('/logout', authenticate, async (req, res) => {
   try {
-    const { email, code } = req.body;
-
-    const { data, error } = await supabase.auth.verifyOtp({
-      email: email.toLowerCase(),
-      token: code,
-      type: 'email',
-    });
-
-    if (error) {
-      return res.status(400).json({ success: false, error: error.message });
-    }
-
-    return res.json({ success: true, message: 'Email verified successfully', session: data.session });
+    const admin = getFirebaseAdmin();
+    await admin.auth().revokeRefreshTokens(req.user.firebaseUid);
+    return res.json({ success: true, message: 'Logged out successfully' });
   } catch (err) {
-    logger.error('Verify email error:', err);
-    res.status(500).json({ success: false, error: err.message });
+    logger.warn('Logout revoke error (non-fatal):', err.message);
+    return res.json({ success: true, message: 'Logged out' });
   }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// POST /api/v1/auth/resend-verification
+// GET /api/v1/auth/kyc/status
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/resend-verification', [
-  body('email').isEmail().withMessage('Valid email is required'),
-], validate, async (req, res) => {
+router.get('/kyc/status', authenticate, async (req, res) => {
   try {
-    const { email } = req.body;
+    const { data: kyc } = await supabase
+      .from('kyc')
+      .select('verified, status')
+      .eq('profile_id', req.user.id)
+      .maybeSingle();
 
-    const { error } = await supabase.auth.resend({
-      type: 'signup',
-      email: email.toLowerCase(),
-    });
-
-    if (error) {
-      return res.status(400).json({ success: false, error: error.message });
-    }
-
-    return res.json({ success: true, message: 'Verification email resent' });
+    const status = kyc?.verified ? 'approved' : (kyc?.status || 'pending');
+    return res.json({ success: true, status });
   } catch (err) {
-    logger.error('Resend verification error:', err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /api/v1/auth/request-password-reset
-// ─────────────────────────────────────────────────────────────────────────────
-router.post('/request-password-reset', [
-  body('email').isEmail().withMessage('Valid email is required'),
-], validate, async (req, res) => {
-  try {
-    const { email } = req.body;
-
-    const { error } = await supabase.auth.resetPasswordForEmail(email.toLowerCase(), {
-      redirectTo: process.env.PASSWORD_RESET_REDIRECT_URL || 'https://coopvest.africa/reset-password',
-    });
-
-    // Always return success — never reveal whether the email is registered (prevents enumeration).
-    // Log SMTP failures internally so they can be diagnosed without leaking info to the client.
-    if (error) {
-      logger.warn('Password reset email failed (SMTP/config issue):', error.message);
-    }
-
-    return res.json({ success: true, message: 'If that email is registered, a reset link has been sent.' });
-  } catch (err) {
-    logger.error('Request password reset error:', err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /api/v1/auth/reset-password
-// Verifies the OTP from the reset email and sets the new password.
-// ─────────────────────────────────────────────────────────────────────────────
-router.post('/reset-password', [
-  body('email').isEmail().withMessage('Valid email is required'),
-  body('code').notEmpty().withMessage('Reset code is required'),
-  body('new_password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
-], validate, async (req, res) => {
-  try {
-    const { email, code, new_password } = req.body;
-
-    // Verify OTP first to get a session
-    const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
-      email: email.toLowerCase(),
-      token: code,
-      type: 'recovery',
-    });
-
-    if (verifyError || !verifyData.session) {
-      return res.status(400).json({ success: false, error: verifyError?.message || 'Invalid reset code' });
-    }
-
-    // Update the password using the session obtained from verifyOtp
-    const userSupabase = supabase; // service role can update directly
-    const { error: updateError } = await supabase.auth.admin.updateUserById(verifyData.user.id, {
-      password: new_password,
-    });
-
-    if (updateError) {
-      return res.status(400).json({ success: false, error: updateError.message });
-    }
-
-    return res.json({ success: true, message: 'Password reset successfully. Please log in with your new password.' });
-  } catch (err) {
-    logger.error('Reset password error:', err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /api/v1/auth/change-password
-// ─────────────────────────────────────────────────────────────────────────────
-router.post('/change-password', authenticate, [
-  body('current_password').notEmpty().withMessage('Current password is required'),
-  body('new_password').isLength({ min: 8 }).withMessage('New password must be at least 8 characters'),
-], validate, async (req, res) => {
-  try {
-    const { current_password, new_password } = req.body;
-
-    // Re-authenticate to verify current password
-    const { data: userData } = await supabase
-      .from('profiles')
-      .select('email')
-      .eq('id', req.user.id)
-      .single();
-
-    const { error: verifyError } = await supabase.auth.signInWithPassword({
-      email: userData.email,
-      password: current_password,
-    });
-
-    if (verifyError) {
-      return res.status(401).json({ success: false, error: 'Current password is incorrect' });
-    }
-
-    const { error: updateError } = await supabase.auth.admin.updateUserById(req.user.id, {
-      password: new_password,
-    });
-
-    if (updateError) {
-      return res.status(400).json({ success: false, error: updateError.message });
-    }
-
-    return res.json({ success: true, message: 'Password changed successfully' });
-  } catch (err) {
-    logger.error('Change password error:', err);
+    logger.error('KYC status error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });

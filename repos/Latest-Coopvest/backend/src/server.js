@@ -20,7 +20,11 @@ const rateLimit = require('express-rate-limit');
 const http = require('http');
 // const connectDB = require('./config/database'); // Removed for Supabase migration
 const supabase = require('./config/supabase');
+const { initializeFirebase } = require('./config/firebase');
 const logger = require('./utils/logger');
+
+// Initialize Firebase Admin SDK early so all route handlers can use it
+initializeFirebase();
 
 // Import services
 const websocketService = require('./services/websocketService');

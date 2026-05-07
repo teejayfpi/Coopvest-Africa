@@ -1,15 +1,19 @@
 /**
- * Authentication Middleware
+ * Authentication Middleware — Firebase Admin SDK
  *
- * Supabase-based authentication. Three modes:
- *   - authenticate      -> requires a valid member JWT (Supabase Auth)
- *   - optionalAuth      -> sets req.user if the JWT is valid, else continues
- *   - requireAdmin      -> valid JWT + role in ('admin', 'superadmin', 'staff')
- *   - requireService    -> valid `x-service-token` header matching
- *                          MOBILE_API_SERVICE_TOKEN (used by the admin web
- *                          portal for cross-backend proxy calls)
+ * Verifies Firebase ID tokens issued by the Flutter app's firebase_auth SDK.
+ * After token verification the middleware looks up the user's profile row in
+ * Supabase and attaches it to req.user so every route handler has a consistent
+ * user object without an extra DB call.
+ *
+ * Modes:
+ *   authenticate   — requires a valid Firebase ID token
+ *   optionalAuth   — attaches req.user when a valid token is present, else continues
+ *   requireAdmin   — valid token + role in ('admin', 'superadmin', 'staff')
+ *   requireService — shared secret via x-service-token header (cross-backend calls)
  */
 
+const { getFirebaseAdmin } = require('../config/firebase');
 const supabase = require('../config/supabase');
 const logger = require('../utils/logger');
 
@@ -20,25 +24,35 @@ const authenticate = async (req, res, next) => {
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({
         success: false,
-        error: 'Authentication required. Provide Bearer token in Authorization header.',
+        error: 'Authentication required. Provide a Firebase ID token as a Bearer token.',
       });
     }
 
-    const token = authHeader.split(' ')[1];
-    const { data: { user }, error } = await supabase.auth.getUser(token);
+    const idToken = authHeader.split(' ')[1];
+    const admin = getFirebaseAdmin();
 
-    if (error || !user) {
+    let decodedToken;
+    try {
+      decodedToken = await admin.auth().verifyIdToken(idToken);
+    } catch (err) {
+      logger.warn('Firebase token verification failed:', err.code, err.message);
       return res.status(401).json({ success: false, error: 'Invalid or expired token' });
     }
+
+    const firebaseUid = decodedToken.uid;
 
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('id, user_id, email, name, role, is_active, is_flagged')
-      .eq('id', user.id)
+      .eq('firebase_uid', firebaseUid)
       .maybeSingle();
 
-    if (profileError || !profile) {
-      logger.error('Failed to fetch user profile for role verification:', profileError);
+    if (profileError) {
+      logger.error('Profile lookup error:', profileError);
+      return res.status(401).json({ success: false, error: 'User profile lookup failed' });
+    }
+
+    if (!profile) {
       return res.status(401).json({ success: false, error: 'User profile not found' });
     }
 
@@ -48,14 +62,15 @@ const authenticate = async (req, res, next) => {
 
     req.user = {
       id: profile.id,
-      email: profile.email,
+      firebaseUid,
+      email: profile.email || decodedToken.email,
       userId: profile.user_id,
       name: profile.name,
       role: profile.role || 'member',
       isFlagged: profile.is_flagged === true,
     };
 
-    req.token = token;
+    req.token = idToken;
     next();
   } catch (error) {
     logger.error('Authentication error:', error);
@@ -68,25 +83,32 @@ const optionalAuth = async (req, res, next) => {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) return next();
 
-    const token = authHeader.split(' ')[1];
-    const { data: { user }, error } = await supabase.auth.getUser(token);
-    if (error || !user) return next();
+    const idToken = authHeader.split(' ')[1];
+    const admin = getFirebaseAdmin();
+
+    let decodedToken;
+    try {
+      decodedToken = await admin.auth().verifyIdToken(idToken);
+    } catch {
+      return next();
+    }
 
     const { data: profile } = await supabase
       .from('profiles')
       .select('id, user_id, email, name, role')
-      .eq('id', user.id)
+      .eq('firebase_uid', decodedToken.uid)
       .maybeSingle();
 
     if (profile) {
       req.user = {
         id: profile.id,
-        email: profile.email,
+        firebaseUid: decodedToken.uid,
+        email: profile.email || decodedToken.email,
         userId: profile.user_id,
         name: profile.name,
         role: profile.role || 'member',
       };
-      req.token = token;
+      req.token = idToken;
     }
     next();
   } catch (_) {
@@ -103,14 +125,6 @@ const requireAdmin = (req, res, next) => {
   });
 };
 
-/**
- * Service-token auth for cross-backend calls (e.g. admin web portal). The
- * caller provides a shared secret in the `x-service-token` header. The
- * request is treated as if it came from a system actor and has full admin
- * privileges on read-only bulk endpoints. Never expose this token to a
- * browser; the admin web backend stores it in an env var and uses it from
- * its server process only.
- */
 const requireService = (req, res, next) => {
   const expected = process.env.MOBILE_API_SERVICE_TOKEN;
   const provided = req.headers['x-service-token'] || req.headers['X-Service-Token'];
