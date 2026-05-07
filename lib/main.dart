@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'firebase_options.dart';
 import 'config/app_config.dart';
 import 'config/theme_config.dart';
 import 'config/theme_enhanced.dart';
@@ -50,7 +51,7 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 /// MUST be a top-level function — FCM runs it in a separate isolate.
 @pragma('vm:entry-point')
 Future<void> _fcmBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   debugPrint('[FCM Background] Message received: ${message.messageId}');
   debugPrint('[FCM Background] Type: ${message.data['type']}');
 }
@@ -76,7 +77,9 @@ void main() async {
   }
   
   try {
-    await Firebase.initializeApp();
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
     FirebaseMessaging.onBackgroundMessage(_fcmBackgroundHandler);
     await NotificationService().init();
   } catch (e) {

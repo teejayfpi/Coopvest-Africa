@@ -17,6 +17,7 @@
 const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
+const { v4: uuidv4 } = require('uuid');
 const { getFirebaseAdmin } = require('../config/firebase');
 const supabase = require('../config/supabase');
 const { authenticate } = require('../middleware/auth');
@@ -62,10 +63,16 @@ const ensureProfile = async (firebaseUser, extra = {}) => {
   if (existing) return existing;
 
   const userId = extra.userId || `USR-${Date.now().toString(36).toUpperCase()}`;
+  // Provide an explicit UUID for `id` — required because the profiles table
+  // primary key has no default until the Firebase migration SQL has been run.
+  // After running run-firebase-migration.js the column gains gen_random_uuid()
+  // as its default and this explicit value is still harmless.
+  const profileId = uuidv4();
 
   const { data: created, error } = await supabase
     .from('profiles')
     .insert({
+      id: profileId,
       firebase_uid: firebaseUser.uid,
       user_id: userId,
       email: firebaseUser.email || extra.email || '',
@@ -78,7 +85,13 @@ const ensureProfile = async (firebaseUser, extra = {}) => {
     .single();
 
   if (error) {
-    logger.error('ensureProfile: insert failed:', error.message);
+    if (error.code === '23503') {
+      // FK violation: profiles.id → auth.users still exists.
+      // Run `npm run migrate:firebase` in the backend directory to fix this.
+      logger.error('ensureProfile: FK constraint blocks insert. Run `npm run migrate:firebase` to apply the Firebase migration.');
+    } else {
+      logger.error('ensureProfile: insert failed:', error.message);
+    }
     return null;
   }
   return created;
