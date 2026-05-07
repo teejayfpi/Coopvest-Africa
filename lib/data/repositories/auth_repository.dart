@@ -1,3 +1,5 @@
+import 'package:firebase_auth/firebase_auth.dart' as fb;
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/network/api_client.dart';
 import '../../core/utils/utils.dart';
@@ -10,64 +12,68 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
   return AuthRepository(apiClient);
 });
 
-/// Auth Repository
+/// Auth Repository — Firebase Auth + backend profile sync
+///
+/// Authentication flow:
+///   1. Sign in/up directly with Firebase Auth SDK (no backend call needed)
+///   2. Get the Firebase ID token
+///   3. Send the ID token to the backend to sync/create the profile row
+///   4. Backend returns the full User payload
 class AuthRepository {
   final ApiClient _apiClient;
+  final fb.FirebaseAuth _firebaseAuth = fb.FirebaseAuth.instance;
+  final GoogleSignIn _googleSignIn = GoogleSignIn();
   User? _cachedUser;
 
   AuthRepository(this._apiClient);
 
-  /// Login with Google
-  Future<AuthResponse> googleSignIn({
-    required String idToken,
-    String? deviceId,
-  }) async {
-    try {
-      final response = await _apiClient.post(
-        '/auth/google',
-        data: {
-          'idToken': idToken,
-          'deviceId': deviceId,
-        },
-      );
+  // ─── helpers ────────────────────────────────────────────────────────────────
 
-      final authResponse = AuthResponse.fromJson(response as Map<String, dynamic>);
-      await _persistTokens(authResponse);
-      return authResponse;
-    } catch (e) {
-      logger.e('Google Sign-In error: $e');
-      rethrow;
-    }
+  /// Get a fresh Firebase ID token and attach it to the API client.
+  Future<String> _refreshAndAttachToken() async {
+    final fbUser = _firebaseAuth.currentUser;
+    if (fbUser == null) throw AuthException('No authenticated Firebase user');
+    final token = await fbUser.getIdToken(true);
+    if (token == null) throw AuthException('Failed to get Firebase ID token');
+    _apiClient.setAuthToken(token);
+    await TokenStorage.saveTokens(accessToken: token);
+    return token;
   }
 
-  Future<AuthResponse> login({
+  /// Sync profile with backend after any Firebase sign-in and return User.
+  Future<User> _syncWithBackend() async {
+    await _refreshAndAttachToken();
+    final response = await _apiClient.post('/auth/sync');
+    final user = User.fromJson(response['user'] as Map<String, dynamic>);
+    _cachedUser = user;
+    return user;
+  }
+
+  // ─── Sign-in methods ─────────────────────────────────────────────────────────
+
+  /// Email + password login
+  Future<User> login({
     required String email,
     required String password,
     String? deviceId,
   }) async {
     try {
-      final request = LoginRequest(
-        email: email,
+      await _firebaseAuth.signInWithEmailAndPassword(
+        email: email.trim(),
         password: password,
-        deviceId: deviceId,
       );
-
-      final response = await _apiClient.post(
-        '/auth/login',
-        data: request.toJson(),
-      );
-
-      final authResponse = AuthResponse.fromJson(response as Map<String, dynamic>);
-      await _persistTokens(authResponse);
-      return authResponse;
+      return await _syncWithBackend();
+    } on fb.FirebaseAuthException catch (e) {
+      logger.e('Firebase login error: ${e.code}');
+      throw AuthException(_mapFirebaseError(e));
     } catch (e) {
       logger.e('Login error: $e');
       rethrow;
     }
   }
 
-  /// Register new user
-  Future<AuthResponse> register({
+  /// Register with email + password
+  Future<User> register({
     required String email,
     required String password,
     required String name,
@@ -76,49 +82,77 @@ class AuthRepository {
     String? referralCode,
   }) async {
     try {
+      final credential = await _firebaseAuth.createUserWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      );
+
+      // Update display name in Firebase
+      await credential.user?.updateDisplayName(name);
+
+      // Send email verification
+      await credential.user?.sendEmailVerification();
+
+      // Attach token and create backend profile
+      await _refreshAndAttachToken();
       final response = await _apiClient.post(
         '/auth/register',
         data: {
-          'email': email,
-          'password': password,
           'name': name,
           'phone': phone,
-          'deviceId': deviceId,
           'referralCode': referralCode,
         },
       );
 
-      return AuthResponse.fromJson(response as Map<String, dynamic>);
+      final user = User.fromJson(response['user'] as Map<String, dynamic>);
+      _cachedUser = user;
+      return user;
+    } on fb.FirebaseAuthException catch (e) {
+      logger.e('Firebase register error: ${e.code}');
+      throw AuthException(_mapFirebaseError(e));
     } catch (e) {
       logger.e('Register error: $e');
       rethrow;
     }
   }
 
-  /// Register the device's FCM token with the backend so the server can send
-  /// targeted push notifications to this device.
+  /// Google Sign-In
+  Future<User> googleSignIn({String? deviceId}) async {
+    try {
+      final googleAccount = await _googleSignIn.signIn();
+      if (googleAccount == null) throw AuthException('Google sign-in cancelled');
+
+      final googleAuth = await googleAccount.authentication;
+      final credential = fb.GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      await _firebaseAuth.signInWithCredential(credential);
+      return await _syncWithBackend();
+    } on fb.FirebaseAuthException catch (e) {
+      logger.e('Firebase Google sign-in error: ${e.code}');
+      throw AuthException(_mapFirebaseError(e));
+    } catch (e) {
+      logger.e('Google sign-in error: $e');
+      rethrow;
+    }
+  }
+
+  /// Register FCM token with the backend
   Future<void> registerFcmToken(String fcmToken) async {
     try {
-      await _apiClient.post(
-        '/notifications/fcm-token',
-        data: {'token': fcmToken},
-      );
+      await _apiClient.post('/notifications/fcm-token', data: {'token': fcmToken});
       logger.i('FCM token registered with backend');
     } catch (e) {
-      // Non-fatal — the app still works without push; log and continue.
       logger.w('FCM token registration failed (non-fatal): $e');
     }
   }
 
   /// Submit KYC
-  Future<void> submitKYC({
-    required KYCSubmission submission,
-  }) async {
+  Future<void> submitKYC({required KYCSubmission submission}) async {
     try {
-      await _apiClient.post(
-        '/auth/kyc/submit',
-        data: submission.toJson(),
-      );
+      await _apiClient.post('/auth/kyc/submit', data: submission.toJson());
     } catch (e) {
       logger.e('KYC submission error: $e');
       rethrow;
@@ -136,39 +170,24 @@ class AuthRepository {
     }
   }
 
-  /// Refresh token
-  Future<AuthResponse> refreshToken(String refreshToken) async {
-    try {
-      final response = await _apiClient.post(
-        '/auth/refresh',
-        data: {'refresh_token': refreshToken},
-      );
-
-      return AuthResponse.fromJson(response as Map<String, dynamic>);
-    } catch (e) {
-      logger.e('Refresh token error: $e');
-      rethrow;
-    }
-  }
-
-  /// Logout
+  /// Logout — signs out from Firebase and revokes backend tokens
   Future<void> logout() async {
     try {
       await _apiClient.post('/auth/logout');
     } catch (e) {
-      logger.e('Logout error: $e');
+      logger.w('Backend logout error (non-fatal): $e');
     } finally {
+      await _googleSignIn.signOut();
+      await _firebaseAuth.signOut();
       _apiClient.clearAuthToken();
       await TokenStorage.clearTokens();
       _cachedUser = null;
     }
   }
 
-  /// Get current user (with caching to avoid redundant API calls)
+  /// Get current user (with caching)
   Future<User> getCurrentUser({bool forceRefresh = false}) async {
-    if (!forceRefresh && _cachedUser != null) {
-      return _cachedUser!;
-    }
+    if (!forceRefresh && _cachedUser != null) return _cachedUser!;
     try {
       final response = await _apiClient.get('/auth/me');
       if (response is Map<String, dynamic> && response.containsKey('user')) {
@@ -183,126 +202,137 @@ class AuthRepository {
     }
   }
 
-  /// Verify email
-  Future<void> verifyEmail(String code) async {
-    try {
-      await _apiClient.post(
-        '/auth/verify-email',
-        data: {'code': code},
-      );
-    } catch (e) {
-      logger.e('Verify email error: $e');
-      rethrow;
-    }
-  }
-
-  /// Resend verification code
-  Future<void> resendVerificationCode(String email) async {
-    try {
-      await _apiClient.post(
-        '/auth/resend-verification',
-        data: {'email': email},
-      );
-    } catch (e) {
-      logger.e('Resend verification error: $e');
-      rethrow;
-    }
-  }
-
-  /// Request password reset
+  /// Password reset — sends Firebase reset email (no backend call needed)
   Future<void> requestPasswordReset(String email) async {
     try {
-      await _apiClient.post(
-        '/auth/request-password-reset',
-        data: {'email': email},
-      );
+      await _firebaseAuth.sendPasswordResetEmail(email: email.trim());
+    } on fb.FirebaseAuthException catch (e) {
+      // Always return success to prevent email enumeration
+      logger.w('Password reset email error (non-fatal): ${e.code}');
     } catch (e) {
       logger.e('Request password reset error: $e');
       rethrow;
     }
   }
 
-  /// Reset password
-  Future<void> resetPassword({
-    required String code,
-    required String newPassword,
-  }) async {
+  /// Reset password with OTP code — Firebase handles via the deep-link/OTP flow
+  Future<void> resetPassword({required String code, required String newPassword}) async {
     try {
-      await _apiClient.post(
-        '/auth/reset-password',
-        data: {
-          'code': code,
-          'new_password': newPassword,
-        },
-      );
-    } catch (e) {
-      logger.e('Reset password error: $e');
-      rethrow;
+      await _firebaseAuth.confirmPasswordReset(code: code, newPassword: newPassword);
+    } on fb.FirebaseAuthException catch (e) {
+      throw AuthException(_mapFirebaseError(e));
     }
   }
 
-  /// Change password
+  /// Change password — re-authenticates then updates in Firebase
   Future<void> changePassword({
     required String currentPassword,
     required String newPassword,
   }) async {
     try {
-      await _apiClient.post(
-        '/auth/change-password',
-        data: {
-          'current_password': currentPassword,
-          'new_password': newPassword,
-        },
+      final fbUser = _firebaseAuth.currentUser;
+      if (fbUser == null || fbUser.email == null) throw AuthException('Not authenticated');
+
+      // Re-authenticate
+      final credential = fb.EmailAuthProvider.credential(
+        email: fbUser.email!,
+        password: currentPassword,
       );
+      await fbUser.reauthenticateWithCredential(credential);
+      await fbUser.updatePassword(newPassword);
+    } on fb.FirebaseAuthException catch (e) {
+      throw AuthException(_mapFirebaseError(e));
+    }
+  }
+
+  /// Email verification — sends verification email
+  Future<void> verifyEmail(String code) async {
+    try {
+      await _firebaseAuth.currentUser?.sendEmailVerification();
     } catch (e) {
-      logger.e('Change password error: $e');
+      logger.e('Verify email error: $e');
       rethrow;
     }
   }
 
-  Future<String> getUserId() async {
-    final user = await getCurrentUser();
-    return user.id;
+  /// Resend email verification
+  Future<void> resendVerificationCode(String email) async {
+    try {
+      await _firebaseAuth.currentUser?.sendEmailVerification();
+    } catch (e) {
+      logger.e('Resend verification error: $e');
+      rethrow;
+    }
   }
 
-  Future<String> getUserName() async {
-    final user = await getCurrentUser();
-    return user.name;
-  }
-
-  Future<String?> getUserPhone() async {
-    final user = await getCurrentUser();
-    return user.phone;
-  }
-
-  /// Restore session from persisted tokens on app startup
+  /// Restore session on app startup using Firebase's persisted auth state
   Future<bool> restoreSession() async {
     try {
-      final hasToken = await TokenStorage.hasToken();
-      if (!hasToken) return false;
+      final fbUser = _firebaseAuth.currentUser;
+      if (fbUser == null) return false;
 
-      final token = await TokenStorage.getAccessToken();
-      if (token != null) {
-        _apiClient.setAuthToken(token);
-        await getCurrentUser(forceRefresh: true);
-        return true;
-      }
-      return false;
+      // Refresh token and re-attach to API client
+      await _refreshAndAttachToken();
+      await getCurrentUser(forceRefresh: true);
+      return true;
     } catch (e) {
       logger.e('Session restore failed: $e');
-      await TokenStorage.clearTokens();
       _apiClient.clearAuthToken();
+      await TokenStorage.clearTokens();
       return false;
     }
   }
 
-  Future<void> _persistTokens(AuthResponse authResponse) async {
-    if (authResponse.accessToken.isNotEmpty) {
-      _apiClient.setAuthToken(authResponse.accessToken);
-      await TokenStorage.saveTokens(
-        accessToken: authResponse.accessToken,
-        refreshToken: authResponse.refreshToken,
+  // Legacy token refresh — kept for backward-compat with ErrorInterceptor
+  Future<AuthResponse> refreshToken(String refreshToken) async {
+    try {
+      final token = await _refreshAndAttachToken();
+      final user = await getCurrentUser(forceRefresh: true);
+      return AuthResponse(
+        accessToken: token,
+        refreshToken: '',
+        user: user,
+        expiresAt: DateTime.now().add(const Duration(hours: 1)),
       );
+    } catch (e) {
+      logger.e('Token refresh error: $e');
+      rethrow;
+    }
+  }
+
+  Future<String> getUserId() async => (await getCurrentUser()).id;
+  Future<String> getUserName() async => (await getCurrentUser()).name;
+  Future<String?> getUserPhone() async => (await getCurrentUser()).phone;
+
+  // ─── Error mapping ────────────────────────────────────────────────────────
+
+  String _mapFirebaseError(fb.FirebaseAuthException e) {
+    switch (e.code) {
+      case 'user-not-found':
+        return 'No account found with this email address.';
+      case 'wrong-password':
+      case 'invalid-credential':
+        return 'Incorrect email or password.';
+      case 'email-already-in-use':
+        return 'An account already exists with this email address.';
+      case 'weak-password':
+        return 'Password is too weak. Use at least 8 characters.';
+      case 'invalid-email':
+        return 'Please enter a valid email address.';
+      case 'user-disabled':
+        return 'This account has been disabled.';
+      case 'too-many-requests':
+        return 'Too many attempts. Please wait a moment and try again.';
+      case 'network-request-failed':
+        return 'Network error. Please check your connection.';
+      case 'requires-recent-login':
+        return 'Please log in again before making this change.';
+      case 'expired-action-code':
+        return 'This link has expired. Please request a new one.';
+      case 'invalid-action-code':
+        return 'Invalid reset code. Please request a new one.';
+      default:
+        return e.message ?? 'Authentication failed. Please try again.';
     }
   }
 }

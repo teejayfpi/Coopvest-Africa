@@ -43,6 +43,11 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS access_level TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS last_password_change_at TIMESTAMPTZ;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN DEFAULT false;
 
+-- Firebase Auth migration: store the Firebase UID for token verification
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS firebase_uid TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_profiles_firebase_uid
+  ON public.profiles (firebase_uid) WHERE firebase_uid IS NOT NULL;
+
 CREATE INDEX IF NOT EXISTS idx_profiles_user_id ON public.profiles(user_id);
 CREATE INDEX IF NOT EXISTS idx_profiles_role ON public.profiles(role);
 CREATE INDEX IF NOT EXISTS idx_profiles_department ON public.profiles(department);

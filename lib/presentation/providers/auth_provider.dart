@@ -13,7 +13,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   AuthNotifier(this._authRepository, this._apiClient) : super(const AuthState());
 
-  /// Register the FCM token with the backend after a successful auth event.
+  /// Register FCM token with the backend after a successful auth event.
   Future<void> _registerFcmToken() async {
     try {
       final token = await NotificationService().getDeviceToken();
@@ -25,47 +25,20 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// Google Sign-In
-  Future<void> googleSignIn(String idToken) async {
-    state = state.copyWith(status: AuthStatus.loading);
-    try {
-      final response = await _authRepository.googleSignIn(idToken: idToken);
-      _apiClient.setAuthToken(response.accessToken);
-
-      state = state.copyWith(
-        status: AuthStatus.authenticated,
-        user: response.user,
-        accessToken: response.accessToken,
-        refreshToken: response.refreshToken,
-      );
-
-      // Register FCM token after successful login (non-blocking)
-      _registerFcmToken();
-    } catch (e) {
-      logger.e('Google Sign-In error: $e');
-      state = state.copyWith(status: AuthStatus.error, error: e.toString());
-      rethrow;
-    }
-  }
-
-  /// Login
+  /// Email + password login via Firebase Auth
   Future<void> login({
     required String email,
     required String password,
   }) async {
     state = state.copyWith(status: AuthStatus.loading);
     try {
-      final response = await _authRepository.login(email: email, password: password);
-      _apiClient.setAuthToken(response.accessToken);
+      final user = await _authRepository.login(email: email, password: password);
 
       state = state.copyWith(
         status: AuthStatus.authenticated,
-        user: response.user,
-        accessToken: response.accessToken,
-        refreshToken: response.refreshToken,
+        user: user,
       );
 
-      // Register FCM token after successful login (non-blocking)
       _registerFcmToken();
     } catch (e) {
       logger.e('Login error: $e');
@@ -74,31 +47,48 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// Register
+  /// Google Sign-In via Firebase Auth
+  Future<void> googleSignIn([String? unused]) async {
+    state = state.copyWith(status: AuthStatus.loading);
+    try {
+      final user = await _authRepository.googleSignIn();
+
+      state = state.copyWith(
+        status: AuthStatus.authenticated,
+        user: user,
+      );
+
+      _registerFcmToken();
+    } catch (e) {
+      logger.e('Google Sign-In error: $e');
+      state = state.copyWith(status: AuthStatus.error, error: e.toString());
+      rethrow;
+    }
+  }
+
+  /// Register with Firebase Auth
   Future<void> register({
     required String email,
     required String password,
     required String name,
     String? phone,
+    String? referralCode,
   }) async {
     state = state.copyWith(status: AuthStatus.loading);
     try {
-      final response = await _authRepository.register(
+      final user = await _authRepository.register(
         email: email,
         password: password,
         name: name,
         phone: phone,
+        referralCode: referralCode,
       );
-      _apiClient.setAuthToken(response.accessToken);
 
       state = state.copyWith(
         status: AuthStatus.kycPending,
-        user: response.user,
-        accessToken: response.accessToken,
-        refreshToken: response.refreshToken,
+        user: user,
       );
 
-      // Register FCM token after registration
       _registerFcmToken();
     } catch (e) {
       logger.e('Register error: $e');
@@ -149,7 +139,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// Logout
+  /// Logout — Firebase sign-out + backend token revocation
   Future<void> logout() async {
     state = state.copyWith(status: AuthStatus.loading);
     try {
@@ -163,19 +153,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// Refresh token
+  /// Refresh the Firebase ID token and re-attach to API client
   Future<void> refreshAccessToken() async {
-    if (state.refreshToken == null) {
-      state = const AuthState(status: AuthStatus.unauthenticated);
-      return;
-    }
     try {
-      final response = await _authRepository.refreshToken(state.refreshToken!);
-      _apiClient.setAuthToken(response.accessToken);
-      state = state.copyWith(
-        accessToken: response.accessToken,
-        refreshToken: response.refreshToken,
-      );
+      await _authRepository.refreshToken('');
     } catch (e) {
       logger.e('Refresh token error: $e');
       _apiClient.clearAuthToken();
@@ -184,7 +165,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// Get current user
+  /// Fetch and update the current user from the backend
   Future<void> getCurrentUser() async {
     try {
       final user = await _authRepository.getCurrentUser();
@@ -194,7 +175,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// Verify email
+  /// Email verification — sends a verification email via Firebase
   Future<void> verifyEmail(String code) async {
     state = state.copyWith(status: AuthStatus.loading);
     try {
@@ -207,7 +188,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// Resend verification code
+  /// Resend email verification
   Future<void> resendVerificationCode(String email) async {
     try {
       await _authRepository.resendVerificationCode(email);
@@ -217,7 +198,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// Request password reset
+  /// Request password reset email via Firebase
   Future<void> requestPasswordReset(String email) async {
     try {
       await _authRepository.requestPasswordReset(email);
@@ -227,7 +208,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// Reset password
+  /// Reset password with action code from Firebase email link
   Future<void> resetPassword({
     required String code,
     required String newPassword,
@@ -243,7 +224,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// Change password
+  /// Change password via Firebase re-authentication
   Future<void> changePassword({
     required String currentPassword,
     required String newPassword,
