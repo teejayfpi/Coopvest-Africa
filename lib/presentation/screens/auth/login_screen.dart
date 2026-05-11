@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:local_auth/local_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/utils/utils.dart';
@@ -8,11 +11,11 @@ import '../../widgets/common/buttons.dart';
 import '../../widgets/common/inputs.dart';
 import '../../../data/models/auth_models.dart';
 
-/// Login Screen - Firebase Authentication
+/// Login Screen - Firebase Authentication with Biometric Support
 /// 
 /// Handles user login via:
 /// 1. Email + Password (Firebase Auth)
-/// 2. Google Sign-In (Firebase Auth with Google provider)
+/// 2. Biometric authentication (if previously enabled by user in Security Settings)
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
 
@@ -26,13 +29,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _obscurePassword = true;
   String? _emailError;
   String? _passwordError;
-  bool _isGoogleLoading = false;
+
+  final LocalAuthentication _localAuth = LocalAuthentication();
+  bool _isBiometricAvailable = false;
+  bool _isBiometricEnabled = false;
 
   @override
   void initState() {
     super.initState();
     _emailController = TextEditingController();
     _passwordController = TextEditingController();
+    _checkBiometricStatus();
   }
 
   @override
@@ -40,6 +47,71 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  /// Check if biometrics are available and enabled by the user
+  Future<void> _checkBiometricStatus() async {
+    try {
+      final canAuthenticate = await _localAuth.canCheckBiometrics;
+      final isDeviceSupported = await _localAuth.isDeviceSupported();
+      final prefs = await SharedPreferences.getInstance();
+      final isEnabled = prefs.getBool('biometric_enabled') ?? false;
+      
+      setState(() {
+        _isBiometricAvailable = canAuthenticate || isDeviceSupported;
+        _isBiometricEnabled = isEnabled && _isBiometricAvailable;
+      });
+    } catch (e) {
+      logger.e('Error checking biometric status: $e');
+    }
+  }
+
+  /// Perform biometric authentication
+  Future<void> _performBiometricAuth() async {
+    try {
+      final didAuthenticate = await _localAuth.authenticate(
+        localizedReason: 'Authenticate to access your Coopvest account',
+        options: const AuthenticationOptions(
+          stickyAuth: true,
+          biometricOnly: true,
+        ),
+      );
+
+      if (didAuthenticate) {
+        // Get stored credentials and login
+        final prefs = await SharedPreferences.getInstance();
+        final email = prefs.getString('biometric_email');
+        final password = prefs.getString('biometric_password');
+        
+        if (email != null && password != null) {
+          await ref.read(authProvider.notifier).login(
+            email: email,
+            password: password,
+          );
+          if (mounted) {
+            Navigator.of(context).pushReplacementNamed('/home');
+          }
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Please login with email first to enable biometric login'),
+                backgroundColor: CoopvestColors.warning,
+              ),
+            );
+          }
+        }
+      }
+    } on PlatformException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Biometric error: ${e.message}'),
+            backgroundColor: CoopvestColors.error,
+          ),
+        );
+      }
+    }
   }
 
   void _validateAndLogin() {
@@ -56,6 +128,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         email: _emailController.text.trim(),
         password: _passwordController.text,
       );
+      
+      // Store credentials for biometric login (if biometric is enabled)
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool('biometric_enabled') ?? false) {
+        await prefs.setString('biometric_email', _emailController.text.trim());
+        await prefs.setString('biometric_password', _passwordController.text);
+      }
+      
       if (mounted) {
         Navigator.of(context).pushReplacementNamed('/home');
       }
@@ -68,27 +148,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           SnackBar(content: Text(msg), backgroundColor: CoopvestColors.error),
         );
       }
-    }
-  }
-
-  Future<void> _performGoogleSignIn() async {
-    setState(() => _isGoogleLoading = true);
-    try {
-      await ref.read(authProvider.notifier).googleSignIn();
-      if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/home');
-      }
-    } catch (e) {
-      if (mounted) {
-        final msg = e.toString()
-            .replaceFirst('Exception: ', '')
-            .replaceFirst('AuthException: ', '');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg), backgroundColor: CoopvestColors.error),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isGoogleLoading = false);
     }
   }
 
@@ -126,8 +185,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
               // Email field
               AppTextField(
-                label: 'Email Address',
-                hint: 'Enter your email',
+                label: 'Email or Phone Number',
+                hint: 'Enter your email or phone',
                 controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
                 errorText: _emailError,
@@ -170,67 +229,56 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 isLoading: isLoading,
                 width: double.infinity,
               ),
-              const SizedBox(height: 24),
-
-              // Divider with "or"
-              Row(
-                children: [
-                  Expanded(child: Divider(color: context.dividerColor)),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(
-                      'or continue with',
-                      style: TextStyle(color: context.textSecondary, fontSize: 14),
+              
+              // Biometric login button (only show if enabled)
+              if (_isBiometricEnabled) ...[
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(child: Divider(color: context.dividerColor)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text(
+                        'or',
+                        style: TextStyle(color: context.textSecondary, fontSize: 14),
+                      ),
                     ),
-                  ),
-                  Expanded(child: Divider(color: context.dividerColor)),
-                ],
-              ),
-              const SizedBox(height: 24),
-
-              // Google Sign-In button
-              OutlinedButton(
-                onPressed: _isGoogleLoading ? null : _performGoogleSignIn,
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 50),
-                  side: BorderSide(color: context.dividerColor),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    Expanded(child: Divider(color: context.dividerColor)),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                Center(
+                  child: Column(
+                    children: [
+                      InkWell(
+                        onTap: _performBiometricAuth,
+                        borderRadius: BorderRadius.circular(50),
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: CoopvestColors.primary.withOpacity(0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.fingerprint,
+                            size: 48,
+                            color: CoopvestColors.primary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Tap to use biometrics',
+                        style: TextStyle(
+                          color: context.textSecondary,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                child: _isGoogleLoading
-                    ? SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: context.textSecondary,
-                        ),
-                      )
-                    : Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Image.network(
-                            'https://www.google.com/favicon.ico',
-                            width: 20,
-                            height: 20,
-                            errorBuilder: (_, __, ___) => const Icon(
-                              Icons.g_mobiledata,
-                              size: 24,
-                              color: Colors.red,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Text(
-                            'Continue with Google',
-                            style: TextStyle(
-                              color: context.textPrimary,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-              ),
+              ],
+              
               const SizedBox(height: 32),
 
               // Sign up link
