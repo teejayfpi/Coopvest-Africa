@@ -3,8 +3,9 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
-import '../../../core/network/api_client.dart';
 import '../../../core/utils/utils.dart';
+import '../../../data/models/auth_models.dart';
+import '../../providers/auth_provider.dart';
 import '../../widgets/common/buttons.dart';
 import '../../widgets/common/inputs.dart';
 
@@ -85,25 +86,26 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
 
     setState(() => _isLoading = true);
     try {
-      final apiClient = ref.read(apiClientProvider);
-      await apiClient.post('/auth/register', data: {
-        'name': _nameController.text.trim(),
-        'phone': _phoneController.text.trim(),
-        'email': _emailController.text.trim().toLowerCase(),
-        'password': _passwordController.text,
-      });
+      // Use Firebase Auth via AuthProvider to create account
+      await ref.read(authProvider.notifier).register(
+        email: _emailController.text.trim().toLowerCase(),
+        password: _passwordController.text,
+        name: _nameController.text.trim(),
+        phone: _phoneController.text.trim(),
+      );
 
       if (mounted) {
+        // Navigate to email verification screen
+        // Firebase sends verification email automatically during registration
         Navigator.of(context).pushNamed('/register-step2', arguments: {
           'name': _nameController.text.trim(),
           'phone': _phoneController.text.trim(),
           'email': _emailController.text.trim().toLowerCase(),
-          'password': _passwordController.text,
         });
       }
     } catch (e) {
       if (mounted) {
-        final msg = e.toString().replaceFirst('Exception: ', '');
+        final msg = e.toString().replaceFirst('Exception: ', '').replaceFirst('AuthException: ', '');
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: CoopvestColors.error));
       }
     } finally {

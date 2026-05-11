@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_auth/firebase_auth.dart' as fb;
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
-import '../../../core/network/api_client.dart';
+import '../../providers/auth_provider.dart';
 import '../../widgets/common/buttons.dart';
 
-/// Registration Step 2 - Email Verification with OTP
+/// Registration Step 2 - Email Verification (Firebase)
+/// 
+/// This screen handles email verification using Firebase's built-in
+/// email verification system. The user's Firebase account was already
+/// created in Step 1, and a verification email was automatically sent.
 class RegisterStep2Screen extends ConsumerStatefulWidget {
   final String email;
   final Map<String, String> registrationData;
@@ -21,26 +26,17 @@ class RegisterStep2Screen extends ConsumerStatefulWidget {
 }
 
 class _RegisterStep2ScreenState extends ConsumerState<RegisterStep2Screen> {
-  late List<TextEditingController> _otpControllers;
-  late List<FocusNode> _otpFocusNodes;
   int _remainingSeconds = 60;
   bool _canResend = false;
-  bool _isVerifying = false;
   bool _isResending = false;
+  bool _isChecking = false;
+
+  final fb.FirebaseAuth _firebaseAuth = fb.FirebaseAuth.instance;
 
   @override
   void initState() {
     super.initState();
-    _otpControllers = List.generate(6, (_) => TextEditingController());
-    _otpFocusNodes = List.generate(6, (_) => FocusNode());
     _startTimer();
-  }
-
-  @override
-  void dispose() {
-    for (var controller in _otpControllers) controller.dispose();
-    for (var node in _otpFocusNodes) node.dispose();
-    super.dispose();
   }
 
   void _startTimer() {
@@ -58,25 +54,37 @@ class _RegisterStep2ScreenState extends ConsumerState<RegisterStep2Screen> {
     });
   }
 
-  Future<void> _resendOTP() async {
+  Future<void> _resendVerificationEmail() async {
     setState(() {
       _remainingSeconds = 60;
       _canResend = false;
       _isResending = true;
-      for (var controller in _otpControllers) controller.clear();
     });
     _startTimer();
+    
     try {
-      await ApiClient().post('/auth/resend-verification', data: {'email': widget.email});
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('OTP sent successfully'), backgroundColor: CoopvestColors.success),
-        );
+      // Use Firebase to resend verification email
+      final currentUser = _firebaseAuth.currentUser;
+      if (currentUser != null) {
+        await currentUser.sendEmailVerification();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Verification email sent successfully'),
+              backgroundColor: CoopvestColors.success,
+            ),
+          );
+        }
+      } else {
+        throw Exception('No user signed in');
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to resend OTP: $e'), backgroundColor: CoopvestColors.error),
+          SnackBar(
+            content: Text('Failed to send verification email: ${e.toString()}'),
+            backgroundColor: CoopvestColors.error,
+          ),
         );
       }
     } finally {
@@ -84,38 +92,80 @@ class _RegisterStep2ScreenState extends ConsumerState<RegisterStep2Screen> {
     }
   }
 
-  void _onOTPFieldChanged(String value, int index) {
-    if (value.length == 1) {
-      if (index < 5) {
-        _otpFocusNodes[index + 1].requestFocus();
-      } else {
-        _otpFocusNodes[index].unfocus();
-      }
-    } else if (value.isEmpty && index > 0) {
-      _otpFocusNodes[index - 1].requestFocus();
-    }
-  }
-
-  Future<void> _verifyOTP() async {
-    final otp = _otpControllers.map((c) => c.text).join();
-    if (otp.length != 6) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter all 6 digits'), backgroundColor: CoopvestColors.error));
-      return;
-    }
-    setState(() => _isVerifying = true);
+  Future<void> _checkVerificationStatus() async {
+    setState(() => _isChecking = true);
+    
     try {
-      final response = await ApiClient().post('/auth/verify-email', data: {'email': widget.email, 'code': otp});
-      if (response['success'] == true && mounted) {
-        Navigator.of(context).pushNamed('/register-step3', arguments: widget.registrationData);
+      // Reload the user to get the latest email verification status
+      await _firebaseAuth.currentUser?.reload();
+      final currentUser = _firebaseAuth.currentUser;
+      
+      if (currentUser != null && currentUser.emailVerified) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Email verified successfully!'),
+              backgroundColor: CoopvestColors.success,
+            ),
+          );
+          // Navigate to the next step (salary deduction consent or home)
+          Navigator.of(context).pushNamed('/register-step3', arguments: widget.registrationData);
+        }
       } else {
-        throw Exception(response['message'] ?? 'Verification failed');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Email not yet verified. Please check your inbox and click the verification link.'),
+              backgroundColor: CoopvestColors.warning,
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Verification failed: $e'), backgroundColor: CoopvestColors.error));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to check verification status: ${e.toString()}'),
+            backgroundColor: CoopvestColors.error,
+          ),
+        );
       }
     } finally {
-      if (mounted) setState(() => _isVerifying = false);
+      if (mounted) setState(() => _isChecking = false);
+    }
+  }
+
+  Future<void> _openEmailApp() async {
+    // Show a dialog with instructions
+    if (mounted) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Check Your Email'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('We sent a verification link to:\n${widget.email}'),
+              const SizedBox(height: 16),
+              const Text(
+                'Please:\n'
+                '1. Open your email app\n'
+                '2. Find the email from Coopvest\n'
+                '3. Click the verification link\n'
+                '4. Return here and tap "I\'ve Verified"',
+                style: TextStyle(fontSize: 14),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Got it'),
+            ),
+          ],
+        ),
+      );
     }
   }
 
@@ -129,7 +179,10 @@ class _RegisterStep2ScreenState extends ConsumerState<RegisterStep2Screen> {
           icon: Icon(Icons.arrow_back, color: context.iconPrimary),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: Text('Verify Email', style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold)),
+        title: Text(
+          'Verify Email',
+          style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold),
+        ),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -137,80 +190,242 @@ class _RegisterStep2ScreenState extends ConsumerState<RegisterStep2Screen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Progress indicator
               Row(
                 children: [
                   Container(
-                    width: 32, height: 32,
-                    decoration: const BoxDecoration(color: CoopvestColors.primary, shape: BoxShape.circle),
-                    child: const Center(child: Icon(Icons.check, color: Colors.white, size: 18)),
+                    width: 32,
+                    height: 32,
+                    decoration: const BoxDecoration(
+                      color: CoopvestColors.primary,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Center(
+                      child: Icon(Icons.check, color: Colors.white, size: 18),
+                    ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(child: Container(height: 2, color: CoopvestColors.primary)),
                   const SizedBox(width: 8),
                   Container(
-                    width: 32, height: 32,
-                    decoration: const BoxDecoration(color: CoopvestColors.primary, shape: BoxShape.circle),
-                    child: const Center(child: Text('2', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+                    width: 32,
+                    height: 32,
+                    decoration: const BoxDecoration(
+                      color: CoopvestColors.primary,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Center(
+                      child: Text(
+                        '2',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                      ),
+                    ),
                   ),
                 ],
               ),
               const SizedBox(height: 32),
-              Text('Verify Your Email Address', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: context.textPrimary)),
-              const SizedBox(height: 8),
-              Text('We sent a 6-digit code to ${widget.email}', style: TextStyle(color: context.textSecondary)),
-              const SizedBox(height: 32),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: List.generate(6, (index) => Flexible(
-                  child: Container(
-                    margin: EdgeInsets.only(right: index == 5 ? 0 : 8),
-                    height: 60,
-                    child: TextField(
-                      controller: _otpControllers[index],
-                      focusNode: _otpFocusNodes[index],
-                      keyboardType: TextInputType.number,
-                      textAlign: TextAlign.center,
-                      maxLength: 1,
-                      onChanged: (value) => _onOTPFieldChanged(value, index),
-                      decoration: InputDecoration(
-                        counterText: '',
-                        filled: true,
-                        fillColor: context.cardBackground,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: context.dividerColor)),
-                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: context.dividerColor)),
-                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: CoopvestColors.primary, width: 2)),
-                      ),
-                      style: TextStyle(color: context.textPrimary, fontSize: 20, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                )),
-              ),
-              const SizedBox(height: 32),
+
+              // Email icon
               Center(
+                child: Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: CoopvestColors.primary.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.mark_email_unread_outlined,
+                    size: 40,
+                    color: CoopvestColors.primary,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Title
+              Center(
+                child: Text(
+                  'Verify Your Email Address',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: context.textPrimary,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Description
+              Center(
+                child: Text(
+                  'We sent a verification link to:',
+                  style: TextStyle(color: context.textSecondary),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Center(
+                child: Text(
+                  widget.email,
+                  style: TextStyle(
+                    color: context.textPrimary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 16,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Instructions card
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: context.cardBackground,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: context.dividerColor),
+                ),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (!_canResend)
-                      Text('Resend code in ${_remainingSeconds}s', style: TextStyle(color: context.textSecondary))
-                    else
-                      GestureDetector(
-                        onTap: _isResending ? null : _resendOTP,
-                        child: Text(_isResending ? 'Sending...' : 'Resend Code', style: const TextStyle(color: CoopvestColors.primary, fontWeight: FontWeight.bold)),
-                      ),
+                    Row(
+                      children: [
+                        Icon(Icons.info_outline, color: CoopvestColors.primary, size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          'How to verify',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: context.textPrimary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    _buildStep('1', 'Open your email app'),
+                    _buildStep('2', 'Find the email from Coopvest'),
+                    _buildStep('3', 'Click the verification link'),
+                    _buildStep('4', 'Return here and tap the button below'),
                   ],
                 ),
               ),
               const SizedBox(height: 32),
-              PrimaryButton(label: 'Verify', onPressed: _verifyOTP, isLoading: _isVerifying, width: double.infinity),
+
+              // Check verification button
+              PrimaryButton(
+                label: "I've Verified My Email",
+                onPressed: _checkVerificationStatus,
+                isLoading: _isChecking,
+                width: double.infinity,
+              ),
               const SizedBox(height: 16),
+
+              // Open email app button
+              OutlinedButton(
+                onPressed: _openEmailApp,
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 50),
+                  side: const BorderSide(color: CoopvestColors.primary),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text(
+                  'View Instructions',
+                  style: TextStyle(color: CoopvestColors.primary),
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Resend section
+              Center(
+                child: Column(
+                  children: [
+                    Text(
+                      "Didn't receive the email?",
+                      style: TextStyle(color: context.textSecondary),
+                    ),
+                    const SizedBox(height: 8),
+                    if (!_canResend)
+                      Text(
+                        'Resend in ${_remainingSeconds}s',
+                        style: TextStyle(color: context.textSecondary),
+                      )
+                    else
+                      GestureDetector(
+                        onTap: _isResending ? null : _resendVerificationEmail,
+                        child: Text(
+                          _isResending ? 'Sending...' : 'Resend Verification Email',
+                          style: const TextStyle(
+                            color: CoopvestColors.primary,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Change email option
               Center(
                 child: TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Change Email Address', style: TextStyle(color: CoopvestColors.primary)),
+                  onPressed: () async {
+                    // Sign out the partially created user and go back
+                    try {
+                      await _firebaseAuth.currentUser?.delete();
+                    } catch (e) {
+                      // User might already be deleted or not exist
+                    }
+                    await ref.read(authProvider.notifier).logout();
+                    if (mounted) {
+                      Navigator.of(context).pop();
+                    }
+                  },
+                  child: const Text(
+                    'Use a Different Email Address',
+                    style: TextStyle(color: CoopvestColors.primary),
+                  ),
                 ),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildStep(String number, String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Container(
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(
+              color: CoopvestColors.primary.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Text(
+                number,
+                style: const TextStyle(
+                  color: CoopvestColors.primary,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            text,
+            style: TextStyle(color: context.textSecondary),
+          ),
+        ],
       ),
     );
   }
