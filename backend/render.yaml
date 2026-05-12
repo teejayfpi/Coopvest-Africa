@@ -1,0 +1,47 @@
+# Render Blueprint for Coopvest Africa Backend
+# https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: coopvest-api
+    runtime: node
+    region: oregon # or frankfurt, singapore, ohio
+    plan: free # or starter, standard, pro
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 8080
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: SUPABASE_URL
+        sync: false # You'll set this manually
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: FIREBASE_CLIENT_EMAIL
+        sync: false
+      - key: FIREBASE_PRIVATE_KEY
+        sync: false
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: SMTP_PORT
+        value: 465
+      - key: SMTP_SECURE
+        value: true
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: CORS_ORIGIN
+        value: "*"
+    healthCheckPath: /health
+    autoDeploy: true
