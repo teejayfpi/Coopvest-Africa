@@ -19,8 +19,9 @@ class User extends Equatable {
   final String? country;
   final String? profilePicture; // URL to user's profile picture
   final String? referralCode;
+  final bool isEmailVerified;
   final DateTime createdAt;
-  final DateTime updatedAt;
+  final DateTime? updatedAt;
 
   const User({
     required this.id,
@@ -40,8 +41,9 @@ class User extends Equatable {
     this.country,
     this.profilePicture,
     this.referralCode,
+    this.isEmailVerified = false,
     required this.createdAt,
-    required this.updatedAt,
+    this.updatedAt,
   });
 
   /// Check if user can request termination
@@ -91,8 +93,9 @@ class User extends Equatable {
       country: json['country'] as String?,
       profilePicture: json['profile_picture'] as String? ?? json['profilePicture'] as String?,
       referralCode: json['referral_code'] as String? ?? json['referralCode'] as String?,
+      isEmailVerified: json['isEmailVerified'] as bool? ?? json['is_email_verified'] as bool? ?? json['emailVerified'] as bool? ?? false,
       createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt'] as String) : (json['created_at'] != null ? DateTime.parse(json['created_at'] as String) : DateTime.now()),
-      updatedAt: json['updatedAt'] != null ? DateTime.parse(json['updatedAt'] as String) : (json['updated_at'] != null ? DateTime.parse(json['updated_at'] as String) : DateTime.now()),
+      updatedAt: json['updatedAt'] != null ? DateTime.parse(json['updatedAt'] as String) : (json['updated_at'] != null ? DateTime.parse(json['updated_at'] as String) : null),
     );
   }
 
@@ -112,8 +115,9 @@ class User extends Equatable {
       'city': city,
       'state': state,
       'country': country,
+      'is_email_verified': isEmailVerified,
       'created_at': createdAt.toIso8601String(),
-      'updated_at': updatedAt.toIso8601String(),
+      'updated_at': updatedAt?.toIso8601String(),
     };
   }
 
@@ -132,6 +136,7 @@ class User extends Equatable {
     String? city,
     String? state,
     String? country,
+    bool? isEmailVerified,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -150,6 +155,7 @@ class User extends Equatable {
       city: city ?? this.city,
       state: state ?? this.state,
       country: country ?? this.country,
+      isEmailVerified: isEmailVerified ?? this.isEmailVerified,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -171,6 +177,7 @@ class User extends Equatable {
     city,
     state,
     country,
+    isEmailVerified,
     createdAt,
     updatedAt,
   ];
