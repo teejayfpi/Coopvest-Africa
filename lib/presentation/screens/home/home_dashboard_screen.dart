@@ -556,19 +556,19 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
           decoration: BoxDecoration(
             color: context.cardBackground,
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.04),
-                blurRadius: 10,
-                offset: const Offset(0, 3),
+                color: Colors.black.withOpacity(0.06),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
               ),
             ],
             border: Border.all(
-              color: Colors.grey.withOpacity(0.08),
+              color: CoopvestColors.primary.withOpacity(0.1),
               width: 1,
             ),
           ),
@@ -582,8 +582,8 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      CoopvestColors.primary.withOpacity(0.12),
-                      CoopvestColors.primary.withOpacity(0.04),
+                      CoopvestColors.primary.withOpacity(0.15),
+                      CoopvestColors.primary.withOpacity(0.05),
                     ],
                   ),
                   borderRadius: BorderRadius.circular(14),
@@ -591,18 +591,20 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                 child: Icon(icon, color: CoopvestColors.primary, size: 24),
               ),
               const SizedBox(height: 10),
-              Flexible(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: context.textPrimary,
-                    fontWeight: FontWeight.w600,
-                    height: 1.2,
+              Expanded(
+                child: Center(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: context.textPrimary,
+                      fontWeight: FontWeight.w600,
+                      height: 1.2,
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],

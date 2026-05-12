@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/extensions/number_extensions.dart';
 import '../../../data/models/guarantor_models.dart';
 import '../../../presentation/providers/guarantor_provider.dart';
+import '../../../presentation/providers/auth_provider.dart';
 import '../../../presentation/widgets/common/cards.dart';
 import '../../../presentation/widgets/common/loading.dart';
 
@@ -34,12 +37,27 @@ class _GuarantorDashboardScreenState
   Widget build(BuildContext context) {
     final state = ref.watch(guarantorProvider);
     final stats = state.stats;
+    final user = ref.watch(currentUserProvider);
 
     return Scaffold(
       backgroundColor: context.scaffoldBackground,
       appBar: AppBar(
         title: const Text('Guarantor Management'),
         elevation: 0,
+        actions: [
+          // Share QR Code button
+          IconButton(
+            icon: const Icon(Icons.qr_code),
+            tooltip: 'Share QR Code',
+            onPressed: () => _showGuarantorQRDialog(user?.id ?? '', user?.name ?? 'User'),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _showGuarantorQRDialog(user?.id ?? '', user?.name ?? 'User'),
+        backgroundColor: CoopvestColors.primary,
+        icon: const Icon(Icons.qr_code_2, color: Colors.white),
+        label: const Text('My QR Code', style: TextStyle(color: Colors.white)),
       ),
       body: Column(
         children: [
@@ -721,6 +739,175 @@ class _GuarantorDashboardScreenState
             child: const Text('Decline'),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Show QR Code dialog for guarantor sharing
+  void _showGuarantorQRDialog(String guarantorId, String guarantorName) {
+    // Generate the guarantor QR data with real user info
+    final qrData = 'coopvest://guarantor?id=$guarantorId&name=${Uri.encodeComponent(guarantorName)}';
+    
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.75,
+        decoration: BoxDecoration(
+          color: context.scaffoldBackground,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          children: [
+            // Handle bar
+            Container(
+              margin: const EdgeInsets.only(top: 12),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: context.dividerColor,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Title
+            Text(
+              'My Guarantor QR Code',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: context.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Let borrowers scan this to add you as guarantor',
+              style: TextStyle(
+                fontSize: 14,
+                color: context.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 24),
+            // QR Code
+            Container(
+              padding: const EdgeInsets.all(24),
+              margin: const EdgeInsets.symmetric(horizontal: 40),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: CoopvestColors.primary.withOpacity(0.1),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  QrImageView(
+                    data: qrData,
+                    version: QrVersions.auto,
+                    size: 200,
+                    backgroundColor: Colors.white,
+                    eyeStyle: const QrEyeStyle(
+                      eyeShape: QrEyeShape.square,
+                      color: Color(0xFF1B5E20),
+                    ),
+                    dataModuleStyle: const QrDataModuleStyle(
+                      dataModuleShape: QrDataModuleShape.square,
+                      color: Color(0xFF1B5E20),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    guarantorName,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1B5E20),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Guarantor ID: ${guarantorId.substring(0, 8)}...',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: CoopvestColors.mediumGray,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            // Copy ID Button
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: guarantorId));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Guarantor ID copied!'),
+                            backgroundColor: CoopvestColors.success,
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.copy),
+                      label: const Text('Copy ID'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        side: const BorderSide(color: CoopvestColors.primary),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.check, color: Colors.white),
+                      label: const Text('Done', style: TextStyle(color: Colors.white)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: CoopvestColors.primary,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Help text
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 40),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: CoopvestColors.info.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: CoopvestColors.info, size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Borrowers can scan this QR code from the loan application screen to add you as a guarantor.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: context.textPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -102,6 +102,8 @@ class CoopvestApp extends ConsumerStatefulWidget {
 
 class _CoopvestAppState extends ConsumerState<CoopvestApp> with WidgetsBindingObserver {
   bool _isSessionRestored = false;
+  bool _isCheckingBiometric = false;
+  bool _wasPaused = false;
 
   @override
   void initState() {
@@ -118,23 +120,42 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp> with WidgetsBindingOb
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
+    if (state == AppLifecycleState.paused) {
+      _wasPaused = true;
+    }
+    if (state == AppLifecycleState.resumed && _wasPaused) {
+      _wasPaused = false;
       _checkBiometricOnResume();
     }
   }
 
   Future<void> _restoreSession() async {
-    final authRepo = ref.read(authRepositoryProvider);
-    final success = await authRepo.restoreSession();
-    if (success) {
-      await ref.read(authProvider.notifier).getCurrentUser();
+    try {
+      final authRepo = ref.read(authRepositoryProvider);
+      final success = await authRepo.restoreSession();
+      
+      if (success) {
+        // Session restored from Firebase - user stays logged in
+        await ref.read(authProvider.notifier).getCurrentUser();
+        debugPrint('[CoopvestApp] Session restored successfully');
+      } else {
+        debugPrint('[CoopvestApp] No session to restore');
+      }
+    } catch (e) {
+      debugPrint('[CoopvestApp] Session restore error: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSessionRestored = true;
+        });
+      }
     }
-    setState(() {
-      _isSessionRestored = true;
-    });
   }
 
   Future<void> _checkBiometricOnResume() async {
+    // Prevent multiple concurrent biometric checks
+    if (_isCheckingBiometric) return;
+    
     final authStatus = ref.read(authStatusProvider);
     if (authStatus != AuthStatus.authenticated) return;
 
@@ -142,9 +163,21 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp> with WidgetsBindingOb
     final isBiometricEnabled = await securityService.isBiometricEnabled();
     
     if (isBiometricEnabled) {
-      final authenticated = await securityService.authenticate();
-      if (!authenticated) {
-        await ref.read(authProvider.notifier).logout();
+      _isCheckingBiometric = true;
+      try {
+        final authenticated = await securityService.authenticate();
+        if (!authenticated && mounted) {
+          // Only logout if biometric auth was explicitly cancelled/failed
+          // Don't logout just because biometrics aren't available
+          ScaffoldMessenger.of(navigatorKey.currentContext!).showSnackBar(
+            const SnackBar(
+              content: Text('Biometric authentication required'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      } finally {
+        _isCheckingBiometric = false;
       }
     }
   }
