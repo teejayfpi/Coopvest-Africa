@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_auth/firebase_auth.dart' as fb;
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/utils/utils.dart';
+import '../../providers/auth_provider.dart';
 import '../../widgets/common/buttons.dart';
 
 /// Salary Deduction & Loan Recovery Consent Screen
@@ -23,16 +25,33 @@ class _SalaryDeductionConsentScreenState extends ConsumerState<SalaryDeductionCo
   bool _agreeToConsent = false;
   bool _isSubmitting = false;
 
+  /// Get memberId from multiple sources: args > auth state > Firebase UID
+  String? _getMemberId() {
+    // First try from registration data arguments
+    final fromArgs = widget.registrationData['memberId'];
+    if (fromArgs != null && fromArgs.isNotEmpty) return fromArgs;
+    
+    // Then try from authenticated user in Riverpod state
+    final user = ref.read(currentUserProvider);
+    if (user?.id != null && user!.id.isNotEmpty) return user.id;
+    
+    // Finally fallback to Firebase UID
+    final fbUser = fb.FirebaseAuth.instance.currentUser;
+    return fbUser?.uid;
+  }
+
   Future<void> _submitConsent() async {
     if (!_agreeToConsent) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please read and accept the consent'), backgroundColor: CoopvestColors.error));
       return;
     }
     
-    // Validate memberId is present
-    final memberId = widget.registrationData['memberId'];
+    // Get memberId from multiple sources
+    final memberId = _getMemberId();
     if (memberId == null || memberId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Member ID is missing. Please complete registration first.'), backgroundColor: CoopvestColors.error));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Unable to identify user. Please try logging in again.'), backgroundColor: CoopvestColors.error));
+      // Navigate back to login as a fallback
+      Navigator.of(context).pushReplacementNamed('/login');
       return;
     }
     
