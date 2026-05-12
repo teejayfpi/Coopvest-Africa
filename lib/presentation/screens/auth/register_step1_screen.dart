@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_auth/firebase_auth.dart' as fb;
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/utils/utils.dart';
@@ -106,10 +107,78 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
     } catch (e) {
       if (mounted) {
         final msg = e.toString().replaceFirst('Exception: ', '').replaceFirst('AuthException: ', '');
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: CoopvestColors.error));
+        
+        // Check if account already exists - try to sign in and check verification status
+        if (msg.contains('already exists') || msg.contains('email-already-in-use')) {
+          await _handleExistingAccount();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: CoopvestColors.error));
+        }
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  /// Handle case where account already exists - check if email is verified
+  Future<void> _handleExistingAccount() async {
+    try {
+      // Try to sign in with existing credentials
+      final credential = await fb.FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: _emailController.text.trim().toLowerCase(),
+        password: _passwordController.text,
+      );
+      
+      final user = credential.user;
+      if (user != null) {
+        if (!user.emailVerified) {
+          // Account exists but email not verified - resend verification and go to step 2
+          await user.sendEmailVerification();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Account found! Please verify your email to continue.'),
+                backgroundColor: CoopvestColors.warning,
+              ),
+            );
+            Navigator.of(context).pushNamed('/register-step2', arguments: {
+              'name': _nameController.text.trim(),
+              'phone': _phoneController.text.trim(),
+              'email': _emailController.text.trim().toLowerCase(),
+            });
+          }
+        } else {
+          // Account exists and email is verified - redirect to login
+          await fb.FirebaseAuth.instance.signOut();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Account already exists and is verified. Please log in instead.'),
+                backgroundColor: CoopvestColors.info,
+              ),
+            );
+            Navigator.of(context).pushReplacementNamed('/login');
+          }
+        }
+      }
+    } on fb.FirebaseAuthException catch (e) {
+      // Wrong password or other error - show original message
+      if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('An account with this email exists. Please log in or use "Forgot Password".'),
+              backgroundColor: CoopvestColors.error,
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('An account already exists with this email address.'), backgroundColor: CoopvestColors.error),
+          );
+        }
+      }
     }
   }
 
