@@ -42,7 +42,7 @@ class RolloverEligibilityScreen extends ConsumerWidget {
 
   Loan _getDemoLoan() {
     final now = DateTime.now();
-    return Loan(id: 'LOAN-DEMO', userId: 'user-id', amount: 100000, tenure: 6, interestRate: 7.0, monthlyRepayment: 18333, totalRepayment: 65000, status: 'active', guarantorsAccepted: 3, guarantorsRequired: 3, createdAt: now.subtract(const Duration(days: 90)), updatedAt: now.subtract(const Duration(days: 60)), approvedAt: now.subtract(const Duration(days: 85)), disbursedAt: now.subtract(const Duration(days: 84)));
+    return Loan(id: 'LOAN-DEMO', userId: 'user-id', type: 'Personal Loan', amount: 100000, tenure: 6, interestRate: 7.0, monthlyRepayment: 18333, totalRepayment: 65000, status: 'active', guarantorsAccepted: 3, guarantorsRequired: 3, createdAt: now.subtract(const Duration(days: 90)), updatedAt: now.subtract(const Duration(days: 60)), approvedAt: now.subtract(const Duration(days: 85)), disbursedAt: now.subtract(const Duration(days: 84)));
   }
 
   Widget _buildLoanSummaryCard(BuildContext context, Loan loan) {

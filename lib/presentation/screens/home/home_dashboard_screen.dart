@@ -964,7 +964,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
               child: _buildNotificationItem(
                 context,
                 notification.title,
-                _formatTimeAgo(notification.createdAt),
+                _formatTimeAgo(notification.timestamp),
                 icon,
                 CoopvestColors.primary,
                 () {},
