@@ -88,22 +88,29 @@ app.use(securityLogger);
 // ==============================================================================
 // CORS CONFIGURATION
 // ==============================================================================
-const allowedOrigins = (process.env.CORS_ORIGIN || '')
-  .split(',')
-  .map(origin => origin.trim())
-  .filter(origin => origin.length > 0);
+const corsOriginEnv = process.env.CORS_ORIGIN || '';
+const allowAllOrigins = corsOriginEnv === '*';
+const allowedOrigins = allowAllOrigins 
+  ? [] 
+  : corsOriginEnv
+      .split(',')
+      .map(origin => origin.trim())
+      .filter(origin => origin.length > 0);
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (mobile apps, curl, etc.)
+    // Allow requests with no origin (mobile apps, curl, Postman, etc.)
+    // This is ESSENTIAL for Flutter/mobile apps which don't send Origin header
     if (!origin) return callback(null, true);
     
+    // Allow all origins if CORS_ORIGIN is set to "*"
+    if (allowAllOrigins) return callback(null, true);
+    
     // Allow localhost for development
-    if (allowedOrigins.includes('http://localhost:3000') && origin === 'http://localhost:3000') {
-      return callback(null, true);
-    }
-    if (allowedOrigins.includes('http://localhost:8080') && origin === 'http://localhost:8080') {
-      return callback(null, true);
+    if (process.env.NODE_ENV !== 'production') {
+      if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+        return callback(null, true);
+      }
     }
     
     // Check if origin is in allowed list
@@ -118,8 +125,8 @@ app.use(cors({
     
     return callback(new Error('Not allowed by CORS'));
   },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Admin-ID'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Admin-ID', 'X-Requested-With', 'Accept'],
   credentials: true,
   maxAge: 86400 // 24 hours
 }));
