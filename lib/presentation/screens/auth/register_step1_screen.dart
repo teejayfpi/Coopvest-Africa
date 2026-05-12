@@ -133,7 +133,11 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
       if (user != null) {
         if (!user.emailVerified) {
           // Account exists but email not verified - resend verification and go to step 2
-          await user.sendEmailVerification();
+          try {
+            await user.sendEmailVerification();
+          } catch (emailError) {
+            // Continue even if email send fails - user can resend from step 2
+          }
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
@@ -162,12 +166,41 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
         }
       }
     } on fb.FirebaseAuthException catch (e) {
-      // Wrong password or other error - show original message
-      if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
+      // Wrong password or other Firebase auth error - redirect to login with helpful message
+      if (e.code == 'wrong-password' || e.code == 'invalid-credential' || e.code == 'INVALID_LOGIN_CREDENTIALS') {
+        if (mounted) {
+          // Show dialog with options to login or reset password
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Account Exists'),
+              content: const Text(
+                'An account with this email already exists. Would you like to log in or reset your password?',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    Navigator.of(context).pushReplacementNamed('/login');
+                  },
+                  child: const Text('Go to Login'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    Navigator.of(context).pushNamed('/forgot-password', arguments: _emailController.text.trim().toLowerCase());
+                  },
+                  child: const Text('Reset Password'),
+                ),
+              ],
+            ),
+          );
+        }
+      } else if (e.code == 'too-many-requests') {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('An account with this email exists. Please log in or use "Forgot Password".'),
+              content: Text('Too many attempts. Please wait a moment and try again.'),
               backgroundColor: CoopvestColors.error,
             ),
           );
@@ -175,9 +208,25 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('An account already exists with this email address.'), backgroundColor: CoopvestColors.error),
+            const SnackBar(
+              content: Text('An account already exists with this email. Please try logging in.'),
+              backgroundColor: CoopvestColors.error,
+            ),
           );
+          // Navigate to login as fallback
+          Navigator.of(context).pushReplacementNamed('/login');
         }
+      }
+    } catch (e) {
+      // Generic error - redirect to login as safest option
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('An account already exists with this email. Please try logging in.'),
+            backgroundColor: CoopvestColors.error,
+          ),
+        );
+        Navigator.of(context).pushReplacementNamed('/login');
       }
     }
   }
