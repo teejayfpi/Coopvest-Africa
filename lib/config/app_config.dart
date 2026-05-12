@@ -68,8 +68,10 @@ class AppConfig {
   static const Duration maxRetryDelay = Duration(seconds: 30);
 
   // Network Configuration
-  static const bool enableSSLPinning = true;
-  static const String sslFingerprint = 'YOUR_SERVER_SSL_FINGERPRINT_HERE'; // TODO: Replace with actual SHA-256 fingerprint
+  // SSL Pinning disabled for Render deployment - Render handles SSL automatically
+  // Re-enable and set fingerprint when using custom domain with known certificate
+  static const bool enableSSLPinning = false;
+  static const String sslFingerprint = ''; // Set SHA-256 fingerprint when SSL pinning is enabled
   static const bool enableRequestLogging = true;
   static const bool enableResponseLogging = true;
 

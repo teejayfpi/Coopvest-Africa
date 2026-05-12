@@ -10,7 +10,7 @@ class FeatureService {
   factory FeatureService() => _instance;
   FeatureService._internal();
 
-  final String _baseUrl = 'http://localhost:5000/api';
+  final String _baseUrl = 'https://coopvest-api.onrender.com/api';
   static const String _cacheKey = 'feature_flags_cache';
   static const Duration _cacheDuration = Duration(hours: 1);
   
