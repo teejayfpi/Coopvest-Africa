@@ -253,69 +253,211 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
   }
 
   Widget _buildHeader(BuildContext context, String name, String membershipId, String fullName) {
+    final walletState = ref.watch(walletProvider);
+    final wallet = walletState.wallet;
+    final totalBalance = (wallet?.balance ?? 0.0) + (wallet?.totalContributions ?? 0.0);
+    
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.only(top: 40, left: 20, right: 20, bottom: 50),
+      padding: const EdgeInsets.only(top: 50, left: 20, right: 20, bottom: 60),
       decoration: BoxDecoration(
-        color: CoopvestColors.primary,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFF1B5E20),
+            const Color(0xFF2E7D32),
+            const Color(0xFF388E3C),
+          ],
+        ),
         borderRadius: const BorderRadius.only(
-          bottomLeft: Radius.circular(24),
-          bottomRight: Radius.circular(24),
+          bottomLeft: Radius.circular(32),
+          bottomRight: Radius.circular(32),
         ),
         boxShadow: [
           BoxShadow(
-            color: CoopvestColors.primary.withOpacity(0.2),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+            color: const Color(0xFF1B5E20).withOpacity(0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          // Top row with greeting and avatar
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Welcome back,',
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.85),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w400,
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Welcome back,',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.8),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w400,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    name,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 4),
-              Text(
-                name,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Membership ID: $membershipId',
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.7),
-                  fontSize: 12,
-                ),
+              Row(
+                children: [
+                  // Notification bell
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.notifications_outlined,
+                      color: Colors.white,
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // Avatar
+                  GestureDetector(
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfileSettingsScreen())),
+                    child: Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white.withOpacity(0.3), width: 2),
+                      ),
+                      child: CircleAvatar(
+                        radius: 22,
+                        backgroundColor: Colors.white.withOpacity(0.2),
+                        child: Text(
+                          _getInitials(fullName),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-          GestureDetector(
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfileSettingsScreen())),
-            child: CircleAvatar(
-              radius: 32,
-              backgroundColor: Colors.white.withOpacity(0.2),
-              child: Text(
-                _getInitials(fullName),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+          
+          const SizedBox(height: 28),
+          
+          // Total Balance Section
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.white.withOpacity(0.1)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Total Balance',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.8),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.visibility_outlined,
+                            color: Colors.white.withOpacity(0.9),
+                            size: 14,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'ID: $membershipId',
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.9),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              ),
+                const SizedBox(height: 12),
+                Text(
+                  '₦${totalBalance.formatNumber()}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: -1,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF81C784).withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.trending_up,
+                            color: const Color(0xFFC8E6C9),
+                            size: 14,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '+12.5%',
+                            style: TextStyle(
+                              color: const Color(0xFFC8E6C9),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'this month',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.7),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         ],
@@ -332,40 +474,59 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
     return '${parts[0][0]}${parts[parts.length - 1][0]}'.toUpperCase();
   }
 
-  Widget _buildCompactStatCard(BuildContext context, String title, String value, IconData icon, VoidCallback onTap) {
+  Widget _buildCompactStatCard(BuildContext context, String title, String value, IconData icon, VoidCallback onTap, {Color? accentColor}) {
+    final cardColor = accentColor ?? CoopvestColors.primary;
+    
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: context.cardBackground,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(18),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.06),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
+              color: cardColor.withOpacity(0.08),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
             ),
           ],
+          border: Border.all(
+            color: cardColor.withOpacity(0.08),
+            width: 1,
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: CoopvestColors.primary.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    cardColor.withOpacity(0.15),
+                    cardColor.withOpacity(0.05),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(icon, color: CoopvestColors.primary, size: 20),
+              child: Icon(icon, color: cardColor, size: 22),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 14),
             Text(
               title,
               style: TextStyle(
                 fontSize: 11,
                 color: context.textSecondary,
                 fontWeight: FontWeight.w500,
+                letterSpacing: 0.2,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -374,9 +535,10 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
             Text(
               value,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: 14,
                 fontWeight: FontWeight.bold,
                 color: context.textPrimary,
+                letterSpacing: -0.3,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -388,46 +550,63 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
   }
 
   Widget _buildActionButton(BuildContext context, String label, IconData icon, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          color: context.cardBackground,
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: CoopvestColors.primary.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+          decoration: BoxDecoration(
+            color: context.cardBackground,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.04),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
               ),
-              child: Icon(icon, color: CoopvestColors.primary, size: 22),
+            ],
+            border: Border.all(
+              color: Colors.grey.withOpacity(0.08),
+              width: 1,
             ),
-            const SizedBox(height: 8),
-            Flexible(
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 10,
-                  color: context.textPrimary,
-                  fontWeight: FontWeight.w600,
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      CoopvestColors.primary.withOpacity(0.12),
+                      CoopvestColors.primary.withOpacity(0.04),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(14),
                 ),
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
+                child: Icon(icon, color: CoopvestColors.primary, size: 24),
               ),
-            ),
-          ],
+              const SizedBox(height: 10),
+              Flexible(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: context.textPrimary,
+                    fontWeight: FontWeight.w600,
+                    height: 1.2,
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -437,39 +616,69 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
     return GestureDetector(
       onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => WalletDashboardScreen(userId: ref.read(currentUserProvider)?.id ?? '', userName: ref.read(currentUserProvider)?.name ?? ''))),
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
           color: context.cardBackground,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
+              color: CoopvestColors.primary.withOpacity(0.06),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+            BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
             ),
           ],
+          border: Border.all(
+            color: CoopvestColors.primary.withOpacity(0.06),
+            width: 1,
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Insights',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: context.textPrimary,
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Insights',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: context.textPrimary,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: CoopvestColors.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    'View All',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: CoopvestColors.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             Text(
-              'Contributions',
+              'Contributions Trend',
               style: TextStyle(
                 fontSize: 12,
                 color: context.textSecondary,
                 fontWeight: FontWeight.w500,
               ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
             SizedBox(
               height: 100,
               child: LineChart(
@@ -485,11 +694,14 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                         getTitlesWidget: (value, meta) {
                           const titles = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
                           if (value.toInt() < titles.length) {
-                            return Text(titles[value.toInt()], style: TextStyle(fontSize: 9, color: context.textSecondary));
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: Text(titles[value.toInt()], style: TextStyle(fontSize: 10, color: context.textSecondary, fontWeight: FontWeight.w500)),
+                            );
                           }
                           return const Text('');
                         },
-                        reservedSize: 20,
+                        reservedSize: 24,
                       ),
                     ),
                   ),
@@ -505,13 +717,31 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                         FlSpot(5, 60),
                       ],
                       isCurved: true,
+                      curveSmoothness: 0.35,
                       color: CoopvestColors.primary,
-                      barWidth: 2.5,
+                      barWidth: 3,
                       isStrokeCapRound: true,
-                      dotData: const FlDotData(show: false),
+                      dotData: FlDotData(
+                        show: true,
+                        getDotPainter: (spot, percent, barData, index) {
+                          return FlDotCirclePainter(
+                            radius: index == 5 ? 5 : 0,
+                            color: CoopvestColors.primary,
+                            strokeWidth: 2,
+                            strokeColor: Colors.white,
+                          );
+                        },
+                      ),
                       belowBarData: BarAreaData(
                         show: true,
-                        color: CoopvestColors.primary.withOpacity(0.1),
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            CoopvestColors.primary.withOpacity(0.2),
+                            CoopvestColors.primary.withOpacity(0.02),
+                          ],
+                        ),
                       ),
                     ),
                   ],
@@ -526,17 +756,39 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
 
   Widget _buildLoanStatusCard(BuildContext context, LoansState loansState) {
     final pendingLoan = loansState.loans.any((l) => l.status == 'under_review' || l.status == 'pending_guarantors');
+    final activeLoan = loansState.loans.any((l) => l.status == 'active' || l.status == 'repaying');
+    
+    final statusColor = pendingLoan 
+        ? CoopvestColors.warning 
+        : (activeLoan ? CoopvestColors.primary : context.textSecondary);
+    final statusText = pendingLoan 
+        ? 'Pending Approval' 
+        : (activeLoan ? 'Active Loan' : 'No Applications');
+    final statusIcon = pendingLoan 
+        ? Icons.hourglass_empty_rounded 
+        : (activeLoan ? Icons.check_circle_outline : Icons.info_outline_rounded);
     
     return GestureDetector(
       onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => LoanDashboardScreen(userId: ref.read(currentUserProvider)?.id ?? '', userName: ref.read(currentUserProvider)?.name ?? '', userPhone: ref.read(currentUserProvider)?.phone ?? ''))),
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
-          color: context.cardBackground,
-          borderRadius: BorderRadius.circular(16),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              statusColor.withOpacity(0.08),
+              statusColor.withOpacity(0.02),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: statusColor.withOpacity(0.15),
+            width: 1,
+          ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: statusColor.withOpacity(0.08),
               blurRadius: 12,
               offset: const Offset(0, 4),
             ),
@@ -545,30 +797,56 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Loan Status',
-              style: TextStyle(
-                fontSize: 14,
-                color: context.textPrimary,
-                fontWeight: FontWeight.w600,
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Loan Status',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: context.textPrimary,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: -0.2,
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: statusColor.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    statusIcon,
+                    color: statusColor,
+                    size: 18,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
+            const Spacer(),
             Text(
-              pendingLoan ? 'Pending\nApproval' : 'No Active\nApplications',
+              statusText,
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: context.textPrimary,
+                color: statusColor,
+                letterSpacing: -0.3,
               ),
             ),
-            const SizedBox(height: 16),
-            Align(
-              alignment: Alignment.bottomRight,
-              child: Icon(
-                Icons.access_time_outlined,
-                color: CoopvestColors.primary.withOpacity(0.6),
-                size: 28,
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: context.cardBackground,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                'View Details',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: context.textSecondary,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
           ],
@@ -578,58 +856,79 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
   }
 
   Widget _buildNotificationItem(BuildContext context, String title, String time, IconData icon, Color color, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: context.cardBackground,
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.03),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: context.cardBackground,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.03),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
               ),
-              child: Icon(icon, color: color, size: 20),
+            ],
+            border: Border.all(
+              color: Colors.grey.withOpacity(0.06),
+              width: 1,
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: context.textPrimary,
-                    ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      color.withOpacity(0.15),
+                      color.withOpacity(0.05),
+                    ],
                   ),
-                  if (time.isNotEmpty) ...[ 
-                    const SizedBox(height: 3),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(icon, color: color, size: 22),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Text(
-                      time,
+                      title,
                       style: TextStyle(
-                        fontSize: 11,
-                        color: context.textSecondary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: context.textPrimary,
+                        letterSpacing: -0.2,
                       ),
                     ),
+                    if (time.isNotEmpty) ...[ 
+                      const SizedBox(height: 4),
+                      Text(
+                        time,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: context.textSecondary,
+                        ),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-          ],
+              Icon(
+                Icons.chevron_right_rounded,
+                color: context.textSecondary.withOpacity(0.5),
+                size: 22,
+              ),
+            ],
+          ),
         ),
       ),
     );
