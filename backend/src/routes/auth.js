@@ -229,6 +229,63 @@ router.post('/google', [
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// POST /api/v1/auth/salary-consent
+// Records the user's salary deduction consent for loan access
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/salary-consent', [
+  body('memberId').notEmpty().withMessage('Member ID is required'),
+  body('consent').isBoolean().withMessage('Consent must be a boolean'),
+], validate, async (req, res) => {
+  try {
+    const { memberId, consent, timestamp } = req.body;
+
+    // Upsert the consent record into the profiles table
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({
+        salary_deduction_consent: consent,
+        salary_deduction_consent_date: timestamp || new Date().toISOString(),
+      })
+      .eq('user_id', memberId)
+      .select()
+      .single();
+
+    if (error) {
+      // If memberId doesnt match user_id, try matching by id
+      const { data: retryData, error: retryError } = await supabase
+        .from('profiles')
+        .update({
+          salary_deduction_consent: consent,
+          salary_deduction_consent_date: timestamp || new Date().toISOString(),
+        })
+        .eq('id', memberId)
+        .select()
+        .single();
+
+      if (retryError) {
+        logger.error('Salary consent update error:', retryError.message);
+        return res.status(400).json({ success: false, error: 'Failed to record consent. Member not found.' });
+      }
+
+      return res.json({
+        success: true,
+        message: 'Salary deduction consent recorded successfully',
+        data: retryData,
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: 'Salary deduction consent recorded successfully',
+      data,
+    });
+  } catch (err) {
+    logger.error('Salary consent error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // POST /api/v1/auth/logout
 // ─────────────────────────────────────────────────────────────────────────────
 router.post('/logout', authenticate, async (req, res) => {
