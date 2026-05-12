@@ -41,12 +41,51 @@ class AuthRepository {
   }
 
   /// Sync profile with backend after any Firebase sign-in and return User.
+  /// If backend sync fails (404/400), create a local User from Firebase data.
   Future<User> _syncWithBackend() async {
     await _refreshAndAttachToken();
-    final response = await _apiClient.post('/auth/sync');
-    final user = User.fromJson(response['user'] as Map<String, dynamic>);
-    _cachedUser = user;
-    return user;
+    
+    try {
+      final response = await _apiClient.post('/auth/sync');
+      final user = User.fromJson(response['user'] as Map<String, dynamic>);
+      _cachedUser = user;
+      return user;
+    } catch (e) {
+      // If sync endpoint fails (404 Resource not found, 400 Bad request),
+      // create a User from Firebase data so login can proceed
+      logger.w('Backend sync failed: $e - using Firebase user data');
+      
+      final fbUser = _firebaseAuth.currentUser;
+      if (fbUser == null) throw AuthException('No authenticated user');
+      
+      // Try to get user from /auth/me endpoint as fallback
+      try {
+        final meResponse = await _apiClient.get('/auth/me');
+        if (meResponse is Map<String, dynamic>) {
+          final userData = meResponse.containsKey('user') 
+              ? meResponse['user'] as Map<String, dynamic>
+              : meResponse;
+          final user = User.fromJson(userData);
+          _cachedUser = user;
+          return user;
+        }
+      } catch (meError) {
+        logger.w('Backend /auth/me also failed: $meError');
+      }
+      
+      // Create minimal User from Firebase data as last resort
+      final user = User(
+        id: fbUser.uid,
+        name: fbUser.displayName ?? 'User',
+        email: fbUser.email ?? '',
+        phone: fbUser.phoneNumber,
+        isEmailVerified: fbUser.emailVerified,
+        kycStatus: 'pending',
+        createdAt: fbUser.metadata.creationTime ?? DateTime.now(),
+      );
+      _cachedUser = user;
+      return user;
+    }
   }
 
   // ─── Sign-in methods ─────────────────────────────────────────────────────────
@@ -192,8 +231,10 @@ class AuthRepository {
   }
 
   /// Get current user (with caching)
+  /// Falls back to Firebase user data if backend is unavailable
   Future<User> getCurrentUser({bool forceRefresh = false}) async {
     if (!forceRefresh && _cachedUser != null) return _cachedUser!;
+    
     try {
       final response = await _apiClient.get('/auth/me');
       if (response is Map<String, dynamic> && response.containsKey('user')) {
@@ -203,7 +244,22 @@ class AuthRepository {
       }
       return _cachedUser!;
     } catch (e) {
-      logger.e('Get current user error: $e');
+      logger.w('Get current user from backend failed: $e');
+      
+      // Fallback to Firebase user if backend fails
+      final fbUser = _firebaseAuth.currentUser;
+      if (fbUser != null) {
+        _cachedUser = User(
+          id: fbUser.uid,
+          name: fbUser.displayName ?? 'User',
+          email: fbUser.email ?? '',
+          phone: fbUser.phoneNumber,
+          isEmailVerified: fbUser.emailVerified,
+          kycStatus: 'pending',
+          createdAt: fbUser.metadata.creationTime ?? DateTime.now(),
+        );
+        return _cachedUser!;
+      }
       rethrow;
     }
   }
@@ -280,6 +336,7 @@ class AuthRepository {
   }
 
   /// Restore session on app startup using Firebase's persisted auth state
+  /// This ensures users stay logged in until they explicitly sign out
   Future<bool> restoreSession() async {
     try {
       final fbUser = _firebaseAuth.currentUser;
@@ -287,12 +344,23 @@ class AuthRepository {
 
       // Refresh token and re-attach to API client
       await _refreshAndAttachToken();
-      await getCurrentUser(forceRefresh: true);
+      
+      // Try to get user from backend, but don't fail if backend is down
+      try {
+        await getCurrentUser(forceRefresh: true);
+      } catch (e) {
+        logger.w('Backend user fetch failed during restore, using Firebase data: $e');
+        // getCurrentUser already handles fallback to Firebase user
+      }
+      
       return true;
     } catch (e) {
       logger.e('Session restore failed: $e');
-      _apiClient.clearAuthToken();
-      await TokenStorage.clearTokens();
+      // Only clear tokens if Firebase auth itself failed, not just backend
+      if (_firebaseAuth.currentUser == null) {
+        _apiClient.clearAuthToken();
+        await TokenStorage.clearTokens();
+      }
       return false;
     }
   }
