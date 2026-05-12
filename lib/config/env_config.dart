@@ -14,23 +14,25 @@ class EnvConfig {
   });
 
   static EnvConfig get dev => EnvConfig(
-        // Android emulator: use http://10.0.2.2:5000/api/v1
-        // iOS simulator:    use http://localhost:5000/api/v1
-        // Physical device:  use https://<your-replit-domain>/api/v1
-        apiBaseUrl: 'http://10.0.2.2:5000/api/v1',
+        // Development: Use Render API for all development testing
+        // Local Android emulator: use http://10.0.2.2:5000/api/v1
+        // Local iOS simulator:    use http://localhost:5000/api/v1
+        apiBaseUrl: 'https://coopvest-api.onrender.com/api/v1',
         appName: 'Coopvest Dev',
         enableLogging: true,
         useMockData: false,
       );
 
   static EnvConfig get staging => EnvConfig(
-        apiBaseUrl: 'https://staging-api.coopvest.africa/api/v1',
+        // Staging: Use Render API
+        apiBaseUrl: 'https://coopvest-api.onrender.com/api/v1',
         appName: 'Coopvest Staging',
         enableLogging: true,
       );
 
   static EnvConfig get prod => EnvConfig(
-        apiBaseUrl: 'https://api.coopvest.africa/api/v1',
+        // Production: Use Render API
+        apiBaseUrl: 'https://coopvest-api.onrender.com/api/v1',
         appName: 'Coopvest Africa',
         enableLogging: false,
       );
