@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
-import '../../../core/services/api_service.dart';
+import '../../../core/network/api_client.dart';
+import '../../../core/utils/utils.dart';
 import '../../widgets/common/buttons.dart';
 
 /// Salary Deduction & Loan Recovery Consent Screen
@@ -21,17 +22,26 @@ class SalaryDeductionConsentScreen extends ConsumerStatefulWidget {
 class _SalaryDeductionConsentScreenState extends ConsumerState<SalaryDeductionConsentScreen> {
   bool _agreeToConsent = false;
   bool _isSubmitting = false;
-  final ApiService _apiService = ApiService();
 
   Future<void> _submitConsent() async {
     if (!_agreeToConsent) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please read and accept the consent'), backgroundColor: CoopvestColors.error));
       return;
     }
+    
+    // Validate memberId is present
+    final memberId = widget.registrationData['memberId'];
+    if (memberId == null || memberId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Member ID is missing. Please complete registration first.'), backgroundColor: CoopvestColors.error));
+      return;
+    }
+    
     setState(() => _isSubmitting = true);
     try {
-      final response = await _apiService.post('/auth/salary-consent', data: {
-        'memberId': widget.registrationData['memberId'] ?? '',
+      // Use the authenticated ApiClient from Riverpod provider
+      final apiClient = ref.read(apiClientProvider);
+      final response = await apiClient.post('/auth/salary-consent', data: {
+        'memberId': memberId,
         'consent': _agreeToConsent,
         'timestamp': DateTime.now().toIso8601String(),
       });
@@ -39,6 +49,18 @@ class _SalaryDeductionConsentScreenState extends ConsumerState<SalaryDeductionCo
         Navigator.of(context).pushReplacementNamed('/account-activation');
       } else {
         throw Exception(response['message'] ?? 'Failed to submit consent');
+      }
+    } on ValidationException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Validation Error: ${e.message}'), backgroundColor: CoopvestColors.error));
+      }
+    } on AuthException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Authentication Error: ${e.message}'), backgroundColor: CoopvestColors.error));
+      }
+    } on NetworkException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Network Error: ${e.message}'), backgroundColor: CoopvestColors.error));
       }
     } catch (e) {
       if (mounted) {
