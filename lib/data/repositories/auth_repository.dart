@@ -312,6 +312,7 @@ class AuthRepository {
         return 'No account found with this email address.';
       case 'wrong-password':
       case 'invalid-credential':
+      case 'INVALID_LOGIN_CREDENTIALS':
         return 'Incorrect email or password.';
       case 'email-already-in-use':
         return 'An account already exists with this email address.';
@@ -331,6 +332,9 @@ class AuthRepository {
         return 'This link has expired. Please request a new one.';
       case 'invalid-action-code':
         return 'Invalid reset code. Please request a new one.';
+      case 'channel-error':
+        // This handles the PigeonUserDetails error in older versions
+        return 'Authentication service error. Please update the app.';
       default:
         return e.message ?? 'Authentication failed. Please try again.';
     }
