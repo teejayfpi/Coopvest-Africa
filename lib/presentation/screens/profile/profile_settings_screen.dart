@@ -22,6 +22,7 @@ import 'notifications_screen.dart';
 import '../transactions/statement_download_screen.dart';
 import '../referral/referral_dashboard_screen.dart';
 import '../referral/referral_sharing_screen.dart';
+import '../rollover/rollover_eligibility_screen.dart';
 
 /// Profile & Settings Screen
 class ProfileSettingsScreen extends ConsumerStatefulWidget {
@@ -50,6 +51,11 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
           'icon': Icons.account_balance_outlined,
           'label': 'Membership',
           'subtitle': 'View status, request termination',
+        },
+        {
+          'icon': Icons.autorenew_outlined,
+          'label': 'Loan Rollover',
+          'subtitle': 'Extend or rollover your existing loan',
         },
         {
           'icon': Icons.download_outlined,
@@ -485,6 +491,11 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
       case 'Membership':
         Navigator.of(context).push(
           MaterialPageRoute(builder: (context) => const MembershipScreen()),
+        );
+        break;
+      case 'Loan Rollover':
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (context) => const RolloverEligibilityScreen()),
         );
         break;
       case 'Download Statement':
