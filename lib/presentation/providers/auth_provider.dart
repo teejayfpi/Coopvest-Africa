@@ -67,6 +67,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   /// Register with Firebase Auth
+  /// After successful registration, user remains authenticated
   Future<void> register({
     required String email,
     required String password,
@@ -84,8 +85,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
         referralCode: referralCode,
       );
 
+      // User is now authenticated and should stay logged in
+      // Set to authenticated (not just kycPending) so session persists
       state = state.copyWith(
-        status: AuthStatus.kycPending,
+        status: AuthStatus.authenticated,
         user: user,
       );
 
