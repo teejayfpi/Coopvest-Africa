@@ -36,15 +36,15 @@ class WalletRepository {
       return Wallet.fromJson(response as Map<String, dynamic>);
     } catch (e) {
       logger.e('Get wallet error: $e');
-      // Mock data for development if backend fails
+      // Return empty wallet with zero values when backend fails
       return Wallet(
-        id: 'mock_id',
-        userId: 'mock_user',
-        balance: 250000.0,
-        totalContributions: 150000.0,
-        totalSavings: 150000.0,
-        pendingContributions: 5000.0,
-        availableForWithdrawal: 245000.0,
+        id: '',
+        userId: '',
+        balance: 0.0,
+        totalContributions: 0.0,
+        totalSavings: 0.0,
+        pendingContributions: 0.0,
+        availableForWithdrawal: 0.0,
         updatedAt: DateTime.now(),
       );
     }
@@ -72,35 +72,8 @@ class WalletRepository {
       return goals;
     } catch (e) {
       logger.e('Get savings goals error: $e');
-      // Mock savings goals for development
-      return [
-        SavingsGoal(
-          id: 'goal_1',
-          userId: 'mock_user',
-          walletId: 'mock_id',
-          name: 'Emergency Fund',
-          description: 'Build emergency savings',
-          targetAmount: 500000.0,
-          currentAmount: 250000.0,
-          monthlyContribution: 50000.0,
-          targetDate: DateTime.now().add(const Duration(days: 180)),
-          createdAt: DateTime.now().subtract(const Duration(days: 30)),
-          status: 'active',
-        ),
-        SavingsGoal(
-          id: 'goal_2',
-          userId: 'mock_user',
-          walletId: 'mock_id',
-          name: 'Vacation Fund',
-          description: 'Save for vacation',
-          targetAmount: 200000.0,
-          currentAmount: 80000.0,
-          monthlyContribution: 20000.0,
-          targetDate: DateTime.now().add(const Duration(days: 120)),
-          createdAt: DateTime.now().subtract(const Duration(days: 15)),
-          status: 'active',
-        ),
-      ];
+      // Return empty list when backend fails - no placeholders
+      return [];
     }
   }
 
@@ -130,29 +103,8 @@ class WalletRepository {
       return transactions;
     } catch (e) {
       logger.e('Get transactions error: $e');
-      // Mock transactions
-      return [
-        Transaction(
-          id: '1',
-          walletId: 'mock_id',
-          type: 'deposit',
-          amount: 50000.0,
-          status: 'completed',
-          description: 'Monthly Contribution',
-          createdAt: DateTime.now().subtract(const Duration(days: 2)),
-          updatedAt: DateTime.now().subtract(const Duration(days: 2)),
-        ),
-        Transaction(
-          id: '2',
-          walletId: 'mock_id',
-          type: 'withdrawal',
-          amount: 10000.0,
-          status: 'completed',
-          description: 'Withdrawal to Bank',
-          createdAt: DateTime.now().subtract(const Duration(days: 5)),
-          updatedAt: DateTime.now().subtract(const Duration(days: 5)),
-        ),
-      ];
+      // Return empty list when backend fails - no placeholders
+      return [];
     }
   }
 

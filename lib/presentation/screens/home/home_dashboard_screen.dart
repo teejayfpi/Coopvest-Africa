@@ -208,38 +208,8 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                     
                     const SizedBox(height: 28),
                     
-                    // Notifications Section
-                    Text(
-                      'Notifications',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: context.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _buildNotificationItem(
-                      context,
-                      'Your loan has been approved',
-                      '2h ago',
-                      Icons.check_circle_outline,
-                      CoopvestColors.primary,
-                      () => Navigator.push(context, MaterialPageRoute(builder: (context) => LoanDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? '', userPhone: user?.phone ?? ''))),
-                    ),
-                    const SizedBox(height: 12),
-                    _buildNotificationItem(
-                      context,
-                      '5 Tips for Better Financial Planning',
-                      '',
-                      Icons.lightbulb_outline,
-                      CoopvestColors.primary,
-                      () => ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: const Text('Financial tips feature coming soon'),
-                          backgroundColor: CoopvestColors.primary,
-                        ),
-                      ),
-                    ),
+                    // Notifications Section - Real-time from provider
+                    _buildNotificationsSection(context, user?.id ?? ''),
                     
                     const SizedBox(height: 32),
                   ],
@@ -420,43 +390,23 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF81C784).withOpacity(0.3),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.trending_up,
-                            color: const Color(0xFFC8E6C9),
-                            size: 14,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '+12.5%',
-                            style: TextStyle(
-                              color: const Color(0xFFC8E6C9),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
+                // Growth indicator - only show if there's actual data
+                if (totalBalance > 0)
+                  Text(
+                    'Updated just now',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.7),
+                      fontSize: 12,
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'this month',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.7),
-                        fontSize: 12,
-                      ),
+                  )
+                else
+                  Text(
+                    'Make your first contribution',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.7),
+                      fontSize: 12,
                     ),
-                  ],
-                ),
+                  ),
               ],
             ),
           ),
@@ -934,5 +884,111 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildNotificationsSection(BuildContext context, String userId) {
+    final notificationsState = ref.watch(notificationsProvider);
+    final notifications = notificationsState.notifications.take(3).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Notifications',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: context.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (notifications.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: context.cardBackground,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: context.dividerColor.withOpacity(0.5)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: CoopvestColors.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    Icons.notifications_none_outlined,
+                    color: CoopvestColors.primary,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'No notifications yet',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: context.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Your notifications will appear here',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: context.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          )
+        else
+          ...notifications.map((notification) {
+            final isLoan = notification.type.contains('loan');
+            final isContribution = notification.type.contains('contribution');
+            final icon = isLoan 
+                ? Icons.monetization_on_outlined 
+                : (isContribution ? Icons.savings_outlined : Icons.notifications_outlined);
+            
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _buildNotificationItem(
+                context,
+                notification.title,
+                _formatTimeAgo(notification.createdAt),
+                icon,
+                CoopvestColors.primary,
+                () {},
+              ),
+            );
+          }),
+      ],
+    );
+  }
+
+  String _formatTimeAgo(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+    
+    if (difference.inMinutes < 1) {
+      return 'Just now';
+    } else if (difference.inMinutes < 60) {
+      return '${difference.inMinutes}m ago';
+    } else if (difference.inHours < 24) {
+      return '${difference.inHours}h ago';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays}d ago';
+    } else {
+      return DateFormat('MMM d').format(dateTime);
+    }
   }
 }
