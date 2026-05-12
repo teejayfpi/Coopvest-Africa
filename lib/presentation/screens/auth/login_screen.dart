@@ -29,6 +29,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _obscurePassword = true;
   String? _emailError;
   String? _passwordError;
+  bool _isNavigating = false;
 
   final LocalAuthentication _localAuth = LocalAuthentication();
   bool _isBiometricAvailable = false;
@@ -155,6 +156,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
     final isLoading = authState.status == AuthStatus.loading;
+    
+    // Listen for auth state changes and navigate when authenticated
+    ref.listen<AuthState>(authProvider, (previous, current) {
+      if (!_isNavigating && 
+          current.status == AuthStatus.authenticated && 
+          previous?.status != AuthStatus.authenticated) {
+        _isNavigating = true;
+        Navigator.of(context).pushReplacementNamed('/home');
+      }
+    });
 
     return Scaffold(
       backgroundColor: context.scaffoldBackground,
