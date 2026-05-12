@@ -55,13 +55,22 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                 children: [
                   Row(mainAxisAlignment: MainAxisAlignment.center, children: List.generate(slides.length, (index) => Container(width: _currentPage == index ? 32 : 8, height: 8, margin: const EdgeInsets.symmetric(horizontal: 4), decoration: BoxDecoration(color: _currentPage == index ? CoopvestColors.primary : context.dividerColor, borderRadius: BorderRadius.circular(4))))),
                   const SizedBox(height: 24),
-                  Row(
-                    children: [
-                      if (_currentPage < slides.length - 1) Expanded(child: SecondaryButton(label: 'Skip', onPressed: () => Navigator.of(context).pushNamed('/login'))),
-                      if (_currentPage < slides.length - 1) const SizedBox(width: 12),
-                      Expanded(child: PrimaryButton(label: _currentPage == slides.length - 1 ? 'Get Started' : 'Next', onPressed: () { if (_currentPage == slides.length - 1) { Navigator.of(context).pushNamed('/login'); } else { _pageController.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut); } })),
-                    ],
-                  ),
+                  if (_currentPage < slides.length - 1) 
+                    Row(
+                      children: [
+                        Expanded(child: SecondaryButton(label: 'Skip', onPressed: () => Navigator.of(context).pushNamed('/login'))),
+                        const SizedBox(width: 12),
+                        Expanded(child: PrimaryButton(label: 'Next', onPressed: () { _pageController.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut); })),
+                      ],
+                    )
+                  else
+                    Column(
+                      children: [
+                        PrimaryButton(label: 'Create Account', onPressed: () => Navigator.of(context).pushNamed('/register'), width: double.infinity),
+                        const SizedBox(height: 12),
+                        SecondaryButton(label: 'Sign In', onPressed: () => Navigator.of(context).pushNamed('/login'), width: double.infinity),
+                      ],
+                    ),
                 ],
               ),
             ),
