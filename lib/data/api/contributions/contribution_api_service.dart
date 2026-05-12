@@ -161,7 +161,7 @@ class ContributionApiService {
           ),
         ],
       ),
-      receiptUrl: 'https://api.coopvest.africa/receipts/$contributionId.pdf',
+      receiptUrl: 'https://coopvest-api.onrender.com/receipts/$contributionId.pdf',
       auditTrailId: 'AUD-${DateTime.now().millisecondsSinceEpoch}',
       processingLogs: [
         ProcessingLog(
