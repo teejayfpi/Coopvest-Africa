@@ -91,7 +91,13 @@ class AuthRepository {
       await credential.user?.updateDisplayName(name);
 
       // Send email verification
-      await credential.user?.sendEmailVerification();
+      try {
+        await credential.user?.sendEmailVerification();
+        logger.i('Verification email sent successfully to ${email.trim()}');
+      } catch (emailError) {
+        logger.e('Failed to send verification email: $emailError');
+        // Continue with registration even if email fails
+      }
 
       // Attach token and create backend profile
       await _refreshAndAttachToken();
@@ -258,7 +264,15 @@ class AuthRepository {
   /// Resend email verification
   Future<void> resendVerificationCode(String email) async {
     try {
-      await _firebaseAuth.currentUser?.sendEmailVerification();
+      final currentUser = _firebaseAuth.currentUser;
+      if (currentUser == null) {
+        throw AuthException('No user signed in. Please sign in again.');
+      }
+      await currentUser.sendEmailVerification();
+      logger.i('Verification email resent successfully to ${currentUser.email}');
+    } on fb.FirebaseAuthException catch (e) {
+      logger.e('Resend verification Firebase error: ${e.code} - ${e.message}');
+      throw AuthException(_mapFirebaseError(e));
     } catch (e) {
       logger.e('Resend verification error: $e');
       rethrow;
