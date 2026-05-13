@@ -17,32 +17,59 @@ class RolloverEligibilityScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final loanState = ref.watch(loanProvider);
-    final activeLoan = loan ?? loanState.loans.firstWhere((l) => l.status == 'active' || l.status == 'repaying', orElse: () => _getDemoLoan());
     final rolloverState = ref.watch(rolloverProvider);
     final rolloverNotifier = ref.read(rolloverProvider.notifier);
+
+    // Find active loan - show message if none exists
+    final activeLoans = loanState.loans.where((l) => l.status == 'active' || l.status == 'repaying').toList();
+    final activeLoan = loan ?? (activeLoans.isNotEmpty ? activeLoans.first : null);
 
     return Scaffold(
       backgroundColor: context.scaffoldBackground,
       appBar: AppBar(title: Text('Rollover Eligibility', style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold)), elevation: 0),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+      body: activeLoan == null
+          ? _buildNoActiveLoanMessage(context)
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildLoanSummaryCard(context, activeLoan),
+                  const SizedBox(height: 24),
+                  _buildEligibilitySection(context, ref, rolloverNotifier, activeLoan),
+                  const SizedBox(height: 24),
+                  if (rolloverState.eligibility != null) _buildActionButtons(context, ref, rolloverNotifier, activeLoan),
+                ],
+              ),
+            ),
+    );
+  }
+
+  Widget _buildNoActiveLoanMessage(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            _buildLoanSummaryCard(context, activeLoan),
+            Icon(Icons.info_outline, size: 64, color: context.textSecondary),
+            const SizedBox(height: 16),
+            Text(
+              'No Active Loan',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: context.textPrimary),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'You need an active loan to check rollover eligibility. Apply for a loan first, then come back here.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14, color: context.textSecondary),
+            ),
             const SizedBox(height: 24),
-            _buildEligibilitySection(context, ref, rolloverNotifier, activeLoan),
-            const SizedBox(height: 24),
-            if (rolloverState.eligibility != null) _buildActionButtons(context, ref, rolloverNotifier, activeLoan),
+            PrimaryButton(label: 'Go Back', onPressed: () => Navigator.of(context).pop()),
           ],
         ),
       ),
     );
-  }
-
-  Loan _getDemoLoan() {
-    final now = DateTime.now();
-    return Loan(id: 'LOAN-DEMO', userId: 'user-id', type: 'Personal Loan', amount: 100000, tenure: 6, interestRate: 7.0, monthlyRepayment: 18333, totalRepayment: 65000, status: 'active', guarantorsAccepted: 3, guarantorsRequired: 3, createdAt: now.subtract(const Duration(days: 90)), updatedAt: now.subtract(const Duration(days: 60)), approvedAt: now.subtract(const Duration(days: 85)), disbursedAt: now.subtract(const Duration(days: 84)));
   }
 
   Widget _buildLoanSummaryCard(BuildContext context, Loan loan) {

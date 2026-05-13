@@ -148,21 +148,27 @@ class ApiClient {
     if (error.response != null) {
       final statusCode = error.response!.statusCode;
       final data = error.response!.data;
+      
+      // Try to extract error message from various response formats
+      String? errorMessage;
+      if (data is Map<String, dynamic>) {
+        errorMessage = data['error'] ?? data['message'] ?? data['msg'];
+      }
 
       switch (statusCode) {
         case 400:
-          return ValidationException(data['message'] ?? 'Bad request');
+          return ValidationException(errorMessage ?? 'Bad request');
         case 401:
-          return AuthException('Unauthorized. Please login again.');
+          return AuthException(errorMessage ?? 'Unauthorized. Please login again.');
         case 403:
-          return AuthException('Access forbidden');
+          return AuthException(errorMessage ?? 'Access forbidden');
         case 404:
-          return ServerException('Resource not found', statusCode: statusCode);
+          return ServerException(errorMessage ?? 'Resource not found', statusCode: statusCode);
         case 500:
-          return ServerException('Server error. Please try again later.', statusCode: statusCode);
+          return ServerException(errorMessage ?? 'Server error. Please try again later.', statusCode: statusCode);
         default:
           return ServerException(
-            data['message'] ?? 'An error occurred',
+            errorMessage ?? 'An error occurred',
             statusCode: statusCode,
           );
       }
