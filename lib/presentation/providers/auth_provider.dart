@@ -169,12 +169,37 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   /// Fetch and update the current user from the backend
+  /// Also sets auth status to authenticated if user is found
   Future<void> getCurrentUser() async {
     try {
       final user = await _authRepository.getCurrentUser();
-      state = state.copyWith(user: user);
+      state = state.copyWith(
+        user: user,
+        status: AuthStatus.authenticated,
+      );
+      logger.i('Current user fetched: ${user.email}');
     } catch (e) {
       logger.e('Get current user error: $e');
+    }
+  }
+
+  /// Restore session from Firebase (called on app startup)
+  Future<bool> restoreSession() async {
+    try {
+      final success = await _authRepository.restoreSession();
+      if (success) {
+        final user = await _authRepository.getCurrentUser();
+        state = state.copyWith(
+          status: AuthStatus.authenticated,
+          user: user,
+        );
+        logger.i('Session restored for: ${user.email}');
+        return true;
+      }
+      return false;
+    } catch (e) {
+      logger.e('Restore session error: $e');
+      return false;
     }
   }
 

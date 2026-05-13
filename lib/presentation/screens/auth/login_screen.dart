@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/utils/utils.dart';
+import '../../../data/repositories/auth_repository.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/common/buttons.dart';
 import '../../widgets/common/inputs.dart';
@@ -58,10 +59,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       final prefs = await SharedPreferences.getInstance();
       final isEnabled = prefs.getBool('biometric_enabled') ?? false;
       
+      // Also check if there's a valid Firebase session (for returning users)
+      final authRepo = ref.read(authRepositoryProvider);
+      final hasSession = await authRepo.hasValidSession();
+      
       setState(() {
         _isBiometricAvailable = canAuthenticate || isDeviceSupported;
-        _isBiometricEnabled = isEnabled && _isBiometricAvailable;
+        // Show biometric option if: enabled in settings AND (has stored creds OR has valid session)
+        _isBiometricEnabled = _isBiometricAvailable && (isEnabled || hasSession);
       });
+      
+      // If biometric is available and user has a valid session, prompt automatically
+      if (_isBiometricEnabled && hasSession && isEnabled) {
+        // Small delay to let the UI render first
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (mounted) {
+          _performBiometricAuth();
+        }
+      }
     } catch (e) {
       logger.e('Error checking biometric status: $e');
     }
@@ -79,7 +94,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       );
 
       if (didAuthenticate) {
-        // Get stored credentials and login
+        final authRepo = ref.read(authRepositoryProvider);
+        
+        // First, try to restore existing Firebase session (no re-login needed)
+        if (await authRepo.hasValidSession()) {
+          try {
+            final user = await authRepo.restoreSessionWithBiometric();
+            ref.read(authProvider.notifier).getCurrentUser();
+            if (mounted) {
+              Navigator.of(context).pushReplacementNamed('/home');
+            }
+            return;
+          } catch (e) {
+            logger.w('Session restore failed, trying stored credentials: $e');
+          }
+        }
+        
+        // Fallback: Get stored credentials and login
         final prefs = await SharedPreferences.getInstance();
         final email = prefs.getString('biometric_email');
         final password = prefs.getString('biometric_password');
