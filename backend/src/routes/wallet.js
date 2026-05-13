@@ -129,6 +129,32 @@ router.post(
 );
 
 /**
+ * POST /api/v1/wallet/contribute - Alias for deposit (used by Flutter app)
+ */
+router.post(
+  '/contribute',
+  authenticate,
+  [body('amount').isFloat({ min: 0.01 }), body('description').optional().isString()],
+  validate,
+  async (req, res) => {
+    try {
+      const { amount, description } = req.body;
+      const wallet = await adjustBalance(req.user.id, Number(amount));
+      const txn = await recordTransaction(req.user.id, {
+        type: 'credit',
+        category: 'contribution',
+        amount,
+        description: description || 'Wallet contribution',
+      });
+      res.status(201).json({ success: true, wallet, transaction: txn });
+    } catch (err) {
+      logger.error('contribute error:', err);
+      res.status(err.statusCode || 500).json({ success: false, error: err.message });
+    }
+  }
+);
+
+/**
  * POST /api/v1/wallet/withdraw
  */
 router.post(
