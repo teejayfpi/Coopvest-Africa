@@ -37,8 +37,17 @@ class AuthRepository {
     if (token == null) throw AuthException('Failed to get Firebase ID token');
     _apiClient.setAuthToken(token);
     await TokenStorage.saveTokens(accessToken: token);
+    logger.i('Auth token refreshed and saved to secure storage');
     return token;
   }
+
+  /// Check if there's a valid Firebase session (for biometric login)
+  Future<bool> hasValidSession() async {
+    return _firebaseAuth.currentUser != null;
+  }
+
+  /// Get the current Firebase user (for biometric login without re-auth)
+  fb.User? get currentFirebaseUser => _firebaseAuth.currentUser;
 
   /// Sync profile with backend after any Firebase sign-in and return User.
   /// If backend sync fails (404/400), create a local User from Firebase data.
@@ -340,7 +349,12 @@ class AuthRepository {
   Future<bool> restoreSession() async {
     try {
       final fbUser = _firebaseAuth.currentUser;
-      if (fbUser == null) return false;
+      if (fbUser == null) {
+        logger.i('No Firebase user found - session not restored');
+        return false;
+      }
+
+      logger.i('Firebase user found: ${fbUser.email} - restoring session...');
 
       // Refresh token and re-attach to API client
       await _refreshAndAttachToken();
@@ -348,6 +362,7 @@ class AuthRepository {
       // Try to get user from backend, but don't fail if backend is down
       try {
         await getCurrentUser(forceRefresh: true);
+        logger.i('Session restored successfully from backend');
       } catch (e) {
         logger.w('Backend user fetch failed during restore, using Firebase data: $e');
         // getCurrentUser already handles fallback to Firebase user
@@ -363,6 +378,16 @@ class AuthRepository {
       }
       return false;
     }
+  }
+
+  /// Restore session for biometric login - refreshes token without full re-auth
+  Future<User> restoreSessionWithBiometric() async {
+    final fbUser = _firebaseAuth.currentUser;
+    if (fbUser == null) throw AuthException('No authenticated session found');
+    
+    // Refresh token and return user
+    await _refreshAndAttachToken();
+    return await getCurrentUser(forceRefresh: true);
   }
 
   // Legacy token refresh — kept for backward-compat with ErrorInterceptor
