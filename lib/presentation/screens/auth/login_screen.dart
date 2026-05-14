@@ -1,22 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/utils/utils.dart';
-import '../../../data/repositories/auth_repository.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/common/buttons.dart';
 import '../../widgets/common/inputs.dart';
 import '../../../data/models/auth_models.dart';
 
-/// Login Screen - Firebase Authentication with Biometric Support
-/// 
-/// Handles user login via:
-/// 1. Email + Password (Firebase Auth)
-/// 2. Biometric authentication (if previously enabled by user in Security Settings)
+const String _bioEmailKey = 'biometric_email';
+const String _bioPasswordKey = 'biometric_password';
+
+/// Login Screen
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
 
@@ -30,18 +28,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _obscurePassword = true;
   String? _emailError;
   String? _passwordError;
-  bool _isNavigating = false;
+  bool _biometricAvailable = false;
+  bool _biometricCredentialsSaved = false;
+  bool _biometricLoading = false;
 
   final LocalAuthentication _localAuth = LocalAuthentication();
-  bool _isBiometricAvailable = false;
-  bool _isBiometricEnabled = false;
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
 
   @override
   void initState() {
     super.initState();
     _emailController = TextEditingController();
     _passwordController = TextEditingController();
-    _checkBiometricStatus();
+    _checkBiometrics();
   }
 
   @override
@@ -51,99 +50,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     super.dispose();
   }
 
-  /// Check if biometrics are available and enabled by the user
-  Future<void> _checkBiometricStatus() async {
+  Future<void> _checkBiometrics() async {
     try {
-      final canAuthenticate = await _localAuth.canCheckBiometrics;
+      final canAuth = await _localAuth.canCheckBiometrics;
       final isDeviceSupported = await _localAuth.isDeviceSupported();
-      final prefs = await SharedPreferences.getInstance();
-      final isEnabled = prefs.getBool('biometric_enabled') ?? false;
-      
-      // Also check if there's a valid Firebase session (for returning users)
-      final authRepo = ref.read(authRepositoryProvider);
-      final hasSession = await authRepo.hasValidSession();
-      
-      setState(() {
-        _isBiometricAvailable = canAuthenticate || isDeviceSupported;
-        // Show biometric option if: enabled in settings AND (has stored creds OR has valid session)
-        _isBiometricEnabled = _isBiometricAvailable && (isEnabled || hasSession);
-      });
-      
-      // If biometric is available and user has a valid session, prompt automatically
-      if (_isBiometricEnabled && hasSession && isEnabled) {
-        // Small delay to let the UI render first
-        await Future.delayed(const Duration(milliseconds: 500));
-        if (mounted) {
-          _performBiometricAuth();
-        }
-      }
-    } catch (e) {
-      logger.e('Error checking biometric status: $e');
-    }
-  }
-
-  /// Perform biometric authentication
-  Future<void> _performBiometricAuth() async {
-    try {
-      final didAuthenticate = await _localAuth.authenticate(
-        localizedReason: 'Authenticate to access your Coopvest account',
-        options: const AuthenticationOptions(
-          stickyAuth: true,
-          biometricOnly: true,
-        ),
-      );
-
-      if (didAuthenticate) {
-        final authRepo = ref.read(authRepositoryProvider);
-        
-        // First, try to restore existing Firebase session (no re-login needed)
-        if (await authRepo.hasValidSession()) {
-          try {
-            final user = await authRepo.restoreSessionWithBiometric();
-            ref.read(authProvider.notifier).getCurrentUser();
-            if (mounted) {
-              Navigator.of(context).pushReplacementNamed('/home');
-            }
-            return;
-          } catch (e) {
-            logger.w('Session restore failed, trying stored credentials: $e');
-          }
-        }
-        
-        // Fallback: Get stored credentials and login
-        final prefs = await SharedPreferences.getInstance();
-        final email = prefs.getString('biometric_email');
-        final password = prefs.getString('biometric_password');
-        
-        if (email != null && password != null) {
-          await ref.read(authProvider.notifier).login(
-            email: email,
-            password: password,
-          );
-          if (mounted) {
-            Navigator.of(context).pushReplacementNamed('/home');
-          }
-        } else {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Please login with email first to enable biometric login'),
-                backgroundColor: CoopvestColors.warning,
-              ),
-            );
-          }
-        }
-      }
-    } on PlatformException catch (e) {
+      final hasCredentials = await _secureStorage.read(key: _bioEmailKey) != null;
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Biometric error: ${e.message}'),
-            backgroundColor: CoopvestColors.error,
-          ),
-        );
+        setState(() {
+          _biometricAvailable = canAuth && isDeviceSupported;
+          _biometricCredentialsSaved = hasCredentials;
+        });
       }
-    }
+    } catch (_) {}
   }
 
   void _validateAndLogin() {
@@ -157,29 +75,69 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Future<void> _performLogin() async {
     try {
       await ref.read(authProvider.notifier).login(
-        email: _emailController.text.trim(),
+        email: _emailController.text,
         password: _passwordController.text,
       );
-      
-      // Store credentials for biometric login (if biometric is enabled)
-      final prefs = await SharedPreferences.getInstance();
-      if (prefs.getBool('biometric_enabled') ?? false) {
-        await prefs.setString('biometric_email', _emailController.text.trim());
-        await prefs.setString('biometric_password', _passwordController.text);
-      }
-      
+      // Save credentials for future biometric use
+      await _secureStorage.write(key: _bioEmailKey, value: _emailController.text);
+      await _secureStorage.write(key: _bioPasswordKey, value: _passwordController.text);
+      if (mounted) Navigator.of(context).pushReplacementNamed('/home');
+    } catch (e) {
       if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/home');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString()), backgroundColor: CoopvestColors.error),
+        );
+      }
+    }
+  }
+
+  Future<void> _authenticateWithBiometrics() async {
+    setState(() => _biometricLoading = true);
+    try {
+      final authenticated = await _localAuth.authenticate(
+        localizedReason: 'Use your fingerprint to sign in to Coopvest',
+        options: const AuthenticationOptions(
+          biometricOnly: false,
+          stickyAuth: true,
+        ),
+      );
+      if (!authenticated) {
+        setState(() => _biometricLoading = false);
+        return;
+      }
+
+      final email = await _secureStorage.read(key: _bioEmailKey);
+      final password = await _secureStorage.read(key: _bioPasswordKey);
+
+      if (email == null || password == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No saved credentials found. Please sign in with your password first.'),
+              backgroundColor: CoopvestColors.warning,
+            ),
+          );
+        }
+        setState(() => _biometricLoading = false);
+        return;
+      }
+
+      await ref.read(authProvider.notifier).login(email: email, password: password);
+      if (mounted) Navigator.of(context).pushReplacementNamed('/home');
+    } on PlatformException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Biometric error: ${e.message}'), backgroundColor: CoopvestColors.error),
+        );
       }
     } catch (e) {
       if (mounted) {
-        final msg = e.toString()
-            .replaceFirst('Exception: ', '')
-            .replaceFirst('AuthException: ', '');
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg), backgroundColor: CoopvestColors.error),
+          SnackBar(content: Text(e.toString()), backgroundColor: CoopvestColors.error),
         );
       }
+    } finally {
+      if (mounted) setState(() => _biometricLoading = false);
     }
   }
 
@@ -187,23 +145,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
     final isLoading = authState.status == AuthStatus.loading;
-    
-    // Listen for auth state changes and navigate when authenticated
-    ref.listen<AuthState>(authProvider, (previous, current) {
-      if (!_isNavigating && 
-          current.status == AuthStatus.authenticated && 
-          previous?.status != AuthStatus.authenticated) {
-        _isNavigating = true;
-        Navigator.of(context).pushReplacementNamed('/home');
-      }
-    });
+    final showBiometric = _biometricAvailable && _biometricCredentialsSaved;
 
     return Scaffold(
       backgroundColor: context.scaffoldBackground,
-      appBar: AppBar(
-        elevation: 0,
-        automaticallyImplyLeading: false,
-      ),
+      appBar: AppBar(elevation: 0, automaticallyImplyLeading: false),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -212,11 +158,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             children: [
               Text(
                 'Welcome Back',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: context.textPrimary,
-                ),
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: context.textPrimary),
               ),
               const SizedBox(height: 8),
               Text(
@@ -225,7 +167,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ),
               const SizedBox(height: 32),
 
-              // Email field
               AppTextField(
                 label: 'Email or Phone Number',
                 hint: 'Enter your email or phone',
@@ -234,8 +175,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 errorText: _emailError,
               ),
               const SizedBox(height: 20),
-
-              // Password field
               AppTextField(
                 label: 'Password',
                 hint: 'Enter your password',
@@ -251,94 +190,86 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ),
               ),
 
-              // Forgot password link
+              const SizedBox(height: 8),
               Align(
                 alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: () => Navigator.of(context).pushNamed('/forgot-password'),
-                  child: const Text(
+                child: GestureDetector(
+                  onTap: () => Navigator.of(context).pushNamed('/forgot-password'),
+                  child: Text(
                     'Forgot Password?',
-                    style: TextStyle(color: CoopvestColors.primary),
+                    style: TextStyle(color: CoopvestColors.primary, fontWeight: FontWeight.w600, fontSize: 13),
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
 
-              // Login button
+              const SizedBox(height: 24),
               PrimaryButton(
                 label: 'Log In',
                 onPressed: _validateAndLogin,
                 isLoading: isLoading,
                 width: double.infinity,
               ),
-              
-              // Biometric login button (only show if enabled)
-              if (_isBiometricEnabled) ...[
-                const SizedBox(height: 24),
+
+              if (showBiometric) ...[
+                const SizedBox(height: 20),
                 Row(
                   children: [
                     Expanded(child: Divider(color: context.dividerColor)),
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Text(
-                        'or',
-                        style: TextStyle(color: context.textSecondary, fontSize: 14),
-                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: Text('or', style: TextStyle(color: context.textSecondary, fontSize: 13)),
                     ),
                     Expanded(child: Divider(color: context.dividerColor)),
                   ],
                 ),
-                const SizedBox(height: 24),
-                Center(
-                  child: Column(
-                    children: [
-                      InkWell(
-                        onTap: _performBiometricAuth,
-                        borderRadius: BorderRadius.circular(50),
-                        child: Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: CoopvestColors.primary.withOpacity(0.1),
-                            shape: BoxShape.circle,
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: _biometricLoading || isLoading ? null : _authenticateWithBiometrics,
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: CoopvestColors.primary, width: 1.5),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: _biometricLoading
+                        ? SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(CoopvestColors.primary),
+                            ),
+                          )
+                        : Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.fingerprint, color: CoopvestColors.primary, size: 24),
+                              const SizedBox(width: 10),
+                              Text(
+                                'Sign in with Fingerprint',
+                                style: TextStyle(
+                                  color: CoopvestColors.primary,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 15,
+                                ),
+                              ),
+                            ],
                           ),
-                          child: Icon(
-                            Icons.fingerprint,
-                            size: 48,
-                            color: CoopvestColors.primary,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Tap to use biometrics',
-                        style: TextStyle(
-                          color: context.textSecondary,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ],
                   ),
                 ),
               ],
-              
-              const SizedBox(height: 32),
 
-              // Sign up link
+              const SizedBox(height: 32),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
-                    "Don't have an account? ",
-                    style: TextStyle(color: context.textSecondary),
-                  ),
+                  Text('Don\'t have an account? ', style: TextStyle(color: context.textSecondary)),
                   GestureDetector(
                     onTap: () => Navigator.of(context).pushNamed('/register'),
                     child: const Text(
                       'Sign Up',
-                      style: TextStyle(
-                        color: CoopvestColors.primary,
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: TextStyle(color: CoopvestColors.primary, fontWeight: FontWeight.bold),
                     ),
                   ),
                 ],
