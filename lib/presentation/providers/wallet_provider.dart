@@ -17,37 +17,23 @@ class WalletRepository {
 
   /// Get wallet
   Future<Wallet> getWallet() async {
-    try {
-      final response = await _apiClient.get('/wallet/balance');
-      // Backend returns { success: true, balance: ..., recentTransactions: ... }
-      // We need to map this to the Wallet model
-      if (response is Map<String, dynamic>) {
-        return Wallet(
-          id: response['id']?.toString() ?? 'mock_wallet_id',
-          userId: response['user_id']?.toString() ?? 'mock_user_id',
-          balance: (response['balance'] as num?)?.toDouble() ?? 0.0,
-          totalContributions: (response['total_contributions'] as num?)?.toDouble() ?? 0.0,
-          totalSavings: (response['total_savings'] as num?)?.toDouble() ?? 0.0,
-          pendingContributions: (response['pending_contributions'] as num?)?.toDouble() ?? 0.0,
-          availableForWithdrawal: (response['available_for_withdrawal'] as num?)?.toDouble() ?? (response['balance'] as num?)?.toDouble() ?? 0.0,
-          updatedAt: response['lastUpdated'] != null ? DateTime.parse(response['lastUpdated'] as String) : DateTime.now(),
-        );
-      }
-      return Wallet.fromJson(response as Map<String, dynamic>);
-    } catch (e) {
-      logger.e('Get wallet error: $e');
-      // Return empty wallet with zero values when backend fails
+    final response = await _apiClient.get('/wallet/balance');
+    if (response is Map<String, dynamic>) {
       return Wallet(
-        id: '',
-        userId: '',
-        balance: 0.0,
-        totalContributions: 0.0,
-        totalSavings: 0.0,
-        pendingContributions: 0.0,
-        availableForWithdrawal: 0.0,
-        updatedAt: DateTime.now(),
+        id: response['id']?.toString() ?? '',
+        userId: response['user_id']?.toString() ?? '',
+        balance: (response['balance'] as num?)?.toDouble() ?? 0.0,
+        totalContributions: (response['total_contributions'] as num?)?.toDouble() ?? 0.0,
+        totalSavings: (response['total_savings'] as num?)?.toDouble() ?? 0.0,
+        pendingContributions: (response['pending_contributions'] as num?)?.toDouble() ?? 0.0,
+        availableForWithdrawal: (response['available_for_withdrawal'] as num?)?.toDouble() ??
+            (response['balance'] as num?)?.toDouble() ?? 0.0,
+        updatedAt: response['lastUpdated'] != null
+            ? DateTime.parse(response['lastUpdated'] as String)
+            : DateTime.now(),
       );
     }
+    return Wallet.fromJson(response as Map<String, dynamic>);
   }
 
   /// Get savings goals
@@ -55,26 +41,18 @@ class WalletRepository {
     int page = 1,
     int pageSize = 20,
   }) async {
-    try {
-      final response = await _apiClient.get(
-        '/wallet/savings-goals',
-        queryParameters: {
-          'page': page,
-          'page_size': pageSize,
-        },
-      );
+    final response = await _apiClient.get(
+      '/wallet/savings-goals',
+      queryParameters: {
+        'page': page,
+        'page_size': pageSize,
+      },
+    );
 
-      final data = response as Map<String, dynamic>;
-      final goals = (data['data'] as List? ?? [])
-          .map((item) => SavingsGoal.fromJson(item as Map<String, dynamic>))
-          .toList();
-
-      return goals;
-    } catch (e) {
-      logger.e('Get savings goals error: $e');
-      // Return empty list when backend fails - no placeholders
-      return [];
-    }
+    final data = response as Map<String, dynamic>;
+    return (data['data'] as List? ?? [])
+        .map((item) => SavingsGoal.fromJson(item as Map<String, dynamic>))
+        .toList();
   }
 
   /// Get transactions
@@ -84,43 +62,34 @@ class WalletRepository {
     String? type,
     String? status,
   }) async {
-    try {
-      final response = await _apiClient.get(
-        '/wallet/transactions',
-        queryParameters: {
-          'page': page,
-          'page_size': pageSize,
-          if (type != null) 'type': type,
-          if (status != null) 'status': status,
-        },
-      );
+    final response = await _apiClient.get(
+      '/wallet/transactions',
+      queryParameters: {
+        'page': page,
+        'page_size': pageSize,
+        if (type != null) 'type': type,
+        if (status != null) 'status': status,
+      },
+    );
 
-      final data = response as Map<String, dynamic>;
-      final transactions = (data['transactions'] as List? ?? [])
-          .map((item) => Transaction.fromJson(item as Map<String, dynamic>))
-          .toList();
-
-      return transactions;
-    } catch (e) {
-      logger.e('Get transactions error: $e');
-      // Return empty list when backend fails - no placeholders
-      return [];
-    }
+    final data = response as Map<String, dynamic>;
+    return (data['transactions'] as List? ?? [])
+        .map((item) => Transaction.fromJson(item as Map<String, dynamic>))
+        .toList();
   }
 
-  /// Make contribution
-  Future<Transaction> makeContribution(double amount) async {
-    try {
-      final response = await _apiClient.post(
-        '/wallet/contribute',
-        data: {'amount': amount},
-      );
+  /// Make deposit
+  Future<Transaction> makeContribution(double amount, {String? description}) async {
+    final response = await _apiClient.post(
+      '/wallet/deposit',
+      data: {
+        'amount': amount,
+        if (description != null) 'description': description,
+      },
+    );
 
-      return Transaction.fromJson(response as Map<String, dynamic>);
-    } catch (e) {
-      logger.e('Make contribution error: $e');
-      rethrow;
-    }
+    final data = response as Map<String, dynamic>;
+    return Transaction.fromJson(data['transaction'] as Map<String, dynamic>);
   }
 
   /// Get contributions
@@ -269,7 +238,7 @@ class WalletNotifier extends StateNotifier<WalletState> {
   }) async {
     state = state.copyWith(status: WalletStatus.loading);
     try {
-      final transaction = await _walletRepository.makeContribution(amount);
+      final transaction = await _walletRepository.makeContribution(amount, description: description);
 
       // Reload wallet
       await loadWallet();

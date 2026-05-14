@@ -197,6 +197,47 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  /// Restore session on app startup from persisted tokens
+  Future<void> restoreSession() async {
+    state = state.copyWith(status: AuthStatus.loading);
+    try {
+      final hasToken = await TokenStorage.hasToken();
+      if (!hasToken) {
+        state = const AuthState(status: AuthStatus.unauthenticated);
+        return;
+      }
+
+      final token = await TokenStorage.getAccessToken();
+      if (token == null) {
+        state = const AuthState(status: AuthStatus.unauthenticated);
+        return;
+      }
+
+      _apiClient.setAuthToken(token);
+      final user = await _authRepository.getCurrentUser(forceRefresh: true);
+
+      final kycStatus = user.kycStatus;
+      final authStatus = kycStatus == 'approved' || kycStatus == 'not_required'
+          ? AuthStatus.authenticated
+          : kycStatus == 'rejected'
+              ? AuthStatus.kycRejected
+              : AuthStatus.kycPending;
+
+      final refreshToken = await TokenStorage.getRefreshToken();
+      state = state.copyWith(
+        status: authStatus,
+        user: user,
+        accessToken: token,
+        refreshToken: refreshToken,
+      );
+    } catch (e) {
+      logger.e('Session restore error: $e');
+      await TokenStorage.clearTokens();
+      _apiClient.clearAuthToken();
+      state = const AuthState(status: AuthStatus.unauthenticated);
+    }
+  }
+
   /// Get current user
   Future<void> getCurrentUser() async {
     try {
