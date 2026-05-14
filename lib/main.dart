@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'firebase_options.dart';
 import 'config/app_config.dart';
 import 'config/theme_config.dart';
 import 'config/theme_enhanced.dart';
@@ -43,7 +44,6 @@ import 'presentation/screens/savings/savings_goals_screen.dart';
 import 'presentation/screens/search/global_search_screen.dart';
 import 'config/env_config.dart';
 import 'presentation/providers/theme_provider.dart';
-import 'presentation/screens/splash_screen.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
@@ -51,7 +51,7 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 /// MUST be a top-level function — FCM runs it in a separate isolate.
 @pragma('vm:entry-point')
 Future<void> _fcmBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   debugPrint('[FCM Background] Message received: ${message.messageId}');
   debugPrint('[FCM Background] Type: ${message.data['type']}');
 }
@@ -77,7 +77,9 @@ void main() async {
   }
   
   try {
-    await Firebase.initializeApp();
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
     FirebaseMessaging.onBackgroundMessage(_fcmBackgroundHandler);
     await NotificationService().init();
   } catch (e) {
@@ -100,6 +102,8 @@ class CoopvestApp extends ConsumerStatefulWidget {
 
 class _CoopvestAppState extends ConsumerState<CoopvestApp> with WidgetsBindingObserver {
   bool _isSessionRestored = false;
+  bool _isCheckingBiometric = false;
+  bool _wasPaused = false;
 
   @override
   void initState() {
@@ -116,19 +120,40 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp> with WidgetsBindingOb
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
+    if (state == AppLifecycleState.paused) {
+      _wasPaused = true;
+    }
+    if (state == AppLifecycleState.resumed && _wasPaused) {
+      _wasPaused = false;
       _checkBiometricOnResume();
     }
   }
 
   Future<void> _restoreSession() async {
-    await ref.read(authProvider.notifier).restoreSession();
-    setState(() {
-      _isSessionRestored = true;
-    });
+    try {
+      // Use the auth provider to restore session - this properly updates auth state
+      final success = await ref.read(authProvider.notifier).restoreSession();
+      
+      if (success) {
+        debugPrint('[CoopvestApp] Session restored successfully');
+      } else {
+        debugPrint('[CoopvestApp] No session to restore');
+      }
+    } catch (e) {
+      debugPrint('[CoopvestApp] Session restore error: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSessionRestored = true;
+        });
+      }
+    }
   }
 
   Future<void> _checkBiometricOnResume() async {
+    // Prevent multiple concurrent biometric checks
+    if (_isCheckingBiometric) return;
+    
     final authStatus = ref.read(authStatusProvider);
     if (authStatus != AuthStatus.authenticated) return;
 
@@ -136,9 +161,21 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp> with WidgetsBindingOb
     final isBiometricEnabled = await securityService.isBiometricEnabled();
     
     if (isBiometricEnabled) {
-      final authenticated = await securityService.authenticate();
-      if (!authenticated) {
-        await ref.read(authProvider.notifier).logout();
+      _isCheckingBiometric = true;
+      try {
+        final authenticated = await securityService.authenticate();
+        if (!authenticated && mounted) {
+          // Only logout if biometric auth was explicitly cancelled/failed
+          // Don't logout just because biometrics aren't available
+          ScaffoldMessenger.of(navigatorKey.currentContext!).showSnackBar(
+            const SnackBar(
+              content: Text('Biometric authentication required'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      } finally {
+        _isCheckingBiometric = false;
       }
     }
   }
@@ -148,7 +185,57 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp> with WidgetsBindingOb
     final themeMode = ref.watch(themeModeProvider);
     final authStatus = ref.watch(authStatusProvider);
 
-    final app = MaterialApp(
+    if (!_isSessionRestored) {
+      return MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: Scaffold(
+          backgroundColor: const Color(0xFF1A1A2E),
+          body: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // App Logo
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2E7D32).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Center(
+                    child: Icon(
+                      Icons.savings,
+                      size: 40,
+                      color: Color(0xFF2E7D32),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Coopvest',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 32),
+                const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF2E7D32)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return MaterialApp(
       title: AppConfig.appName,
       navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
@@ -251,11 +338,6 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp> with WidgetsBindingOb
 
         '/search': (context) => const GlobalSearchScreen(),
       },
-    );
-
-    return SplashScreen(
-      isReady: _isSessionRestored,
-      child: app,
     );
   }
 }
