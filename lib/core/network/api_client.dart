@@ -45,9 +45,10 @@ class ApiClient {
     // Apply SSL Pinning
     SecurityService().applySSLPinning(_dio);
 
-    // Add interceptors
-    _dio.interceptors.add(LoggingInterceptor());
+    // Add interceptors - IMPORTANT: Order matters!
+    // Auth should be first to attach token before logging
     _dio.interceptors.add(AuthInterceptor());
+    _dio.interceptors.add(LoggingInterceptor());
     _dio.interceptors.add(ErrorInterceptor(this)); // Pass this for token refresh
     
     _initialized = true;
@@ -217,9 +218,9 @@ class ApiClient {
         },
       ),
     );
+    _dio.interceptors.add(AuthInterceptor());
     _dio.interceptors.add(LoggingInterceptor());
     _dio.interceptors.add(ErrorInterceptor(this));
-    _dio.interceptors.add(AuthInterceptor());
   }
 
   /// Get Loan API Service
@@ -370,17 +371,22 @@ class LoggingInterceptor extends Interceptor {
 }
 
 /// Auth Interceptor — reads token from secure storage and attaches it
+/// ✅ FIXED: Properly handles async token reading
 class AuthInterceptor extends Interceptor {
   @override
-  void onRequest(RequestOptions options, RequestInterceptorHandler handler) async {
+  Future<void> onRequest(RequestOptions options, RequestInterceptorHandler handler) async {
     try {
       final token = await _secureStorage.read(key: _accessTokenKey);
       if (token != null && token.isNotEmpty) {
         options.headers['Authorization'] = 'Bearer $token';
+        logger.i('AuthInterceptor: Token attached (${token.substring(0, 10)}...)');
+      } else {
+        logger.w('AuthInterceptor: No token found in secure storage');
       }
     } catch (e) {
       logger.e('AuthInterceptor: Failed to read token: $e');
     }
+    // ✅ NOW: This only fires after token is read
     handler.next(options);
   }
 }
