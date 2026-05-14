@@ -13,7 +13,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   AuthNotifier(this._authRepository, this._apiClient) : super(const AuthState());
 
-  /// Register FCM token with the backend after a successful auth event.
+  /// Register the FCM token with the backend after a successful auth event.
   Future<void> _registerFcmToken() async {
     try {
       final token = await NotificationService().getDeviceToken();
@@ -25,39 +25,25 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// Email + password login via Firebase Auth
-  Future<void> login({
-    required String email,
-    required String password,
-  }) async {
+  /// Google Sign-In
+  Future<void> googleSignIn(String idToken) async {
     state = state.copyWith(status: AuthStatus.loading);
     try {
-      final user = await _authRepository.login(email: email, password: password);
+      final response = await _authRepository.googleSignIn(idToken: idToken);
+      _apiClient.setAuthToken(response.accessToken);
+      await TokenStorage.saveTokens(
+        accessToken: response.accessToken,
+        refreshToken: response.refreshToken,
+      );
 
       state = state.copyWith(
         status: AuthStatus.authenticated,
-        user: user,
+        user: response.user,
+        accessToken: response.accessToken,
+        refreshToken: response.refreshToken,
       );
 
-      _registerFcmToken();
-    } catch (e) {
-      logger.e('Login error: $e');
-      state = state.copyWith(status: AuthStatus.error, error: e.toString());
-      rethrow;
-    }
-  }
-
-  /// Google Sign-In via Firebase Auth
-  Future<void> googleSignIn([String? unused]) async {
-    state = state.copyWith(status: AuthStatus.loading);
-    try {
-      final user = await _authRepository.googleSignIn();
-
-      state = state.copyWith(
-        status: AuthStatus.authenticated,
-        user: user,
-      );
-
+      // Register FCM token after successful login (non-blocking)
       _registerFcmToken();
     } catch (e) {
       logger.e('Google Sign-In error: $e');
@@ -66,32 +52,65 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// Register with Firebase Auth
-  /// After successful registration, user remains authenticated
+  /// Login
+  Future<void> login({
+    required String email,
+    required String password,
+  }) async {
+    state = state.copyWith(status: AuthStatus.loading);
+    try {
+      final response = await _authRepository.login(email: email, password: password);
+      _apiClient.setAuthToken(response.accessToken);
+      await TokenStorage.saveTokens(
+        accessToken: response.accessToken,
+        refreshToken: response.refreshToken,
+      );
+
+      state = state.copyWith(
+        status: AuthStatus.authenticated,
+        user: response.user,
+        accessToken: response.accessToken,
+        refreshToken: response.refreshToken,
+      );
+
+      // Register FCM token after successful login (non-blocking)
+      _registerFcmToken();
+    } catch (e) {
+      logger.e('Login error: $e');
+      state = state.copyWith(status: AuthStatus.error, error: e.toString());
+      rethrow;
+    }
+  }
+
+  /// Register
   Future<void> register({
     required String email,
     required String password,
     required String name,
     String? phone,
-    String? referralCode,
   }) async {
     state = state.copyWith(status: AuthStatus.loading);
     try {
-      final user = await _authRepository.register(
+      final response = await _authRepository.register(
         email: email,
         password: password,
         name: name,
         phone: phone,
-        referralCode: referralCode,
+      );
+      _apiClient.setAuthToken(response.accessToken);
+      await TokenStorage.saveTokens(
+        accessToken: response.accessToken,
+        refreshToken: response.refreshToken,
       );
 
-      // User is now authenticated and should stay logged in
-      // Set to authenticated (not just kycPending) so session persists
       state = state.copyWith(
-        status: AuthStatus.authenticated,
-        user: user,
+        status: AuthStatus.kycPending,
+        user: response.user,
+        accessToken: response.accessToken,
+        refreshToken: response.refreshToken,
       );
 
+      // Register FCM token after registration
       _registerFcmToken();
     } catch (e) {
       logger.e('Register error: $e');
@@ -142,12 +161,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// Logout — Firebase sign-out + backend token revocation
+  /// Logout
   Future<void> logout() async {
     state = state.copyWith(status: AuthStatus.loading);
     try {
       await _authRepository.logout();
       _apiClient.clearAuthToken();
+      await TokenStorage.clearTokens();
       state = const AuthState(status: AuthStatus.unauthenticated);
     } catch (e) {
       logger.e('Logout error: $e');
@@ -156,10 +176,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// Refresh the Firebase ID token and re-attach to API client
+  /// Refresh token
   Future<void> refreshAccessToken() async {
+    if (state.refreshToken == null) {
+      state = const AuthState(status: AuthStatus.unauthenticated);
+      return;
+    }
     try {
-      await _authRepository.refreshToken('');
+      final response = await _authRepository.refreshToken(state.refreshToken!);
+      _apiClient.setAuthToken(response.accessToken);
+      state = state.copyWith(
+        accessToken: response.accessToken,
+        refreshToken: response.refreshToken,
+      );
     } catch (e) {
       logger.e('Refresh token error: $e');
       _apiClient.clearAuthToken();
@@ -168,42 +197,17 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// Fetch and update the current user from the backend
-  /// Also sets auth status to authenticated if user is found
+  /// Get current user
   Future<void> getCurrentUser() async {
     try {
       final user = await _authRepository.getCurrentUser();
-      state = state.copyWith(
-        user: user,
-        status: AuthStatus.authenticated,
-      );
-      logger.i('Current user fetched: ${user.email}');
+      state = state.copyWith(user: user);
     } catch (e) {
       logger.e('Get current user error: $e');
     }
   }
 
-  /// Restore session from Firebase (called on app startup)
-  Future<bool> restoreSession() async {
-    try {
-      final success = await _authRepository.restoreSession();
-      if (success) {
-        final user = await _authRepository.getCurrentUser();
-        state = state.copyWith(
-          status: AuthStatus.authenticated,
-          user: user,
-        );
-        logger.i('Session restored for: ${user.email}');
-        return true;
-      }
-      return false;
-    } catch (e) {
-      logger.e('Restore session error: $e');
-      return false;
-    }
-  }
-
-  /// Email verification — sends a verification email via Firebase
+  /// Verify email
   Future<void> verifyEmail(String code) async {
     state = state.copyWith(status: AuthStatus.loading);
     try {
@@ -216,7 +220,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// Resend email verification
+  /// Resend verification code
   Future<void> resendVerificationCode(String email) async {
     try {
       await _authRepository.resendVerificationCode(email);
@@ -226,7 +230,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// Request password reset email via Firebase
+  /// Request password reset
   Future<void> requestPasswordReset(String email) async {
     try {
       await _authRepository.requestPasswordReset(email);
@@ -236,7 +240,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// Reset password with action code from Firebase email link
+  /// Reset password
   Future<void> resetPassword({
     required String code,
     required String newPassword,
@@ -252,7 +256,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// Change password via Firebase re-authentication
+  /// Change password
   Future<void> changePassword({
     required String currentPassword,
     required String newPassword,
