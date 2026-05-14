@@ -44,8 +44,7 @@ dependencies:
   firebase_messaging: ^15.2.3
   flutter_local_notifications: ^18.0.1
 
-  # Firebase (upgraded to fix PigeonUserDetails type cast error)
-  # See: https://github.com/firebase/flutterfire/issues/12154
+  # Firebase (standardized to latest stable versions)
   firebase_core: ^3.9.0
   firebase_auth: ^5.5.1
   cloud_firestore: ^5.6.6
