@@ -29,6 +29,7 @@ import '../../../presentation/screens/guarantor/guarantor_dashboard_screen.dart'
 import '../../../presentation/screens/documents/document_upload_screen.dart';
 import '../../../presentation/screens/profile/profile_settings_screen.dart';
 import 'package:fl_chart/fl_chart.dart';
+import '../../../presentation/widgets/loan/loan_eligibility_card.dart';
 
 class HomeDashboardScreen extends ConsumerStatefulWidget {
   const HomeDashboardScreen({super.key});
@@ -188,6 +189,22 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                       ],
                     ),
                     
+                    const SizedBox(height: 28),
+
+                    // Loan Eligibility Progress
+                    LoanEligibilityCard(
+                      onApplyTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => LoanDashboardScreen(
+                            userId: user?.id ?? '',
+                            userName: user?.name ?? '',
+                            userPhone: user?.phone ?? '',
+                          ),
+                        ),
+                      ),
+                    ),
+
                     const SizedBox(height: 28),
                     
                     // Insights & Loan Status
