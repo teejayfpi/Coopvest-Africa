@@ -261,7 +261,7 @@ class _SplashContent extends StatelessWidget {
         // pulsing sonar rings
         Center(
           child: CustomPaint(
-            size: const Size(340, 340),
+            size: const Size(260, 260),
             painter: _PulseRingPainter(pulseValue, logoOpacity),
           ),
         ),
@@ -411,8 +411,8 @@ class _LogoBadge extends StatelessWidget {
     return Stack(alignment: Alignment.center, children: [
       // outer glow
       Container(
-        width: 168,
-        height: 168,
+        width: 124,
+        height: 124,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           boxShadow: [
@@ -431,8 +431,8 @@ class _LogoBadge extends StatelessWidget {
       ),
       // gold ring
       Container(
-        width: 154,
-        height: 154,
+        width: 110,
+        height: 110,
         decoration: const BoxDecoration(
           shape: BoxShape.circle,
           gradient: LinearGradient(
@@ -457,8 +457,8 @@ class _LogoBadge extends StatelessWidget {
       // shimmer sweep
       ClipOval(
         child: SizedBox(
-          width: 154,
-          height: 154,
+          width: 110,
+          height: 110,
           child: CustomPaint(painter: _ShimmerPainter(shimmerValue)),
         ),
       ),
