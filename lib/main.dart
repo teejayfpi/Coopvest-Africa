@@ -16,6 +16,7 @@ import 'presentation/screens/auth/welcome_screen.dart';
 import 'presentation/screens/auth/login_screen.dart';
 import 'presentation/screens/auth/register_step1_screen.dart';
 import 'presentation/screens/auth/register_step2_screen.dart';
+import 'presentation/screens/auth/registration_onboarding_screen.dart';
 import 'presentation/screens/auth/google_complete_screen.dart';
 import 'presentation/screens/auth/salary_deduction_consent_screen.dart';
 import 'presentation/screens/auth/account_activation_screen.dart';
@@ -255,6 +256,12 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp> with WidgetsBindingOb
           );
         },
         '/register-step3': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments as Map<String, String>?;
+          return RegistrationOnboardingScreen(
+            registrationData: args ?? {},
+          );
+        },
+        '/salary-deduction-consent': (context) {
           final args = ModalRoute.of(context)?.settings.arguments as Map<String, String>?;
           return SalaryDeductionConsentScreen(
             registrationData: args ?? {},
