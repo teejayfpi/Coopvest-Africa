@@ -23,6 +23,7 @@ import '../transactions/statement_download_screen.dart';
 import '../referral/referral_dashboard_screen.dart';
 import '../referral/referral_sharing_screen.dart';
 import '../rollover/rollover_eligibility_screen.dart';
+import '../contributions/manage_contribution_plan_screen.dart';
 
 /// Profile & Settings Screen
 class ProfileSettingsScreen extends ConsumerStatefulWidget {
@@ -71,6 +72,11 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
           'icon': Icons.account_balance_wallet_outlined,
           'label': 'Bank Accounts',
           'subtitle': 'Manage your linked bank accounts',
+        },
+        {
+          'icon': Icons.savings_outlined,
+          'label': 'Manage Contribution Plan',
+          'subtitle': 'Increase or request a reduction to your monthly contribution',
         },
       ],
     },
@@ -506,6 +512,11 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
       case 'Bank Accounts':
         Navigator.of(context).push(
           MaterialPageRoute(builder: (context) => const BankAccountsScreen()),
+        );
+        break;
+      case 'Manage Contribution Plan':
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (context) => const ManageContributionPlanScreen()),
         );
         break;
       case 'Notifications':
