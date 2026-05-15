@@ -43,7 +43,6 @@ import 'presentation/screens/savings/savings_goals_screen.dart';
 import 'presentation/screens/search/global_search_screen.dart';
 import 'config/env_config.dart';
 import 'presentation/providers/theme_provider.dart';
-import 'presentation/screens/splash_screen.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
@@ -152,7 +151,7 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp> with WidgetsBindingOb
     final themeMode = ref.watch(themeModeProvider);
     final authStatus = ref.watch(authStatusProvider);
 
-    final app = MaterialApp(
+    return MaterialApp(
       title: AppConfig.appName,
       navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
@@ -255,11 +254,6 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp> with WidgetsBindingOb
 
         '/search': (context) => const GlobalSearchScreen(),
       },
-    );
-
-    return SplashScreen(
-      isReady: _isSessionRestored,
-      child: app,
     );
   }
 }
