@@ -194,16 +194,35 @@ class _SplashContent extends StatelessWidget {
           children: [
             const Spacer(flex: 2),
 
-            // Logo image with scale + fade
+            // Text-based brand logo with scale + fade
             Opacity(
               opacity: logoOpacity,
               child: Transform.scale(
                 scale: logoScale,
-                child: Image.asset(
-                  'assets/images/coopvest_logo.jpg',
-                  width: 220,
-                  height: 220,
-                  fit: BoxFit.contain,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Brand name
+                    const Text(
+                      'COOPVEST',
+                      style: TextStyle(
+                        fontSize: 42,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF1B3A6B),
+                        letterSpacing: 3,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    // Accent line
+                    Container(
+                      width: 60,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2E7D32),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),

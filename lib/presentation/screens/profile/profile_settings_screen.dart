@@ -405,12 +405,12 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
         ),
         const SizedBox(height: 16),
         Text(
-          user?.name ?? 'Ayanlowo',
+          user?.name ?? 'Member',
           style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: context.textPrimary),
         ),
         const SizedBox(height: 4),
         Text(
-          user?.email ?? 'ayanlowo@example.com',
+          user?.email ?? '',
           style: TextStyle(color: context.textSecondary),
         ),
       ],

@@ -442,7 +442,9 @@ class _GuarantorResponseScreenState
               Expanded(
                 child: PrimaryButton(
                   label: 'Accept',
-                  onPressed: _isLoading ? null : () => _respond(true),
+                  onPressed: () async {
+                    if (!_isLoading) await _respond(true);
+                  },
                   isLoading: _isLoading,
                 ),
               ),
