@@ -519,6 +519,8 @@ class RolloverState extends Equatable {
   final List<LoanRollover> rolloverHistory;
   final RolloverEligibility? eligibility;
   final List<RolloverGuarantor> guarantors;
+  final List<RolloverGuarantor> selectedGuarantors;
+  final int? newTenure;
   final String? error;
   final bool isLoading;
 
@@ -528,6 +530,8 @@ class RolloverState extends Equatable {
     this.rolloverHistory = const [],
     this.eligibility,
     this.guarantors = const [],
+    this.selectedGuarantors = const [],
+    this.newTenure,
     this.error,
     this.isLoading = false,
   });
@@ -544,6 +548,8 @@ class RolloverState extends Equatable {
     List<LoanRollover>? rolloverHistory,
     RolloverEligibility? eligibility,
     List<RolloverGuarantor>? guarantors,
+    List<RolloverGuarantor>? selectedGuarantors,
+    int? newTenure,
     String? error,
     bool? isLoading,
   }) {
@@ -553,6 +559,8 @@ class RolloverState extends Equatable {
       rolloverHistory: rolloverHistory ?? this.rolloverHistory,
       eligibility: eligibility ?? this.eligibility,
       guarantors: guarantors ?? this.guarantors,
+      selectedGuarantors: selectedGuarantors ?? this.selectedGuarantors,
+      newTenure: newTenure ?? this.newTenure,
       error: error,
       isLoading: isLoading ?? this.isLoading,
     );
@@ -565,6 +573,8 @@ class RolloverState extends Equatable {
         rolloverHistory,
         eligibility,
         guarantors,
+        selectedGuarantors,
+        newTenure,
         error,
         isLoading,
       ];

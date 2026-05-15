@@ -389,6 +389,78 @@ class RolloverProgressSteps extends StatelessWidget {
   }
 }
 
+/// Guarantor Selection Card for Rollover Request
+class GuarantorSelectionCard extends StatelessWidget {
+  final RolloverGuarantor guarantor;
+  final VoidCallback onRemove;
+
+  const GuarantorSelectionCard({
+    super.key,
+    required this.guarantor,
+    required this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 1,
+      margin: const EdgeInsets.only(bottom: 8),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 20,
+              backgroundColor: CoopvestColors.primary.withAlpha((255 * 0.1).toInt()),
+              child: Text(
+                guarantor.guarantorName.isNotEmpty
+                    ? guarantor.guarantorName[0].toUpperCase()
+                    : '?',
+                style: const TextStyle(
+                  color: CoopvestColors.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    guarantor.guarantorName,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  Text(
+                    guarantor.guarantorPhone,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: CoopvestColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            GuarantorStatusBadge(status: guarantor.status),
+            const SizedBox(width: 8),
+            IconButton(
+              icon: const Icon(Icons.close, size: 18, color: CoopvestColors.error),
+              onPressed: onRemove,
+              tooltip: 'Remove guarantor',
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// Empty State Widget for Rollover
 class RolloverEmptyState extends StatelessWidget {
   final String title;

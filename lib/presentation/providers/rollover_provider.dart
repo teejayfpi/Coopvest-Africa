@@ -385,6 +385,32 @@ class RolloverNotifier extends StateNotifier<RolloverState> {
         .length;
   }
 
+  /// Add a guarantor to the selected list for rollover request
+  void addSelectedGuarantor(RolloverGuarantor guarantor) {
+    if (state.selectedGuarantors.length >= 3) return;
+    if (state.selectedGuarantors.any((g) => g.guarantorId == guarantor.guarantorId)) return;
+    final updated = [...state.selectedGuarantors, guarantor];
+    state = state.copyWith(selectedGuarantors: updated);
+  }
+
+  /// Remove a guarantor from the selected list
+  void removeGuarantor(String guarantorId) {
+    final updated = state.selectedGuarantors
+        .where((g) => g.guarantorId != guarantorId)
+        .toList();
+    state = state.copyWith(selectedGuarantors: updated);
+  }
+
+  /// Set the new tenure for rollover
+  void setNewTenure(int tenure) {
+    state = state.copyWith(newTenure: tenure);
+  }
+
+  /// Clear selected guarantors
+  void clearSelectedGuarantors() {
+    state = state.copyWith(selectedGuarantors: []);
+  }
+
   /// Add a new guarantor to the rollover request
   void addGuarantor(GuarantorInfo guarantor) {
     final RolloverGuarantor rolloverGuarantor = RolloverGuarantor(
@@ -401,14 +427,6 @@ class RolloverNotifier extends StateNotifier<RolloverState> {
       updatedAt: DateTime.now(),
     );
     final updated = [...state.guarantors, rolloverGuarantor];
-    state = state.copyWith(guarantors: updated);
-  }
-
-  /// Remove a guarantor from the rollover request
-  void removeGuarantor(String guarantorId) {
-    final updated = state.guarantors
-        .where((g) => g.guarantorId != guarantorId)
-        .toList();
     state = state.copyWith(guarantors: updated);
   }
 
