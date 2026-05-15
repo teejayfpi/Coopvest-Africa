@@ -46,6 +46,12 @@ import 'presentation/screens/search/global_search_screen.dart';
 import 'config/env_config.dart';
 import 'presentation/providers/theme_provider.dart';
 import 'presentation/screens/splash_screen.dart';
+import 'presentation/screens/rollover/rollover_eligibility_screen.dart';
+import 'presentation/screens/rollover/rollover_request_screen.dart';
+import 'presentation/screens/rollover/guarantor_consent_screen.dart';
+import 'presentation/screens/rollover/guarantor_response_screen.dart';
+import 'presentation/screens/rollover/rollover_status_screen.dart';
+import 'data/models/loan_models.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
@@ -295,6 +301,31 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp> with WidgetsBindingOb
         },
 
         '/search': (context) => const GlobalSearchScreen(),
+
+        // Rollover routes
+        '/rollover/eligibility': (context) {
+          final loan = ModalRoute.of(context)?.settings.arguments as Loan;
+          return RolloverEligibilityScreen(loan: loan);
+        },
+        '/rollover/request': (context) {
+          final loan = ModalRoute.of(context)?.settings.arguments as Loan;
+          return RolloverRequestScreen(loan: loan);
+        },
+        '/rollover/consent': (context) {
+          final rolloverId = ModalRoute.of(context)?.settings.arguments as String;
+          return GuarantorConsentScreen(rolloverId: rolloverId);
+        },
+        '/rollover/status': (context) {
+          final rolloverId = ModalRoute.of(context)?.settings.arguments as String;
+          return RolloverStatusScreen(rolloverId: rolloverId);
+        },
+        '/rollover/guarantor-response': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments as Map<String, String>;
+          return GuarantorResponseScreen(
+            rolloverId: args['rolloverId']!,
+            guarantorId: args['guarantorId']!,
+          );
+        },
       },
     );
 
