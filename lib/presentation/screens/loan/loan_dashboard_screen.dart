@@ -9,6 +9,7 @@ import '../../../presentation/providers/loan_provider.dart';
 import '../../../presentation/widgets/common/buttons.dart';
 import '../../../presentation/widgets/common/cards.dart';
 import 'loan_application_screen.dart';
+import '../../widgets/loan/loan_eligibility_card.dart';
 
 /// Loan Dashboard Screen - View and manage all loan applications
 class LoanDashboardScreen extends ConsumerStatefulWidget {
@@ -118,6 +119,23 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
                       ),
                     ),
                   ],
+                ),
+
+                const SizedBox(height: 24),
+
+                // Loan Eligibility Progress
+                LoanEligibilityCard(
+                  onApplyTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => LoanApplicationScreen(
+                          userId: widget.userId,
+                          userName: widget.userName,
+                          userPhone: widget.userPhone,
+                        ),
+                      ),
+                    );
+                  },
                 ),
 
                 const SizedBox(height: 24),
