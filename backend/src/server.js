@@ -310,6 +310,9 @@ app.use(errorHandler);
 const scheduledNotificationsWorker = require('./workers/scheduledNotificationsWorker');
 scheduledNotificationsWorker.start();
 
+const rolloverDeadlineWorker = require('./workers/rolloverDeadlineWorker');
+rolloverDeadlineWorker.start();
+
 server.listen(PORT, '0.0.0.0', () => {
   logger.info(`🚀 Coopvest Referral API running on port ${PORT}`);
   logger.info(`🌐 WebSocket endpoint: ws://localhost:${PORT}/ws`);

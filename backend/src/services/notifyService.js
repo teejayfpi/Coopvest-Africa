@@ -226,6 +226,7 @@ function _androidChannelForType(type) {
     case 'rollover_rejected':
     case 'rollover_cancelled':
     case 'rollover_guarantor_replaced':
+    case 'rollover_deadline_reminder':
       return 'rollover_notifications';
     case 'savings_goal':
     case 'savings_contribution':

@@ -217,6 +217,7 @@ class NotificationService {
       case 'rollover_rejected':
       case 'rollover_cancelled':
       case 'rollover_guarantor_replaced':
+      case 'rollover_deadline_reminder':
         return _channelRolloverId;
       case 'savings_goal':
       case 'savings_contribution':
@@ -267,6 +268,7 @@ class NotificationService {
 
         // ── Rollover tap routing ────────────────────────────────────────────
         case 'rollover_consent_request':
+        case 'rollover_deadline_reminder':
           // Guarantor taps → go straight to their response screen
           if (data.containsKey('rolloverId') && data.containsKey('guarantorId')) {
             navigatorKey.currentState?.pushNamed(
@@ -544,6 +546,25 @@ class NotificationService {
       payload: jsonEncode({
         'type': 'rollover_rejected',
         'rolloverId': rolloverId,
+      }),
+      channelId: _channelRolloverId,
+    );
+  }
+
+  /// Sent TO a guarantor as a 24-hour deadline reminder when they haven't responded.
+  Future<void> showRolloverDeadlineReminderNotification({
+    required String borrowerName,
+    required int hoursLeft,
+    required String rolloverId,
+    required String guarantorId,
+  }) async {
+    await _showLocalNotification(
+      title: 'Rollover Consent Reminder',
+      body: '⏰ $hoursLeft hour${hoursLeft != 1 ? 's' : ''} left to respond to $borrowerName\'s rollover consent request. Tap to review before it expires.',
+      payload: jsonEncode({
+        'type': 'rollover_deadline_reminder',
+        'rolloverId': rolloverId,
+        'guarantorId': guarantorId,
       }),
       channelId: _channelRolloverId,
     );
