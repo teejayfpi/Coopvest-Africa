@@ -68,7 +68,7 @@ class _SalaryDeductionConsentScreenState extends ConsumerState<SalaryDeductionCo
       // Check for success response
       if (response != null && (response['success'] == true || response['status'] == 'ok')) {
         if (mounted) {
-          Navigator.of(context).pushReplacementNamed('/account-activation');
+          Navigator.of(context).pushReplacementNamed('/home');
         }
         return;
       }
@@ -76,14 +76,14 @@ class _SalaryDeductionConsentScreenState extends ConsumerState<SalaryDeductionCo
       // If response doesn't indicate success but no error thrown, still proceed
       // (consent was recorded, backend might have different response format)
       if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/account-activation');
+        Navigator.of(context).pushReplacementNamed('/home');
       }
     } on ServerException catch (e) {
       // 404 means endpoint doesn't exist yet - proceed anyway since consent is legal formality
       if (e.statusCode == 404) {
         logger.w('Salary consent endpoint not found - proceeding with registration');
         if (mounted) {
-          Navigator.of(context).pushReplacementNamed('/account-activation');
+          Navigator.of(context).pushReplacementNamed('/home');
         }
         return;
       }
@@ -96,7 +96,7 @@ class _SalaryDeductionConsentScreenState extends ConsumerState<SalaryDeductionCo
       // Log the consent locally and allow user to proceed
       logger.w('Salary consent validation error: ${e.message} - proceeding with registration');
       if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/account-activation');
+        Navigator.of(context).pushReplacementNamed('/home');
       }
     } on AuthException catch (e) {
       if (mounted) {
@@ -112,7 +112,7 @@ class _SalaryDeductionConsentScreenState extends ConsumerState<SalaryDeductionCo
       // Unknown error - log and allow user to proceed
       logger.e('Consent submission error: $e');
       if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/account-activation');
+        Navigator.of(context).pushReplacementNamed('/home');
       }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
@@ -130,7 +130,7 @@ class _SalaryDeductionConsentScreenState extends ConsumerState<SalaryDeductionCo
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              Navigator.of(context).pushReplacementNamed('/account-activation');
+              Navigator.of(context).pushReplacementNamed('/home');
             },
             child: const Text('Continue'),
           ),
