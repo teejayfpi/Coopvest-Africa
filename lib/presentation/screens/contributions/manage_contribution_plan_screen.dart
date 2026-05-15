@@ -482,13 +482,10 @@ class _IncreaseCard extends ConsumerWidget {
                   final isSaving =
                       r.watch(contributionPlanProvider).isSaving;
                   return PrimaryButton(
-                    label: isSaving
-                        ? 'Saving…'
-                        : 'Confirm Increase',
+                    label: 'Confirm Increase',
                     width: double.infinity,
-                    onPressed: isSaving
-                        ? null
-                        : () async {
+                    isLoading: isSaving,
+                    onPressed: () async {
                             final amt = selected ??
                                 double.tryParse(ctrl.text);
                             if (amt == null || amt <= 0) return;
@@ -646,13 +643,10 @@ class _ReductionCard extends ConsumerWidget {
                   final isSaving =
                       r.watch(contributionPlanProvider).isSaving;
                   return PrimaryButton(
-                    label: isSaving
-                        ? 'Submitting…'
-                        : 'Submit Reduction Request',
+                    label: 'Submit Reduction Request',
                     width: double.infinity,
-                    onPressed: isSaving
-                        ? null
-                        : () async {
+                    isLoading: isSaving,
+                    onPressed: () async {
                             final amt = selected ??
                                 double.tryParse(ctrl.text);
                             if (amt == null || amt <= 0) return;
