@@ -272,8 +272,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 width: double.infinity,
               ),
               
-              // Biometric login button (only show if enabled)
-              if (_isBiometricEnabled) ...[
+              // Biometric login button (show whenever device supports biometrics)
+              if (_isBiometricAvailable) ...[
                 const SizedBox(height: 24),
                 Row(
                   children: [
