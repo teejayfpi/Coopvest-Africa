@@ -341,10 +341,88 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
                 ],
               ),
+
+              const SizedBox(height: 36),
+
+              // Trust & security footer
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1B3A6B).withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: const Color(0xFF1B3A6B).withOpacity(0.10),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _TrustBadgeItem(
+                      icon: Icons.lock_outline_rounded,
+                      label: 'SSL Encrypted',
+                      color: const Color(0xFF1B3A6B),
+                    ),
+                    Container(
+                      width: 1,
+                      height: 32,
+                      color: const Color(0xFF1B3A6B).withOpacity(0.15),
+                    ),
+                    _TrustBadgeItem(
+                      icon: Icons.verified_user_outlined,
+                      label: 'Secure Login',
+                      color: const Color(0xFF2E7D32),
+                    ),
+                    Container(
+                      width: 1,
+                      height: 32,
+                      color: const Color(0xFF1B3A6B).withOpacity(0.15),
+                    ),
+                    _TrustBadgeItem(
+                      icon: Icons.shield_outlined,
+                      label: 'Data Protected',
+                      color: const Color(0xFF1B3A6B),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 24),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+class _TrustBadgeItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  const _TrustBadgeItem({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 20, color: color),
+        const SizedBox(height: 5),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            color: color.withOpacity(0.8),
+            letterSpacing: 0.3,
+          ),
+        ),
+      ],
     );
   }
 }
