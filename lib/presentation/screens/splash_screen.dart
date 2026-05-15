@@ -123,8 +123,8 @@ class _SplashScreenState extends State<SplashScreen>
     if (!_introController.isCompleted) {
       await _introController.forward();
     }
-    // Brief pause so the full logo is visible
-    await Future.delayed(const Duration(milliseconds: 400));
+    // Brief pause so the full logo is visible - increased to 300ms for better UX on slower devices
+    await Future.delayed(const Duration(milliseconds: 300));
     if (mounted) {
       _exitController.forward();
     }
@@ -256,16 +256,16 @@ class _SplashContent extends StatelessWidget {
                     opacity: badgeFade,
                     child: !isReady
                         ? const SizedBox(
-                            width: 28,
-                            height: 28,
+                            width: 32,
+                            height: 32,
                             child: CircularProgressIndicator(
-                              strokeWidth: 2.5,
+                              strokeWidth: 3.0,
                               valueColor: AlwaysStoppedAnimation<Color>(
                                 Color(0xFF2E7D32),
                               ),
                             ),
                           )
-                        : const SizedBox(height: 28),
+                        : const SizedBox(height: 32),
                   ),
 
                   const SizedBox(height: 20),
