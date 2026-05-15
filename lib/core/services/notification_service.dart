@@ -20,6 +20,7 @@ class NotificationService {
   // ── Channel IDs ──────────────────────────────────────────────────────────────
   static const String _channelLoanId       = 'loan_notifications';
   static const String _channelGuarantorId  = 'guarantor_notifications';
+  static const String _channelRolloverId   = 'rollover_notifications';
   static const String _channelSavingsId    = 'savings_notifications';
   static const String _channelWalletId     = 'wallet_notifications';
   static const String _channelOtpId        = 'otp_notifications';
@@ -50,7 +51,6 @@ class NotificationService {
         logger.w('Notification permission denied');
       }
 
-      // Log FCM token for debugging
       final token = await _messaging.getToken();
       logger.i('FCM Token: $token');
 
@@ -91,7 +91,7 @@ class NotificationService {
         _handleNotificationTap(jsonEncode(initialMessage.data));
       }
 
-      // Token refresh — re-register with backend whenever it changes
+      // Token refresh
       _messaging.onTokenRefresh.listen((newToken) {
         logger.i('FCM token refreshed');
       });
@@ -110,43 +110,56 @@ class NotificationService {
       final plugin = _localNotifications
           .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
 
-      const channels = [
-        AndroidNotificationChannel(
+      // Custom sound for rollover consent alerts
+      const rolloverSound = RawResourceAndroidNotificationSound('rollover_alert');
+
+      final channels = [
+        const AndroidNotificationChannel(
           _channelLoanId,
           'Loan Notifications',
           description: 'Loan application and approval alerts',
           importance: Importance.high,
           enableVibration: true,
         ),
-        AndroidNotificationChannel(
+        const AndroidNotificationChannel(
           _channelGuarantorId,
           'Guarantor Notifications',
           description: 'Guarantor request alerts',
           importance: Importance.high,
           enableVibration: true,
         ),
+        // Rollover channel — uses the custom ding-dong sound
         AndroidNotificationChannel(
+          _channelRolloverId,
+          'Rollover Notifications',
+          description: 'Loan rollover consent requests and status updates',
+          importance: Importance.max,
+          enableVibration: true,
+          sound: rolloverSound,
+          playSound: true,
+        ),
+        const AndroidNotificationChannel(
           _channelSavingsId,
           'Savings Notifications',
           description: 'Savings goal alerts',
           importance: Importance.defaultImportance,
           enableVibration: false,
         ),
-        AndroidNotificationChannel(
+        const AndroidNotificationChannel(
           _channelWalletId,
           'Wallet Notifications',
           description: 'Wallet credit and debit alerts',
           importance: Importance.high,
           enableVibration: true,
         ),
-        AndroidNotificationChannel(
+        const AndroidNotificationChannel(
           _channelOtpId,
           'OTP Notifications',
           description: 'One-time password delivery',
           importance: Importance.max,
           enableVibration: true,
         ),
-        AndroidNotificationChannel(
+        const AndroidNotificationChannel(
           _channelGeneralId,
           'General Notifications',
           description: 'General Coopvest Africa alerts',
@@ -195,6 +208,16 @@ class NotificationService {
       case 'guarantor_request':
       case 'guarantor_confirmed':
         return _channelGuarantorId;
+      // ── Rollover events → custom sound channel ──────────────────────────
+      case 'rollover_consent_request':
+      case 'rollover_consent_accepted':
+      case 'rollover_consent_declined':
+      case 'rollover_all_consents_received':
+      case 'rollover_approved':
+      case 'rollover_rejected':
+      case 'rollover_cancelled':
+      case 'rollover_guarantor_replaced':
+        return _channelRolloverId;
       case 'savings_goal':
       case 'savings_contribution':
         return _channelSavingsId;
@@ -241,6 +264,36 @@ class NotificationService {
             navigatorKey.currentState?.pushNamed('/guarantor-verification', arguments: data);
           }
           break;
+
+        // ── Rollover tap routing ────────────────────────────────────────────
+        case 'rollover_consent_request':
+          // Guarantor taps → go straight to their response screen
+          if (data.containsKey('rolloverId') && data.containsKey('guarantorId')) {
+            navigatorKey.currentState?.pushNamed(
+              '/rollover/guarantor-response',
+              arguments: {
+                'rolloverId': data['rolloverId'] as String,
+                'guarantorId': data['guarantorId'] as String,
+              },
+            );
+          }
+          break;
+        case 'rollover_consent_accepted':
+        case 'rollover_consent_declined':
+        case 'rollover_all_consents_received':
+        case 'rollover_approved':
+        case 'rollover_rejected':
+        case 'rollover_cancelled':
+        case 'rollover_guarantor_replaced':
+          // Borrower taps → go to rollover status screen
+          if (data.containsKey('rolloverId')) {
+            navigatorKey.currentState?.pushNamed(
+              '/rollover/status',
+              arguments: data['rolloverId'] as String,
+            );
+          }
+          break;
+
         case 'savings_goal':
         case 'savings_contribution':
           navigatorKey.currentState?.pushNamed('/savings-goal');
@@ -253,8 +306,6 @@ class NotificationService {
           break;
         case 'otp':
         case 'otp_sent':
-          // OTP arrives in the notification body — no navigation needed,
-          // the user reads it from the notification shade.
           break;
         default:
           logger.i('Unhandled notification type tapped: $type');
@@ -273,18 +324,27 @@ class NotificationService {
     String channelId = _channelGeneralId,
   }) async {
     try {
+      // Use the custom rollover sound on both Android and iOS
+      final isRollover = channelId == _channelRolloverId;
+
       final androidDetails = AndroidNotificationDetails(
         channelId,
         _channelNameForId(channelId),
-        importance: channelId == _channelOtpId ? Importance.max : Importance.high,
-        priority: channelId == _channelOtpId ? Priority.max : Priority.high,
+        importance: (channelId == _channelOtpId || isRollover) ? Importance.max : Importance.high,
+        priority: (channelId == _channelOtpId || isRollover) ? Priority.max : Priority.high,
         enableVibration: true,
+        sound: isRollover
+            ? const RawResourceAndroidNotificationSound('rollover_alert')
+            : null,
+        playSound: true,
       );
 
-      const iosDetails = DarwinNotificationDetails(
+      final iosDetails = DarwinNotificationDetails(
         presentAlert: true,
         presentBadge: true,
         presentSound: true,
+        // For iOS, the sound file must also be bundled in the app
+        sound: isRollover ? 'rollover_alert.aiff' : null,
       );
 
       final details = NotificationDetails(android: androidDetails, iOS: iosDetails);
@@ -304,12 +364,13 @@ class NotificationService {
 
   String _channelNameForId(String id) {
     switch (id) {
-      case _channelLoanId:       return 'Loan Notifications';
-      case _channelGuarantorId:  return 'Guarantor Notifications';
-      case _channelSavingsId:    return 'Savings Notifications';
-      case _channelWalletId:     return 'Wallet Notifications';
-      case _channelOtpId:        return 'OTP Notifications';
-      default:                   return 'Coopvest Africa Notifications';
+      case _channelLoanId:      return 'Loan Notifications';
+      case _channelGuarantorId: return 'Guarantor Notifications';
+      case _channelRolloverId:  return 'Rollover Notifications';
+      case _channelSavingsId:   return 'Savings Notifications';
+      case _channelWalletId:    return 'Wallet Notifications';
+      case _channelOtpId:       return 'OTP Notifications';
+      default:                  return 'Coopvest Africa Notifications';
     }
   }
 
@@ -350,7 +411,7 @@ class NotificationService {
     }
   }
 
-  // ── Convenience show methods ──────────────────────────────────────────────────
+  // ── Loan notifications ────────────────────────────────────────────────────────
 
   Future<void> showLoanApplicationNotification(String loanType, double amount) async {
     await _showLocalNotification(
@@ -380,6 +441,8 @@ class NotificationService {
     );
   }
 
+  // ── Guarantor notifications ───────────────────────────────────────────────────
+
   Future<void> showGuarantorRequestNotification(String borrowerName, double loanAmount) async {
     await _showLocalNotification(
       title: 'Guarantee Request',
@@ -397,6 +460,115 @@ class NotificationService {
       channelId: _channelGuarantorId,
     );
   }
+
+  // ── Rollover notifications (custom sound) ─────────────────────────────────────
+
+  /// Sent TO the guarantor when they are invited to consent to a rollover.
+  Future<void> showRolloverConsentRequestNotification({
+    required String borrowerName,
+    required double loanAmount,
+    required String rolloverId,
+    required String guarantorId,
+  }) async {
+    await _showLocalNotification(
+      title: 'Rollover Consent Requested',
+      body: '$borrowerName needs your consent to extend their \u20a6${loanAmount.formatNumber()} loan. Tap to review.',
+      payload: jsonEncode({
+        'type': 'rollover_consent_request',
+        'rolloverId': rolloverId,
+        'guarantorId': guarantorId,
+      }),
+      channelId: _channelRolloverId,
+    );
+  }
+
+  /// Sent TO the borrower when a guarantor responds.
+  Future<void> showRolloverGuarantorRespondedNotification({
+    required String guarantorName,
+    required bool accepted,
+    required String rolloverId,
+  }) async {
+    final action = accepted ? 'accepted' : 'declined';
+    final emoji = accepted ? '✓' : '✗';
+    await _showLocalNotification(
+      title: 'Guarantor Response Received',
+      body: '$emoji $guarantorName has $action your rollover consent request.',
+      payload: jsonEncode({
+        'type': accepted ? 'rollover_consent_accepted' : 'rollover_consent_declined',
+        'rolloverId': rolloverId,
+      }),
+      channelId: _channelRolloverId,
+    );
+  }
+
+  /// Sent TO the borrower when all guarantors have consented — ready for admin review.
+  Future<void> showRolloverAllConsentsReceivedNotification({
+    required String rolloverId,
+  }) async {
+    await _showLocalNotification(
+      title: 'All Guarantors Have Consented!',
+      body: 'Your rollover request is now with our admin team for approval.',
+      payload: jsonEncode({
+        'type': 'rollover_all_consents_received',
+        'rolloverId': rolloverId,
+      }),
+      channelId: _channelRolloverId,
+    );
+  }
+
+  /// Sent TO the borrower when admin approves the rollover.
+  Future<void> showRolloverApprovedNotification({
+    required String rolloverId,
+    required int newTenureMonths,
+  }) async {
+    await _showLocalNotification(
+      title: 'Rollover Approved!',
+      body: 'Great news! Your loan rollover for $newTenureMonths months has been approved.',
+      payload: jsonEncode({
+        'type': 'rollover_approved',
+        'rolloverId': rolloverId,
+      }),
+      channelId: _channelRolloverId,
+    );
+  }
+
+  /// Sent TO the borrower when admin rejects the rollover.
+  Future<void> showRolloverRejectedNotification({
+    required String rolloverId,
+    String? reason,
+  }) async {
+    final extra = reason != null ? ' Reason: $reason' : '';
+    await _showLocalNotification(
+      title: 'Rollover Request Rejected',
+      body: 'Unfortunately, your rollover request was not approved.$extra',
+      payload: jsonEncode({
+        'type': 'rollover_rejected',
+        'rolloverId': rolloverId,
+      }),
+      channelId: _channelRolloverId,
+    );
+  }
+
+  /// Sent TO the new replacement guarantor when they are appointed.
+  Future<void> showRolloverGuarantorReplacedNotification({
+    required String borrowerName,
+    required double loanAmount,
+    required String rolloverId,
+    required String guarantorId,
+  }) async {
+    await _showLocalNotification(
+      title: 'Rollover Guarantor Request',
+      body: 'You have been appointed as a guarantor for $borrowerName\'s \u20a6${loanAmount.formatNumber()} loan rollover. Tap to review.',
+      payload: jsonEncode({
+        'type': 'rollover_consent_request',
+        'rolloverId': rolloverId,
+        'guarantorId': guarantorId,
+      }),
+      channelId: _channelRolloverId,
+    );
+  }
+
+  // ── Savings notifications ─────────────────────────────────────────────────────
 
   Future<void> showSavingsGoalCompletedNotification(String goalName) async {
     await _showLocalNotification(
@@ -416,7 +588,8 @@ class NotificationService {
     );
   }
 
-  /// Show a wallet credit notification when funds land in the user's wallet.
+  // ── Wallet notifications ──────────────────────────────────────────────────────
+
   Future<void> showWalletCreditedNotification(double amount, {String? description}) async {
     final desc = description != null ? ' — $description' : '';
     await _showLocalNotification(
@@ -427,7 +600,6 @@ class NotificationService {
     );
   }
 
-  /// Show a wallet debit notification.
   Future<void> showWalletDebitedNotification(double amount, {String? description}) async {
     final desc = description != null ? ' — $description' : '';
     await _showLocalNotification(
@@ -438,8 +610,8 @@ class NotificationService {
     );
   }
 
-  /// Show an OTP notification — used when the OTP is delivered via push
-  /// instead of (or in addition to) SMS/email.
+  // ── OTP notifications ─────────────────────────────────────────────────────────
+
   Future<void> showOtpNotification(String otp, {String purpose = 'verification'}) async {
     await _showLocalNotification(
       title: 'Your OTP Code',

@@ -5,17 +5,17 @@
  * persisted in Supabase `rollovers` and link back to the source loan.
  *
  * Flow:
- *   POST   /                              — member creates rollover request
+ *   POST   /                              — member creates rollover request (notifies guarantors)
  *   GET    /                              — member lists their rollovers
  *   GET    /:id                           — get single rollover (member or guarantor)
  *   DELETE /:id                           — member cancels while still pending
  *   GET    /:id/guarantors                — list guarantors for a rollover
- *   POST   /:id/guarantors               — add guarantor to rollover
- *   PATCH  /:id/guarantors/:gid/respond  — guarantor accepts or declines
- *   PATCH  /:id/guarantors/:gid/replace  — borrower replaces a declined guarantor
+ *   POST   /:id/guarantors               — add guarantor to rollover (notifies them)
+ *   PATCH  /:id/guarantors/:gid/respond  — guarantor accepts or declines (notifies borrower)
+ *   PATCH  /:id/guarantors/:gid/replace  — borrower replaces a declined guarantor (notifies new guarantor)
  *   GET    /:id/eligibility              — check if loan qualifies for rollover
- *   PATCH  /:id/approve                  — admin approves rollover
- *   PATCH  /:id/reject                   — admin rejects rollover
+ *   PATCH  /:id/approve                  — admin approves rollover (notifies borrower)
+ *   PATCH  /:id/reject                   — admin rejects rollover (notifies borrower)
  */
 
 const express = require('express');
@@ -26,12 +26,12 @@ const supabase = require('../config/supabase');
 const { authenticate } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const logger = require('../utils/logger');
+const notify = require('../services/notifyService');
 
 router.use(authenticate);
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Fetch a rollover row; returns null if not found. */
 async function findRollover(id, profileId = null) {
   let query = supabase.from('rollovers').select('*').eq('id', id);
   if (profileId) query = query.eq('profile_id', profileId);
@@ -40,7 +40,6 @@ async function findRollover(id, profileId = null) {
   return data;
 }
 
-/** Fetch a rollover_guarantor row. */
 async function findGuarantor(rolloverId, guarantorId) {
   const { data, error } = await supabase
     .from('rollover_guarantors')
@@ -52,7 +51,6 @@ async function findGuarantor(rolloverId, guarantorId) {
   return data;
 }
 
-/** Check whether all guarantors for a rollover have accepted. */
 async function allGuarantorsAccepted(rolloverId) {
   const { data, error } = await supabase
     .from('rollover_guarantors')
@@ -61,6 +59,18 @@ async function allGuarantorsAccepted(rolloverId) {
   if (error) throw error;
   if (!data || data.length === 0) return false;
   return data.every(g => g.status === 'accepted');
+}
+
+/** Fetch the borrower's display name and loan amount for notification bodies. */
+async function getRolloverContext(rollover) {
+  const [profileRes, loanRes] = await Promise.all([
+    supabase.from('profiles').select('full_name').eq('id', rollover.profile_id).maybeSingle(),
+    supabase.from('loans').select('amount').eq('id', rollover.loan_id).maybeSingle(),
+  ]);
+  return {
+    borrowerName: profileRes.data?.full_name || 'A member',
+    loanAmount: loanRes.data?.amount || 0,
+  };
 }
 
 // ── POST / — create rollover request ─────────────────────────────────────────
@@ -91,7 +101,6 @@ router.post(
         return res.status(400).json({ success: false, error: 'Only active loans can be rolled over' });
       }
 
-      // Prevent duplicate pending rollover
       const { data: existing } = await supabase
         .from('rollovers')
         .select('id')
@@ -112,26 +121,46 @@ router.post(
           status: 'pending',
           guarantor_consent_deadline: new Date(
             Date.now() + 7 * 24 * 60 * 60 * 1000,
-          ).toISOString(), // 7 days
+          ).toISOString(),
         })
         .select('*')
         .single();
       if (rErr) throw rErr;
 
-      // Insert guarantors if provided
+      // Insert guarantors and notify each one
       if (guarantors.length > 0) {
-        const guarantorRows = guarantors.map(g => ({
-          rollover_id: rollover.id,
-          guarantor_id: g.guarantorId,
-          guarantor_name: g.guarantorName,
-          guarantor_phone: g.guarantorPhone,
-          status: 'invited',
-          invited_at: new Date().toISOString(),
-        }));
-        const { error: gErr } = await supabase
-          .from('rollover_guarantors')
-          .insert(guarantorRows);
-        if (gErr) throw gErr;
+        const borrowerProfile = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', req.user.id)
+          .maybeSingle();
+        const borrowerName = borrowerProfile.data?.full_name || 'A member';
+
+        for (const g of guarantors) {
+          const { data: guarantorRow } = await supabase
+            .from('rollover_guarantors')
+            .insert({
+              rollover_id: rollover.id,
+              guarantor_id: g.guarantorId,
+              guarantor_name: g.guarantorName,
+              guarantor_phone: g.guarantorPhone,
+              status: 'invited',
+              invited_at: new Date().toISOString(),
+            })
+            .select('*')
+            .single();
+
+          // Fire-and-forget notification to each guarantor
+          if (guarantorRow) {
+            notify.notifyRolloverGuarantorInvited({
+              guarantorProfileId: g.guarantorId,
+              borrowerName,
+              loanAmount: loan.amount,
+              rolloverId: rollover.id,
+              guarantorRecordId: guarantorRow.id,
+            }).catch(err => logger.warn('Notification error (guarantor invite):', err.message));
+          }
+        }
       }
 
       logger.info(`Rollover created: ${rollover.id} for loan ${loanId}`);
@@ -163,7 +192,6 @@ router.get('/', async (req, res) => {
 
 router.get('/:id', [param('id').isUUID()], validate, async (req, res) => {
   try {
-    // Allow both the borrower and any guarantor to fetch rollover details
     const { data, error } = await supabase
       .from('rollovers')
       .select('*, rollover_guarantors(*)')
@@ -172,7 +200,6 @@ router.get('/:id', [param('id').isUUID()], validate, async (req, res) => {
     if (error) throw error;
     if (!data) return res.status(404).json({ success: false, error: 'Rollover not found' });
 
-    // Check the requester is either the borrower or a guarantor
     const isOwner = data.profile_id === req.user.id;
     const isGuarantor = (data.rollover_guarantors || []).some(
       g => g.guarantor_id === req.user.id,
@@ -211,7 +238,7 @@ router.delete('/:id', [param('id').isUUID()], validate, async (req, res) => {
   }
 });
 
-// ── GET /:id/eligibility — check loan eligibility ─────────────────────────────
+// ── GET /:id/eligibility ───────────────────────────────────────────────────────
 
 router.get(
   '/:id/eligibility',
@@ -219,7 +246,6 @@ router.get(
   validate,
   async (req, res) => {
     try {
-      // :id here is the loan_id (string), not rollover uuid
       const { data: loan, error: lErr } = await supabase
         .from('loans')
         .select('*')
@@ -235,7 +261,6 @@ router.get(
           : 0;
       const hasMinimum50 = repaymentPercentage >= 50;
 
-      // Check consistent savings (3+ months contributions)
       const threeMonthsAgo = new Date();
       threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
       const { count: savingsCount } = await supabase
@@ -310,7 +335,6 @@ router.post(
         return res.status(400).json({ success: false, error: 'Cannot add guarantors to a non-pending rollover' });
       }
 
-      // Max 3 guarantors
       const { count } = await supabase
         .from('rollover_guarantors')
         .select('*', { count: 'exact', head: true })
@@ -334,6 +358,16 @@ router.post(
         .single();
       if (error) throw error;
 
+      // Notify the guarantor (fire-and-forget)
+      const { borrowerName, loanAmount } = await getRolloverContext(rollover);
+      notify.notifyRolloverGuarantorInvited({
+        guarantorProfileId: req.body.guarantorId,
+        borrowerName,
+        loanAmount,
+        rolloverId: req.params.id,
+        guarantorRecordId: data.id,
+      }).catch(err => logger.warn('Notification error (guarantor add):', err.message));
+
       res.status(201).json({ success: true, guarantor: data });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
@@ -341,7 +375,7 @@ router.post(
   }
 );
 
-// ── PATCH /:id/guarantors/:gid/respond — guarantor accepts or declines ────────
+// ── PATCH /:id/guarantors/:gid/respond ───────────────────────────────────────
 
 router.patch(
   '/:id/guarantors/:gid/respond',
@@ -363,7 +397,6 @@ router.patch(
       const guarantor = await findGuarantor(req.params.id, req.params.gid);
       if (!guarantor) return res.status(404).json({ success: false, error: 'Guarantor not found' });
 
-      // Verify the authenticated user is the guarantor
       if (guarantor.guarantor_id !== req.user.id) {
         return res.status(403).json({ success: false, error: 'You are not the assigned guarantor for this entry' });
       }
@@ -387,7 +420,15 @@ router.patch(
         .single();
       if (uErr) throw uErr;
 
-      // If all guarantors have accepted, advance rollover to awaiting_admin_approval
+      // Notify borrower of this guarantor's response (fire-and-forget)
+      notify.notifyRolloverGuarantorResponded({
+        borrowerProfileId: rollover.profile_id,
+        guarantorName: guarantor.guarantor_name,
+        accepted,
+        rolloverId: req.params.id,
+      }).catch(err => logger.warn('Notification error (guarantor respond):', err.message));
+
+      // Check if all guarantors have now accepted → advance to awaiting_admin_approval
       if (accepted) {
         const allAccepted = await allGuarantorsAccepted(req.params.id);
         if (allAccepted) {
@@ -396,6 +437,12 @@ router.patch(
             .update({ status: 'awaiting_admin_approval' })
             .eq('id', req.params.id);
           logger.info(`Rollover ${req.params.id} advanced to awaiting_admin_approval`);
+
+          // Notify borrower that all consents are in
+          notify.notifyRolloverAllConsentsReceived({
+            borrowerProfileId: rollover.profile_id,
+            rolloverId: req.params.id,
+          }).catch(err => logger.warn('Notification error (all consents received):', err.message));
         }
       }
 
@@ -408,7 +455,7 @@ router.patch(
   }
 );
 
-// ── PATCH /:id/guarantors/:gid/replace — replace a declined guarantor ─────────
+// ── PATCH /:id/guarantors/:gid/replace ───────────────────────────────────────
 
 router.patch(
   '/:id/guarantors/:gid/replace',
@@ -436,7 +483,6 @@ router.patch(
 
       const { newGuarantorId, newGuarantorName, newGuarantorPhone } = req.body;
 
-      // Replace by updating the existing row
       const { data, error } = await supabase
         .from('rollover_guarantors')
         .update({
@@ -453,6 +499,16 @@ router.patch(
         .single();
       if (error) throw error;
 
+      // Notify the new guarantor (fire-and-forget)
+      const { borrowerName, loanAmount } = await getRolloverContext(rollover);
+      notify.notifyRolloverGuarantorReplaced({
+        newGuarantorProfileId: newGuarantorId,
+        borrowerName,
+        loanAmount,
+        rolloverId: req.params.id,
+        guarantorRecordId: data.id,
+      }).catch(err => logger.warn('Notification error (guarantor replace):', err.message));
+
       logger.info(`Guarantor ${req.params.gid} replaced on rollover ${req.params.id}`);
       res.json({ success: true, guarantor: data });
     } catch (err) {
@@ -462,7 +518,7 @@ router.patch(
   }
 );
 
-// ── PATCH /:id/approve — admin approves rollover ──────────────────────────────
+// ── PATCH /:id/approve ────────────────────────────────────────────────────────
 
 router.patch(
   '/:id/approve',
@@ -470,7 +526,6 @@ router.patch(
   validate,
   async (req, res) => {
     try {
-      // Basic admin check — extend with your admin middleware as needed
       if (!req.user.is_admin) {
         return res.status(403).json({ success: false, error: 'Admin access required' });
       }
@@ -493,6 +548,13 @@ router.patch(
         .single();
       if (error) throw error;
 
+      // Notify borrower — fire-and-forget
+      notify.notifyRolloverApproved({
+        borrowerProfileId: rollover.profile_id,
+        rolloverId: req.params.id,
+        extensionMonths: rollover.extension_months,
+      }).catch(err => logger.warn('Notification error (rollover approved):', err.message));
+
       logger.info(`Rollover ${req.params.id} approved by admin ${req.user.id}`);
       res.json({ success: true, rollover: data });
     } catch (err) {
@@ -502,7 +564,7 @@ router.patch(
   }
 );
 
-// ── PATCH /:id/reject — admin rejects rollover ────────────────────────────────
+// ── PATCH /:id/reject ─────────────────────────────────────────────────────────
 
 router.patch(
   '/:id/reject',
@@ -534,6 +596,13 @@ router.patch(
         .select('*')
         .single();
       if (error) throw error;
+
+      // Notify borrower — fire-and-forget
+      notify.notifyRolloverRejected({
+        borrowerProfileId: rollover.profile_id,
+        rolloverId: req.params.id,
+        rejectionReason: req.body.rejectionReason,
+      }).catch(err => logger.warn('Notification error (rollover rejected):', err.message));
 
       logger.info(`Rollover ${req.params.id} rejected by admin ${req.user.id}`);
       res.json({ success: true, rollover: data });

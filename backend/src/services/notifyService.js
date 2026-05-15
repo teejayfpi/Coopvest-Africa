@@ -50,7 +50,6 @@ function _getFirebaseAdmin() {
         ? admin.credential.cert({
             projectId: process.env.FIREBASE_PROJECT_ID,
             clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-            // GitHub/Heroku env vars often collapse \n — restore them
             privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
           })
         : admin.credential.applicationDefault();
@@ -130,14 +129,14 @@ async function sendSms({ to, body }) {
  * Send a Firebase Cloud Messaging push notification.
  *
  * @param {object} opts
- * @param {string}  opts.token        - Device FCM registration token (single device)
+ * @param {string}   opts.token       - Device FCM registration token (single device)
  * @param {string[]} [opts.tokens]    - Multiple device tokens (multicast)
- * @param {string}  [opts.topic]      - FCM topic (e.g. 'all_users')
- * @param {string}  opts.title        - Notification title
- * @param {string}  opts.body         - Notification body
- * @param {object}  [opts.data]       - Arbitrary key→value string payload
- * @param {string}  [opts.type]       - Notification type for client routing
- * @param {string}  [opts.imageUrl]   - Optional image URL
+ * @param {string}   [opts.topic]     - FCM topic (e.g. 'all_users')
+ * @param {string}   opts.title       - Notification title
+ * @param {string}   opts.body        - Notification body
+ * @param {object}   [opts.data]      - Arbitrary key→value string payload
+ * @param {string}   [opts.type]      - Notification type for client routing
+ * @param {string}   [opts.imageUrl]  - Optional image URL
  */
 async function sendPush({ token, tokens, topic, title, body, data = {}, type, imageUrl }) {
   const app = _getFirebaseAdmin();
@@ -152,6 +151,9 @@ async function sendPush({ token, tokens, topic, title, body, data = {}, type, im
   const notification = { title, body };
   if (imageUrl) notification.imageUrl = imageUrl;
 
+  const isRollover = type && type.startsWith('rollover_');
+  const isOtp = type === 'otp' || type === 'otp_sent';
+
   const payload = {
     notification,
     data: { ...data, type: type || 'general' },
@@ -159,7 +161,10 @@ async function sendPush({ token, tokens, topic, title, body, data = {}, type, im
       notification: {
         clickAction: 'FLUTTER_NOTIFICATION_CLICK',
         channelId: _androidChannelForType(type),
-        priority: type === 'otp' || type === 'otp_sent' ? 'high' : 'default',
+        priority: (isOtp || isRollover) ? 'high' : 'default',
+        // Reference the custom sound for rollover events
+        ...(isRollover ? { sound: 'rollover_alert' } : {}),
+        defaultSound: !isRollover,
       },
     },
     apns: {
@@ -167,21 +172,20 @@ async function sendPush({ token, tokens, topic, title, body, data = {}, type, im
         aps: {
           alert: { title, body },
           badge: 1,
-          sound: 'default',
+          // Use the custom rollover sound on iOS too
+          sound: isRollover ? 'rollover_alert.aiff' : 'default',
         },
       },
     },
   };
 
   try {
-    // Single token
     if (token) {
       const result = await messaging.send({ ...payload, token });
       logger.info(`FCM push sent to single device. messageId=${result}`);
       return { status: 'sent', messageId: result };
     }
 
-    // Multiple tokens (multicast)
     if (tokens && tokens.length > 0) {
       const result = await messaging.sendEachForMulticast({ ...payload, tokens });
       const failed = result.responses.filter((r) => !r.success).length;
@@ -189,7 +193,6 @@ async function sendPush({ token, tokens, topic, title, body, data = {}, type, im
       return { status: 'sent', successCount: result.successCount, failureCount: failed };
     }
 
-    // Topic
     if (topic) {
       const result = await messaging.send({ ...payload, topic });
       logger.info(`FCM push sent to topic=${topic}. messageId=${result}`);
@@ -214,6 +217,16 @@ function _androidChannelForType(type) {
     case 'guarantor_request':
     case 'guarantor_confirmed':
       return 'guarantor_notifications';
+    // Rollover events → dedicated channel with custom sound
+    case 'rollover_consent_request':
+    case 'rollover_consent_accepted':
+    case 'rollover_consent_declined':
+    case 'rollover_all_consents_received':
+    case 'rollover_approved':
+    case 'rollover_rejected':
+    case 'rollover_cancelled':
+    case 'rollover_guarantor_replaced':
+      return 'rollover_notifications';
     case 'savings_goal':
     case 'savings_contribution':
       return 'savings_notifications';
@@ -262,9 +275,8 @@ async function pushToProfile({ profileId, title, body, data = {}, type }) {
   }
 }
 
-/**
- * Notify user their loan was approved.
- */
+// ── Existing high-level helpers ───────────────────────────────────────────────
+
 async function notifyLoanApproved({ profileId, loanId, loanType, amount }) {
   const title = 'Loan Approved!';
   const body = `Your ${loanType} for ₦${Number(amount).toLocaleString()} has been approved.`;
@@ -274,9 +286,6 @@ async function notifyLoanApproved({ profileId, loanId, loanType, amount }) {
   ]);
 }
 
-/**
- * Notify user an OTP was sent via push (supplement to SMS/email).
- */
 async function notifyOtpSent({ profileId, otp, purpose = 'verification' }) {
   const title = 'Your OTP Code';
   const body = `Your Coopvest ${purpose} code is ${otp}. Expires in 10 minutes. Do not share it.`;
@@ -286,9 +295,6 @@ async function notifyOtpSent({ profileId, otp, purpose = 'verification' }) {
   ]);
 }
 
-/**
- * Notify user their wallet was credited.
- */
 async function notifyWalletCredited({ profileId, amount, description }) {
   const desc = description ? ` — ${description}` : '';
   const title = 'Wallet Credited';
@@ -299,18 +305,125 @@ async function notifyWalletCredited({ profileId, amount, description }) {
   ]);
 }
 
+// ── Rollover notification helpers ─────────────────────────────────────────────
+
+/**
+ * Notify a guarantor that they have been invited to consent to a rollover.
+ * Fires push + in-app on their account; triggers the custom ding-dong sound.
+ */
+async function notifyRolloverGuarantorInvited({
+  guarantorProfileId,
+  borrowerName,
+  loanAmount,
+  rolloverId,
+  guarantorRecordId,
+}) {
+  const title = 'Rollover Consent Requested';
+  const body = `${borrowerName} needs your consent to extend their ₦${Number(loanAmount).toLocaleString()} loan. Tap to review.`;
+  const type = 'rollover_consent_request';
+  const data = {
+    rolloverId: String(rolloverId),
+    guarantorId: String(guarantorRecordId),
+  };
+  await Promise.all([
+    sendInApp({ profileId: guarantorProfileId, title, body, type, priority: 'high' }),
+    pushToProfile({ profileId: guarantorProfileId, title, body, type, data }),
+  ]);
+  logger.info(`Rollover consent request sent to guarantor ${guarantorProfileId} for rollover ${rolloverId}`);
+}
+
+/**
+ * Notify the borrower that a guarantor has accepted or declined.
+ */
+async function notifyRolloverGuarantorResponded({
+  borrowerProfileId,
+  guarantorName,
+  accepted,
+  rolloverId,
+}) {
+  const action = accepted ? 'accepted' : 'declined';
+  const emoji = accepted ? '✓' : '✗';
+  const title = 'Guarantor Response Received';
+  const body = `${emoji} ${guarantorName} has ${action} your rollover consent request.`;
+  const type = accepted ? 'rollover_consent_accepted' : 'rollover_consent_declined';
+  const data = { rolloverId: String(rolloverId) };
+  await Promise.all([
+    sendInApp({ profileId: borrowerProfileId, title, body, type, priority: 'high' }),
+    pushToProfile({ profileId: borrowerProfileId, title, body, type, data }),
+  ]);
+}
+
+/**
+ * Notify the borrower that ALL guarantors have consented — request advanced to admin.
+ */
+async function notifyRolloverAllConsentsReceived({ borrowerProfileId, rolloverId }) {
+  const title = 'All Guarantors Have Consented!';
+  const body = 'Your rollover request is now with our admin team for approval. We\'ll notify you once a decision is made.';
+  const type = 'rollover_all_consents_received';
+  const data = { rolloverId: String(rolloverId) };
+  await Promise.all([
+    sendInApp({ profileId: borrowerProfileId, title, body, type, priority: 'high' }),
+    pushToProfile({ profileId: borrowerProfileId, title, body, type, data }),
+  ]);
+}
+
+/**
+ * Notify the borrower that admin has approved the rollover.
+ */
+async function notifyRolloverApproved({ borrowerProfileId, rolloverId, extensionMonths }) {
+  const title = 'Rollover Approved!';
+  const body = `Great news! Your loan rollover for ${extensionMonths} month${extensionMonths !== 1 ? 's' : ''} has been approved. Your new repayment schedule is now active.`;
+  const type = 'rollover_approved';
+  const data = { rolloverId: String(rolloverId) };
+  await Promise.all([
+    sendInApp({ profileId: borrowerProfileId, title, body, type, priority: 'high' }),
+    pushToProfile({ profileId: borrowerProfileId, title, body, type, data }),
+  ]);
+}
+
+/**
+ * Notify the borrower that admin has rejected the rollover.
+ */
+async function notifyRolloverRejected({ borrowerProfileId, rolloverId, rejectionReason }) {
+  const title = 'Rollover Request Rejected';
+  const reasonClause = rejectionReason ? ` Reason: ${rejectionReason}` : '';
+  const body = `Unfortunately, your rollover request was not approved.${reasonClause}`;
+  const type = 'rollover_rejected';
+  const data = { rolloverId: String(rolloverId) };
+  await Promise.all([
+    sendInApp({ profileId: borrowerProfileId, title, body, type, priority: 'normal' }),
+    pushToProfile({ profileId: borrowerProfileId, title, body, type, data }),
+  ]);
+}
+
+/**
+ * Notify a replacement guarantor that they have been appointed.
+ */
+async function notifyRolloverGuarantorReplaced({
+  newGuarantorProfileId,
+  borrowerName,
+  loanAmount,
+  rolloverId,
+  guarantorRecordId,
+}) {
+  const title = 'Rollover Guarantor Request';
+  const body = `You have been appointed as a guarantor for ${borrowerName}'s ₦${Number(loanAmount).toLocaleString()} loan rollover. Tap to review and respond.`;
+  const type = 'rollover_consent_request';
+  const data = {
+    rolloverId: String(rolloverId),
+    guarantorId: String(guarantorRecordId),
+  };
+  await Promise.all([
+    sendInApp({ profileId: newGuarantorProfileId, title, body, type, priority: 'high' }),
+    pushToProfile({ profileId: newGuarantorProfileId, title, body, type, data }),
+  ]);
+  logger.info(`Rollover replacement consent request sent to guarantor ${newGuarantorProfileId} for rollover ${rolloverId}`);
+}
+
 // ── Broadcast (fan-out) ───────────────────────────────────────────────────────
 
 /**
  * High-level fan-out: deliver to multiple profiles across multiple channels.
- *
- * @param {object} opts
- * @param {string[]} opts.profileIds
- * @param {string[]} opts.channels   - ['in_app', 'email', 'sms', 'push']
- * @param {string}   opts.title
- * @param {string}   opts.body
- * @param {string}   [opts.subject]  - Email subject (falls back to title)
- * @param {string}   [opts.type]     - Notification type
  */
 async function broadcast({ profileIds, channels = ['in_app'], title, body, subject, type }) {
   const results = [];
@@ -351,4 +464,11 @@ module.exports = {
   notifyLoanApproved,
   notifyOtpSent,
   notifyWalletCredited,
+  // Rollover
+  notifyRolloverGuarantorInvited,
+  notifyRolloverGuarantorResponded,
+  notifyRolloverAllConsentsReceived,
+  notifyRolloverApproved,
+  notifyRolloverRejected,
+  notifyRolloverGuarantorReplaced,
 };
