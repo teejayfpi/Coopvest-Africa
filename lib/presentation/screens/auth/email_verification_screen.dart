@@ -58,7 +58,7 @@ class _EmailVerificationScreenState extends ConsumerState<EmailVerificationScree
   Future<void> _checkVerificationStatus() async {
     if (_emailController.text.isEmpty) return;
     try {
-      final response = await ApiClient().get(
+      final response = await ref.read(apiClientProvider).get(
         '/auth/check-email-verification',
         queryParameters: {'email': _emailController.text},
       );
@@ -76,7 +76,7 @@ class _EmailVerificationScreenState extends ConsumerState<EmailVerificationScree
     }
     setState(() { _isResending = true; _errorMessage = null; _successMessage = null; });
     try {
-      final response = await ApiClient().post(
+      final response = await ref.read(apiClientProvider).post(
         '/auth/resend-verification-email',
         queryParameters: {'email': _emailController.text},
       );
@@ -107,7 +107,7 @@ class _EmailVerificationScreenState extends ConsumerState<EmailVerificationScree
     }
     setState(() { _isVerifying = true; _errorMessage = null; _successMessage = null; });
     try {
-      final response = await ApiClient().post(
+      final response = await ref.read(apiClientProvider).post(
         '/auth/verify-otp',
         data: {'email': _emailController.text, 'otp': _otpController.text},
       );
