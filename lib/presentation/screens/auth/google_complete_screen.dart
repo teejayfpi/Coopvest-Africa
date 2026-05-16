@@ -35,9 +35,13 @@ class _CompleteRegistrationScreenState extends ConsumerState<CompleteRegistratio
     }
     try {
       // Google users are already authenticated via Firebase — use googleSignIn()
-      // to properly populate the Riverpod auth state instead of calling register()
-      // with an empty password (which would fail validation).
+      // to properly populate the Riverpod auth state, then verify the state
+      // is actually authenticated before entering the onboarding flow.
       await ref.read(authProvider.notifier).googleSignIn();
+      final authState = ref.read(authProvider);
+      if (authState.status != AuthStatus.authenticated) {
+        throw Exception('Google sign-in did not produce an authenticated session.');
+      }
       if (mounted) {
         Navigator.of(context).pushReplacementNamed('/register-step3', arguments: {
           'email': widget.googleUser.email,
