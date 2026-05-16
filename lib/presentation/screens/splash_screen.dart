@@ -39,18 +39,22 @@ class _SplashScreenState extends State<SplashScreen>
   late final AnimationController _floatCtrl;
   late final Animation<double> _floatY;
 
-  // progress bar spanning minDuration
-  late final AnimationController _progressCtrl;
+  // indeterminate shimmer for loading bar (looped)
+  late final AnimationController _barCtrl;
 
   // shimmer sweep (looped)
   late final AnimationController _shimmerCtrl;
 
-  // exit fade
+  // exit fade — reduced to 150ms delay + 400ms fade (was 300ms + 600ms)
   late final AnimationController _exitCtrl;
   late final Animation<double> _exitFade;
 
   bool _splashVisible = true;
   bool _minElapsed = false;
+
+  /// Guard against _tryDismiss being called simultaneously from
+  /// _onMinElapsed() and didUpdateWidget().
+  bool _dismissing = false;
 
   @override
   void initState() {
@@ -105,19 +109,20 @@ class _SplashScreenState extends State<SplashScreen>
       CurvedAnimation(parent: _floatCtrl, curve: Curves.easeInOut),
     );
 
-    // progress bar spanning full minDuration
-    _progressCtrl =
-        AnimationController(vsync: this, duration: widget.minDuration)
-          ..forward().whenComplete(_onMinElapsed);
+    // indeterminate loading bar — loops independently of minDuration so it
+    // never misrepresents actual boot progress.
+    _barCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 1400))
+      ..repeat();
 
     // shimmer
     _shimmerCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 1800))
       ..repeat();
 
-    // exit
+    // exit: 400ms fade (was 600ms)
     _exitCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 600));
+        vsync: this, duration: const Duration(milliseconds: 400));
     _exitFade = Tween<double>(begin: 1.0, end: 0.0).animate(
       CurvedAnimation(parent: _exitCtrl, curve: Curves.easeInOut),
     );
@@ -126,6 +131,9 @@ class _SplashScreenState extends State<SplashScreen>
         setState(() => _splashVisible = false);
       }
     });
+
+    // min-duration timer — drives the guard, NOT a visible progress bar
+    Future.delayed(widget.minDuration, _onMinElapsed);
 
     _introCtrl.forward();
   }
@@ -145,8 +153,13 @@ class _SplashScreenState extends State<SplashScreen>
 
   Future<void> _tryDismiss() async {
     if (!widget.isReady || !_minElapsed) return;
+    // Guard: only one dismiss sequence can run at a time
+    if (_dismissing) return;
+    _dismissing = true;
+
     if (!_introCtrl.isCompleted) await _introCtrl.forward();
-    await Future.delayed(const Duration(milliseconds: 300));
+    // Reduced settle delay: 150ms (was 300ms)
+    await Future.delayed(const Duration(milliseconds: 150));
     if (mounted) _exitCtrl.forward();
   }
 
@@ -155,7 +168,7 @@ class _SplashScreenState extends State<SplashScreen>
     _introCtrl.dispose();
     _pulseCtrl.dispose();
     _floatCtrl.dispose();
-    _progressCtrl.dispose();
+    _barCtrl.dispose();
     _shimmerCtrl.dispose();
     _exitCtrl.dispose();
     super.dispose();
@@ -163,37 +176,37 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Once the splash has fully faded out, render the child with zero overhead.
+    // The child is NOT built while the splash is visible — avoids wasting
+    // CPU/memory on heavy home screens during the most sensitive startup window.
     if (!_splashVisible) return widget.child;
 
-    return Stack(children: [
-      widget.child,
-      AnimatedBuilder(
-        animation: Listenable.merge([
-          _introCtrl,
-          _pulseCtrl,
-          _floatCtrl,
-          _progressCtrl,
-          _shimmerCtrl,
-          _exitCtrl,
-        ]),
-        builder: (context, _) => FadeTransition(
-          opacity: _exitFade,
-          child: _SplashContent(
-            logoScale: _logoScale.value,
-            logoOpacity: _logoOpacity.value,
-            textSlide: _textSlide.value,
-            textFade: _textFade.value,
-            taglineFade: _taglineFade.value,
-            badgeFade: _badgeFade.value,
-            pulseValue: _pulseCtrl.value,
-            floatY: _floatY.value,
-            progressValue: _progressCtrl.value,
-            shimmerValue: _shimmerCtrl.value,
-            isReady: widget.isReady,
-          ),
+    return AnimatedBuilder(
+      animation: Listenable.merge([
+        _introCtrl,
+        _pulseCtrl,
+        _floatCtrl,
+        _barCtrl,
+        _shimmerCtrl,
+        _exitCtrl,
+      ]),
+      builder: (context, _) => FadeTransition(
+        opacity: _exitFade,
+        child: _SplashContent(
+          logoScale: _logoScale.value,
+          logoOpacity: _logoOpacity.value,
+          textSlide: _textSlide.value,
+          textFade: _textFade.value,
+          taglineFade: _taglineFade.value,
+          badgeFade: _badgeFade.value,
+          pulseValue: _pulseCtrl.value,
+          floatY: _floatY.value,
+          barValue: _barCtrl.value,
+          shimmerValue: _shimmerCtrl.value,
+          isReady: widget.isReady,
         ),
       ),
-    ]);
+    );
   }
 }
 
@@ -208,16 +221,16 @@ class _SplashContent extends StatelessWidget {
   final double badgeFade;
   final double pulseValue;
   final double floatY;
-  final double progressValue;
+  final double barValue;
   final double shimmerValue;
   final bool isReady;
 
-  static const Color _navy    = Color(0xFF080F1C);
-  static const Color _blue    = Color(0xFF1B3A6B);
-  static const Color _midBlue = Color(0xFF1E4A8A);
-  static const Color _gold    = Color(0xFFD4AF37);
+  static const Color _navy      = Color(0xFF080F1C);
+  static const Color _blue      = Color(0xFF1B3A6B);
+  static const Color _midBlue   = Color(0xFF1E4A8A);
+  static const Color _gold      = Color(0xFFD4AF37);
   static const Color _lightGold = Color(0xFFEDD97C);
-  static const Color _green   = Color(0xFF2E7D32);
+  static const Color _green     = Color(0xFF2E7D32);
 
   const _SplashContent({
     required this.logoScale,
@@ -228,7 +241,7 @@ class _SplashContent extends StatelessWidget {
     required this.badgeFade,
     required this.pulseValue,
     required this.floatY,
-    required this.progressValue,
+    required this.barValue,
     required this.shimmerValue,
     required this.isReady,
   });
@@ -351,21 +364,17 @@ class _SplashContent extends StatelessWidget {
 
             const Spacer(flex: 2),
 
-            // progress bar + security badge
+            // indeterminate loading bar + security badge
             Opacity(
               opacity: badgeFade,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 52),
                 child: Column(children: [
+                  // Indeterminate sweep — does NOT imply a percentage of boot
+                  // progress, avoiding the misleading "fake progress" problem.
                   ClipRRect(
                     borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: progressValue,
-                      minHeight: 2,
-                      backgroundColor: Colors.white10,
-                      valueColor:
-                          const AlwaysStoppedAnimation<Color>(_gold),
-                    ),
+                    child: _IndeterminateBar(value: barValue),
                   ),
                   const SizedBox(height: 22),
                   Row(
@@ -399,7 +408,59 @@ class _SplashContent extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Logo badge
+// Indeterminate loading bar — a gold sweep that loops left-to-right.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _IndeterminateBar extends StatelessWidget {
+  final double value; // 0.0 → 1.0 looping
+  const _IndeterminateBar({required this.value});
+
+  static const Color _gold      = Color(0xFFD4AF37);
+  static const Color _lightGold = Color(0xFFEDD97C);
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, constraints) {
+      final total = constraints.maxWidth;
+      // The sweep occupies 40% of the bar width
+      const sweepFraction = 0.40;
+      final sweepWidth = total * sweepFraction;
+      // Travels from -sweepWidth to total (full pass), driven by [value]
+      final rawLeft = value * (total + sweepWidth) - sweepWidth;
+      final clampedLeft = rawLeft.clamp(0.0, total);
+      final clampedRight = (rawLeft + sweepWidth).clamp(0.0, total);
+
+      return SizedBox(
+        height: 2,
+        child: Stack(children: [
+          // track
+          Container(color: Colors.white10),
+          // sweep
+          Positioned(
+            left: clampedLeft,
+            width: clampedRight - clampedLeft,
+            top: 0,
+            bottom: 0,
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    _gold.withOpacity(0.0),
+                    _lightGold,
+                    _gold.withOpacity(0.0),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ]),
+      );
+    });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Logo badge — with asset fallback so a missing logo.png is handled gracefully
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _LogoBadge extends StatelessWidget {
@@ -446,9 +507,23 @@ class _LogoBadge extends StatelessWidget {
           child: ClipOval(
             child: Container(
               color: const Color(0xFF0F2040),
+              // Graceful fallback when logo.png is missing or not declared
+              // in pubspec.yaml — shows gold "CV" initials instead of a
+              // broken-image icon that could be mistaken for intentional design.
               child: Image.asset(
                 'assets/images/logo.png',
                 fit: BoxFit.cover,
+                errorBuilder: (context, error, stack) => const Center(
+                  child: Text(
+                    'CV',
+                    style: TextStyle(
+                      color: Color(0xFFD4AF37),
+                      fontSize: 28,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
