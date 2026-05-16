@@ -68,7 +68,7 @@ class _SalaryDeductionConsentScreenState extends ConsumerState<SalaryDeductionCo
       // Check for success response
       if (response != null && (response['success'] == true || response['status'] == 'ok')) {
         if (mounted) {
-          Navigator.of(context).pushReplacementNamed('/home');
+          Navigator.of(context).pushReplacementNamed('/account-activation');
         }
         return;
       }
@@ -92,27 +92,35 @@ class _SalaryDeductionConsentScreenState extends ConsumerState<SalaryDeductionCo
         _showErrorWithProceedOption('Server error. Your consent has been noted locally.');
       }
     } on ValidationException catch (e) {
-      // 400 Bad Request - endpoint might expect different format or doesn't exist
-      // Log the consent locally and allow user to proceed
-      logger.w('Salary consent validation error: ${e.message} - proceeding with registration');
+      // 400 Bad Request — consent was rejected by the server; do NOT proceed
+      logger.e('Salary consent validation error: \${e.message}');
       if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/home');
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Consent failed: \${e.message}'),
+          backgroundColor: CoopvestColors.error,
+        ));
       }
     } on AuthException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Authentication Error: ${e.message}'), backgroundColor: CoopvestColors.error));
       }
     } on NetworkException catch (e) {
-      // Network error - allow user to proceed since consent is recorded locally
-      logger.w('Network error during consent submission: ${e.message}');
+      // Network error — user must retry; consent must be recorded server-side
+      logger.e('Network error during consent submission: \${e.message}');
       if (mounted) {
-        _showErrorWithProceedOption('Network error. Your consent has been noted and will sync when online.');
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Network error. Please check your connection and try again.'),
+          backgroundColor: CoopvestColors.error,
+        ));
       }
     } catch (e) {
-      // Unknown error - log and allow user to proceed
-      logger.e('Consent submission error: $e');
+      // Unknown error — do not silently proceed; show the error to the user
+      logger.e('Consent submission error: \$e');
       if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/home');
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Unexpected error. Please try again.'),
+          backgroundColor: CoopvestColors.error,
+        ));
       }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
