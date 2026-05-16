@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb;
@@ -32,6 +33,7 @@ class _RegisterStep2ScreenState extends ConsumerState<RegisterStep2Screen> {
   bool _isChecking = false;
 
   final fb.FirebaseAuth _firebaseAuth = fb.FirebaseAuth.instance;
+  Timer? _resendTimer;
 
   @override
   void initState() {
@@ -40,17 +42,19 @@ class _RegisterStep2ScreenState extends ConsumerState<RegisterStep2Screen> {
   }
 
   void _startTimer() {
-    Future.delayed(const Duration(seconds: 1), () {
-      if (mounted) {
-        setState(() {
-          _remainingSeconds--;
-          if (_remainingSeconds == 0) {
-            _canResend = true;
-          } else {
-            _startTimer();
-          }
-        });
+    _resendTimer?.cancel();
+    _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
       }
+      setState(() {
+        _remainingSeconds--;
+        if (_remainingSeconds <= 0) {
+          _canResend = true;
+          timer.cancel();
+        }
+      });
     });
   }
 
