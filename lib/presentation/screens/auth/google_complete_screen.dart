@@ -4,6 +4,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/utils/utils.dart';
+import '../../../data/models/auth_models.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/common/buttons.dart';
 import '../../widgets/common/inputs.dart';
