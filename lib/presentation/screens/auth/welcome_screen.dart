@@ -58,7 +58,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                   if (_currentPage < slides.length - 1) 
                     Row(
                       children: [
-                        Expanded(child: SecondaryButton(label: 'Skip', onPressed: () => Navigator.of(context).pushNamed('/login'))),
+                        Expanded(child: SecondaryButton(label: 'Skip', onPressed: () => Navigator.of(context).pushReplacementNamed('/login'))),
                         const SizedBox(width: 12),
                         Expanded(child: PrimaryButton(label: 'Next', onPressed: () { _pageController.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut); })),
                       ],
@@ -66,9 +66,9 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                   else
                     Column(
                       children: [
-                        PrimaryButton(label: 'Create Account', onPressed: () => Navigator.of(context).pushNamed('/register'), width: double.infinity),
+                        PrimaryButton(label: 'Create Account', onPressed: () => Navigator.of(context).pushReplacementNamed('/register'), width: double.infinity),
                         const SizedBox(height: 12),
-                        SecondaryButton(label: 'Sign In', onPressed: () => Navigator.of(context).pushNamed('/login'), width: double.infinity),
+                        SecondaryButton(label: 'Sign In', onPressed: () => Navigator.of(context).pushReplacementNamed('/login'), width: double.infinity),
                       ],
                     ),
                 ],
