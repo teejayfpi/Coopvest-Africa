@@ -106,9 +106,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           try {
             final user = await authRepo.restoreSessionWithBiometric();
             await ref.read(authProvider.notifier).getCurrentUser();
-            if (mounted) {
-              Navigator.of(context).pushReplacementNamed('/home');
-            }
+            // ref.listen will navigate to /home once auth state transitions
             return;
           } catch (e) {
             logger.w('Session restore failed, trying stored credentials: $e');
@@ -125,9 +123,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             email: email,
             password: password,
           );
-          if (mounted) {
-            Navigator.of(context).pushReplacementNamed('/home');
-          }
+          // ref.listen will navigate to /home once auth state transitions
         } else {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
