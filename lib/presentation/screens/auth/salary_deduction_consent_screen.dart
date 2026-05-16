@@ -65,18 +65,12 @@ class _SalaryDeductionConsentScreenState extends ConsumerState<SalaryDeductionCo
         'timestamp': DateTime.now().toIso8601String(),
       });
       
-      // Check for success response
-      if (response != null && (response['success'] == true || response['status'] == 'ok')) {
-        if (mounted) {
-          Navigator.of(context).pushReplacementNamed('/account-activation');
-        }
-        return;
-      }
-      
-      // If response doesn't indicate success but no error thrown, still proceed
-      // (consent was recorded, backend might have different response format)
+      // Any non-throwing 2xx response means the server accepted the consent.
+      // Route to account-activation regardless of the response body shape —
+      // checking specific keys (success/status) caused valid responses with
+      // different shapes (e.g. {recorded: true}) to silently land on /home.
       if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/home');
+        Navigator.of(context).pushReplacementNamed('/account-activation');
       }
     } on ServerException catch (e) {
       // All server errors — including 404 — must surface to the user.
