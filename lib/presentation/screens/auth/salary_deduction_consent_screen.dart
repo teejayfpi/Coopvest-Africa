@@ -79,17 +79,19 @@ class _SalaryDeductionConsentScreenState extends ConsumerState<SalaryDeductionCo
         Navigator.of(context).pushReplacementNamed('/home');
       }
     } on ServerException catch (e) {
-      // 404 means endpoint doesn't exist yet - proceed anyway since consent is legal formality
-      if (e.statusCode == 404) {
-        logger.w('Salary consent endpoint not found - proceeding with registration');
-        if (mounted) {
-          Navigator.of(context).pushReplacementNamed('/home');
-        }
-        return;
-      }
-      // For other server errors, show message but allow user to proceed
+      // All server errors — including 404 — must surface to the user.
+      // Salary deduction consent is a legal obligation; it cannot be silently
+      // skipped because the endpoint is unavailable. The backend must be fixed.
+      logger.e('Salary consent server error [\${e.statusCode}]: \${e.message}');
       if (mounted) {
-        _showErrorWithProceedOption('Server error. Your consent has been noted locally.');
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+            e.statusCode == 404
+                ? 'Consent service is unavailable (404). Please contact support.'
+                : 'Server error (\${e.statusCode}). Please try again.',
+          ),
+          backgroundColor: CoopvestColors.error,
+        ));
       }
     } on ValidationException catch (e) {
       // 400 Bad Request — consent was rejected by the server; do NOT proceed
