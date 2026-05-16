@@ -5,8 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
+import '../../../core/utils/utils.dart';
 import '../../widgets/common/buttons.dart';
 import '../../widgets/common/inputs.dart';
+import '../../../core/network/api_client.dart';
 
 // ---------------------------------------------------------------------------
 // Data collected across all onboarding steps
@@ -288,6 +290,16 @@ class _RegistrationOnboardingScreenState
         'nok_phone': _data.nokPhone,
         'nok_address': _data.nokAddress,
       };
+
+      // Submit registration data to backend before proceeding
+      try {
+        final apiClient = ref.read(apiClientProvider);
+        await apiClient.post('/auth/complete-registration', data: combined);
+      } catch (e) {
+        // Log the error but allow the flow to continue — data can be re-synced
+        // during KYC. A network blip should not block the user from proceeding.
+        logger.e('Registration data submission error: \$e');
+      }
 
       if (mounted) {
         Navigator.of(context).pushNamed(
