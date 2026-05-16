@@ -142,6 +142,9 @@ class _RegistrationOnboardingScreenState
     if (_currentStep == 1) {
       if (!_validateStep2()) return;
     }
+    if (_currentStep == 2) {
+      if (!_validateStep3()) return;
+    }
     if (_currentStep == 3) {
       if (!_validateStep4()) return;
     }
@@ -190,6 +193,24 @@ class _RegistrationOnboardingScreenState
     }
     _data.residentialAddress = _addressCtrl.text.trim();
     _data.lga = _lgaCtrl.text.trim();
+    return true;
+  }
+
+  bool _validateStep3() {
+    if (_data.selfiePhoto == null) {
+      _showError('Please upload or take a selfie photo.');
+      return false;
+    }
+    if (_data.idDocumentPhoto == null) {
+      _showError('Please upload a photo of your ID document.');
+      return false;
+    }
+    if (_idNumberCtrl.text.trim().isEmpty) {
+      _showError('Please enter your NIN / ID number.');
+      return false;
+    }
+    _data.idNumber = _idNumberCtrl.text.trim();
+    _data.staffId = _staffIdCtrl.text.trim();
     return true;
   }
 
@@ -679,6 +700,7 @@ class _PersonalInfoStep extends StatefulWidget {
 }
 
 class _PersonalInfoStepState extends State<_PersonalInfoStep> {
+  late TextEditingController _dobCtrl;
   final _genders = ['Male', 'Female', 'Other', 'Prefer not to say'];
 
   final _nigerianStates = [
@@ -689,6 +711,18 @@ class _PersonalInfoStepState extends State<_PersonalInfoStep> {
     'Ogun', 'Ondo', 'Osun', 'Oyo', 'Plateau', 'Rivers', 'Sokoto',
     'Taraba', 'Yobe', 'Zamfara',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _dobCtrl = TextEditingController(text: widget.data.dateOfBirth);
+  }
+
+  @override
+  void dispose() {
+    _dobCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -718,7 +752,7 @@ class _PersonalInfoStepState extends State<_PersonalInfoStep> {
             label: 'Date of Birth *',
             hint: 'DD/MM/YYYY',
             readOnly: true,
-            controller: TextEditingController(text: widget.data.dateOfBirth),
+            controller: _dobCtrl,
             onTap: () async {
               final picked = await showDatePicker(
                 context: context,
@@ -736,8 +770,10 @@ class _PersonalInfoStepState extends State<_PersonalInfoStep> {
               );
               if (picked != null) {
                 setState(() {
-                  widget.data.dateOfBirth =
-                      '${picked.day.toString().padLeft(2, '0')}/${picked.month.toString().padLeft(2, '0')}/${picked.year}';
+                  final formatted =
+                      '\${picked.day.toString().padLeft(2, '0')}/\${picked.month.toString().padLeft(2, '0')}/\${picked.year}';
+                  widget.data.dateOfBirth = formatted;
+                  _dobCtrl.text = formatted;
                 });
               }
             },
