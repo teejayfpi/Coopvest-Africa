@@ -274,52 +274,54 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 width: double.infinity,
               ),
               
-              // Biometric login button (always visible)
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(child: Divider(color: context.dividerColor)),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(
-                      'or',
-                      style: TextStyle(color: context.textSecondary, fontSize: 14),
-                    ),
-                  ),
-                  Expanded(child: Divider(color: context.dividerColor)),
-                ],
-              ),
-              const SizedBox(height: 24),
-              Center(
-                child: Column(
+              // Biometric login button — only shown when biometrics are enabled and available
+              if (_isBiometricEnabled) ...[
+                const SizedBox(height: 24),
+                Row(
                   children: [
-                    InkWell(
-                      onTap: _performBiometricAuth,
-                      borderRadius: BorderRadius.circular(50),
-                      child: Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: CoopvestColors.primary.withOpacity(0.1),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.fingerprint,
-                          size: 48,
-                          color: CoopvestColors.primary,
-                        ),
+                    Expanded(child: Divider(color: context.dividerColor)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text(
+                        'or',
+                        style: TextStyle(color: context.textSecondary, fontSize: 14),
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Tap to use biometrics',
-                      style: TextStyle(
-                        color: context.textSecondary,
-                        fontSize: 14,
-                      ),
-                    ),
+                    Expanded(child: Divider(color: context.dividerColor)),
                   ],
                 ),
-              ),
+                const SizedBox(height: 24),
+                Center(
+                  child: Column(
+                    children: [
+                      InkWell(
+                        onTap: _performBiometricAuth,
+                        borderRadius: BorderRadius.circular(50),
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: CoopvestColors.primary.withOpacity(0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.fingerprint,
+                            size: 48,
+                            color: CoopvestColors.primary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Tap to use biometrics',
+                        style: TextStyle(
+                          color: context.textSecondary,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               
               const SizedBox(height: 32),
 
