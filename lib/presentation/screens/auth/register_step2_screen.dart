@@ -98,6 +98,21 @@ class _RegisterStep2ScreenState extends ConsumerState<RegisterStep2Screen> {
 
   Future<void> _checkVerificationStatus() async {
     setState(() => _isChecking = true);
+
+    // Guard: if the Firebase session was lost (back-nav, expiry), redirect to login
+    if (_firebaseAuth.currentUser == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Session expired. Please sign in again.'),
+            backgroundColor: CoopvestColors.error,
+          ),
+        );
+        Navigator.of(context).pushReplacementNamed('/login');
+      }
+      if (mounted) setState(() => _isChecking = false);
+      return;
+    }
     
     try {
       // Reload the user to get the latest email verification status
