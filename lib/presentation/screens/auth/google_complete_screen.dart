@@ -34,9 +34,16 @@ class _CompleteRegistrationScreenState extends ConsumerState<CompleteRegistratio
       return;
     }
     try {
-      await ref.read(authProvider.notifier).register(email: widget.googleUser.email, password: '', name: widget.googleUser.displayName ?? 'User', phone: phone);
+      // Google users are already authenticated via Firebase — use googleSignIn()
+      // to properly populate the Riverpod auth state instead of calling register()
+      // with an empty password (which would fail validation).
+      await ref.read(authProvider.notifier).googleSignIn();
       if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/register-step3', arguments: {'email': widget.googleUser.email, 'name': widget.googleUser.displayName ?? 'User', 'phone': phone});
+        Navigator.of(context).pushReplacementNamed('/register-step3', arguments: {
+          'email': widget.googleUser.email,
+          'name': widget.googleUser.displayName ?? 'User',
+          'phone': phone,
+        });
       }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Registration failed: $e'), backgroundColor: CoopvestColors.error));
