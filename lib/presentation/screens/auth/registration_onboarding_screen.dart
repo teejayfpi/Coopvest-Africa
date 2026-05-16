@@ -277,6 +277,46 @@ class _RegistrationOnboardingScreenState
     ));
   }
 
+  /// Shows a dialog with the error message and two actions:
+  /// "Try Again" re-invokes [_submit]; "Cancel" dismisses so the user can
+  /// review their data before retrying manually.
+  Future<void> _showRetryDialog(String message) async {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.cloud_off_rounded, color: CoopvestColors.error, size: 22),
+            const SizedBox(width: 10),
+            const Text('Submission Failed'),
+          ],
+        ),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogCtx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: CoopvestColors.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () {
+              Navigator.of(dialogCtx).pop();
+              _submit();
+            },
+            child: const Text('Try Again'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _submit() async {
     if (!_data.allTermsAccepted) {
       _showError(
@@ -320,9 +360,9 @@ class _RegistrationOnboardingScreenState
       } catch (e) {
         logger.e('Registration data submission error: \$e');
         if (mounted) {
-          _showError(
+          await _showRetryDialog(
             'Could not save your registration details. Please check your '
-            'connection and tap Submit again.',
+            'connection and try again.',
           );
         }
         return;
