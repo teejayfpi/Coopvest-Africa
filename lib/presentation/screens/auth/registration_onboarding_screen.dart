@@ -312,14 +312,20 @@ class _RegistrationOnboardingScreenState
         'nok_address': _data.nokAddress,
       };
 
-      // Submit registration data to backend before proceeding
+      // Submit registration data to backend — failure is a hard stop;
+      // an incomplete backend record must not silently enter the salary flow.
+      final apiClient = ref.read(apiClientProvider);
       try {
-        final apiClient = ref.read(apiClientProvider);
         await apiClient.post('/auth/complete-registration', data: combined);
       } catch (e) {
-        // Log the error but allow the flow to continue — data can be re-synced
-        // during KYC. A network blip should not block the user from proceeding.
         logger.e('Registration data submission error: \$e');
+        if (mounted) {
+          _showError(
+            'Could not save your registration details. Please check your '
+            'connection and tap Submit again.',
+          );
+        }
+        return;
       }
 
       if (mounted) {
