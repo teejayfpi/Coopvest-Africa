@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/utils/utils.dart';
@@ -33,8 +34,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _isNavigating = false;
 
   final LocalAuthentication _localAuth = LocalAuthentication();
+  final _secureStorage = const FlutterSecureStorage();
   bool _isBiometricAvailable = false;
   bool _isBiometricEnabled = false;
+  bool _biometricPrompted = false;
 
   @override
   void initState() {
@@ -53,6 +56,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   /// Check if biometrics are available and enabled by the user
   Future<void> _checkBiometricStatus() async {
+    if (_biometricPrompted) return;
     try {
       final canAuthenticate = await _localAuth.canCheckBiometrics;
       final isDeviceSupported = await _localAuth.isDeviceSupported();
@@ -71,6 +75,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       
       // If biometric is available and user has a valid session, prompt automatically
       if (_isBiometricEnabled && hasSession && isEnabled) {
+        _biometricPrompted = true;
         // Small delay to let the UI render first
         await Future.delayed(const Duration(milliseconds: 500));
         if (mounted) {
@@ -100,7 +105,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         if (await authRepo.hasValidSession()) {
           try {
             final user = await authRepo.restoreSessionWithBiometric();
-            ref.read(authProvider.notifier).getCurrentUser();
+            await ref.read(authProvider.notifier).getCurrentUser();
             if (mounted) {
               Navigator.of(context).pushReplacementNamed('/home');
             }
@@ -113,7 +118,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         // Fallback: Get stored credentials and login
         final prefs = await SharedPreferences.getInstance();
         final email = prefs.getString('biometric_email');
-        final password = prefs.getString('biometric_password');
+        final password = await _secureStorage.read(key: 'biometric_password');
         
         if (email != null && password != null) {
           await ref.read(authProvider.notifier).login(
@@ -165,12 +170,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       final prefs = await SharedPreferences.getInstance();
       if (prefs.getBool('biometric_enabled') ?? false) {
         await prefs.setString('biometric_email', _emailController.text.trim());
-        await prefs.setString('biometric_password', _passwordController.text);
+        await _secureStorage.write(key: 'biometric_password', value: _passwordController.text);
       }
       
-      if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/home');
-      }
     } catch (e) {
       if (mounted) {
         final msg = e.toString()
