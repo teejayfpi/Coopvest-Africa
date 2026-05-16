@@ -17,7 +17,7 @@ class _AccountActivationScreenState extends State<AccountActivationScreen> {
   void initState() {
     super.initState();
     Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) Navigator.of(context).pushReplacementNamed('/login');
+      if (mounted) Navigator.of(context).pushReplacementNamed('/home');
     });
   }
 
@@ -55,9 +55,9 @@ class _AccountActivationScreenState extends State<AccountActivationScreen> {
                 ),
               ).animate().fadeIn(duration: 600.ms).slideY(begin: 0.3, end: 0),
               const SizedBox(height: 32),
-              PrimaryButton(label: 'Go to Login', onPressed: () => Navigator.of(context).pushReplacementNamed('/login'), width: double.infinity),
+              PrimaryButton(label: 'Go to Home', onPressed: () => Navigator.of(context).pushReplacementNamed('/home'), width: double.infinity),
               const SizedBox(height: 16),
-              Text('Redirecting to login in 3 seconds...', textAlign: TextAlign.center, style: TextStyle(color: context.textSecondary, fontSize: 12)),
+              Text('Redirecting to home in 3 seconds...', textAlign: TextAlign.center, style: TextStyle(color: context.textSecondary, fontSize: 12)),
             ],
           ),
         ),
