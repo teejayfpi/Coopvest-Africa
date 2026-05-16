@@ -777,7 +777,7 @@ class _PersonalInfoStepState extends State<_PersonalInfoStep> {
               if (picked != null) {
                 setState(() {
                   final formatted =
-                      '\${picked.day.toString().padLeft(2, '0')}/\${picked.month.toString().padLeft(2, '0')}/\${picked.year}';
+                      '${picked.day.toString().padLeft(2, '0')}/${picked.month.toString().padLeft(2, '0')}/${picked.year}';
                   widget.data.dateOfBirth = formatted;
                   _dobCtrl.text = formatted;
                 });
