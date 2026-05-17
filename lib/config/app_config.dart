@@ -22,7 +22,7 @@ class AppConfig {
   // NOTE: Loan eligibility is now calculated based on 3x total savings
   // See: LoanProvider for dynamic loan limit calculation
   static const double loanMultiplier = 3.0; // Members can borrow 3x their savings
-  static const int loanEligibilityMonths = 6; // Minimum months of membership required
+  static const int loanEligibilityMonths = 0; // TEMP: set to 0 for testing (restore to 6)
   static const List<int> loanTenures = [3, 6, 12];
   static const double baseInterestRate = 10.0;
   static const int guarantorsRequired = 3;
