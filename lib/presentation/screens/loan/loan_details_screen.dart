@@ -178,7 +178,7 @@ class LoanDetailsScreen extends ConsumerWidget {
                       Text(
                         'Late loan repayments may attract a ₦3,000 penalty fee after repeated default notices. '
                         'Continued non-payment beyond three months may trigger guarantor recovery procedures '
-                        'in accordance with Coopvest Africa's loan policy.',
+                        'in accordance with Coopvest Africa\'s loan policy.',
                         style: TextStyle(color: CoopvestColors.error, fontSize: 12, height: 1.5),
                       ),
                     ],
@@ -202,7 +202,7 @@ class LoanDetailsScreen extends ConsumerWidget {
                         child: Text(
                           'Late loan repayments may attract a ₦3,000 penalty fee after repeated default notices. '
                           'Continued non-payment beyond three months may trigger guarantor recovery procedures '
-                          'in accordance with Coopvest Africa's loan policy.',
+                          'in accordance with Coopvest Africa\'s loan policy.',
                           style: TextStyle(color: CoopvestColors.warning, fontSize: 11, height: 1.5),
                         ),
                       ),
