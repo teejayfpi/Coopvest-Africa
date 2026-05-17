@@ -388,20 +388,12 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
                         Text('Loan Agreement Terms', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                         SizedBox(height: 10),
                         Text(
-                          '1. This loan requires exactly three (3) guarantors who must provide consent before activation.
-
-'
-                          '2. Repayments must be made on time each month.
-
-'
-                          '3. A ₦3,000 late repayment penalty applies after 2 consecutive missed payments.
-
-'
+                          '1. This loan requires exactly three (3) guarantors who must provide consent before activation.\n\n'
+                          '2. Repayments must be made on time each month.\n\n'
+                          '3. A ₦3,000 late repayment penalty applies after 2 consecutive missed payments.\n\n'
                           '4. If repayment is missed for 3 consecutive months without approved arrangements, '
                           'guarantors may become responsible for the outstanding balance in accordance with '
-                          'Coopvest Africa's loan policy.
-
-'
+                          'Coopvest Africa\'s loan policy.\n\n'
                           '5. By proceeding, you authorise Coopvest Africa to disburse the approved amount '
                           'to your registered account and to apply the terms above.',
                           style: TextStyle(fontSize: 12, height: 1.6),
