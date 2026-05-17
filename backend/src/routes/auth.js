@@ -286,6 +286,44 @@ router.post('/salary-consent', [
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// GET /api/v1/auth/complete-registration/status
+// Returns whether the authenticated user has already completed onboarding.
+// The Flutter app calls this on screen load to skip the flow for returning users.
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/complete-registration/status', authenticate, async (req, res) => {
+  try {
+    const [profileRes, kycRes] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select('department')
+        .eq('id', req.user.id)
+        .maybeSingle(),
+      supabase
+        .from('kyc')
+        .select('national_id, personal_info, employment_info')
+        .eq('profile_id', req.user.id)
+        .maybeSingle(),
+    ]);
+
+    if (profileRes.error) throw profileRes.error;
+    if (kycRes.error) throw kycRes.error;
+
+    // Consider onboarding complete when the KYC row exists and has personal_info saved.
+    const kycRow = kycRes.data;
+    const completed = !!(
+      kycRow &&
+      kycRow.personal_info &&
+      Object.keys(kycRow.personal_info).length > 0
+    );
+
+    return res.json({ success: true, completed });
+  } catch (err) {
+    logger.error('complete-registration/status error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // POST /api/v1/auth/complete-registration
 // Saves all onboarding data collected after email verification.
 // Called by the Flutter registration_onboarding_screen on the final step.
