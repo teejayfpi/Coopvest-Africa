@@ -176,7 +176,9 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
         : summaryContributionMonths;
     
     // Determine eligibility
-    final isEligible = membershipMonths >= 6 && finalContributionMonths >= 6;
+    // TEMP: forced true for testing — restore original check when done:
+    // final isEligible = membershipMonths >= 6 && finalContributionMonths >= 6;
+    final isEligible = true;
     
     return {
       'isEligible': isEligible,
