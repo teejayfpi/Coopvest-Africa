@@ -286,6 +286,86 @@ router.post('/salary-consent', [
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// POST /api/v1/auth/complete-registration
+// Saves all onboarding data collected after email verification.
+// Called by the Flutter registration_onboarding_screen on the final step.
+// Also reachable via the /api/auth/complete-registration compat alias in server.js.
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/complete-registration', authenticate, async (req, res) => {
+  try {
+    const {
+      gender, date_of_birth, address, state, lga,
+      occupation, employer_name, employment_type,
+      employer_staff_id, work_address, years_of_employment,
+      monthly_amount, contribution_method, preferred_payment_day,
+      nok_name, nok_relationship, nok_phone, nok_address,
+      id_type, id_number, staff_id,
+    } = req.body;
+
+    // 1. Update the profiles row with employer/dept info
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .update({
+        department: employer_name || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', req.user.id);
+
+    if (profileError) {
+      logger.error('complete-registration: profile update failed:', profileError.message);
+      return res.status(500).json({ success: false, error: profileError.message });
+    }
+
+    // 2. Upsert KYC row — merges personal, employment, NOK, and contribution data.
+    //    personal_info holds everything that doesn't have its own top-level column.
+    const { error: kycError } = await supabase
+      .from('kyc')
+      .upsert(
+        {
+          profile_id: req.user.id,
+          national_id: id_number || null,
+          date_of_birth: date_of_birth || null,
+          address: address || null,
+          personal_info: {
+            gender,
+            state,
+            lga,
+            staff_id,
+            id_type,
+            nok_name,
+            nok_relationship,
+            nok_phone,
+            nok_address,
+            monthly_amount,
+            contribution_method,
+            preferred_payment_day,
+          },
+          employment_info: {
+            occupation,
+            employer_name,
+            employment_type,
+            employer_staff_id,
+            work_address,
+            years_of_employment,
+          },
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'profile_id' }
+      );
+
+    if (kycError) {
+      logger.error('complete-registration: kyc upsert failed:', kycError.message);
+      return res.status(500).json({ success: false, error: kycError.message });
+    }
+
+    return res.status(200).json({ success: true, message: 'Registration details saved.' });
+  } catch (err) {
+    logger.error('complete-registration error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // POST /api/v1/auth/logout
 // ─────────────────────────────────────────────────────────────────────────────
 router.post('/logout', authenticate, async (req, res) => {
