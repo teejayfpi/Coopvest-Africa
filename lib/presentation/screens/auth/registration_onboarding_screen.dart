@@ -126,6 +126,31 @@ class _RegistrationOnboardingScreenState
   final _nokAddressCtrl = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+    // Check if this user already completed onboarding (e.g. returned after
+    // a crash or re-login). If so, skip straight to the next screen.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkAlreadyCompleted());
+  }
+
+  Future<void> _checkAlreadyCompleted() async {
+    try {
+      final apiClient = ref.read(apiClientProvider);
+      final response =
+          await apiClient.get('/auth/complete-registration/status');
+      final data = response.data as Map<String, dynamic>?;
+      if ((data?['completed'] as bool? ?? false) && mounted) {
+        Navigator.of(context).pushReplacementNamed(
+          '/salary-deduction-consent',
+          arguments: widget.registrationData,
+        );
+      }
+    } catch (_) {
+      // Non-fatal — if the check fails, the user continues through the form normally.
+    }
+  }
+
+  @override
   void dispose() {
     _pageController.dispose();
     _addressCtrl.dispose();

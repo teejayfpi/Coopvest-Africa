@@ -254,6 +254,10 @@ app.post('/api/auth/login', authLimiter, (req, res, next) => {
   req.url = '/login';
   authRoutes(req, res, next);
 });
+app.get('/api/auth/complete-registration/status', (req, res, next) => {
+  req.url = '/complete-registration/status';
+  authRoutes(req, res, next);
+});
 app.post('/api/auth/complete-registration', authLimiter, (req, res, next) => {
   req.url = '/complete-registration';
   authRoutes(req, res, next);
