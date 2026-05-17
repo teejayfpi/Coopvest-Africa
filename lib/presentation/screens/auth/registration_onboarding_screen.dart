@@ -88,6 +88,7 @@ class _RegistrationOnboardingScreenState
   int _currentStep = 0;
   final _data = _OnboardingData();
   bool _isSubmitting = false;
+  bool _isCheckingStatus = true;
 
   static const int _totalSteps = 7;
 
@@ -144,10 +145,12 @@ class _RegistrationOnboardingScreenState
           '/salary-deduction-consent',
           arguments: widget.registrationData,
         );
+        return;
       }
     } catch (_) {
       // Non-fatal — if the check fails, the user continues through the form normally.
     }
+    if (mounted) setState(() => _isCheckingStatus = false);
   }
 
   @override
@@ -414,7 +417,9 @@ class _RegistrationOnboardingScreenState
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return Stack(
+      children: [
+        Scaffold(
       backgroundColor: context.scaffoldBackground,
       appBar: AppBar(
         elevation: 0,
@@ -543,6 +548,34 @@ class _RegistrationOnboardingScreenState
           ),
         ],
       ),
+    ),
+        // ── Status-check loading overlay ──────────────────────────────────
+        if (_isCheckingStatus)
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: CoopvestColors.primary.withOpacity(0.08),
+              ),
+              child: const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(color: CoopvestColors.primary),
+                    SizedBox(height: 16),
+                    Text(
+                      'Just a moment…',
+                      style: TextStyle(
+                        color: CoopvestColors.primary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
