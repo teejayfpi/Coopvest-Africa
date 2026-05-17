@@ -155,19 +155,127 @@ class _GuarantorVerificationScreenState extends State<GuarantorVerificationScree
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Liability Terms', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: context.textPrimary)),
-        const SizedBox(height: 16),
+        Text('Guarantor Consent', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: context.textPrimary)),
+        const SizedBox(height: 12),
+
+        // Policy notification copy — exact text from Loan Policy §3.2
         Container(
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(color: context.cardBackground, borderRadius: BorderRadius.circular(12), border: Border.all(color: context.dividerColor)),
-          child: Text('By proceeding, you agree to be liable for 1/3 of the loan amount in case of default.', style: TextStyle(color: context.textSecondary, height: 1.5)),
+          decoration: BoxDecoration(
+            color: CoopvestColors.primary.withOpacity(0.06),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: CoopvestColors.primary.withOpacity(0.3)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.info_outline, color: CoopvestColors.primary, size: 18),
+                  SizedBox(width: 8),
+                  Text('Guarantor Notice', style: TextStyle(fontWeight: FontWeight.bold, color: CoopvestColors.primary)),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'You have been listed as a guarantor for ${widget.borrowerName}\'s loan application. '
+                'By accepting, you acknowledge your responsibility under the loan agreement and '
+                "Coopvest Africa's loan policy.",
+                style: TextStyle(color: context.textPrimary, height: 1.6, fontSize: 13),
+              ),
+            ],
+          ),
         ),
-        const SizedBox(height: 24),
-        Row(
-          children: [
-            Checkbox(value: _agreedToTerms, onChanged: (v) => setState(() => _agreedToTerms = v ?? false), activeColor: CoopvestColors.primary),
-            Expanded(child: Text('I accept the liability terms', style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold))),
-          ],
+        const SizedBox(height: 16),
+
+        // Liability disclosure
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: context.cardBackground,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: context.dividerColor),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Liability Disclosure', style: TextStyle(fontWeight: FontWeight.bold, color: context.textPrimary, fontSize: 14)),
+              const SizedBox(height: 10),
+              Text(
+                '• You are guaranteeing ₦${widget.loanAmount.toStringAsFixed(2)} for ${widget.borrowerName}.',
+                style: TextStyle(color: context.textSecondary, height: 1.5, fontSize: 13),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                '• If the borrower fails to repay for 3 consecutive months without approved arrangements, '
+                'guarantors may become responsible for supporting repayment of the outstanding balance.',
+                style: TextStyle(height: 1.5, fontSize: 13),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '• Your estimated liability share: ₦${_guarantorLiability.toStringAsFixed(2)} (1/3 of loan).',
+                style: TextStyle(color: context.textSecondary, height: 1.5, fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Standard policy notice (Loan Policy §5.2)
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: CoopvestColors.warning.withOpacity(0.07),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: CoopvestColors.warning.withOpacity(0.25)),
+          ),
+          child: const Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.warning_amber_outlined, color: CoopvestColors.warning, size: 16),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Late loan repayments may attract a ₦3,000 penalty fee after repeated default notices. '
+                  'Continued non-payment beyond three months may trigger guarantor recovery procedures '
+                  "in accordance with Coopvest Africa's loan policy.",
+                  style: TextStyle(color: CoopvestColors.warning, fontSize: 11, height: 1.5),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+
+        // Consent checkbox
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: _agreedToTerms ? CoopvestColors.success.withOpacity(0.06) : context.cardBackground,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: _agreedToTerms ? CoopvestColors.success.withOpacity(0.4) : context.dividerColor),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Checkbox(
+                value: _agreedToTerms,
+                onChanged: (v) => setState(() => _agreedToTerms = v ?? false),
+                activeColor: CoopvestColors.success,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    "I have read and understood the guarantor responsibilities and Coopvest Africa's loan policy. "
+                    'I consent to act as guarantor for this loan.',
+                    style: TextStyle(color: context.textPrimary, fontSize: 13, height: 1.4),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 32),
         PrimaryButton(label: 'Confirm Guarantee', onPressed: _confirmConsent, isLoading: _isProcessing, width: double.infinity),

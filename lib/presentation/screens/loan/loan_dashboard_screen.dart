@@ -47,6 +47,9 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
     final totalBorrowed = loans.fold(0.0, (sum, l) => sum + l.amount);
     final totalRepaid = loans.where((l) => l.status == 'completed').fold(0.0, (sum, l) => sum + l.totalRepayment);
     
+    final overdueLoans = loans.where((l) => l.status.toLowerCase() == 'overdue' || l.status.toLowerCase() == 'in_recovery').toList();
+    final hasOverdueLoans = overdueLoans.isNotEmpty;
+
     final _quickStats = {
       'totalLoans': loans.length,
       'activeLoans': activeLoans,
@@ -72,6 +75,60 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // ── Overdue Status Banner (Loan Policy §4.2) ──
+                if (hasOverdueLoans) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: CoopvestColors.error.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: CoopvestColors.error.withOpacity(0.5), width: 1.5),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.warning_amber_rounded, color: CoopvestColors.error, size: 22),
+                            SizedBox(width: 8),
+                            Text(
+                              'OVERDUE STATUS',
+                              style: TextStyle(
+                                color: CoopvestColors.error,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'You have ${overdueLoans.length} overdue loan${overdueLoans.length > 1 ? "s" : ""}. '
+                          'Please make your repayment immediately to avoid additional penalties.',
+                          style: const TextStyle(color: CoopvestColors.error, fontSize: 13, height: 1.4),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: CoopvestColors.error.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Text(
+                            'Late loan repayments may attract a ₦3,000 penalty fee after repeated default notices. '
+                            'Continued non-payment beyond three months may trigger guarantor recovery procedures '
+                            "in accordance with Coopvest Africa's loan policy.",
+                            style: TextStyle(color: CoopvestColors.error, fontSize: 11, height: 1.5),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
                 // Quick Stats
                 Row(
                   children: [

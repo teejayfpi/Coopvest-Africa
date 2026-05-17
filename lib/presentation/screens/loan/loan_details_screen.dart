@@ -155,6 +155,63 @@ class LoanDetailsScreen extends ConsumerWidget {
 
               const SizedBox(height: 32),
 
+              // Standard Policy Notice (Loan Policy §5.2)
+              if (loan.status.toLowerCase() == 'overdue' || loan.status.toLowerCase() == 'in_recovery') ...[
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: CoopvestColors.error.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: CoopvestColors.error.withOpacity(0.4)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.warning_amber_rounded, color: CoopvestColors.error, size: 20),
+                          const SizedBox(width: 8),
+                          Text('Overdue Status', style: TextStyle(fontWeight: FontWeight.bold, color: CoopvestColors.error, fontSize: 15)),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        'Late loan repayments may attract a ₦3,000 penalty fee after repeated default notices. '
+                        'Continued non-payment beyond three months may trigger guarantor recovery procedures '
+                        'in accordance with Coopvest Africa's loan policy.',
+                        style: TextStyle(color: CoopvestColors.error, fontSize: 12, height: 1.5),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ] else ...[
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: CoopvestColors.warning.withOpacity(0.07),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: CoopvestColors.warning.withOpacity(0.25)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.info_outline, color: CoopvestColors.warning, size: 16),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Late loan repayments may attract a ₦3,000 penalty fee after repeated default notices. '
+                          'Continued non-payment beyond three months may trigger guarantor recovery procedures '
+                          'in accordance with Coopvest Africa's loan policy.',
+                          style: TextStyle(color: CoopvestColors.warning, fontSize: 11, height: 1.5),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+
               if (loan.status == 'Active' || loan.status == 'Repaying')
                 PrimaryButton(
                   label: 'Make Repayment',

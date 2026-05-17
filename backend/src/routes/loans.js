@@ -280,4 +280,101 @@ router.get(
   }
 );
 
+
+/**
+ * POST /api/v1/loans/:loanId/apply-penalty
+ * Applies the ₦3,000 late repayment charge per Loan Policy §4.1 (Stage 2).
+ * Only applicable after the 2nd consecutive missed month — not on first miss.
+ */
+router.post(
+  '/:loanId/apply-penalty',
+  authenticate,
+  [param('loanId').notEmpty()],
+  validate,
+  verifyLoanOwnership,
+  async (req, res) => {
+    try {
+      const loan = req.loan;
+      const PENALTY = 3000;
+
+      if (!['active', 'repaying', 'overdue'].includes(loan.status)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Penalty can only be applied to active, repaying, or overdue loans.',
+        });
+      }
+
+      const newBalance = (loan.outstanding_balance || loan.amount || 0) + PENALTY;
+
+      const { data: updated, error } = await supabase
+        .from('loans')
+        .update({
+          outstanding_balance: newBalance,
+          penalty_applied: true,
+          penalty_amount: (loan.penalty_amount || 0) + PENALTY,
+          status: 'overdue',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', loan.id)
+        .select('*')
+        .single();
+
+      if (error) throw error;
+
+      await auditLog(req.user.id, 'LOAN_PENALTY_APPLIED', loan.id, {
+        penalty: PENALTY,
+        newBalance,
+        reason: 'Stage 2 — 2nd consecutive missed month (Loan Policy §4.1)',
+      });
+
+      res.json({
+        success: true,
+        message: 'Late repayment penalty of ₦3,000 applied to loan balance.',
+        penalty: PENALTY,
+        newBalance,
+        loan: updated,
+      });
+    } catch (err) {
+      logger.error('Apply penalty error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+);
+
+/**
+ * GET /api/v1/loans/:loanId/recovery-status
+ * Returns the current recovery stage and penalty info for a loan.
+ */
+router.get(
+  '/:loanId/recovery-status',
+  authenticate,
+  [param('loanId').notEmpty()],
+  validate,
+  verifyLoanOwnership,
+  async (req, res) => {
+    const loan = req.loan;
+    const missedMonths = loan.missed_months || 0;
+    let stage = 'none';
+    if (missedMonths >= 3) stage = 'recovery';
+    else if (missedMonths === 2) stage = 'penalty';
+    else if (missedMonths === 1) stage = 'reminder';
+
+    res.json({
+      success: true,
+      loanId: loan.loan_id || loan.id,
+      status: loan.status,
+      missedMonths,
+      stage,
+      penaltyApplied: loan.penalty_applied || false,
+      penaltyAmount: loan.penalty_amount || 0,
+      outstandingBalance: loan.outstanding_balance || loan.amount || 0,
+      recoveryInitiatedAt: loan.recovery_initiated_at || null,
+      notice:
+        'Late loan repayments may attract a ₦3,000 penalty fee after repeated default notices. ' +
+        'Continued non-payment beyond three months may trigger guarantor recovery procedures ' +
+        'in accordance with Coopvest Africa's loan policy.',
+    });
+  }
+);
+
 module.exports = router;
