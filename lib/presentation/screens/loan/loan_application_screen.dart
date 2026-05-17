@@ -344,6 +344,136 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
     );
   }
 
+  /// Shows the Digital Loan Agreement dialog (Loan Policy §2.2).
+  /// Returns true if user accepts, false if they cancel.
+  Future<bool> _showLoanAgreementDialog() async {
+    bool acceptedAgreement = false;
+    bool acceptedTermsAck = false;
+
+    return await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: Theme.of(ctx).cardColor,
+          title: const Row(
+            children: [
+              Icon(Icons.description, color: CoopvestColors.primary),
+              SizedBox(width: 8),
+              Expanded(child: Text('Digital Loan Agreement', style: TextStyle(fontSize: 16))),
+            ],
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Please read and accept the following before your loan application is submitted.',
+                    style: TextStyle(fontSize: 12, color: CoopvestColors.mediumGray),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: CoopvestColors.primary.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: CoopvestColors.primary.withOpacity(0.2)),
+                    ),
+                    child: const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Loan Agreement Terms', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        SizedBox(height: 10),
+                        Text(
+                          '1. This loan requires exactly three (3) guarantors who must provide consent before activation.
+
+'
+                          '2. Repayments must be made on time each month.
+
+'
+                          '3. A ₦3,000 late repayment penalty applies after 2 consecutive missed payments.
+
+'
+                          '4. If repayment is missed for 3 consecutive months without approved arrangements, '
+                          'guarantors may become responsible for the outstanding balance in accordance with '
+                          'Coopvest Africa's loan policy.
+
+'
+                          '5. By proceeding, you authorise Coopvest Africa to disburse the approved amount '
+                          'to your registered account and to apply the terms above.',
+                          style: TextStyle(fontSize: 12, height: 1.6),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  // Checkbox 1: Digital agreement acceptance
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Checkbox(
+                        value: acceptedAgreement,
+                        onChanged: (v) => setDialogState(() => acceptedAgreement = v ?? false),
+                        activeColor: CoopvestColors.primary,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      const Expanded(
+                        child: Padding(
+                          padding: EdgeInsets.only(top: 4),
+                          child: Text(
+                            'I have read and agree to the Digital Loan Agreement above.',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  // Checkbox 2: Loan terms acknowledgment (§2.2)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Checkbox(
+                        value: acceptedTermsAck,
+                        onChanged: (v) => setDialogState(() => acceptedTermsAck = v ?? false),
+                        activeColor: CoopvestColors.primary,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      const Expanded(
+                        child: Padding(
+                          padding: EdgeInsets.only(top: 4),
+                          child: Text(
+                            'I explicitly acknowledge and accept the loan terms, guarantor requirements, and repayment obligations.',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: CoopvestColors.primary),
+              onPressed: (acceptedAgreement && acceptedTermsAck)
+                  ? () => Navigator.of(ctx).pop(true)
+                  : null,
+              child: const Text('Accept & Continue', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    ) ?? false;
+  }
+
   Future<void> _submitApplication() async {
     // First check if user is eligible for loan
     final eligibility = _checkLoanEligibility();
@@ -358,6 +488,10 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
     }
 
     if (!_formKey.currentState!.validate()) return;
+
+    // Show Digital Loan Agreement for acceptance (Loan Policy §2.2)
+    final agreementAccepted = await _showLoanAgreementDialog();
+    if (!agreementAccepted) return;
 
     setState(() {
       _isSubmitting = true;

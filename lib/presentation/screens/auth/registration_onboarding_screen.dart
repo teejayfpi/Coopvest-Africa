@@ -51,6 +51,8 @@ class _OnboardingData {
   bool acceptedTerms = false;
   bool acceptedContributionPolicy = false;
   bool acceptedLoanPolicy = false;
+  bool acceptedGuarantorRequirement = false; // Section 5.1: 3 guarantors
+  bool acceptedDefaultPolicy = false; // Section 5.1: guarantors contacted on default
   bool acceptedRegistrationFeePolicy = false;
   bool acceptedPrivacyPolicy = false;
 
@@ -58,6 +60,8 @@ class _OnboardingData {
       acceptedTerms &&
       acceptedContributionPolicy &&
       acceptedLoanPolicy &&
+      acceptedGuarantorRequirement &&
+      acceptedDefaultPolicy &&
       acceptedRegistrationFeePolicy &&
       acceptedPrivacyPolicy;
 }
@@ -1516,6 +1520,26 @@ class _TermsStep extends StatelessWidget {
             },
           ),
           _TermsCheckbox(
+            title: 'Guarantor Requirement',
+            subtitle:
+                'I understand that loans under the direct contribution model require three guarantors.',
+            value: data.acceptedGuarantorRequirement,
+            onChanged: (v) {
+              data.acceptedGuarantorRequirement = v ?? false;
+              onAcceptAll();
+            },
+          ),
+          _TermsCheckbox(
+            title: 'Default & Recovery Policy',
+            subtitle:
+                'I understand that guarantors may be contacted in the event of prolonged loan default.',
+            value: data.acceptedDefaultPolicy,
+            onChanged: (v) {
+              data.acceptedDefaultPolicy = v ?? false;
+              onAcceptAll();
+            },
+          ),
+          _TermsCheckbox(
             title: 'Registration Fee Policy',
             subtitle:
                 'I understand that the ₦5,000 registration fee is non-refundable and will be added to my first contribution.',
@@ -1544,6 +1568,8 @@ class _TermsStep extends StatelessWidget {
               data.acceptedTerms = true;
               data.acceptedContributionPolicy = true;
               data.acceptedLoanPolicy = true;
+              data.acceptedGuarantorRequirement = true;
+              data.acceptedDefaultPolicy = true;
               data.acceptedRegistrationFeePolicy = true;
               data.acceptedPrivacyPolicy = true;
               onAcceptAll();

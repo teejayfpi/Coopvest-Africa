@@ -313,6 +313,10 @@ scheduledNotificationsWorker.start();
 const rolloverDeadlineWorker = require('./workers/rolloverDeadlineWorker');
 rolloverDeadlineWorker.start();
 
+// Loan Recovery Worker — enforces 3-stage default/penalty process (Loan Policy §4.1)
+const loanRecoveryWorker = require('./workers/loanRecoveryWorker');
+loanRecoveryWorker.start();
+
 server.listen(PORT, '0.0.0.0', () => {
   logger.info(`🚀 Coopvest Referral API running on port ${PORT}`);
   logger.info(`🌐 WebSocket endpoint: ws://localhost:${PORT}/ws`);
