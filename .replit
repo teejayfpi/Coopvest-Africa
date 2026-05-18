@@ -30,12 +30,12 @@ waitForPort = 8080
 outputType = "console"
 
 [[ports]]
-localPort = 5173
-externalPort = 80
-
-[[ports]]
 localPort = 8080
 externalPort = 8080
+
+[[ports]]
+localPort = 8081
+externalPort = 80
 
 [userenv]
 
