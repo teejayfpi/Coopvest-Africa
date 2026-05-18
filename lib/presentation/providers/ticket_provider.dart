@@ -24,7 +24,7 @@ class TicketRepository {
   }) async {
     try {
       final response = await _apiClient.get(
-        '/api/v1/tickets',
+        '/tickets',
         queryParameters: {
           if (status != null) 'status': status,
           if (category != null) 'category': category,
@@ -41,6 +41,72 @@ class TicketRepository {
       }
     } catch (e) {
       logger.e('Get tickets error: $e');
+      rethrow;
+    }
+  }
+
+  /// Create a new support ticket
+  Future<Ticket> createTicket({
+    required String subject,
+    required String message,
+    String? category,
+    String? priority,
+  }) async {
+    try {
+      final response = await _apiClient.post(
+        '/tickets',
+        data: {
+          'subject': subject,
+          'message': message,
+          if (category != null) 'category': category,
+          if (priority != null) 'priority': priority,
+        },
+      );
+
+      if (response['success'] == true) {
+        return Ticket.fromJson(response['ticket'] as Map<String, dynamic>);
+      } else {
+        throw Exception(response['error'] ?? 'Failed to create ticket');
+      }
+    } catch (e) {
+      logger.e('Create ticket error: $e');
+      rethrow;
+    }
+  }
+
+  /// Reply to an existing ticket
+  Future<void> replyToTicket({
+    required String ticketId,
+    required String message,
+  }) async {
+    try {
+      final response = await _apiClient.post(
+        '/tickets/$ticketId/replies',
+        data: {'message': message},
+      );
+
+      if (response['success'] != true) {
+        throw Exception(response['error'] ?? 'Failed to send reply');
+      }
+    } catch (e) {
+      logger.e('Reply to ticket error: $e');
+      rethrow;
+    }
+  }
+
+  /// Close a ticket
+  Future<void> closeTicket(String ticketId) async {
+    try {
+      final response = await _apiClient.patch(
+        '/tickets/$ticketId',
+        data: {'status': 'closed'},
+      );
+
+      if (response['success'] != true) {
+        throw Exception(response['error'] ?? 'Failed to close ticket');
+      }
+    } catch (e) {
+      logger.e('Close ticket error: $e');
       rethrow;
     }
   }
@@ -67,6 +133,55 @@ class TicketNotifier extends StateNotifier<TicketState> {
         status: TicketStatus.error,
         error: e.toString(),
       );
+    }
+  }
+
+  /// Create a new ticket
+  Future<Ticket?> createTicket({
+    required String subject,
+    required String message,
+    String? category,
+    String? priority,
+  }) async {
+    state = state.copyWith(status: TicketStatus.loading);
+    try {
+      final ticket = await _ticketRepository.createTicket(
+        subject: subject,
+        message: message,
+        category: category,
+        priority: priority,
+      );
+      state = state.copyWith(
+        status: TicketStatus.loaded,
+        tickets: [ticket, ...state.tickets],
+      );
+      return ticket;
+    } catch (e) {
+      logger.e('Create ticket error: $e');
+      state = state.copyWith(
+        status: TicketStatus.error,
+        error: e.toString(),
+      );
+      return null;
+    }
+  }
+
+  /// Reply to a ticket
+  Future<bool> replyToTicket({
+    required String ticketId,
+    required String message,
+  }) async {
+    try {
+      await _ticketRepository.replyToTicket(ticketId: ticketId, message: message);
+      await loadTickets();
+      return true;
+    } catch (e) {
+      logger.e('Reply to ticket error: $e');
+      state = state.copyWith(
+        status: TicketStatus.error,
+        error: e.toString(),
+      );
+      return false;
     }
   }
 }

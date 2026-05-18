@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/utils/utils.dart';
+import '../../../presentation/providers/wallet_provider.dart';
 import '../../../presentation/widgets/common/buttons.dart';
 import '../../../presentation/widgets/common/cards.dart';
 import '../../../presentation/widgets/common/inputs.dart';
@@ -21,20 +22,37 @@ class _WithdrawalScreenState extends ConsumerState<WithdrawalScreen> {
   final _amountController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _isProcessing = false;
-  double _availableBalance = 120000.0;
 
   Future<void> _processWithdrawal() async {
     if (!_formKey.currentState!.validate()) return;
+
+    final rawAmount = _amountController.text.replaceAll(',', '');
+    final amount = double.tryParse(rawAmount);
+    if (amount == null || amount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a valid amount')),
+      );
+      return;
+    }
+
     setState(() => _isProcessing = true);
     try {
-      await Future.delayed(const Duration(seconds: 2));
-      _showSuccessDialog();
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Withdrawal failed: $e'), backgroundColor: CoopvestColors.error),
+      await ref.read(walletProvider.notifier).makeWithdrawal(
+        amount: amount,
+        description: 'Wallet withdrawal',
       );
+      if (mounted) _showSuccessDialog();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Withdrawal failed: $e'),
+            backgroundColor: CoopvestColors.error,
+          ),
+        );
+      }
     } finally {
-      setState(() => _isProcessing = false);
+      if (mounted) setState(() => _isProcessing = false);
     }
   }
 
@@ -99,6 +117,11 @@ class _WithdrawalScreenState extends ConsumerState<WithdrawalScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final walletState = ref.watch(walletProvider);
+    final availableBalance = walletState.wallet?.availableForWithdrawal ??
+        walletState.wallet?.balance ??
+        0.0;
+
     return Scaffold(
       backgroundColor: context.scaffoldBackground,
       appBar: AppBar(
@@ -128,15 +151,20 @@ class _WithdrawalScreenState extends ConsumerState<WithdrawalScreen> {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Available for Withdrawal', style: TextStyle(fontSize: 12, color: context.textSecondary)),
+                          Text('Available for Withdrawal',
+                              style: TextStyle(fontSize: 12, color: context.textSecondary)),
                           const SizedBox(height: 4),
                           Text(
-                            '₦${_availableBalance.toStringAsFixed(2)}',
-                            style: const TextStyle(color: CoopvestColors.info, fontWeight: FontWeight.bold, fontSize: 20),
+                            '₦${availableBalance.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                                color: CoopvestColors.info,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 20),
                           ),
                         ],
                       ),
-                      const Icon(Icons.account_balance_wallet, color: CoopvestColors.info, size: 32),
+                      const Icon(Icons.account_balance_wallet,
+                          color: CoopvestColors.info, size: 32),
                     ],
                   ),
                 ),
@@ -151,6 +179,13 @@ class _WithdrawalScreenState extends ConsumerState<WithdrawalScreen> {
                   textInputAction: TextInputAction.done,
                   prefixText: '₦ ',
                   onChanged: (value) => setState(() {}),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) return 'Amount is required';
+                    final amount = double.tryParse(value.replaceAll(',', ''));
+                    if (amount == null || amount <= 0) return 'Enter a valid amount';
+                    if (amount > availableBalance) return 'Insufficient balance';
+                    return null;
+                  },
                 ),
 
                 const SizedBox(height: 12),
@@ -159,10 +194,12 @@ class _WithdrawalScreenState extends ConsumerState<WithdrawalScreen> {
                   spacing: 12,
                   runSpacing: 12,
                   children: [5000, 10000, 25000, 50000, 100000].map((amount) {
-                    final isSelected = _amountController.text.replaceAll(',', '') == amount.toString();
+                    final isSelected =
+                        _amountController.text.replaceAll(',', '') == amount.toString();
+                    final isAffordable = amount <= availableBalance;
                     return GestureDetector(
                       onTap: () {
-                        if (amount <= _availableBalance) {
+                        if (isAffordable) {
                           _amountController.text = amount.toString();
                           setState(() {});
                         }
@@ -170,12 +207,12 @@ class _WithdrawalScreenState extends ConsumerState<WithdrawalScreen> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                         decoration: BoxDecoration(
-                          color: amount <= _availableBalance
+                          color: isAffordable
                               ? (isSelected ? CoopvestColors.primary : context.cardBackground)
                               : context.cardBackground.withOpacity(0.5),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                            color: amount <= _availableBalance
+                            color: isAffordable
                                 ? (isSelected ? CoopvestColors.primary : context.dividerColor)
                                 : context.dividerColor,
                           ),
@@ -183,7 +220,7 @@ class _WithdrawalScreenState extends ConsumerState<WithdrawalScreen> {
                         child: Text(
                           '₦${amount.formatNumber()}',
                           style: TextStyle(
-                            color: amount <= _availableBalance
+                            color: isAffordable
                                 ? (isSelected ? Colors.white : context.textPrimary)
                                 : context.textSecondary,
                           ),
@@ -205,12 +242,18 @@ class _WithdrawalScreenState extends ConsumerState<WithdrawalScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Withdrawal to:', style: TextStyle(fontWeight: FontWeight.bold, color: context.textPrimary)),
-                            Text('Access Bank ****1234', style: TextStyle(color: context.textSecondary, fontSize: 12)),
+                            Text('Withdrawal to:',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold, color: context.textPrimary)),
+                            Text('Your linked bank account',
+                                style: TextStyle(color: context.textSecondary, fontSize: 12)),
                           ],
                         ),
                       ),
-                      TextButton(onPressed: () {}, child: const Text('Change')),
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pushNamed('/bank-accounts'),
+                        child: const Text('Change'),
+                      ),
                     ],
                   ),
                 ),
@@ -236,9 +279,11 @@ class _WithdrawalScreenState extends ConsumerState<WithdrawalScreen> {
                 const SizedBox(height: 32),
 
                 _isProcessing
-                    ? const Center(child: CircularProgressIndicator(color: CoopvestColors.primary))
+                    ? const Center(
+                        child: CircularProgressIndicator(color: CoopvestColors.primary))
                     : PrimaryButton(
-                        label: 'Withdraw ₦${_amountController.text.isEmpty ? '0' : _amountController.text}',
+                        label:
+                            'Withdraw ₦${_amountController.text.isEmpty ? '0' : _amountController.text}',
                         onPressed: _processWithdrawal,
                         width: double.infinity,
                       ),

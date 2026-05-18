@@ -210,4 +210,68 @@ router.get('/dashboard', authenticate, async (req, res) => {
   }
 });
 
+/**
+ * GET /api/v1/user/insights
+ * Returns aggregated financial insights for the authenticated user.
+ */
+router.get('/insights', authenticate, async (req, res) => {
+  try {
+    const [savingsRes, transactionsRes, loansRes] = await Promise.all([
+      supabase.from('savings').select('balance, currency').eq('profile_id', req.user.id).maybeSingle(),
+      supabase
+        .from('transactions')
+        .select('type, amount, created_at')
+        .eq('profile_id', req.user.id)
+        .order('created_at', { ascending: false })
+        .limit(100),
+      supabase
+        .from('loans')
+        .select('status, amount, outstanding_balance')
+        .eq('profile_id', req.user.id),
+    ]);
+
+    const savings = savingsRes.data;
+    const transactions = transactionsRes.data || [];
+    const loans = loansRes.data || [];
+
+    const totalCredits = transactions
+      .filter((t) => t.type === 'credit')
+      .reduce((sum, t) => sum + Number(t.amount), 0);
+
+    const totalDebits = transactions
+      .filter((t) => t.type === 'debit')
+      .reduce((sum, t) => sum + Number(t.amount), 0);
+
+    const activeLoans = loans.filter((l) => l.status === 'active' || l.status === 'disbursed');
+    const totalOutstanding = activeLoans.reduce(
+      (sum, l) => sum + Number(l.outstanding_balance || l.amount || 0),
+      0
+    );
+
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    const monthlyCredits = transactions
+      .filter((t) => t.type === 'credit' && t.created_at >= startOfMonth)
+      .reduce((sum, t) => sum + Number(t.amount), 0);
+
+    res.json({
+      success: true,
+      insights: {
+        totalSavings: Number(savings?.balance || 0),
+        totalCredits,
+        totalDebits,
+        netFlow: totalCredits - totalDebits,
+        activeLoansCount: activeLoans.length,
+        totalOutstandingLoanBalance: totalOutstanding,
+        monthlyCredits,
+        transactionCount: transactions.length,
+        currency: savings?.currency || 'NGN',
+      },
+    });
+  } catch (err) {
+    logger.error('user insights error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;

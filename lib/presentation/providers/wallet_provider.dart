@@ -57,7 +57,7 @@ class WalletRepository {
   }) async {
     try {
       final response = await _apiClient.get(
-        '/wallet/savings-goals',
+        '/savings/goals',
         queryParameters: {
           'page': page,
           'page_size': pageSize,
@@ -65,14 +65,13 @@ class WalletRepository {
       );
 
       final data = response as Map<String, dynamic>;
-      final goals = (data['data'] as List? ?? [])
+      final goals = (data['goals'] as List? ?? [])
           .map((item) => SavingsGoal.fromJson(item as Map<String, dynamic>))
           .toList();
 
       return goals;
     } catch (e) {
       logger.e('Get savings goals error: $e');
-      // Return empty list when backend fails - no placeholders
       return [];
     }
   }
@@ -146,6 +145,43 @@ class WalletRepository {
     } catch (e) {
       logger.e('Get contributions error: $e');
       return [];
+    }
+  }
+
+  /// Make withdrawal
+  Future<void> makeWithdrawal(double amount, {String? description}) async {
+    try {
+      final response = await _apiClient.post(
+        '/wallet/withdraw',
+        data: {'amount': amount, if (description != null) 'description': description},
+      );
+      return;
+    } catch (e) {
+      logger.e('Make withdrawal error: $e');
+      rethrow;
+    }
+  }
+
+  /// Create a savings goal
+  Future<void> createSavingsGoal({
+    required String name,
+    required double targetAmount,
+    required DateTime targetDate,
+    String? description,
+  }) async {
+    try {
+      await _apiClient.post(
+        '/savings/goals',
+        data: {
+          'name': name,
+          'targetAmount': targetAmount,
+          'targetDate': targetDate.toIso8601String(),
+          if (description != null) 'description': description,
+        },
+      );
+    } catch (e) {
+      logger.e('Create savings goal error: $e');
+      rethrow;
     }
   }
 
@@ -289,6 +325,26 @@ class WalletNotifier extends StateNotifier<WalletState> {
     }
   }
 
+  /// Make withdrawal
+  Future<void> makeWithdrawal({
+    required double amount,
+    String? description,
+  }) async {
+    state = state.copyWith(status: WalletStatus.loading);
+    try {
+      await _walletRepository.makeWithdrawal(amount, description: description);
+      await loadWallet();
+      state = state.copyWith(status: WalletStatus.loaded);
+    } catch (e) {
+      logger.e('Make withdrawal error: $e');
+      state = state.copyWith(
+        status: WalletStatus.error,
+        error: e.toString(),
+      );
+      rethrow;
+    }
+  }
+
   /// Create a savings goal
   Future<bool> createSavingsGoal({
     required String goalName,
@@ -298,9 +354,13 @@ class WalletNotifier extends StateNotifier<WalletState> {
   }) async {
     state = state.copyWith(status: WalletStatus.loading);
     try {
-      logger.i('Creating savings goal: $goalName, target: $targetAmount, by: $targetDate');
-      // For demo, simulate success
-      await Future.delayed(const Duration(seconds: 1));
+      await _walletRepository.createSavingsGoal(
+        name: goalName,
+        targetAmount: targetAmount,
+        targetDate: targetDate,
+        description: description,
+      );
+      await loadSavingsGoals();
       state = state.copyWith(status: WalletStatus.loaded);
       return true;
     } catch (e) {

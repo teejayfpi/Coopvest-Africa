@@ -17,6 +17,36 @@ const logger = require('../utils/logger');
 router.use(requireAdmin);
 
 /**
+ * GET /api/v1/admin/payment-settings
+ * Returns the current payment account details shown on the deposit screen.
+ */
+router.get('/payment-settings', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('settings')
+      .select('value')
+      .eq('key', 'payment_account')
+      .maybeSingle();
+
+    if (error) throw error;
+
+    if (data?.value) {
+      return res.json({ success: true, ...data.value });
+    }
+
+    return res.json({
+      success: true,
+      bank: process.env.DEFAULT_PAYMENT_BANK || 'Opay',
+      account_name: process.env.DEFAULT_PAYMENT_ACCOUNT_NAME || 'Coopvest Africa',
+      account_number: process.env.DEFAULT_PAYMENT_ACCOUNT_NUMBER || '',
+    });
+  } catch (err) {
+    logger.error('admin payment-settings error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * GET /api/v1/admin/overview
  */
 router.get('/overview', async (req, res) => {

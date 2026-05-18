@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/network/api_client.dart';
+import '../../core/utils/utils.dart';
 
-/// Holds the bank account details shown on the deposit screen.
-/// In production these should be fetched from the admin API.
 class PaymentAccountDetails {
   final String bank;
   final String accountName;
@@ -24,28 +24,35 @@ class PaymentAccountDetails {
       accountNumber: accountNumber ?? this.accountNumber,
     );
   }
+
+  factory PaymentAccountDetails.fromJson(Map<String, dynamic> json) {
+    return PaymentAccountDetails(
+      bank: json['bank'] as String? ?? '',
+      accountName: json['account_name'] as String? ?? '',
+      accountNumber: json['account_number'] as String? ?? '',
+    );
+  }
 }
 
-/// Default payment account — updated by super admin via the admin dashboard.
 const _defaultPaymentAccount = PaymentAccountDetails(
   bank: 'Opay',
-  accountName: 'Ayanlowo Olatunji Ayobami',
-  accountNumber: '7038193753',
+  accountName: 'Coopvest Africa',
+  accountNumber: '',
 );
 
 class PaymentSettingsNotifier extends StateNotifier<PaymentAccountDetails> {
-  PaymentSettingsNotifier() : super(_defaultPaymentAccount);
+  final ApiClient _apiClient;
 
-  /// Called once on startup to load settings from the API.
-  /// Falls back to defaults if the API is unreachable.
+  PaymentSettingsNotifier(this._apiClient) : super(_defaultPaymentAccount);
+
   Future<void> loadFromApi() async {
     try {
-      // TODO: replace with real API call, e.g.:
-      // final resp = await apiClient.get('/admin/payment-settings');
-      // state = PaymentAccountDetails(
-      //   bank: resp['bank'], accountName: resp['account_name'], accountNumber: resp['account_number']);
-    } catch (_) {
-      // Keep defaults on error
+      final resp = await _apiClient.get('/admin/payment-settings');
+      if (resp is Map<String, dynamic> && resp['success'] == true) {
+        state = PaymentAccountDetails.fromJson(resp);
+      }
+    } catch (e) {
+      logger.w('PaymentSettings: API unavailable, using defaults: $e');
     }
   }
 
@@ -60,5 +67,8 @@ class PaymentSettingsNotifier extends StateNotifier<PaymentAccountDetails> {
 
 final paymentSettingsProvider =
     StateNotifierProvider<PaymentSettingsNotifier, PaymentAccountDetails>(
-  (ref) => PaymentSettingsNotifier(),
+  (ref) {
+    final apiClient = ref.watch(apiClientProvider);
+    return PaymentSettingsNotifier(apiClient);
+  },
 );
