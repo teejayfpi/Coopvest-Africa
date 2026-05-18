@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/app_config.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
+import '../../../core/network/api_client.dart';
 import '../../../data/models/referral_models.dart';
 import '../../../presentation/providers/auth_provider.dart';
 import '../../../presentation/providers/contributions/contribution_provider.dart';
@@ -540,13 +541,25 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
 
       // Generate unique loan ID
       final loanId = '${widget.userId}-LOAN-${DateTime.now().millisecondsSinceEpoch}';
-      
-      // Simulate API call
-      await Future.delayed(const Duration(seconds: 2));
 
-      // Simple approval logic (in production, this would be based on credit score, etc.)
+      // Register loan with backend (fire-and-forget; don't block UI on failure)
+      final apiClient = ref.read(apiClientProvider);
+      try {
+        await apiClient.post('/api/v1/loans/register', data: {
+          'loanRef': loanId,
+          'loanType': _selectedLoanType,
+          'amount': requestedAmount,
+          'monthlySavings': monthlySavings,
+          'purpose': _purposeController.text.trim(),
+          'interestRate': loanInfo['interest'],
+          'tenorMonths': loanInfo['duration'],
+        });
+      } catch (_) {
+        // Backend registration is best-effort; local flow continues regardless
+      }
+
+      // Simple approval logic (15%+ savings = Approved, 10–15% = Pending Review)
       if (monthlySavings >= requestedAmount * 0.15) {
-        // 15% or higher = Approved
         setState(() {
           _loanId = loanId;
           _loanStatus = 'Approved';
@@ -558,7 +571,6 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
         // Show success dialog
         _showSuccessDialog();
       } else if (monthlySavings >= requestedAmount * 0.1) {
-        // 10-15% = Pending Review
         setState(() {
           _loanId = loanId;
           _loanStatus = 'Pending Review';
