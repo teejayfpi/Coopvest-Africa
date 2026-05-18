@@ -404,6 +404,56 @@ router.post('/complete-registration', authenticate, async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// POST /api/v1/auth/sync
+// Called by the Flutter app after Firebase sign-in to upsert the profile row
+// using the Firebase UID. Returns the same AuthResponse shape so the client
+// can treat it identically to a login response.
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/sync', authenticate, async (req, res) => {
+  try {
+    const { name, phone } = req.body;
+    const profileId = req.user.id;
+    const firebaseUid = req.user.firebaseUid;
+
+    const updateData = { updated_at: new Date().toISOString() };
+    if (name) updateData.name = name;
+    if (phone) updateData.phone = phone;
+    if (firebaseUid) updateData.firebase_uid = firebaseUid;
+
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .update(updateData)
+      .eq('id', profileId)
+      .select('id, user_id, email, name, phone, role, kyc_verified, is_active, created_at, updated_at')
+      .maybeSingle();
+
+    if (error) {
+      logger.error('auth/sync: profile update failed:', error.message);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+
+    const userPayload = {
+      userId: profile?.user_id || req.user.userId,
+      id: profileId,
+      email: profile?.email || req.user.email,
+      name: profile?.name || req.user.name || '',
+      phone: profile?.phone || null,
+      role: profile?.role || req.user.role || 'member',
+      kycStatus: profile?.kyc_verified ? 'approved' : 'pending',
+      membershipStatus: profile?.is_active === false ? 'inactive' : 'active',
+      emailVerified: true,
+      created_at: profile?.created_at,
+      updated_at: profile?.updated_at,
+    };
+
+    return res.json({ success: true, user: userPayload, token: req.token });
+  } catch (err) {
+    logger.error('auth/sync error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // POST /api/v1/auth/logout
 // ─────────────────────────────────────────────────────────────────────────────
 router.post('/logout', authenticate, async (req, res) => {

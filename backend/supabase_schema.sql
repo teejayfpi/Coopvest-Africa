@@ -42,6 +42,7 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS department TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS access_level TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS last_password_change_at TIMESTAMPTZ;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN DEFAULT false;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS firebase_uid TEXT UNIQUE;
 
 CREATE INDEX IF NOT EXISTS idx_profiles_user_id ON public.profiles(user_id);
 CREATE INDEX IF NOT EXISTS idx_profiles_role ON public.profiles(role);

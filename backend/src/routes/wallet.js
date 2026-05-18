@@ -237,6 +237,75 @@ router.post(
 );
 
 /**
+ * GET /api/v1/wallet/contributions
+ * Returns the caller's contribution-type transactions.
+ */
+router.get('/contributions', authenticate, async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+    const page = parseInt(req.query.page) || 1;
+
+    const { data, error, count } = await supabase
+      .from('transactions')
+      .select('*', { count: 'exact' })
+      .eq('profile_id', req.user.id)
+      .eq('category', 'contribution')
+      .order('created_at', { ascending: false })
+      .range((page - 1) * limit, page * limit - 1);
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      data: data || [],
+      pagination: { page, limit, total: count || 0 },
+    });
+  } catch (err) {
+    logger.error('wallet contributions error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/v1/wallet/transactions/:id/receipt
+ * Returns a receipt summary for a specific transaction.
+ */
+router.get('/transactions/:id/receipt', authenticate, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq('id', req.params.id)
+      .eq('profile_id', req.user.id)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) {
+      return res.status(404).json({ success: false, error: 'Transaction not found' });
+    }
+
+    const receipt = {
+      receipt_id: `RCT-${data.reference || data.id}`,
+      transaction_id: data.id,
+      reference: data.reference,
+      type: data.type,
+      category: data.category,
+      amount: data.amount,
+      currency: data.currency || 'NGN',
+      description: data.description,
+      status: data.status,
+      created_at: data.created_at,
+      receipt_url: null,
+    };
+
+    res.json({ success: true, receipt });
+  } catch (err) {
+    logger.error('transaction receipt error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * GET /api/v1/wallet/statement
  */
 router.get('/statement', authenticate, async (req, res) => {

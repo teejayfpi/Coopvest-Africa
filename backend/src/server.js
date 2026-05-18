@@ -256,6 +256,16 @@ app.use('/api/guarantor', guarantorRoutes);
 // Root-level alias in case Dio resolves absolute paths from host root
 app.use('/guarantor', guarantorRoutes);
 
+// KYC aliases (Flutter calls /auth/kyc/submit and /auth/kyc/status)
+app.post('/api/v1/auth/kyc/submit', (req, res, next) => {
+  req.url = '/submit';
+  kycRoutes(req, res, next);
+});
+app.get('/api/v1/auth/kyc/status', (req, res, next) => {
+  req.url = '/status';
+  kycRoutes(req, res, next);
+});
+
 // Aliases for requested endpoints
 app.post('/api/auth/login', authLimiter, (req, res, next) => {
   req.url = '/login';

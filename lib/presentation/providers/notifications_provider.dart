@@ -84,7 +84,7 @@ class NotificationRepository {
   /// Mark notification as read
   Future<void> markAsRead(String notificationId) async {
     try {
-      await _apiClient.put(
+      await _apiClient.patch(
         '/notifications/$notificationId/read',
       );
     } catch (e) {
