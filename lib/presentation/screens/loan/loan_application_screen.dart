@@ -99,6 +99,7 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
   String? _rejectionReason;
   bool _showQrCode = false;
   bool _isSubmitting = false;
+  final ScrollController _scrollController = ScrollController();
 
   // Calculate monthly repayment
   double _calculateMonthlyRepayment(double amount, double interestRate, int tenure) {
@@ -612,7 +613,15 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
             label: 'View QR Code',
             onPressed: () {
               Navigator.of(context).pop();
-              // The QR code is already shown because _showQrCode is true
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (_scrollController.hasClients) {
+                  _scrollController.animateTo(
+                    _scrollController.position.maxScrollExtent,
+                    duration: const Duration(milliseconds: 600),
+                    curve: Curves.easeInOut,
+                  );
+                }
+              });
             },
           ),
         ],
@@ -643,11 +652,20 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
           ],
         ),
         actions: [
-          TextButton(
+          PrimaryButton(
+            label: 'View QR Code',
             onPressed: () {
               Navigator.of(context).pop();
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (_scrollController.hasClients) {
+                  _scrollController.animateTo(
+                    _scrollController.position.maxScrollExtent,
+                    duration: const Duration(milliseconds: 600),
+                    curve: Curves.easeInOut,
+                  );
+                }
+              });
             },
-            child: const Text('OK'),
           ),
         ],
       ),
@@ -663,6 +681,7 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
     _amountController.dispose();
     _purposeController.dispose();
     _monthlySavingsController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -699,6 +718,7 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
       ),
       body: SafeArea(
         child: SingleChildScrollView(
+          controller: _scrollController,
           padding: const EdgeInsets.all(24),
           child: Form(
             key: _formKey,
