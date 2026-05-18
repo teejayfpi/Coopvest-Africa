@@ -545,7 +545,7 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
       // Register loan with backend (fire-and-forget; don't block UI on failure)
       final apiClient = ref.read(apiClientProvider);
       try {
-        await apiClient.post('/api/v1/loans/register', data: {
+        await apiClient.post('/loans/register', data: {
           'loanRef': loanId,
           'loanType': _selectedLoanType,
           'amount': requestedAmount,
