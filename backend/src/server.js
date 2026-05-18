@@ -46,6 +46,7 @@ const settingsRoutes = require('./routes/settings');
 const watchlistRoutes = require('./routes/watchlist');
 const analyticsRoutes = require('./routes/analytics');
 const adminApiRoutes = require('./routes/adminApi');
+const guarantorRoutes = require('./routes/guarantor');
 
 // Import middleware
 const errorHandler = require('./middleware/errorHandler');
@@ -248,6 +249,12 @@ app.use('/api/v1/transactions', transactionRoutes);
 app.use('/api/v1/settings', settingsRoutes);
 app.use('/api/v1/watchlist', watchlistRoutes);
 app.use('/api/v1/analytics', analyticsRoutes);
+app.use('/api/v1/guarantor', guarantorRoutes);
+
+// Aliases for Flutter app (Dio baseUrl: /api, paths: /guarantor/...)
+app.use('/api/guarantor', guarantorRoutes);
+// Root-level alias in case Dio resolves absolute paths from host root
+app.use('/guarantor', guarantorRoutes);
 
 // Aliases for requested endpoints
 app.post('/api/auth/login', authLimiter, (req, res, next) => {
