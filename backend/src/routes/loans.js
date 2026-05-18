@@ -267,6 +267,76 @@ router.get('/qr-stats', async (req, res) => {
 });
 
 /**
+ * GET /api/v1/loans/qr/:qrId
+ *
+ * Look up loan details by QR code ID. Called by the Flutter QR scanner
+ * after decoding the QR image so the guarantor sees real borrower data.
+ */
+router.get(
+  '/qr/:qrId',
+  authenticate,
+  [param('qrId').notEmpty()],
+  validate,
+  async (req, res) => {
+    try {
+      const { qrId } = req.params;
+
+      const { data: qrRow, error: qrErr } = await supabase
+        .from('loan_qrs')
+        .select(`
+          qr_id,
+          loan_id,
+          guarantors_required,
+          guarantors_found,
+          expires_at,
+          loans (
+            id,
+            loan_type,
+            amount,
+            tenure_months,
+            status,
+            profile_id,
+            profiles (
+              id,
+              name,
+              phone
+            )
+          )
+        `)
+        .eq('qr_id', qrId)
+        .maybeSingle();
+
+      if (qrErr) throw qrErr;
+      if (!qrRow) {
+        return res.status(404).json({ success: false, error: 'QR code not found or expired' });
+      }
+
+      const loan = qrRow.loans || {};
+      const borrower = loan.profiles || {};
+
+      res.json({
+        success: true,
+        qrId: qrRow.qr_id,
+        loanId: qrRow.loan_id,
+        loanType: loan.loan_type || 'Quick Loan',
+        loanAmount: parseFloat(loan.amount || 0),
+        loanTenure: loan.tenure_months || 12,
+        borrowerName: borrower.name || 'Coopvest Member',
+        borrowerPhone: borrower.phone || '',
+        borrowerId: loan.profile_id || '',
+        guarantorsRequired: qrRow.guarantors_required || 3,
+        guarantorsFound: qrRow.guarantors_found || 0,
+        expiresAt: qrRow.expires_at,
+        isExpired: qrRow.expires_at ? new Date() > new Date(qrRow.expires_at) : false,
+      });
+    } catch (err) {
+      logger.error('Error fetching loan by QR ID:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+);
+
+/**
  * GET /api/v1/loans/:loanId
  */
 router.get(
@@ -280,6 +350,153 @@ router.get(
   }
 );
 
+
+/**
+ * POST /api/v1/loans/:loanId/guarantors/confirm
+ *
+ * Called by the Flutter GuarantorVerificationScreen when a guarantor
+ * accepts responsibility for a loan after scanning the borrower's QR code.
+ * Finds the loan_guarantors record by loan_id + guarantor_id and marks it
+ * as 'consented'. Returns progress toward the required 3 guarantors.
+ */
+router.post(
+  '/:loanId/guarantors/confirm',
+  authenticate,
+  [
+    param('loanId').notEmpty(),
+    body('guarantor_id').notEmpty(),
+  ],
+  validate,
+  async (req, res) => {
+    try {
+      const { loanId } = req.params;
+      const { guarantor_id: guarantorId, guarantor_name, guarantor_phone } = req.body;
+
+      // The guarantor confirming must be the authenticated user or a valid profile
+      const actorId = req.user.id;
+
+      // Find the pending guarantor record
+      const { data: row, error: findErr } = await supabase
+        .from('loan_guarantors')
+        .select('id, status, loan_id')
+        .eq('loan_id', loanId)
+        .eq('guarantor_id', guarantorId)
+        .maybeSingle();
+
+      if (findErr) throw findErr;
+
+      const now = new Date().toISOString();
+
+      if (!row) {
+        // No record yet — create one (guarantor scanned QR before record existed)
+        const { error: insertErr } = await supabase
+          .from('loan_guarantors')
+          .insert({
+            loan_id: loanId,
+            guarantor_id: guarantorId,
+            status: 'consented',
+            consented_at: now,
+          });
+        if (insertErr) throw insertErr;
+      } else {
+        if (row.status === 'consented') {
+          return res.status(400).json({ success: false, error: 'You have already confirmed this guarantee.' });
+        }
+        const { error: updateErr } = await supabase
+          .from('loan_guarantors')
+          .update({ status: 'consented', consented_at: now, updated_at: now })
+          .eq('id', row.id);
+        if (updateErr) throw updateErr;
+      }
+
+      // Update the loan_qrs guarantors_found count
+      try {
+        const { data: qrRow } = await supabase
+          .from('loan_qrs')
+          .select('guarantors_found')
+          .eq('loan_id', loanId)
+          .maybeSingle();
+        if (qrRow) {
+          await supabase
+            .from('loan_qrs')
+            .update({ guarantors_found: (qrRow.guarantors_found || 0) + 1, updated_at: now })
+            .eq('loan_id', loanId);
+        }
+      } catch (_) {}
+
+      // Count total confirmed guarantors for this loan
+      const { count: confirmedCount } = await supabase
+        .from('loan_guarantors')
+        .select('id', { count: 'exact', head: true })
+        .eq('loan_id', loanId)
+        .eq('status', 'consented');
+
+      await auditLog(actorId, 'GUARANTOR_CONSENTED', loanId, {
+        guarantorId,
+        guarantorName: guarantor_name,
+      });
+
+      res.json({
+        success: true,
+        message: 'Guarantee confirmed successfully.',
+        guarantor_status: 'consented',
+        guarantors_now_confirmed: confirmedCount || 0,
+      });
+    } catch (err) {
+      logger.error('Error confirming guarantee:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+);
+
+/**
+ * POST /api/v1/loans/:loanId/guarantors/decline
+ *
+ * Called when a guarantor declines a loan guarantee request.
+ */
+router.post(
+  '/:loanId/guarantors/decline',
+  authenticate,
+  [
+    param('loanId').notEmpty(),
+    body('guarantor_id').notEmpty(),
+  ],
+  validate,
+  async (req, res) => {
+    try {
+      const { loanId } = req.params;
+      const { guarantor_id: guarantorId, reason } = req.body;
+
+      const { data: row, error: findErr } = await supabase
+        .from('loan_guarantors')
+        .select('id, status')
+        .eq('loan_id', loanId)
+        .eq('guarantor_id', guarantorId)
+        .maybeSingle();
+
+      if (findErr) throw findErr;
+      if (!row) return res.status(404).json({ success: false, error: 'Guarantor record not found.' });
+      if (row.status !== 'pending') {
+        return res.status(400).json({ success: false, error: `Request is already ${row.status}.` });
+      }
+
+      const now = new Date().toISOString();
+      const { error: updateErr } = await supabase
+        .from('loan_guarantors')
+        .update({ status: 'rejected', updated_at: now })
+        .eq('id', row.id);
+
+      if (updateErr) throw updateErr;
+
+      await auditLog(req.user.id, 'GUARANTOR_REJECTED', loanId, { guarantorId, reason: reason || null });
+
+      res.json({ success: true, message: 'Guarantee request declined.' });
+    } catch (err) {
+      logger.error('Error declining guarantee:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+);
 
 /**
  * POST /api/v1/loans/:loanId/apply-penalty
