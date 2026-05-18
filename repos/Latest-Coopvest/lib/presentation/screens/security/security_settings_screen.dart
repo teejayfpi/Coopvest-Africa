@@ -3,8 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_auth/local_auth.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
-import '../../../presentation/providers/auth_provider.dart';
-import '../../../presentation/providers/theme_provider.dart';
+import '../../../core/services/security_service.dart';
+import '../../../presentation/providers/app_settings_provider.dart';
 import 'login_history_screen.dart';
 
 /// Security Settings Screen
@@ -12,33 +12,38 @@ class SecuritySettingsScreen extends ConsumerStatefulWidget {
   const SecuritySettingsScreen({Key? key}) : super(key: key);
 
   @override
-  ConsumerState<SecuritySettingsScreen> createState() => _SecuritySettingsScreenState();
+  ConsumerState<SecuritySettingsScreen> createState() =>
+      _SecuritySettingsScreenState();
 }
 
-class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen> {
+class _SecuritySettingsScreenState
+    extends ConsumerState<SecuritySettingsScreen> {
   bool _isBiometricAvailable = false;
   bool _isBiometricEnabled = false;
-  bool _isLoading = false;
-  
+  bool _isBioLoading = false;
+
   final LocalAuthentication _localAuth = LocalAuthentication();
+  final SecurityService _securityService = SecurityService();
 
   @override
   void initState() {
     super.initState();
-    _checkBiometricAvailability();
+    _checkBiometric();
   }
 
-  Future<void> _checkBiometricAvailability() async {
+  Future<void> _checkBiometric() async {
     try {
       final canAuthenticate = await _localAuth.canCheckBiometrics;
       final isDeviceSupported = await _localAuth.isDeviceSupported();
-      setState(() {
-        _isBiometricAvailable = canAuthenticate || isDeviceSupported;
-      });
-    } catch (e) {
-      setState(() {
-        _isBiometricAvailable = false;
-      });
+      final isEnabled = await _securityService.isBiometricEnabled();
+      if (mounted) {
+        setState(() {
+          _isBiometricAvailable = canAuthenticate || isDeviceSupported;
+          _isBiometricEnabled = isEnabled;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isBiometricAvailable = false);
     }
   }
 
@@ -53,52 +58,47 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isBioLoading = true);
 
     try {
       if (value) {
-        // Try to authenticate with biometrics
         final bool didAuthenticate = await _localAuth.authenticate(
-          options: const AuthenticationOptions(
-            biometricOnly: true,
-          ),
+          options: const AuthenticationOptions(biometricOnly: true),
           localizedReason: 'Authenticate to enable biometric login',
         );
-        
+
         if (didAuthenticate) {
-          setState(() {
-            _isBiometricEnabled = true;
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Biometric login enabled successfully'),
-              backgroundColor: CoopvestColors.success,
-            ),
-          );
+          await _securityService.setBiometricEnabled(true);
+          setState(() => _isBiometricEnabled = true);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Biometric login enabled successfully'),
+                backgroundColor: CoopvestColors.success,
+              ),
+            );
+          }
         }
       } else {
-        setState(() {
-          _isBiometricEnabled = false;
-        });
+        await _securityService.setBiometricEnabled(false);
+        setState(() => _isBiometricEnabled = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Biometric login disabled')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Biometric login disabled'),
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: CoopvestColors.error,
           ),
         );
       }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: $e'),
-          backgroundColor: CoopvestColors.error,
-        ),
-      );
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) setState(() => _isBioLoading = false);
     }
   }
 
@@ -107,11 +107,13 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: context.cardBackground,
-        title: Text('Change Transaction PIN', style: TextStyle(color: context.textPrimary)),
+        title: Text('Change Transaction PIN',
+            style: TextStyle(color: context.textPrimary)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Enter your current 4-digit PIN to proceed.', style: TextStyle(color: context.textSecondary)),
+            Text('Enter your current 4-digit PIN to proceed.',
+                style: TextStyle(color: context.textSecondary)),
             const SizedBox(height: 16),
             TextField(
               keyboardType: TextInputType.number,
@@ -122,7 +124,8 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
                 labelText: 'Current PIN',
                 labelStyle: TextStyle(color: context.textSecondary),
                 border: const OutlineInputBorder(),
-                enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: context.dividerColor)),
+                enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: context.dividerColor)),
               ),
             ),
             const SizedBox(height: 16),
@@ -151,11 +154,13 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: context.cardBackground,
-        title: Text('Set New PIN', style: TextStyle(color: context.textPrimary)),
+        title:
+            Text('Set New PIN', style: TextStyle(color: context.textPrimary)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Enter your new 4-digit PIN.', style: TextStyle(color: context.textSecondary)),
+            Text('Enter your new 4-digit PIN.',
+                style: TextStyle(color: context.textSecondary)),
             const SizedBox(height: 16),
             TextField(
               keyboardType: TextInputType.number,
@@ -166,7 +171,8 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
                 labelText: 'New PIN',
                 labelStyle: TextStyle(color: context.textSecondary),
                 border: const OutlineInputBorder(),
-                enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: context.dividerColor)),
+                enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: context.dividerColor)),
               ),
             ),
             const SizedBox(height: 16),
@@ -179,7 +185,8 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
                 labelText: 'Confirm New PIN',
                 labelStyle: TextStyle(color: context.textSecondary),
                 border: const OutlineInputBorder(),
-                enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: context.dividerColor)),
+                enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: context.dividerColor)),
               ),
             ),
             const SizedBox(height: 16),
@@ -213,7 +220,8 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: context.cardBackground,
-        title: Text('Change Password', style: TextStyle(color: context.textPrimary)),
+        title: Text('Change Password',
+            style: TextStyle(color: context.textPrimary)),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -225,7 +233,8 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
                   labelText: 'Current Password',
                   labelStyle: TextStyle(color: context.textSecondary),
                   border: const OutlineInputBorder(),
-                  enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: context.dividerColor)),
+                  enabledBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: context.dividerColor)),
                 ),
               ),
               const SizedBox(height: 16),
@@ -236,7 +245,8 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
                   labelText: 'New Password',
                   labelStyle: TextStyle(color: context.textSecondary),
                   border: const OutlineInputBorder(),
-                  enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: context.dividerColor)),
+                  enabledBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: context.dividerColor)),
                 ),
               ),
               const SizedBox(height: 16),
@@ -247,7 +257,8 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
                   labelText: 'Confirm New Password',
                   labelStyle: TextStyle(color: context.textSecondary),
                   border: const OutlineInputBorder(),
-                  enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: context.dividerColor)),
+                  enabledBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: context.dividerColor)),
                 ),
               ),
               const SizedBox(height: 24),
@@ -279,6 +290,9 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
 
   @override
   Widget build(BuildContext context) {
+    final settings = ref.watch(appSettingsProvider);
+    final settingsNotifier = ref.read(appSettingsProvider.notifier);
+
     return Scaffold(
       backgroundColor: context.scaffoldBackground,
       appBar: AppBar(
@@ -293,73 +307,74 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
             // Authentication Section
             _buildSectionHeader('Authentication'),
             const SizedBox(height: 12),
-            
+
             // Biometric Login
             _buildSettingsTile(
               icon: Icons.fingerprint,
               title: 'Biometric Login',
-              subtitle: _isBiometricAvailable 
+              subtitle: _isBiometricAvailable
                   ? 'Use fingerprint or face to login'
                   : 'Not available on this device',
               trailing: _isBiometricAvailable
                   ? Switch(
                       value: _isBiometricEnabled,
-                      onChanged: _isLoading ? null : _toggleBiometric,
+                      onChanged: _isBioLoading ? null : _toggleBiometric,
                       activeColor: CoopvestColors.primary,
                     )
                   : Icon(Icons.not_interested, color: context.textSecondary),
             ),
-            
+
             const SizedBox(height: 24),
-            
+
             // PIN Section
             _buildSectionHeader('Transaction PIN'),
             const SizedBox(height: 12),
-            
+
             _buildSettingsTile(
               icon: Icons.pin,
               title: 'Change Transaction PIN',
               subtitle: 'Update your 4-digit transaction PIN',
               onTap: _showChangePinDialog,
             ),
-            
+
             const SizedBox(height: 24),
-            
+
             // Password Section
             _buildSectionHeader('Password'),
             const SizedBox(height: 12),
-            
+
             _buildSettingsTile(
               icon: Icons.lock_outline,
               title: 'Change Password',
               subtitle: 'Update your account password',
               onTap: _showChangePasswordDialog,
             ),
-            
+
             const SizedBox(height: 24),
-            
+
             // Session Section
             _buildSectionHeader('Session'),
             const SizedBox(height: 12),
-            
+
             _buildSettingsTile(
               icon: Icons.timer,
               title: 'Auto-Lock',
               subtitle: 'Lock app after 5 minutes of inactivity',
               trailing: Switch(
-                value: true,
-                onChanged: (val) {},
+                value: settings.autoLockEnabled,
+                onChanged: settingsNotifier.setAutoLock,
                 activeColor: CoopvestColors.primary,
               ),
             ),
-            
+
             _buildSettingsTile(
               icon: Icons.history,
               title: 'Login History',
               subtitle: 'View where your account was accessed',
               onTap: () {
                 Navigator.of(context).push(
-                  MaterialPageRoute(builder: (context) => const LoginHistoryScreen()),
+                  MaterialPageRoute(
+                      builder: (context) => const LoginHistoryScreen()),
                 );
               },
             ),
@@ -372,7 +387,7 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
   Widget _buildSectionHeader(String title) {
     return Text(
       title,
-      style: TextStyle(
+      style: const TextStyle(
         fontSize: 14,
         fontWeight: FontWeight.bold,
         color: CoopvestColors.primary,
@@ -390,7 +405,8 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
   }) {
     return ListTile(
       onTap: onTap,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      contentPadding:
+          const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       tileColor: context.cardBackground,
       leading: Container(
@@ -410,12 +426,10 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
       ),
       subtitle: Text(
         subtitle,
-        style: TextStyle(
-          fontSize: 12,
-          color: context.textSecondary,
-        ),
+        style: TextStyle(fontSize: 12, color: context.textSecondary),
       ),
-      trailing: trailing ?? Icon(Icons.chevron_right, color: context.textSecondary),
+      trailing:
+          trailing ?? Icon(Icons.chevron_right, color: context.textSecondary),
     );
   }
 }
