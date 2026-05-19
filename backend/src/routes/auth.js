@@ -405,20 +405,17 @@ router.post('/complete-registration', authenticate, async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/v1/auth/sync
-// Called by the Flutter app after Firebase sign-in to upsert the profile row
-// using the Firebase UID. Returns the same AuthResponse shape so the client
-// can treat it identically to a login response.
+// Called by the Flutter app after Supabase sign-in to upsert the profile row
+// and return the latest user payload. Returns { success, user, token }.
 // ─────────────────────────────────────────────────────────────────────────────
 router.post('/sync', authenticate, async (req, res) => {
   try {
     const { name, phone } = req.body;
     const profileId = req.user.id;
-    const firebaseUid = req.user.firebaseUid;
 
     const updateData = { updated_at: new Date().toISOString() };
     if (name) updateData.name = name;
     if (phone) updateData.phone = phone;
-    if (firebaseUid) updateData.firebase_uid = firebaseUid;
 
     const { data: profile, error } = await supabase
       .from('profiles')
