@@ -130,23 +130,14 @@ class SecurityService {
     dio.httpClientAdapter = IOHttpClientAdapter(
       createHttpClient: () {
         final client = HttpClient();
+        // badCertificateCallback is only invoked when the system's certificate
+        // chain validation has already failed (self-signed, expired, hostname
+        // mismatch, etc.).  Always return false so those connections are
+        // rejected — this is the secure default.
         client.badCertificateCallback =
             (X509Certificate cert, String host, int port) {
-          // When a fingerprint is configured, verify it matches.
-          if (AppConfig.sslFingerprint.isNotEmpty) {
-            final thumbprint = cert.sha256
-                .map((b) => b.toRadixString(16).padLeft(2, '0'))
-                .join(':')
-                .toUpperCase();
-            final match = thumbprint == AppConfig.sslFingerprint.toUpperCase();
-            if (!match) {
-              logger.e(
-                  'SSL Pinning: Certificate mismatch for $host. Rejecting.');
-            }
-            return match;
-          }
-          // No fingerprint configured — reject all bad certs in prod.
-          logger.w('SSL Pinning: No fingerprint set; blocking bad cert for $host');
+          logger.e('SSL Pinning: Rejecting bad certificate for $host '
+              '(subject: ${cert.subject})');
           return false;
         };
         return client;
