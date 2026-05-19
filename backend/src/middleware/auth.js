@@ -1,74 +1,29 @@
 /**
  * Authentication Middleware
  *
- * Primary mode: Firebase Admin SDK JWT verification.
- * Fallback mode: Supabase auth (used when FIREBASE_PROJECT_ID is not set).
+ * Verifies every protected request by calling supabase.auth.getUser(token),
+ * which validates the Supabase JWT server-side without a local secret.
+ * On success it attaches the resolved profile to req.user.
  *
- * Modes:
- *   - authenticate      -> requires a valid member JWT
- *   - optionalAuth      -> sets req.user if the JWT is valid, else continues
- *   - requireAdmin      -> valid JWT + role in ('admin', 'superadmin', 'staff')
- *   - requireService    -> valid `x-service-token` header matching
- *                          MOBILE_API_SERVICE_TOKEN
+ * Exports:
+ *   authenticate   — requires a valid Supabase JWT
+ *   optionalAuth   — sets req.user if JWT is valid, else continues
+ *   requireAdmin   — valid JWT + role in ('admin', 'superadmin', 'staff')
+ *   requireService — valid x-service-token header
  */
 
 const supabase = require('../config/supabase');
 const logger = require('../utils/logger');
 
-let _firebaseAdmin = null;
-
-function getFirebaseAdmin() {
-  if (_firebaseAdmin) return _firebaseAdmin;
-  const projectId = process.env.FIREBASE_PROJECT_ID;
-  if (!projectId) return null;
-  try {
-    const admin = require('firebase-admin');
-    if (!admin.apps.length) {
-      const credential = process.env.FIREBASE_SERVICE_ACCOUNT_JSON
-        ? admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON))
-        : admin.credential.applicationDefault();
-      admin.initializeApp({ credential, projectId });
-    }
-    _firebaseAdmin = admin;
-    return admin;
-  } catch (err) {
-    logger.warn('Firebase Admin init failed — falling back to Supabase auth:', err.message);
-    return null;
-  }
-}
-
+/**
+ * Verify a Supabase Bearer token and return the matching profile row.
+ * Throws if the token is invalid or the profile is missing.
+ */
 async function verifyToken(token) {
-  const admin = getFirebaseAdmin();
-
-  if (admin) {
-    const decoded = await admin.auth().verifyIdToken(token);
-    const firebaseUid = decoded.uid;
-    const email = decoded.email || null;
-
-    let { data: profile, error } = await supabase
-      .from('profiles')
-      .select('id, user_id, email, name, role, is_active, is_flagged')
-      .eq('firebase_uid', firebaseUid)
-      .maybeSingle();
-
-    if (error) {
-      logger.error('Profile lookup by firebase_uid failed:', error.message);
-    }
-
-    if (!profile && email) {
-      const res = await supabase
-        .from('profiles')
-        .select('id, user_id, email, name, role, is_active, is_flagged')
-        .eq('email', email)
-        .maybeSingle();
-      profile = res.data;
-    }
-
-    return { profile, firebaseUid };
-  }
-
   const { data: { user }, error } = await supabase.auth.getUser(token);
-  if (error || !user) throw new Error('Invalid or expired token');
+  if (error || !user) {
+    throw new Error('Invalid or expired token');
+  }
 
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
@@ -96,11 +51,10 @@ const authenticate = async (req, res, next) => {
 
     const token = authHeader.split(' ')[1];
 
-    let profile, firebaseUid;
+    let profile;
     try {
       const result = await verifyToken(token);
       profile = result.profile;
-      firebaseUid = result.firebaseUid;
     } catch (err) {
       return res.status(401).json({ success: false, error: 'Invalid or expired token' });
     }
@@ -120,7 +74,6 @@ const authenticate = async (req, res, next) => {
       name: profile.name,
       role: profile.role || 'member',
       isFlagged: profile.is_flagged === true,
-      firebaseUid: firebaseUid || null,
     };
 
     req.token = token;
@@ -138,11 +91,10 @@ const optionalAuth = async (req, res, next) => {
 
     const token = authHeader.split(' ')[1];
 
-    let profile, firebaseUid;
+    let profile;
     try {
       const result = await verifyToken(token);
       profile = result.profile;
-      firebaseUid = result.firebaseUid;
     } catch (_) {
       return next();
     }
@@ -154,7 +106,6 @@ const optionalAuth = async (req, res, next) => {
         userId: profile.user_id,
         name: profile.name,
         role: profile.role || 'member',
-        firebaseUid: firebaseUid || null,
       };
       req.token = token;
     }
