@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'firebase_options.dart';
 import 'config/app_config.dart';
 import 'config/theme_config.dart';
@@ -10,6 +11,7 @@ import 'core/services/feature_service.dart';
 import 'core/services/security_service.dart';
 import 'core/services/notification_service.dart';
 import 'data/models/auth_models.dart';
+import 'data/models/loan_models.dart';
 import 'data/repositories/auth_repository.dart';
 import 'presentation/providers/auth_provider.dart';
 import 'presentation/screens/auth/welcome_screen.dart';
@@ -51,7 +53,11 @@ import 'presentation/screens/rollover/rollover_request_screen.dart';
 import 'presentation/screens/rollover/guarantor_consent_screen.dart';
 import 'presentation/screens/rollover/guarantor_response_screen.dart';
 import 'presentation/screens/rollover/rollover_status_screen.dart';
-import 'data/models/loan_models.dart';
+
+// Supabase project credentials (anon key is safe to embed in client code)
+const _supabaseUrl = 'https://nyoauzqezpxeonmrxxgi.supabase.co';
+const _supabaseAnonKey =
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im55b2F1enFlenB4ZW9ubXJ4eGdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyODI3MzUsImV4cCI6MjA4OTg1ODczNX0.5WfECoO2Xu5VfBzFbQd2CA8rIeBVnOkiKmnnbYRA8VU';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
@@ -66,24 +72,31 @@ Future<void> _fcmBackgroundHandler(RemoteMessage message) async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   const envString = String.fromEnvironment('ENV', defaultValue: 'dev');
   final env = Environment.values.firstWhere(
     (e) => e.toString().split('.').last == envString,
     orElse: () => Environment.dev,
   );
   EnvironmentContext.setEnvironment(env);
-  
+
+  // Initialize Supabase Auth
+  await Supabase.initialize(
+    url: _supabaseUrl,
+    anonKey: _supabaseAnonKey,
+  );
+
   final securityService = SecurityService();
   await securityService.initialize();
-  
+
   final featureService = FeatureService();
   try {
     await featureService.init().timeout(const Duration(seconds: 5));
   } catch (e) {
     debugPrint('Feature service initialization failed: $e');
   }
-  
+
+  // Firebase is kept for push notifications, analytics and crashlytics only.
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
@@ -93,7 +106,7 @@ void main() async {
   } catch (e) {
     debugPrint('Firebase/Notification initialization failed: $e');
   }
-  
+
   runApp(
     const ProviderScope(
       child: CoopvestApp(),
@@ -108,7 +121,8 @@ class CoopvestApp extends ConsumerStatefulWidget {
   ConsumerState<CoopvestApp> createState() => _CoopvestAppState();
 }
 
-class _CoopvestAppState extends ConsumerState<CoopvestApp> with WidgetsBindingObserver {
+class _CoopvestAppState extends ConsumerState<CoopvestApp>
+    with WidgetsBindingObserver {
   bool _isSessionRestored = false;
   bool _isCheckingBiometric = false;
   bool _wasPaused = false;
@@ -139,9 +153,8 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp> with WidgetsBindingOb
 
   Future<void> _restoreSession() async {
     try {
-      // Use the auth provider to restore session - this properly updates auth state
-      final success = await ref.read(authProvider.notifier).restoreSession();
-      
+      final success =
+          await ref.read(authProvider.notifier).restoreSession();
       if (success) {
         debugPrint('[CoopvestApp] Session restored successfully');
       } else {
@@ -159,22 +172,19 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp> with WidgetsBindingOb
   }
 
   Future<void> _checkBiometricOnResume() async {
-    // Prevent multiple concurrent biometric checks
     if (_isCheckingBiometric) return;
-    
+
     final authStatus = ref.read(authStatusProvider);
     if (authStatus != AuthStatus.authenticated) return;
 
     final securityService = SecurityService();
     final isBiometricEnabled = await securityService.isBiometricEnabled();
-    
+
     if (isBiometricEnabled) {
       _isCheckingBiometric = true;
       try {
         final authenticated = await securityService.authenticate();
         if (!authenticated && mounted) {
-          // Only logout if biometric auth was explicitly cancelled/failed
-          // Don't logout just because biometrics aren't available
           ScaffoldMessenger.of(navigatorKey.currentContext!).showSnackBar(
             const SnackBar(
               content: Text('Biometric authentication required'),
@@ -200,26 +210,31 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp> with WidgetsBindingOb
       theme: CoopvestTheme.lightTheme,
       darkTheme: CoopvestTheme.darkTheme,
       themeMode: themeMode,
-      home: authStatus == AuthStatus.authenticated ? const MainContainer() : const WelcomeScreen(),
+      home: authStatus == AuthStatus.authenticated
+          ? const MainContainer()
+          : const WelcomeScreen(),
       routes: {
         '/welcome': (context) => const WelcomeScreen(),
         '/login': (context) => const LoginScreen(),
         '/register': (context) => const RegisterStep1Screen(),
         '/register-step2': (context) {
-          final args = ModalRoute.of(context)?.settings.arguments as Map<String, String>?;
+          final args = ModalRoute.of(context)?.settings.arguments
+              as Map<String, String>?;
           return RegisterStep2Screen(
             email: args?['email'] ?? '',
             registrationData: args ?? {},
           );
         },
         '/register-step3': (context) {
-          final args = ModalRoute.of(context)?.settings.arguments as Map<String, String>?;
+          final args = ModalRoute.of(context)?.settings.arguments
+              as Map<String, String>?;
           return RegistrationOnboardingScreen(
             registrationData: args ?? {},
           );
         },
         '/salary-deduction-consent': (context) {
-          final args = ModalRoute.of(context)?.settings.arguments as Map<String, String>?;
+          final args = ModalRoute.of(context)?.settings.arguments
+              as Map<String, String>?;
           return SalaryDeductionConsentScreen(
             registrationData: args ?? {},
           );
@@ -227,36 +242,41 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp> with WidgetsBindingOb
         '/account-activation': (context) => const AccountActivationScreen(),
         '/forgot-password': (context) => const ForgotPasswordScreen(),
         '/reset-password-otp': (context) {
-          final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+          final args = ModalRoute.of(context)?.settings.arguments
+              as Map<String, dynamic>?;
           return ResetPasswordOtpScreen(email: args?['email'] ?? '');
         },
         '/verify-email': (context) => const EmailVerificationScreen(),
         '/google-complete': (context) {
-          final googleUser = ModalRoute.of(context)?.settings.arguments as GoogleSignInAccount?;
+          final googleUser = ModalRoute.of(context)?.settings.arguments
+              as GoogleSignInAccount?;
           return CompleteRegistrationScreen(googleUser: googleUser!);
         },
-        
+
         '/support': (context) => const SupportHomeScreen(),
         '/create-ticket': (context) => const TicketCreationScreen(),
         '/tickets': (context) => const TicketListScreen(),
         '/ticket-detail': (context) {
-          final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+          final args = ModalRoute.of(context)?.settings.arguments
+              as Map<String, dynamic>?;
           return TicketDetailScreen(
             ticketId: args?['ticketId'] ?? '',
           );
         },
-        
-        '/kyc-employment-details': (context) => const KYCEmploymentDetailsScreen(),
+
+        '/kyc-employment-details': (context) =>
+            const KYCEmploymentDetailsScreen(),
         '/kyc-id-upload': (context) => const KYCIDUploadScreen(),
         '/kyc-selfie': (context) => const KYCSelfieScreen(),
         '/kyc-bank-info': (context) => const KYCBankInfoScreen(),
         '/kyc-success': (context) => const KYCSuccessScreen(),
         '/kyc-complete': (context) => const KYCSuccessScreen(),
-        
+
         '/home': (context) => const MainContainer(),
-        
+
         '/loan-dashboard': (context) {
-          final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+          final args = ModalRoute.of(context)?.settings.arguments
+              as Map<String, dynamic>?;
           return LoanDashboardScreen(
             userId: args?['userId'] ?? '',
             userName: args?['userName'] ?? '',
@@ -264,7 +284,8 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp> with WidgetsBindingOb
           );
         },
         '/loan-application': (context) {
-          final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+          final args = ModalRoute.of(context)?.settings.arguments
+              as Map<String, dynamic>?;
           return LoanApplicationScreen(
             userId: args?['userId'] ?? '',
             userName: args?['userName'] ?? 'User',
@@ -272,13 +293,15 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp> with WidgetsBindingOb
           );
         },
         '/loan-details': (context) {
-          final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+          final args = ModalRoute.of(context)?.settings.arguments
+              as Map<String, dynamic>?;
           return LoanDetailsScreen(
             loanId: args?['loanId'] ?? '',
           );
         },
         '/guarantor-verification': (context) {
-          final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+          final args = ModalRoute.of(context)?.settings.arguments
+              as Map<String, dynamic>?;
           return GuarantorVerificationScreen(
             loanId: args?['loanId'] ?? '',
             guarantorId: args?['guarantorId'] ?? '',
@@ -289,12 +312,13 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp> with WidgetsBindingOb
             loanTenor: args?['loanTenor'] ?? 4,
           );
         },
-        
+
         '/profile': (context) => const ProfileSettingsScreen(),
         '/security': (context) => const SecuritySettingsScreen(),
-        
+
         '/savings-goal': (context) {
-          final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+          final args = ModalRoute.of(context)?.settings.arguments
+              as Map<String, dynamic>?;
           return SavingsGoalsScreen(
             userId: args?['userId'] ?? '',
           );
@@ -302,25 +326,29 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp> with WidgetsBindingOb
 
         '/search': (context) => const GlobalSearchScreen(),
 
-        // Rollover routes
         '/rollover/eligibility': (context) {
-          final loan = ModalRoute.of(context)?.settings.arguments as Loan;
+          final loan =
+              ModalRoute.of(context)?.settings.arguments as Loan;
           return RolloverEligibilityScreen(loan: loan);
         },
         '/rollover/request': (context) {
-          final loan = ModalRoute.of(context)?.settings.arguments as Loan;
+          final loan =
+              ModalRoute.of(context)?.settings.arguments as Loan;
           return RolloverRequestScreen(loan: loan);
         },
         '/rollover/consent': (context) {
-          final rolloverId = ModalRoute.of(context)?.settings.arguments as String;
+          final rolloverId =
+              ModalRoute.of(context)?.settings.arguments as String;
           return GuarantorConsentScreen(rolloverId: rolloverId);
         },
         '/rollover/status': (context) {
-          final rolloverId = ModalRoute.of(context)?.settings.arguments as String;
+          final rolloverId =
+              ModalRoute.of(context)?.settings.arguments as String;
           return RolloverStatusScreen(rolloverId: rolloverId);
         },
         '/rollover/guarantor-response': (context) {
-          final args = ModalRoute.of(context)?.settings.arguments as Map<String, String>;
+          final args = ModalRoute.of(context)?.settings.arguments
+              as Map<String, String>;
           return GuarantorResponseScreen(
             rolloverId: args['rolloverId']!,
             guarantorId: args['guarantorId']!,

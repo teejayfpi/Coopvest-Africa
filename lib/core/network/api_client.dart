@@ -29,7 +29,7 @@ class ApiClient {
 
   void _initialize() {
     if (_initialized) return;
-    
+
     _dio = Dio(
       BaseOptions(
         baseUrl: AppConfig.apiBaseUrl,
@@ -45,12 +45,11 @@ class ApiClient {
     // Apply SSL Pinning
     SecurityService().applySSLPinning(_dio);
 
-    // Add interceptors - IMPORTANT: Order matters!
-    // Auth should be first to attach token before logging
+    // Auth interceptor first, then logging, then error handler
     _dio.interceptors.add(AuthInterceptor());
     _dio.interceptors.add(LoggingInterceptor());
-    _dio.interceptors.add(ErrorInterceptor(this)); // Pass this for token refresh
-    
+    _dio.interceptors.add(ErrorInterceptor(this));
+
     _initialized = true;
   }
 
@@ -169,11 +168,10 @@ class ApiClient {
     if (error.response != null) {
       final statusCode = error.response!.statusCode;
       final data = error.response!.data;
-      
-      // Try to extract error message from various response formats
+
       String? errorMessage;
       if (data is Map<String, dynamic>) {
-        errorMessage = data['error'] ?? data['message'] ?? data['msg'];
+        errorMessage = data['error'] as String? ?? data['message'] as String? ?? data['msg'] as String?;
       }
 
       switch (statusCode) {
@@ -188,17 +186,15 @@ class ApiClient {
         case 500:
           return ServerException(errorMessage ?? 'Server error. Please try again later.', statusCode: statusCode);
         default:
-          return ServerException(
-            errorMessage ?? 'An error occurred',
-            statusCode: statusCode,
-          );
+          return ServerException(errorMessage ?? 'An error occurred', statusCode: statusCode);
       }
     } else if (error.type == DioExceptionType.connectionTimeout) {
       return NetworkException('Connection timeout. Please check your internet.');
     } else if (error.type == DioExceptionType.receiveTimeout) {
       return NetworkException('Request timeout. Please try again.');
     } else if (error.type == DioExceptionType.connectionError) {
-      return NetworkException('Unable to connect to the server. Please check if the backend is running and the API URL in AppConfig is correct.');
+      return NetworkException(
+          'Unable to connect to the server. Please check your internet connection.');
     } else if (error.type == DioExceptionType.unknown) {
       return NetworkException('Network error. Please check your connection.');
     }
@@ -243,22 +239,9 @@ class ApiClient {
     _dio.interceptors.add(ErrorInterceptor(this));
   }
 
-  /// Get Loan API Service
-  dynamic getLoanApiService() {
-    // This will be used with retrofit to create the loan API service
-    return _dio;
-  }
-
-  /// Get Rollover API Service
-  dynamic getRolloverApiService() {
-    // This will be used with retrofit to create the rollover API service
-    return _dio;
-  }
-
-  /// Get Referral API Service
-  dynamic getReferralApiService() {
-    return _dio;
-  }
+  dynamic getLoanApiService() => _dio;
+  dynamic getRolloverApiService() => _dio;
+  dynamic getReferralApiService() => _dio;
 }
 
 /// API Error Handling
@@ -274,9 +257,8 @@ class ApiException implements Exception {
   });
 
   @override
-  String toString() {
-    return 'ApiException: $message${statusCode != null ? ' (Status: $statusCode)' : ''}';
-  }
+  String toString() =>
+      'ApiException: $message${statusCode != null ? ' (Status: $statusCode)' : ''}';
 }
 
 /// Result wrapper for API responses
@@ -291,13 +273,8 @@ class ApiResult<T> {
     required this.isSuccess,
   });
 
-  factory ApiResult.success(T data) {
-    return ApiResult(data: data, isSuccess: true);
-  }
-
-  factory ApiResult.error(String error) {
-    return ApiResult(error: error, isSuccess: false);
-  }
+  factory ApiResult.success(T data) => ApiResult(data: data, isSuccess: true);
+  factory ApiResult.error(String error) => ApiResult(error: error, isSuccess: false);
 
   bool get hasData => data != null;
   bool get hasError => error != null;
@@ -308,46 +285,27 @@ extension DioErrorExtension on DioException {
   ApiException toApiException() {
     switch (type) {
       case DioExceptionType.connectionTimeout:
-        return ApiException(
-          message: 'Connection timed out. Please try again.',
-          statusCode: 408,
-        );
+        return ApiException(message: 'Connection timed out. Please try again.', statusCode: 408);
       case DioExceptionType.sendTimeout:
-        return ApiException(
-          message: 'Send timed out. Please try again.',
-          statusCode: 408,
-        );
+        return ApiException(message: 'Send timed out. Please try again.', statusCode: 408);
       case DioExceptionType.receiveTimeout:
-        return ApiException(
-          message: 'Receive timed out. Please try again.',
-          statusCode: 408,
-        );
+        return ApiException(message: 'Receive timed out. Please try again.', statusCode: 408);
       case DioExceptionType.badCertificate:
-        return ApiException(
-          message: 'Security certificate error.',
-          statusCode: 495,
-        );
+        return ApiException(message: 'Security certificate error.', statusCode: 495);
       case DioExceptionType.badResponse:
-        final statusCode = response?.statusCode;
-        final errorMessage = response?.data?['message'] ?? 'Request failed';
         return ApiException(
-          message: errorMessage,
-          statusCode: statusCode,
+          message: response?.data?['message'] as String? ?? 'Request failed',
+          statusCode: response?.statusCode,
         );
       case DioExceptionType.cancel:
-        return ApiException(
-          message: 'Request cancelled',
-          statusCode: -1,
-        );
+        return ApiException(message: 'Request cancelled', statusCode: -1);
       case DioExceptionType.connectionError:
         return ApiException(
-          message: 'Unable to connect to the server. Please check if the backend is running and the API URL in AppConfig is correct.',
+          message: 'Unable to connect to the server. Please check your internet connection.',
           statusCode: -1,
         );
       case DioExceptionType.unknown:
-        return ApiException(
-          message: 'An unexpected error occurred. Please try again.',
-        );
+        return ApiException(message: 'An unexpected error occurred. Please try again.');
     }
   }
 }
@@ -357,10 +315,7 @@ class LoggingInterceptor extends Interceptor {
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
     if (AppConfig.enableRequestLogging) {
-      logger.i(
-        'API Request: ${options.method} ${options.path}',
-        error: 'Headers: ${options.headers}',
-      );
+      logger.i('API Request: ${options.method} ${options.path}');
       if (options.data != null) {
         logger.i('Request Data: ${options.data}');
       }
@@ -371,47 +326,36 @@ class LoggingInterceptor extends Interceptor {
   @override
   void onResponse(Response response, ResponseInterceptorHandler handler) {
     if (AppConfig.enableResponseLogging) {
-      logger.i(
-        'API Response: ${response.statusCode} ${response.requestOptions.path}',
-        error: 'Data: ${response.data}',
-      );
+      logger.i('API Response: ${response.statusCode} ${response.requestOptions.path}');
     }
     handler.next(response);
   }
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
-    logger.e(
-      'API Error: ${err.message}',
-      error: err.response?.data,
-      stackTrace: err.stackTrace,
-    );
+    logger.e('API Error: ${err.message}', error: err.response?.data, stackTrace: err.stackTrace);
     handler.next(err);
   }
 }
 
 /// Auth Interceptor — reads token from secure storage and attaches it
-/// ✅ FIXED: Properly handles async token reading
 class AuthInterceptor extends Interceptor {
   @override
-  Future<void> onRequest(RequestOptions options, RequestInterceptorHandler handler) async {
+  Future<void> onRequest(
+      RequestOptions options, RequestInterceptorHandler handler) async {
     try {
       final token = await _secureStorage.read(key: _accessTokenKey);
       if (token != null && token.isNotEmpty) {
         options.headers['Authorization'] = 'Bearer $token';
-        logger.i('AuthInterceptor: Token attached (${token.substring(0, 10)}...)');
-      } else {
-        logger.w('AuthInterceptor: No token found in secure storage');
       }
     } catch (e) {
       logger.e('AuthInterceptor: Failed to read token: $e');
     }
-    // ✅ NOW: This only fires after token is read
     handler.next(options);
   }
 }
 
-/// Error Interceptor — handles 401 responses via Firebase ID token refresh
+/// Error Interceptor — handles 401 responses via Supabase token refresh
 class ErrorInterceptor extends Interceptor {
   final ApiClient _apiClient;
   bool _isRefreshing = false;
@@ -423,12 +367,13 @@ class ErrorInterceptor extends Interceptor {
     if (err.response?.statusCode == 401 && !_isRefreshing) {
       _isRefreshing = true;
       try {
-        // Firebase handles token refresh natively — force a fresh ID token
-        // via the AuthRepository which wraps FirebaseAuth.currentUser.getIdToken(true)
         final authRepo = AuthRepository(_apiClient);
         final response = await authRepo.refreshToken('');
 
-        await TokenStorage.saveTokens(accessToken: response.accessToken);
+        await TokenStorage.saveTokens(
+          accessToken: response.accessToken,
+          refreshToken: response.refreshToken,
+        );
         _apiClient.setAuthToken(response.accessToken);
 
         final options = err.requestOptions;
@@ -451,20 +396,19 @@ class ErrorInterceptor extends Interceptor {
 
 /// Helper functions for token persistence
 class TokenStorage {
-  static Future<void> saveTokens({required String accessToken, String? refreshToken}) async {
+  static Future<void> saveTokens(
+      {required String accessToken, String? refreshToken}) async {
     await _secureStorage.write(key: _accessTokenKey, value: accessToken);
     if (refreshToken != null) {
       await _secureStorage.write(key: _refreshTokenKey, value: refreshToken);
     }
   }
 
-  static Future<String?> getAccessToken() async {
-    return _secureStorage.read(key: _accessTokenKey);
-  }
+  static Future<String?> getAccessToken() async =>
+      _secureStorage.read(key: _accessTokenKey);
 
-  static Future<String?> getRefreshToken() async {
-    return _secureStorage.read(key: _refreshTokenKey);
-  }
+  static Future<String?> getRefreshToken() async =>
+      _secureStorage.read(key: _refreshTokenKey);
 
   static Future<void> clearTokens() async {
     await _secureStorage.delete(key: _accessTokenKey);

@@ -50,17 +50,19 @@ dependencies:
   dart_jsonwebtoken: ^2.12.0
   google_sign_in: ^6.1.6
 
+  # Supabase Auth (replaces firebase_auth)
+  supabase_flutter: ^2.3.0
+
   # QR Code
   qr_flutter: ^4.0.0
   mobile_scanner: ^3.5.0
 
-  # Notifications
+  # Notifications (Firebase Messaging kept for push notifications)
   firebase_messaging: ^15.2.3
   flutter_local_notifications: ^18.0.1
 
-  # Firebase (standardized to latest stable versions)
+  # Firebase (core services only — auth handled by Supabase)
   firebase_core: ^3.9.0
-  firebase_auth: ^5.5.1
   cloud_firestore: ^5.6.6
   firebase_storage: ^12.4.3
   firebase_analytics: ^11.4.3

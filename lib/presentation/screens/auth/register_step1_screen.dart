@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:firebase_auth/firebase_auth.dart' as fb;
+import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/utils/utils.dart';
@@ -15,7 +15,8 @@ class RegisterStep1Screen extends ConsumerStatefulWidget {
   const RegisterStep1Screen({Key? key}) : super(key: key);
 
   @override
-  ConsumerState<RegisterStep1Screen> createState() => _RegisterStep1ScreenState();
+  ConsumerState<RegisterStep1Screen> createState() =>
+      _RegisterStep1ScreenState();
 }
 
 class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
@@ -75,29 +76,35 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
       _phoneError = Validators.validatePhone(_phoneController.text);
       _emailError = Validators.validateEmail(_emailController.text);
       _passwordError = Validators.validatePassword(_passwordController.text);
-      _confirmPasswordError = _passwordController.text != _confirmPasswordController.text ? 'Passwords do not match' : null;
+      _confirmPasswordError =
+          _passwordController.text != _confirmPasswordController.text
+              ? 'Passwords do not match'
+              : null;
     });
 
-    if (_nameError != null || _phoneError != null || _emailError != null || _passwordError != null || _confirmPasswordError != null) return;
+    if (_nameError != null ||
+        _phoneError != null ||
+        _emailError != null ||
+        _passwordError != null ||
+        _confirmPasswordError != null) return;
 
     if (!_agreeToTerms) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please accept Terms & Privacy Policy'), backgroundColor: CoopvestColors.error));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Please accept Terms & Privacy Policy'),
+          backgroundColor: CoopvestColors.error));
       return;
     }
 
     setState(() => _isLoading = true);
     try {
-      // Use Firebase Auth via AuthProvider to create account
       await ref.read(authProvider.notifier).register(
-        email: _emailController.text.trim().toLowerCase(),
-        password: _passwordController.text,
-        name: _nameController.text.trim(),
-        phone: _phoneController.text.trim(),
-      );
+            email: _emailController.text.trim().toLowerCase(),
+            password: _passwordController.text,
+            name: _nameController.text.trim(),
+            phone: _phoneController.text.trim(),
+          );
 
       if (mounted) {
-        // Navigate to email verification screen
-        // Firebase sends verification email automatically during registration
         Navigator.of(context).pushNamed('/register-step2', arguments: {
           'name': _nameController.text.trim(),
           'phone': _phoneController.text.trim(),
@@ -106,13 +113,18 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
       }
     } catch (e) {
       if (mounted) {
-        final msg = e.toString().replaceFirst('Exception: ', '').replaceFirst('AuthException: ', '');
-        
-        // Check if account already exists - try to sign in and check verification status
-        if (msg.contains('already exists') || msg.contains('email-already-in-use')) {
+        final msg = e
+            .toString()
+            .replaceFirst('Exception: ', '')
+            .replaceFirst('AuthException: ', '');
+
+        if (msg.contains('already exists') ||
+            msg.contains('email-already-in-use') ||
+            msg.contains('already registered')) {
           await _handleExistingAccount();
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: CoopvestColors.error));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(msg), backgroundColor: CoopvestColors.error));
         }
       }
     } finally {
@@ -120,31 +132,33 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
     }
   }
 
-  /// Handle case where account already exists - check if email is verified
+  /// Handle the case where a Supabase account already exists for this email.
   Future<void> _handleExistingAccount() async {
     try {
-      // Try to sign in with existing credentials
-      final credential = await fb.FirebaseAuth.instance.signInWithEmailAndPassword(
+      // Try to sign in with the provided credentials
+      final result = await sb.Supabase.instance.client.auth.signInWithPassword(
         email: _emailController.text.trim().toLowerCase(),
         password: _passwordController.text,
       );
-      
-      final user = credential.user;
-      if (user != null) {
-        if (!user.emailVerified) {
-          // Account exists but email not verified - resend verification and go to step 2
+
+      final sbUser = result.user;
+      if (sbUser != null) {
+        if (sbUser.emailConfirmedAt == null) {
+          // Account exists but email not verified — resend and go to step 2
           try {
-            await user.sendEmailVerification();
-          } catch (emailError) {
-            // Continue even if email send fails - user can resend from step 2
+            await sb.Supabase.instance.client.auth.resend(
+              type: sb.OtpType.signup,
+              email: sbUser.email!,
+            );
+          } catch (_) {
+            // Continue even if resend fails
           }
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Account found! Please verify your email to continue.'),
-                backgroundColor: CoopvestColors.warning,
-              ),
-            );
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text(
+                  'Account found! Please verify your email to continue.'),
+              backgroundColor: CoopvestColors.warning,
+            ));
             Navigator.of(context).pushNamed('/register-step2', arguments: {
               'name': _nameController.text.trim(),
               'phone': _phoneController.text.trim(),
@@ -152,24 +166,22 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
             });
           }
         } else {
-          // Account exists and email is verified - redirect to login
-          await fb.FirebaseAuth.instance.signOut();
+          // Account verified — redirect to login
+          await sb.Supabase.instance.client.auth.signOut();
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Account already exists and is verified. Please log in instead.'),
-                backgroundColor: CoopvestColors.info,
-              ),
-            );
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text(
+                  'Account already exists and is verified. Please log in instead.'),
+              backgroundColor: CoopvestColors.info,
+            ));
             Navigator.of(context).pushReplacementNamed('/login');
           }
         }
       }
-    } on fb.FirebaseAuthException catch (e) {
-      // Wrong password or other Firebase auth error - redirect to login with helpful message
-      if (e.code == 'wrong-password' || e.code == 'invalid-credential' || e.code == 'INVALID_LOGIN_CREDENTIALS') {
+    } on sb.AuthException catch (e) {
+      final msg = e.message.toLowerCase();
+      if (msg.contains('invalid') || msg.contains('wrong') || msg.contains('credentials')) {
         if (mounted) {
-          // Show dialog with options to login or reset password
           showDialog(
             context: context,
             builder: (context) => AlertDialog(
@@ -188,7 +200,9 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
                 TextButton(
                   onPressed: () {
                     Navigator.of(context).pop();
-                    Navigator.of(context).pushNamed('/forgot-password', arguments: _emailController.text.trim().toLowerCase());
+                    Navigator.of(context).pushNamed('/forgot-password',
+                        arguments:
+                            _emailController.text.trim().toLowerCase());
                   },
                   child: const Text('Reset Password'),
                 ),
@@ -196,36 +210,31 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
             ),
           );
         }
-      } else if (e.code == 'too-many-requests') {
+      } else if (msg.contains('rate limit') || msg.contains('too many')) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Too many attempts. Please wait a moment and try again.'),
-              backgroundColor: CoopvestColors.error,
-            ),
-          );
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content:
+                Text('Too many attempts. Please wait a moment and try again.'),
+            backgroundColor: CoopvestColors.error,
+          ));
         }
       } else {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('An account already exists with this email. Please try logging in.'),
-              backgroundColor: CoopvestColors.error,
-            ),
-          );
-          // Navigate to login as fallback
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text(
+                'An account already exists with this email. Please try logging in.'),
+            backgroundColor: CoopvestColors.error,
+          ));
           Navigator.of(context).pushReplacementNamed('/login');
         }
       }
     } catch (e) {
-      // Generic error - redirect to login as safest option
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('An account already exists with this email. Please try logging in.'),
-            backgroundColor: CoopvestColors.error,
-          ),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+              'An account already exists with this email. Please try logging in.'),
+          backgroundColor: CoopvestColors.error,
+        ));
         Navigator.of(context).pushReplacementNamed('/login');
       }
     }
@@ -241,7 +250,9 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
           icon: Icon(Icons.arrow_back, color: context.iconPrimary),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: Text('Create Account', style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold)),
+        title: Text('Create Account',
+            style: TextStyle(
+                color: context.textPrimary, fontWeight: FontWeight.bold)),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -252,30 +263,62 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
               Row(
                 children: [
                   Container(
-                    width: 32, height: 32,
-                    decoration: const BoxDecoration(color: CoopvestColors.primary, shape: BoxShape.circle),
-                    child: const Center(child: Text('1', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+                    width: 32,
+                    height: 32,
+                    decoration: const BoxDecoration(
+                        color: CoopvestColors.primary, shape: BoxShape.circle),
+                    child: const Center(
+                        child: Text('1',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold))),
                   ),
                   const SizedBox(width: 8),
-                  Expanded(child: Container(height: 2, color: context.dividerColor)),
+                  Expanded(
+                      child: Container(height: 2, color: context.dividerColor)),
                   const SizedBox(width: 8),
                   Container(
-                    width: 32, height: 32,
-                    decoration: BoxDecoration(color: context.dividerColor, shape: BoxShape.circle),
-                    child: Center(child: Text('2', style: TextStyle(color: context.textSecondary, fontWeight: FontWeight.bold))),
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                        color: context.dividerColor, shape: BoxShape.circle),
+                    child: Center(
+                        child: Text('2',
+                            style: TextStyle(
+                                color: context.textSecondary,
+                                fontWeight: FontWeight.bold))),
                   ),
                 ],
               ),
               const SizedBox(height: 32),
-              Text('Basic Account Information', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: context.textPrimary)),
+              Text('Basic Account Information',
+                  style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: context.textPrimary)),
               const SizedBox(height: 8),
-              Text('Enter your basic information to get started', style: TextStyle(color: context.textSecondary)),
+              Text('Enter your basic information to get started',
+                  style: TextStyle(color: context.textSecondary)),
               const SizedBox(height: 24),
-              AppTextField(label: 'Full Name', hint: 'As per your official ID', controller: _nameController, errorText: _nameError),
+              AppTextField(
+                  label: 'Full Name',
+                  hint: 'As per your official ID',
+                  controller: _nameController,
+                  errorText: _nameError),
               const SizedBox(height: 20),
-              AppTextField(label: 'Phone Number', hint: '+234 801 234 5678', controller: _phoneController, keyboardType: TextInputType.phone, errorText: _phoneError),
+              AppTextField(
+                  label: 'Phone Number',
+                  hint: '+234 801 234 5678',
+                  controller: _phoneController,
+                  keyboardType: TextInputType.phone,
+                  errorText: _phoneError),
               const SizedBox(height: 20),
-              AppTextField(label: 'Email Address', hint: 'your.email@example.com', controller: _emailController, keyboardType: TextInputType.emailAddress, errorText: _emailError),
+              AppTextField(
+                  label: 'Email Address',
+                  hint: 'your.email@example.com',
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  errorText: _emailError),
               const SizedBox(height: 20),
               AppTextField(
                 label: 'Password',
@@ -284,8 +327,13 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
                 obscureText: _obscurePassword,
                 errorText: _passwordError,
                 suffixIcon: IconButton(
-                  icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility, color: context.textSecondary),
-                  onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                  icon: Icon(
+                      _obscurePassword
+                          ? Icons.visibility_off
+                          : Icons.visibility,
+                      color: context.textSecondary),
+                  onPressed: () =>
+                      setState(() => _obscurePassword = !_obscurePassword),
                 ),
               ),
               if (_passwordController.text.isNotEmpty) ...[
@@ -293,11 +341,21 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
                 LinearProgressIndicator(
                   value: _passwordStrength,
                   backgroundColor: context.dividerColor,
-                  color: _passwordStrength < 0.5 ? CoopvestColors.error : _passwordStrength < 0.75 ? Colors.orange : CoopvestColors.success,
+                  color: _passwordStrength < 0.5
+                      ? CoopvestColors.error
+                      : _passwordStrength < 0.75
+                          ? Colors.orange
+                          : CoopvestColors.success,
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  _passwordStrength < 0.25 ? 'Very Weak' : _passwordStrength < 0.5 ? 'Weak' : _passwordStrength < 0.75 ? 'Medium' : 'Strong',
+                  _passwordStrength < 0.25
+                      ? 'Very Weak'
+                      : _passwordStrength < 0.5
+                          ? 'Weak'
+                          : _passwordStrength < 0.75
+                              ? 'Medium'
+                              : 'Strong',
                   style: TextStyle(fontSize: 12, color: context.textSecondary),
                 ),
               ],
@@ -309,23 +367,40 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
                 obscureText: _obscureConfirmPassword,
                 errorText: _confirmPasswordError,
                 suffixIcon: IconButton(
-                  icon: Icon(_obscureConfirmPassword ? Icons.visibility_off : Icons.visibility, color: context.textSecondary),
-                  onPressed: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
+                  icon: Icon(
+                      _obscureConfirmPassword
+                          ? Icons.visibility_off
+                          : Icons.visibility,
+                      color: context.textSecondary),
+                  onPressed: () => setState(
+                      () => _obscureConfirmPassword = !_obscureConfirmPassword),
                 ),
               ),
               const SizedBox(height: 24),
               Row(
                 children: [
-                  Checkbox(value: _agreeToTerms, onChanged: (v) => setState(() => _agreeToTerms = v ?? false), activeColor: CoopvestColors.primary),
+                  Checkbox(
+                      value: _agreeToTerms,
+                      onChanged: (v) =>
+                          setState(() => _agreeToTerms = v ?? false),
+                      activeColor: CoopvestColors.primary),
                   Expanded(
                     child: RichText(
                       text: TextSpan(
                         text: 'I agree to the ',
                         style: TextStyle(color: context.textSecondary),
                         children: [
-                          TextSpan(text: 'Terms of Service', style: const TextStyle(color: CoopvestColors.primary, fontWeight: FontWeight.bold)),
+                          TextSpan(
+                              text: 'Terms of Service',
+                              style: const TextStyle(
+                                  color: CoopvestColors.primary,
+                                  fontWeight: FontWeight.bold)),
                           const TextSpan(text: ' and '),
-                          TextSpan(text: 'Privacy Policy', style: const TextStyle(color: CoopvestColors.primary, fontWeight: FontWeight.bold)),
+                          TextSpan(
+                              text: 'Privacy Policy',
+                              style: const TextStyle(
+                                  color: CoopvestColors.primary,
+                                  fontWeight: FontWeight.bold)),
                         ],
                       ),
                     ),
@@ -333,7 +408,11 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
                 ],
               ),
               const SizedBox(height: 32),
-              PrimaryButton(label: 'Continue', onPressed: _validateAndContinue, isLoading: _isLoading, width: double.infinity),
+              PrimaryButton(
+                  label: 'Continue',
+                  onPressed: _validateAndContinue,
+                  isLoading: _isLoading,
+                  width: double.infinity),
               const SizedBox(height: 24),
             ],
           ),

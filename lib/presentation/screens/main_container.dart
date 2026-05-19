@@ -18,20 +18,26 @@ class MainContainer extends ConsumerStatefulWidget {
 class _MainContainerState extends ConsumerState<MainContainer> {
   int _selectedIndex = 0;
 
+  // Screens are built lazily inside IndexedStack — declaring them here avoids
+  // rebuilding the list on every frame while still reacting to user changes.
+  late final List<Widget> _screens;
+
+  @override
+  void initState() {
+    super.initState();
+    // Screens that need user data read from providers internally.
+    // Screens that accept constructor params (userId, etc.) get them from
+    // the provider inside the screen itself to avoid rebuild on every frame.
+    _screens = const [
+      HomeDashboardScreen(),
+      _WalletTab(),
+      _LoanTab(),
+      ProfileSettingsScreen(),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
-    final user = ref.watch(currentUserProvider);
-    final userId = user?.id ?? '';
-    final userName = user?.name ?? 'User';
-    final userPhone = user?.phone ?? '';
-
-    final List<Widget> _screens = [
-      const HomeDashboardScreen(),
-      WalletDashboardScreen(userId: userId, userName: userName),
-      LoanDashboardScreen(userId: userId, userName: userName, userPhone: userPhone),
-      const ProfileSettingsScreen(),
-    ];
-
     return Scaffold(
       body: IndexedStack(
         index: _selectedIndex,
@@ -58,8 +64,10 @@ class _MainContainerState extends ConsumerState<MainContainer> {
           backgroundColor: context.cardBackground,
           selectedItemColor: CoopvestColors.primary,
           unselectedItemColor: context.textSecondary,
-          selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-          unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.normal, fontSize: 12),
+          selectedLabelStyle:
+              const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+          unselectedLabelStyle:
+              const TextStyle(fontWeight: FontWeight.normal, fontSize: 12),
           items: const [
             BottomNavigationBarItem(
               icon: Icon(Icons.home_outlined),
@@ -84,6 +92,36 @@ class _MainContainerState extends ConsumerState<MainContainer> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Wrapper widgets that read user data from providers internally,
+/// preventing MainContainer from rebuilding the full screens list on
+/// every provider change.
+class _WalletTab extends ConsumerWidget {
+  const _WalletTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(currentUserProvider);
+    return WalletDashboardScreen(
+      userId: user?.id ?? '',
+      userName: user?.name ?? 'User',
+    );
+  }
+}
+
+class _LoanTab extends ConsumerWidget {
+  const _LoanTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(currentUserProvider);
+    return LoanDashboardScreen(
+      userId: user?.id ?? '',
+      userName: user?.name ?? 'User',
+      userPhone: user?.phone ?? '',
     );
   }
 }

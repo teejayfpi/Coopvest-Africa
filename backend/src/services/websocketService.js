@@ -1,13 +1,14 @@
 /**
  * WebSocket Service
- * 
- * Real-time communication for loan progress updates and notifications
+ *
+ * Real-time communication for loan progress updates and notifications.
+ * Authentication uses Supabase JWT verification (getUser) instead of custom JWT.
  */
 
 const WebSocket = require('ws');
 const { v4: uuidv4 } = require('uuid');
-const jwt = require('jsonwebtoken');
 const logger = require('../utils/logger');
+const supabase = require('../config/supabase');
 
 class WebSocketService {
   constructor() {
@@ -15,18 +16,15 @@ class WebSocketService {
     this.clients = new Map(); // userId -> Set of WebSocket connections
     this.loanRooms = new Map(); // loanId -> Set of userIds subscribed
     this.heartbeatInterval = null;
-    
-    // JWT secret for token verification
-    this.jwtSecret = process.env.JWT_SECRET || 'coopvest-jwt-secret-2025';
   }
 
   /**
    * Initialize WebSocket server
    */
   initialize(server) {
-    this.wss = new WebSocket.Server({ 
+    this.wss = new WebSocket.Server({
       server,
-      path: '/ws'
+      path: '/ws',
     });
 
     logger.info('WebSocket server initializing...');
@@ -35,7 +33,6 @@ class WebSocketService {
       this.handleConnection(ws, req);
     });
 
-    // Start heartbeat to detect stale connections
     this.startHeartbeat();
 
     logger.info('WebSocket server initialized on path: /ws');
@@ -53,32 +50,27 @@ class WebSocketService {
 
     logger.info(`New WebSocket connection: ${connectionId}`);
 
-    // Handle pong (heartbeat response)
     ws.on('pong', () => {
       ws.isAlive = true;
     });
 
-    // Handle incoming messages
     ws.on('message', (data) => {
       this.handleMessage(ws, data);
     });
 
-    // Handle connection close
     ws.on('close', () => {
       this.handleDisconnect(ws);
     });
 
-    // Handle errors
     ws.on('error', (error) => {
       logger.error(`WebSocket error for ${connectionId}:`, error);
       this.handleDisconnect(ws);
     });
 
-    // Send connection confirmation
     this.sendToClient(ws, {
       type: 'connected',
       connectionId,
-      message: 'Connected to Coopvest WebSocket'
+      message: 'Connected to Coopvest WebSocket',
     });
   }
 
@@ -88,60 +80,71 @@ class WebSocketService {
   handleMessage(ws, data) {
     try {
       const message = JSON.parse(data.toString());
-      
+
       switch (message.type) {
         case 'authenticate':
           this.handleAuthenticate(ws, message);
           break;
-          
+
         case 'subscribe_loan':
           this.handleSubscribeLoan(ws, message);
           break;
-          
+
         case 'unsubscribe_loan':
           this.handleUnsubscribeLoan(ws, message);
           break;
-          
+
         case 'ping':
           this.sendToClient(ws, { type: 'pong', timestamp: Date.now() });
           break;
-          
+
         default:
           logger.warn(`Unknown message type: ${message.type}`);
           this.sendToClient(ws, {
             type: 'error',
-            message: `Unknown message type: ${message.type}`
+            message: `Unknown message type: ${message.type}`,
           });
       }
     } catch (error) {
       logger.error('Error parsing WebSocket message:', error);
       this.sendToClient(ws, {
         type: 'error',
-        message: 'Invalid message format'
+        message: 'Invalid message format',
       });
     }
   }
 
   /**
-   * Handle authentication message
+   * Handle authentication message — verifies Supabase JWT via getUser().
    */
-  handleAuthenticate(ws, message) {
+  async handleAuthenticate(ws, message) {
     try {
       const { token } = message;
-      
+
       if (!token) {
         this.sendToClient(ws, {
           type: 'error',
-          message: 'Authentication token required'
+          message: 'Authentication token required',
         });
         return;
       }
 
-      // Verify JWT token
-      const decoded = jwt.verify(token, this.jwtSecret);
-      ws.userId = decoded.userId || decoded.user_id;
-      
-      // Add to clients map
+      // Verify the Supabase access token
+      const {
+        data: { user },
+        error,
+      } = await supabase.auth.getUser(token);
+
+      if (error || !user) {
+        this.sendToClient(ws, {
+          type: 'error',
+          message: 'Authentication failed',
+        });
+        return;
+      }
+
+      ws.userId = user.id;
+
       if (!this.clients.has(ws.userId)) {
         this.clients.set(ws.userId, new Set());
       }
@@ -152,13 +155,13 @@ class WebSocketService {
       this.sendToClient(ws, {
         type: 'authenticated',
         userId: ws.userId,
-        message: 'Successfully authenticated'
+        message: 'Successfully authenticated',
       });
     } catch (error) {
       logger.error('WebSocket authentication error:', error);
       this.sendToClient(ws, {
         type: 'error',
-        message: 'Authentication failed'
+        message: 'Authentication failed',
       });
     }
   }
@@ -168,24 +171,20 @@ class WebSocketService {
    */
   handleSubscribeLoan(ws, message) {
     const { loanId } = message;
-    
+
     if (!ws.userId) {
       this.sendToClient(ws, {
         type: 'error',
-        message: 'Please authenticate first'
+        message: 'Please authenticate first',
       });
       return;
     }
 
     if (!loanId) {
-      this.sendToClient(ws, {
-        type: 'error',
-        message: 'Loan ID required'
-      });
+      this.sendToClient(ws, { type: 'error', message: 'Loan ID required' });
       return;
     }
 
-    // Add to loan room
     if (!this.loanRooms.has(loanId)) {
       this.loanRooms.set(loanId, new Set());
     }
@@ -197,10 +196,9 @@ class WebSocketService {
     this.sendToClient(ws, {
       type: 'subscribed',
       loanId,
-      message: `Subscribed to loan ${loanId}`
+      message: `Subscribed to loan ${loanId}`,
     });
 
-    // Send current progress
     this.sendLoanProgress(loanId, ws.userId);
   }
 
@@ -209,16 +207,12 @@ class WebSocketService {
    */
   handleUnsubscribeLoan(ws, message) {
     const { loanId } = message;
-    
+
     if (!loanId) {
-      this.sendToClient(ws, {
-        type: 'error',
-        message: 'Loan ID required'
-      });
+      this.sendToClient(ws, { type: 'error', message: 'Loan ID required' });
       return;
     }
 
-    // Remove from loan room
     if (this.loanRooms.has(loanId)) {
       this.loanRooms.get(loanId).delete(ws.userId);
     }
@@ -229,7 +223,7 @@ class WebSocketService {
     this.sendToClient(ws, {
       type: 'unsubscribed',
       loanId,
-      message: `Unsubscribed from loan ${loanId}`
+      message: `Unsubscribed from loan ${loanId}`,
     });
   }
 
@@ -237,7 +231,6 @@ class WebSocketService {
    * Handle client disconnect
    */
   handleDisconnect(ws) {
-    // Remove from clients map
     if (ws.userId && this.clients.has(ws.userId)) {
       this.clients.get(ws.userId).delete(ws);
       if (this.clients.get(ws.userId).size === 0) {
@@ -245,8 +238,7 @@ class WebSocketService {
       }
     }
 
-    // Remove from loan rooms
-    ws.subscribedLoans.forEach(loanId => {
+    ws.subscribedLoans.forEach((loanId) => {
       if (this.loanRooms.has(loanId)) {
         this.loanRooms.get(loanId).delete(ws.userId);
       }
@@ -260,14 +252,14 @@ class WebSocketService {
    */
   startHeartbeat() {
     this.heartbeatInterval = setInterval(() => {
-      this.wss.clients.forEach(ws => {
+      this.wss.clients.forEach((ws) => {
         if (ws.isAlive === false) {
           return ws.terminate();
         }
         ws.isAlive = false;
         ws.ping();
       });
-    }, 30000); // 30 seconds
+    }, 30000);
   }
 
   /**
@@ -293,19 +285,17 @@ class WebSocketService {
    */
   sendToUser(userId, data) {
     if (this.clients.has(userId)) {
-      this.clients.get(userId).forEach(ws => {
+      this.clients.get(userId).forEach((ws) => {
         this.sendToClient(ws, data);
       });
     }
   }
 
   /**
-   * Send loan progress update to all subscribers of a loan
+   * Broadcast loan progress to all subscribers of a loan
    */
   broadcastLoanProgress(loanId, progress) {
-    if (!this.loanRooms.has(loanId)) {
-      return;
-    }
+    if (!this.loanRooms.has(loanId)) return;
 
     const message = {
       type: 'loan_progress',
@@ -314,34 +304,46 @@ class WebSocketService {
       progress: {
         guarantorsFound: progress.guarantorsFound,
         guarantorsRequired: progress.guarantorsRequired,
-        percentage: Math.round((progress.guarantorsFound / progress.guarantorsRequired) * 100),
-        remaining: progress.guarantorsRequired - progress.guarantorsFound
+        percentage: Math.round(
+          (progress.guarantorsFound / progress.guarantorsRequired) * 100
+        ),
+        remaining: progress.guarantorsRequired - progress.guarantorsFound,
       },
-      guarantors: progress.guarantors || []
+      guarantors: progress.guarantors || [],
     };
 
-    // Get all userIds subscribed to this loan
     const subscribers = this.loanRooms.get(loanId);
-    
-    subscribers.forEach(userId => {
+    subscribers.forEach((userId) => {
       this.sendToUser(userId, message);
     });
 
-    logger.debug(`Broadcasted progress update for loan ${loanId} to ${subscribers.size} subscribers`);
+    logger.debug(
+      `Broadcasted progress update for loan ${loanId} to ${subscribers.size} subscribers`
+    );
   }
 
   /**
-   * Send loan progress to specific user
+   * Send current loan progress to a specific user
    */
   sendLoanProgress(loanId, userId) {
-    // In production, fetch from database
+    // TODO: fetch real progress from database in production
     const mockProgress = {
       guarantorsFound: 2,
       guarantorsRequired: 3,
       guarantors: [
-        { name: 'Jane Smith', phone: '+23480****5678', status: 'approved', timestamp: new Date().toISOString() },
-        { name: 'Mike Johnson', phone: '+23480****9012', status: 'approved', timestamp: new Date().toISOString() }
-      ]
+        {
+          name: 'Jane Smith',
+          phone: '+23480****5678',
+          status: 'approved',
+          timestamp: new Date().toISOString(),
+        },
+        {
+          name: 'Mike Johnson',
+          phone: '+23480****9012',
+          status: 'approved',
+          timestamp: new Date().toISOString(),
+        },
+      ],
     };
 
     this.sendToUser(userId, {
@@ -351,10 +353,13 @@ class WebSocketService {
       progress: {
         found: mockProgress.guarantorsFound,
         required: mockProgress.guarantorsRequired,
-        percentage: Math.round((mockProgress.guarantorsFound / mockProgress.guarantorsRequired) * 100),
-        remaining: mockProgress.guarantorsRequired - mockProgress.guarantorsFound
+        percentage: Math.round(
+          (mockProgress.guarantorsFound / mockProgress.guarantorsRequired) * 100
+        ),
+        remaining:
+          mockProgress.guarantorsRequired - mockProgress.guarantorsFound,
       },
-      guarantors: mockProgress.guarantors
+      guarantors: mockProgress.guarantors,
     });
   }
 
@@ -366,26 +371,25 @@ class WebSocketService {
       type: 'guarantor_action',
       loanId,
       timestamp: new Date().toISOString(),
-      action, // 'viewed', 'approved', 'declined'
-      guarantor: action.guarantor || null
+      action,
+      guarantor: action.guarantor || null,
     };
 
-    // Get subscribers for this loan
     if (this.loanRooms.has(loanId)) {
-      this.loanRooms.get(loanId).forEach(userId => {
+      this.loanRooms.get(loanId).forEach((userId) => {
         this.sendToUser(userId, message);
       });
     }
   }
 
   /**
-   * Broadcast notification to user
+   * Send notification to a user
    */
   sendNotification(userId, notification) {
     this.sendToUser(userId, {
       type: 'notification',
       timestamp: new Date().toISOString(),
-      notification
+      notification,
     });
   }
 
@@ -397,10 +401,12 @@ class WebSocketService {
       totalConnections: this.wss ? this.wss.clients.size : 0,
       authenticatedUsers: this.clients.size,
       activeLoanRooms: this.loanRooms.size,
-      clientsPerUser: Array.from(this.clients.entries()).map(([userId, sockets]) => ({
-        userId,
-        connections: sockets.size
-      }))
+      clientsPerUser: Array.from(this.clients.entries()).map(
+        ([userId, sockets]) => ({
+          userId,
+          connections: sockets.size,
+        })
+      ),
     };
   }
 
@@ -410,7 +416,7 @@ class WebSocketService {
   shutdown() {
     this.stopHeartbeat();
     if (this.wss) {
-      this.wss.clients.forEach(ws => {
+      this.wss.clients.forEach((ws) => {
         ws.close();
       });
       this.wss.close();
@@ -421,5 +427,4 @@ class WebSocketService {
   }
 }
 
-// Export singleton instance
 module.exports = new WebSocketService();
