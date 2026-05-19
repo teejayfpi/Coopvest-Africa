@@ -38,21 +38,53 @@ class HomeDashboardScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeDashboardScreen> createState() => _HomeDashboardScreenState();
 }
 
-class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
+class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
+    with WidgetsBindingObserver {
   late Future<void> _refreshFuture;
-  late Timer _refreshTimer;
+  Timer? _refreshTimer;
+  bool _appInForeground = true;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _refreshFuture = _loadData();
-    _setupPeriodicRefresh();
+    _startPeriodicRefresh();
   }
 
   @override
   void dispose() {
-    _refreshTimer.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    _stopPeriodicRefresh();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _appInForeground = true;
+      _startPeriodicRefresh();
+      _loadData();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      _appInForeground = false;
+      _stopPeriodicRefresh();
+    }
+  }
+
+  void _startPeriodicRefresh() {
+    _stopPeriodicRefresh();
+    // Refresh every 60 seconds only while the app is in the foreground
+    _refreshTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+      if (mounted && _appInForeground) {
+        _loadData();
+      }
+    });
+  }
+
+  void _stopPeriodicRefresh() {
+    _refreshTimer?.cancel();
+    _refreshTimer = null;
   }
 
   Future<void> _loadData() async {
@@ -66,14 +98,6 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
         debugPrint('Error loading dashboard data: $e');
       }
     }
-  }
-
-  void _setupPeriodicRefresh() {
-    _refreshTimer = Timer.periodic(const Duration(seconds: 15), (_) {
-      if (mounted) {
-        _loadData();
-      }
-    });
   }
 
   @override

@@ -8,9 +8,6 @@
         "dev": "nodemon src/server.js",
         "test": "jest --coverage",
         "test:watch": "jest --watch",
-        "migrate": "node migrate.js migrate",
-        "migrate:status": "node migrate.js status",
-        "migrate:seed-admin": "node migrate.js seed-admin",
         "seed": "node src/seed.js"
     },
     "keywords": [
@@ -25,7 +22,6 @@
     "license": "MIT",
     "dependencies": {
         "@supabase/supabase-js": "^2.100.0",
-        "bcryptjs": "^2.4.3",
         "cors": "^2.8.5",
         "dotenv": "^16.3.1",
         "express": "^4.18.2",
@@ -34,7 +30,6 @@
         "firebase-admin": "^12.0.0",
         "google-auth-library": "^10.5.0",
         "helmet": "^7.1.0",
-        "jsonwebtoken": "^9.0.2",
         "morgan": "^1.10.0",
         "morgan-json": "^1.1.0",
         "nodemailer": "^6.9.7",

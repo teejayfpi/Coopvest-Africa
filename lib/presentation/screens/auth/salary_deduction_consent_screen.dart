@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:firebase_auth/firebase_auth.dart' as fb;
+import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/network/api_client.dart';
@@ -35,9 +35,9 @@ class _SalaryDeductionConsentScreenState extends ConsumerState<SalaryDeductionCo
     final user = ref.read(currentUserProvider);
     if (user?.id != null && user!.id.isNotEmpty) return user.id;
     
-    // Finally fallback to Firebase UID
-    final fbUser = fb.FirebaseAuth.instance.currentUser;
-    return fbUser?.uid;
+    // Finally fallback to Supabase session user ID
+    final sbUser = sb.Supabase.instance.client.auth.currentUser;
+    return sbUser?.id;
   }
 
   Future<void> _submitConsent() async {

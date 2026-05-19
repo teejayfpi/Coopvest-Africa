@@ -1,4 +1,4 @@
-import 'package:firebase_auth/firebase_auth.dart' as fb;
+import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/network/api_client.dart';
@@ -12,66 +12,65 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
   return AuthRepository(apiClient);
 });
 
-/// Auth Repository — Firebase Auth + backend profile sync
+/// Auth Repository — Supabase Auth + backend profile sync
 ///
 /// Authentication flow:
-///   1. Sign in/up directly with Firebase Auth SDK (no backend call needed)
-///   2. Get the Firebase ID token
-///   3. Send the ID token to the backend to sync/create the profile row
+///   1. Sign in/up directly with Supabase Auth SDK
+///   2. Get the Supabase access token (JWT)
+///   3. Send the access token to the backend to sync/create the profile row
 ///   4. Backend returns the full User payload
 class AuthRepository {
   final ApiClient _apiClient;
-  final fb.FirebaseAuth _firebaseAuth = fb.FirebaseAuth.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
+  final sb.SupabaseClient _supabase = sb.Supabase.instance.client;
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    scopes: ['email', 'profile'],
+    serverClientId:
+        '1040576298736-991ja94slls4f6csarfheerlkg7bfpon.apps.googleusercontent.com',
+  );
   User? _cachedUser;
 
   AuthRepository(this._apiClient);
 
   // ─── helpers ────────────────────────────────────────────────────────────────
 
-  /// Get a fresh Firebase ID token and attach it to the API client.
-  Future<String> _refreshAndAttachToken() async {
-    final fbUser = _firebaseAuth.currentUser;
-    if (fbUser == null) throw AuthException('No authenticated Firebase user');
-    final token = await fbUser.getIdToken(true);
-    if (token == null) throw AuthException('Failed to get Firebase ID token');
+  /// Attach the current Supabase session token to the API client.
+  Future<String> _attachToken() async {
+    final session = _supabase.auth.currentSession;
+    if (session == null) throw AuthException('No active Supabase session');
+    final token = session.accessToken;
     _apiClient.setAuthToken(token);
-    await TokenStorage.saveTokens(accessToken: token);
-    logger.i('Auth token refreshed and saved to secure storage');
+    await TokenStorage.saveTokens(
+      accessToken: token,
+      refreshToken: session.refreshToken,
+    );
     return token;
   }
 
-  /// Check if there's a valid Firebase session (for biometric login)
+  /// Check if there's a valid Supabase session.
   Future<bool> hasValidSession() async {
-    return _firebaseAuth.currentUser != null;
+    return _supabase.auth.currentSession != null;
   }
 
-  /// Get the current Firebase user (for biometric login without re-auth)
-  fb.User? get currentFirebaseUser => _firebaseAuth.currentUser;
+  /// Get the current Supabase user.
+  sb.User? get currentSupabaseUser => _supabase.auth.currentUser;
 
-  /// Sync profile with backend after any Firebase sign-in and return User.
-  /// If backend sync fails (404/400), create a local User from Firebase data.
+  /// Sync profile with backend after any Supabase sign-in and return User.
   Future<User> _syncWithBackend() async {
-    await _refreshAndAttachToken();
-    
+    await _attachToken();
+
     try {
       final response = await _apiClient.post('/auth/sync');
       final user = User.fromJson(response['user'] as Map<String, dynamic>);
       _cachedUser = user;
       return user;
     } catch (e) {
-      // If sync endpoint fails (404 Resource not found, 400 Bad request),
-      // create a User from Firebase data so login can proceed
-      logger.w('Backend sync failed: $e - using Firebase user data');
-      
-      final fbUser = _firebaseAuth.currentUser;
-      if (fbUser == null) throw AuthException('No authenticated user');
-      
-      // Try to get user from /auth/me endpoint as fallback
+      logger.w('Backend sync failed: $e — using Supabase user data');
+
+      // Fallback to /auth/me
       try {
         final meResponse = await _apiClient.get('/auth/me');
         if (meResponse is Map<String, dynamic>) {
-          final userData = meResponse.containsKey('user') 
+          final userData = meResponse.containsKey('user')
               ? meResponse['user'] as Map<String, dynamic>
               : meResponse;
           final user = User.fromJson(userData);
@@ -81,23 +80,28 @@ class AuthRepository {
       } catch (meError) {
         logger.w('Backend /auth/me also failed: $meError');
       }
-      
-      // Create minimal User from Firebase data as last resort
+
+      // Last resort: build User from Supabase data
+      final sbUser = _supabase.auth.currentUser;
+      if (sbUser == null) throw AuthException('No authenticated user');
+      final meta = sbUser.userMetadata ?? {};
       final user = User(
-        id: fbUser.uid,
-        name: fbUser.displayName ?? 'User',
-        email: fbUser.email ?? '',
-        phone: fbUser.phoneNumber,
-        isEmailVerified: fbUser.emailVerified,
+        id: sbUser.id,
+        name: meta['name'] as String? ??
+            sbUser.email?.split('@').first ??
+            'User',
+        email: sbUser.email ?? '',
+        phone: meta['phone'] as String?,
+        isEmailVerified: sbUser.emailConfirmedAt != null,
         kycStatus: 'pending',
-        createdAt: fbUser.metadata.creationTime ?? DateTime.now(),
+        createdAt: DateTime.now(),
       );
       _cachedUser = user;
       return user;
     }
   }
 
-  // ─── Sign-in methods ─────────────────────────────────────────────────────────
+  // ─── Sign-in methods ──────────────────────────────────────────────────────
 
   /// Email + password login
   Future<User> login({
@@ -106,14 +110,14 @@ class AuthRepository {
     String? deviceId,
   }) async {
     try {
-      await _firebaseAuth.signInWithEmailAndPassword(
+      await _supabase.auth.signInWithPassword(
         email: email.trim(),
         password: password,
       );
       return await _syncWithBackend();
-    } on fb.FirebaseAuthException catch (e) {
-      logger.e('Firebase login error: ${e.code}');
-      throw AuthException(_mapFirebaseError(e));
+    } on sb.AuthException catch (e) {
+      logger.e('Supabase login error: ${e.message}');
+      throw AuthException(_mapSupabaseError(e));
     } catch (e) {
       logger.e('Login error: $e');
       rethrow;
@@ -130,27 +134,9 @@ class AuthRepository {
     String? referralCode,
   }) async {
     try {
-      final credential = await _firebaseAuth.createUserWithEmailAndPassword(
+      final response = await _supabase.auth.signUp(
         email: email.trim(),
         password: password,
-      );
-
-      // Update display name in Firebase
-      await credential.user?.updateDisplayName(name);
-
-      // Send email verification
-      try {
-        await credential.user?.sendEmailVerification();
-        logger.i('Verification email sent successfully to ${email.trim()}');
-      } catch (emailError) {
-        logger.e('Failed to send verification email: $emailError');
-        // Continue with registration even if email fails
-      }
-
-      // Attach token and create backend profile
-      await _refreshAndAttachToken();
-      final response = await _apiClient.post(
-        '/auth/register',
         data: {
           'name': name,
           'phone': phone,
@@ -158,12 +144,30 @@ class AuthRepository {
         },
       );
 
-      final user = User.fromJson(response['user'] as Map<String, dynamic>);
-      _cachedUser = user;
-      return user;
-    } on fb.FirebaseAuthException catch (e) {
-      logger.e('Firebase register error: ${e.code}');
-      throw AuthException(_mapFirebaseError(e));
+      if (response.user == null) {
+        throw AuthException('Registration failed. Please try again.');
+      }
+
+      // If session exists, sync with backend. Otherwise email confirmation needed.
+      if (response.session != null) {
+        return await _syncWithBackend();
+      } else {
+        final sbUser = response.user!;
+        final user = User(
+          id: sbUser.id,
+          name: name,
+          email: sbUser.email ?? email,
+          phone: phone,
+          isEmailVerified: false,
+          kycStatus: 'pending',
+          createdAt: DateTime.now(),
+        );
+        _cachedUser = user;
+        return user;
+      }
+    } on sb.AuthException catch (e) {
+      logger.e('Supabase register error: ${e.message}');
+      throw AuthException(_mapSupabaseError(e));
     } catch (e) {
       logger.e('Register error: $e');
       rethrow;
@@ -174,19 +178,23 @@ class AuthRepository {
   Future<User> googleSignIn({String? deviceId}) async {
     try {
       final googleAccount = await _googleSignIn.signIn();
-      if (googleAccount == null) throw AuthException('Google sign-in cancelled');
+      if (googleAccount == null) {
+        throw AuthException('Google sign-in cancelled');
+      }
 
       final googleAuth = await googleAccount.authentication;
-      final credential = fb.GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
+      final idToken = googleAuth.idToken;
+      if (idToken == null) throw AuthException('Failed to get Google ID token');
 
-      await _firebaseAuth.signInWithCredential(credential);
+      await _supabase.auth.signInWithIdToken(
+        provider: sb.OAuthProvider.google,
+        idToken: idToken,
+        accessToken: googleAuth.accessToken,
+      );
       return await _syncWithBackend();
-    } on fb.FirebaseAuthException catch (e) {
-      logger.e('Firebase Google sign-in error: ${e.code}');
-      throw AuthException(_mapFirebaseError(e));
+    } on sb.AuthException catch (e) {
+      logger.e('Supabase Google sign-in error: ${e.message}');
+      throw AuthException(_mapSupabaseError(e));
     } catch (e) {
       logger.e('Google sign-in error: $e');
       rethrow;
@@ -196,7 +204,8 @@ class AuthRepository {
   /// Register FCM token with the backend
   Future<void> registerFcmToken(String fcmToken) async {
     try {
-      await _apiClient.post('/notifications/fcm-token', data: {'token': fcmToken});
+      await _apiClient.post('/notifications/fcm-token',
+          data: {'token': fcmToken});
       logger.i('FCM token registered with backend');
     } catch (e) {
       logger.w('FCM token registration failed (non-fatal): $e');
@@ -224,7 +233,7 @@ class AuthRepository {
     }
   }
 
-  /// Logout — signs out from Firebase and revokes backend tokens
+  /// Logout — signs out from Supabase and revokes backend tokens
   Future<void> logout() async {
     try {
       await _apiClient.post('/auth/logout');
@@ -232,7 +241,7 @@ class AuthRepository {
       logger.w('Backend logout error (non-fatal): $e');
     } finally {
       await _googleSignIn.signOut();
-      await _firebaseAuth.signOut();
+      await _supabase.auth.signOut();
       _apiClient.clearAuthToken();
       await TokenStorage.clearTokens();
       _cachedUser = null;
@@ -240,32 +249,34 @@ class AuthRepository {
   }
 
   /// Get current user (with caching)
-  /// Falls back to Firebase user data if backend is unavailable
   Future<User> getCurrentUser({bool forceRefresh = false}) async {
     if (!forceRefresh && _cachedUser != null) return _cachedUser!;
-    
+
     try {
       final response = await _apiClient.get('/auth/me');
       if (response is Map<String, dynamic> && response.containsKey('user')) {
-        _cachedUser = User.fromJson(response['user'] as Map<String, dynamic>);
+        _cachedUser =
+            User.fromJson(response['user'] as Map<String, dynamic>);
       } else {
         _cachedUser = User.fromJson(response as Map<String, dynamic>);
       }
       return _cachedUser!;
     } catch (e) {
       logger.w('Get current user from backend failed: $e');
-      
-      // Fallback to Firebase user if backend fails
-      final fbUser = _firebaseAuth.currentUser;
-      if (fbUser != null) {
+
+      final sbUser = _supabase.auth.currentUser;
+      if (sbUser != null) {
+        final meta = sbUser.userMetadata ?? {};
         _cachedUser = User(
-          id: fbUser.uid,
-          name: fbUser.displayName ?? 'User',
-          email: fbUser.email ?? '',
-          phone: fbUser.phoneNumber,
-          isEmailVerified: fbUser.emailVerified,
+          id: sbUser.id,
+          name: meta['name'] as String? ??
+              sbUser.email?.split('@').first ??
+              'User',
+          email: sbUser.email ?? '',
+          phone: meta['phone'] as String?,
+          isEmailVerified: sbUser.emailConfirmedAt != null,
           kycStatus: 'pending',
-          createdAt: fbUser.metadata.creationTime ?? DateTime.now(),
+          createdAt: DateTime.now(),
         );
         return _cachedUser!;
       }
@@ -273,53 +284,59 @@ class AuthRepository {
     }
   }
 
-  /// Password reset — sends Firebase reset email (no backend call needed)
+  /// Password reset — sends Supabase reset email
   Future<void> requestPasswordReset(String email) async {
     try {
-      await _firebaseAuth.sendPasswordResetEmail(email: email.trim());
-    } on fb.FirebaseAuthException catch (e) {
+      await _supabase.auth.resetPasswordForEmail(email.trim());
+    } on sb.AuthException catch (e) {
       // Always return success to prevent email enumeration
-      logger.w('Password reset email error (non-fatal): ${e.code}');
+      logger.w('Password reset email error (non-fatal): ${e.message}');
     } catch (e) {
       logger.e('Request password reset error: $e');
       rethrow;
     }
   }
 
-  /// Reset password with OTP code — Firebase handles via the deep-link/OTP flow
-  Future<void> resetPassword({required String code, required String newPassword}) async {
+  /// Reset password with OTP token from Supabase email
+  Future<void> resetPassword(
+      {required String code, required String newPassword}) async {
     try {
-      await _firebaseAuth.confirmPasswordReset(code: code, newPassword: newPassword);
-    } on fb.FirebaseAuthException catch (e) {
-      throw AuthException(_mapFirebaseError(e));
+      await _supabase.auth.verifyOTP(
+        token: code,
+        type: sb.OtpType.recovery,
+      );
+      await _supabase.auth.updateUser(sb.UserAttributes(password: newPassword));
+    } on sb.AuthException catch (e) {
+      throw AuthException(_mapSupabaseError(e));
     }
   }
 
-  /// Change password — re-authenticates then updates in Firebase
+  /// Change password — re-authenticates then updates in Supabase
   Future<void> changePassword({
     required String currentPassword,
     required String newPassword,
   }) async {
     try {
-      final fbUser = _firebaseAuth.currentUser;
-      if (fbUser == null || fbUser.email == null) throw AuthException('Not authenticated');
+      final email = _supabase.auth.currentUser?.email;
+      if (email == null) throw AuthException('Not authenticated');
 
-      // Re-authenticate
-      final credential = fb.EmailAuthProvider.credential(
-        email: fbUser.email!,
+      // Re-authenticate to confirm current password
+      await _supabase.auth.signInWithPassword(
+        email: email,
         password: currentPassword,
       );
-      await fbUser.reauthenticateWithCredential(credential);
-      await fbUser.updatePassword(newPassword);
-    } on fb.FirebaseAuthException catch (e) {
-      throw AuthException(_mapFirebaseError(e));
+      await _supabase.auth.updateUser(sb.UserAttributes(password: newPassword));
+    } on sb.AuthException catch (e) {
+      throw AuthException(_mapSupabaseError(e));
     }
   }
 
-  /// Email verification — sends verification email
+  /// Send / resend email verification
   Future<void> verifyEmail(String code) async {
     try {
-      await _firebaseAuth.currentUser?.sendEmailVerification();
+      final email = _supabase.auth.currentUser?.email;
+      if (email == null) return;
+      await _supabase.auth.resend(type: sb.OtpType.signup, email: email);
     } catch (e) {
       logger.e('Verify email error: $e');
       rethrow;
@@ -329,50 +346,42 @@ class AuthRepository {
   /// Resend email verification
   Future<void> resendVerificationCode(String email) async {
     try {
-      final currentUser = _firebaseAuth.currentUser;
-      if (currentUser == null) {
-        throw AuthException('No user signed in. Please sign in again.');
-      }
-      await currentUser.sendEmailVerification();
-      logger.i('Verification email resent successfully to ${currentUser.email}');
-    } on fb.FirebaseAuthException catch (e) {
-      logger.e('Resend verification Firebase error: ${e.code} - ${e.message}');
-      throw AuthException(_mapFirebaseError(e));
+      await _supabase.auth.resend(type: sb.OtpType.signup, email: email.trim());
+      logger.i('Verification email resent to $email');
+    } on sb.AuthException catch (e) {
+      logger.e('Resend verification Supabase error: ${e.message}');
+      throw AuthException(_mapSupabaseError(e));
     } catch (e) {
       logger.e('Resend verification error: $e');
       rethrow;
     }
   }
 
-  /// Restore session on app startup using Firebase's persisted auth state
-  /// This ensures users stay logged in until they explicitly sign out
+  /// Restore session on app startup using Supabase's persisted auth state
   Future<bool> restoreSession() async {
     try {
-      final fbUser = _firebaseAuth.currentUser;
-      if (fbUser == null) {
-        logger.i('No Firebase user found - session not restored');
+      final session = _supabase.auth.currentSession;
+      if (session == null) {
+        logger.i('No Supabase session found — session not restored');
         return false;
       }
 
-      logger.i('Firebase user found: ${fbUser.email} - restoring session...');
+      logger.i(
+          'Supabase session found: ${_supabase.auth.currentUser?.email} — restoring...');
 
-      // Refresh token and re-attach to API client
-      await _refreshAndAttachToken();
-      
-      // Try to get user from backend, but don't fail if backend is down
+      await _attachToken();
+
       try {
         await getCurrentUser(forceRefresh: true);
         logger.i('Session restored successfully from backend');
       } catch (e) {
-        logger.w('Backend user fetch failed during restore, using Firebase data: $e');
-        // getCurrentUser already handles fallback to Firebase user
+        logger.w('Backend user fetch failed during restore: $e');
       }
-      
+
       return true;
     } catch (e) {
       logger.e('Session restore failed: $e');
-      // Only clear tokens if Firebase auth itself failed, not just backend
-      if (_firebaseAuth.currentUser == null) {
+      if (_supabase.auth.currentSession == null) {
         _apiClient.clearAuthToken();
         await TokenStorage.clearTokens();
       }
@@ -380,26 +389,38 @@ class AuthRepository {
     }
   }
 
-  /// Restore session for biometric login - refreshes token without full re-auth
+  /// Restore session for biometric login
   Future<User> restoreSessionWithBiometric() async {
-    final fbUser = _firebaseAuth.currentUser;
-    if (fbUser == null) throw AuthException('No authenticated session found');
-    
-    // Refresh token and return user
-    await _refreshAndAttachToken();
+    final session = _supabase.auth.currentSession;
+    if (session == null) throw AuthException('No authenticated session found');
+    await _attachToken();
     return await getCurrentUser(forceRefresh: true);
   }
 
-  // Legacy token refresh — kept for backward-compat with ErrorInterceptor
-  Future<AuthResponse> refreshToken(String refreshToken) async {
+  /// Token refresh — uses Supabase session refresh
+  Future<AuthResponse> refreshToken(String ignored) async {
     try {
-      final token = await _refreshAndAttachToken();
+      final currentSession = _supabase.auth.currentSession;
+      if (currentSession == null) throw AuthException('No session to refresh');
+
+      final response = await _supabase.auth.refreshSession();
+      final newSession = response.session;
+      if (newSession == null) throw AuthException('Token refresh failed');
+
+      await TokenStorage.saveTokens(
+        accessToken: newSession.accessToken,
+        refreshToken: newSession.refreshToken,
+      );
+      _apiClient.setAuthToken(newSession.accessToken);
+
       final user = await getCurrentUser(forceRefresh: true);
       return AuthResponse(
-        accessToken: token,
-        refreshToken: '',
+        accessToken: newSession.accessToken,
+        refreshToken: newSession.refreshToken ?? '',
         user: user,
-        expiresAt: DateTime.now().add(const Duration(hours: 1)),
+        expiresAt: newSession.expiresAt != null
+            ? DateTime.fromMillisecondsSinceEpoch(newSession.expiresAt! * 1000)
+            : DateTime.now().add(const Duration(hours: 1)),
       );
     } catch (e) {
       logger.e('Token refresh error: $e');
@@ -411,39 +432,38 @@ class AuthRepository {
   Future<String> getUserName() async => (await getCurrentUser()).name;
   Future<String?> getUserPhone() async => (await getCurrentUser()).phone;
 
-  // ─── Error mapping ────────────────────────────────────────────────────────
+  // ─── Error mapping ─────────────────────────────────────────────────────────
 
-  String _mapFirebaseError(fb.FirebaseAuthException e) {
-    switch (e.code) {
-      case 'user-not-found':
-        return 'No account found with this email address.';
-      case 'wrong-password':
-      case 'invalid-credential':
-      case 'INVALID_LOGIN_CREDENTIALS':
-        return 'Incorrect email or password.';
-      case 'email-already-in-use':
-        return 'An account already exists with this email address.';
-      case 'weak-password':
-        return 'Password is too weak. Use at least 8 characters.';
-      case 'invalid-email':
-        return 'Please enter a valid email address.';
-      case 'user-disabled':
-        return 'This account has been disabled.';
-      case 'too-many-requests':
-        return 'Too many attempts. Please wait a moment and try again.';
-      case 'network-request-failed':
-        return 'Network error. Please check your connection.';
-      case 'requires-recent-login':
-        return 'Please log in again before making this change.';
-      case 'expired-action-code':
-        return 'This link has expired. Please request a new one.';
-      case 'invalid-action-code':
-        return 'Invalid reset code. Please request a new one.';
-      case 'channel-error':
-        // This handles the PigeonUserDetails error in older versions
-        return 'Authentication service error. Please update the app.';
-      default:
-        return e.message ?? 'Authentication failed. Please try again.';
+  String _mapSupabaseError(sb.AuthException e) {
+    final msg = e.message.toLowerCase();
+    if (msg.contains('invalid login') ||
+        msg.contains('invalid email or password') ||
+        msg.contains('user not found')) {
+      return 'Incorrect email or password.';
     }
+    if (msg.contains('email already')) {
+      return 'An account already exists with this email address.';
+    }
+    if (msg.contains('password') && msg.contains('short')) {
+      return 'Password is too weak. Use at least 8 characters.';
+    }
+    if (msg.contains('email') && msg.contains('invalid')) {
+      return 'Please enter a valid email address.';
+    }
+    if (msg.contains('disabled') || msg.contains('banned')) {
+      return 'This account has been disabled.';
+    }
+    if (msg.contains('rate limit') || msg.contains('too many')) {
+      return 'Too many attempts. Please wait a moment and try again.';
+    }
+    if (msg.contains('network') || msg.contains('connection')) {
+      return 'Network error. Please check your connection.';
+    }
+    if (msg.contains('expired')) {
+      return 'This link has expired. Please request a new one.';
+    }
+    return e.message.isNotEmpty
+        ? e.message
+        : 'Authentication failed. Please try again.';
   }
 }

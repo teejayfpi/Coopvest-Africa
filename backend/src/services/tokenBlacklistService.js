@@ -5,8 +5,6 @@
  * Uses Redis for storage (with in-memory fallback)
  */
 
-const jwt = require('jsonwebtoken');
-
 // In-memory fallback for when Redis is not available
 const memoryBlacklist = new Map();
 
