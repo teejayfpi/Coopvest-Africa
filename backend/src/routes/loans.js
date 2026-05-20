@@ -589,7 +589,7 @@ router.get(
       notice:
         'Late loan repayments may attract a ₦3,000 penalty fee after repeated default notices. ' +
         'Continued non-payment beyond three months may trigger guarantor recovery procedures ' +
-        'in accordance with Coopvest Africa's loan policy.',
+        "in accordance with Coopvest Africa\u2019s loan policy.",
     });
   }
 );

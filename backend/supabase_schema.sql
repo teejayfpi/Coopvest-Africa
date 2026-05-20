@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS public.kyc (
   date_of_birth DATE,
   personal_info JSONB DEFAULT '{}'::jsonb,
   contact_info JSONB DEFAULT '{}'::jsonb,
-  employment JSONB DEFAULT '{}'::jsonb,
+  employment_info JSONB DEFAULT '{}'::jsonb,
   bank_info JSONB DEFAULT '{}'::jsonb,
   selfie JSONB DEFAULT '{}'::jsonb,
   submitted_at TIMESTAMPTZ,
