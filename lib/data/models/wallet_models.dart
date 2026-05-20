@@ -109,15 +109,19 @@ class Transaction extends Equatable {
 
   factory Transaction.fromJson(Map<String, dynamic> json) {
     return Transaction(
-      id: json['id'] as String,
-      walletId: json['wallet_id'] as String,
-      type: json['type'] as String,
-      amount: (json['amount'] as num).toDouble(),
-      status: json['status'] as String,
+      id: json['id'] as String? ?? '',
+      walletId: json['wallet_id'] as String? ?? '',
+      type: json['type'] as String? ?? 'credit',
+      amount: (json['amount'] as num?)?.toDouble() ?? 0.0,
+      status: json['status'] as String? ?? 'completed',
       description: json['description'] as String?,
-      referenceId: json['reference_id'] as String?,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      referenceId: json['reference_id'] as String? ?? json['reference'] as String?,
+      createdAt: json['created_at'] != null
+          ? DateTime.parse(json['created_at'] as String)
+          : DateTime.now(),
+      updatedAt: json['updated_at'] != null
+          ? DateTime.parse(json['updated_at'] as String)
+          : DateTime.now(),
     );
   }
 

@@ -115,7 +115,9 @@ class WalletRepository {
         data: {'amount': amount, if (description != null) 'description': description},
       );
 
-      return Transaction.fromJson(response as Map<String, dynamic>);
+      final data = response as Map<String, dynamic>;
+      final txnData = data['transaction'] as Map<String, dynamic>? ?? data;
+      return Transaction.fromJson(txnData);
     } catch (e) {
       logger.e('Make contribution error: $e');
       rethrow;
