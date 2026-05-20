@@ -59,7 +59,7 @@ router.patch('/', [body('preferences').optional().isObject()], validate, async (
     const { data, error } = await supabase
       .from('user_settings')
       .update(update)
-      .eq('id', existing.id)
+      .eq('profile_id', existing.profile_id)
       .select('*')
       .single();
     if (error) throw error;
