@@ -197,25 +197,6 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
 
                 const SizedBox(height: 24),
 
-                // Apply New Loan Button
-                PrimaryButton(
-                  label: '+ Apply for New Loan',
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => LoanApplicationScreen(
-                          userId: widget.userId,
-                          userName: widget.userName,
-                          userPhone: widget.userPhone,
-                        ),
-                      ),
-                    );
-                  },
-                  width: double.infinity,
-                ),
-
-                const SizedBox(height: 24),
-
                 // Loan History Section
                 Text(
                   'Loan History',

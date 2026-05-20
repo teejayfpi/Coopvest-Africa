@@ -100,6 +100,17 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  /// Update user profile
+  Future<void> updateProfile({String? name, String? phone}) async {
+    try {
+      final user = await _authRepository.updateProfile(name: name, phone: phone);
+      state = state.copyWith(user: user);
+    } catch (e) {
+      logger.e('Update profile error: $e');
+      rethrow;
+    }
+  }
+
   /// Submit KYC
   Future<void> submitKYC({required KYCSubmission submission}) async {
     state = state.copyWith(status: AuthStatus.loading);
