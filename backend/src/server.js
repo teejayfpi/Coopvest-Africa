@@ -251,7 +251,28 @@ app.use('/api/v1/watchlist', watchlistRoutes);
 app.use('/api/v1/analytics', analyticsRoutes);
 app.use('/api/v1/guarantor', guarantorRoutes);
 
-// Aliases for Flutter app (Dio baseUrl: /api, paths: /guarantor/...)
+// ==============================================================================
+// FLUTTER APP COMPATIBILITY — /api/<path> mirrors /api/v1/<path>
+// The Flutter Dio client uses baseUrl=/api, so all requests hit /api/<path>.
+// Mount every route set at /api/ to avoid 404s.
+// ==============================================================================
+app.use('/api/auth', authLimiter, authRoutes);
+app.use('/api/auth', emailVerificationRoutes);
+app.use('/api/referrals', requireFeatureFlag('referralSystem'), referralRoutes);
+app.use('/api/tickets', ticketRoutes);
+app.use('/api/loans', requireFeatureFlag('loanModule'), loanRoutes);
+app.use('/api/wallet', walletRoutes);
+app.use('/api/user', userRoutes);
+app.use('/api/kyc', kycRoutes);
+app.use('/api/savings', requireFeatureFlag('savingsModule'), savingsRoutes);
+app.use('/api/rollover', rolloverRoutes);
+app.use('/api/investments', requireFeatureFlag('investmentModule'), investmentsRoutes);
+app.use('/api/notifications', requireFeatureFlag('notifications'), notificationRoutes);
+app.use('/api/bank-accounts', bankAccountRoutes);
+app.use('/api/transactions', transactionRoutes);
+app.use('/api/settings', settingsRoutes);
+app.use('/api/watchlist', watchlistRoutes);
+app.use('/api/analytics', analyticsRoutes);
 app.use('/api/guarantor', guarantorRoutes);
 // Root-level alias in case Dio resolves absolute paths from host root
 app.use('/guarantor', guarantorRoutes);
@@ -265,39 +286,13 @@ app.get('/api/v1/auth/kyc/status', (req, res, next) => {
   req.url = '/status';
   kycRoutes(req, res, next);
 });
-
-// Aliases for requested endpoints
-app.post('/api/auth/login', authLimiter, (req, res, next) => {
-  req.url = '/login';
-  authRoutes(req, res, next);
+app.post('/api/auth/kyc/submit', (req, res, next) => {
+  req.url = '/submit';
+  kycRoutes(req, res, next);
 });
-app.get('/api/auth/complete-registration/status', (req, res, next) => {
-  req.url = '/complete-registration/status';
-  authRoutes(req, res, next);
-});
-app.post('/api/auth/complete-registration', authLimiter, (req, res, next) => {
-  req.url = '/complete-registration';
-  authRoutes(req, res, next);
-});
-app.post('/api/auth/verify-email', (req, res, next) => {
-  req.url = '/verify-otp';
-  emailVerificationRoutes(req, res, next);
-});
-app.post('/api/auth/resend-verification', (req, res, next) => {
-  req.url = '/resend-otp';
-  emailVerificationRoutes(req, res, next);
-});
-app.get('/api/user/profile', (req, res, next) => {
-  req.url = '/profile';
-  authRoutes(req, res, next);
-});
-app.post('/api/loans/apply', (req, res, next) => {
-  req.url = '/apply';
-  loanRoutes(req, res, next);
-});
-app.get('/api/wallet/balance', (req, res, next) => {
-  req.url = '/balance';
-  walletRoutes(req, res, next);
+app.get('/api/auth/kyc/status', (req, res, next) => {
+  req.url = '/status';
+  kycRoutes(req, res, next);
 });
 
 // ==============================================================================

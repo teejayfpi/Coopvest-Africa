@@ -88,7 +88,7 @@ class LoanApplicationRequest {
 
   Map<String, dynamic> toJson() => {
         'loanType': loanType,
-        'loanAmount': loanAmount,
+        'amount': loanAmount,
         'tenureMonths': tenureMonths,
         'purpose': purpose,
       };
