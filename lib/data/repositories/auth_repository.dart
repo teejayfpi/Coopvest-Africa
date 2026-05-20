@@ -212,6 +212,27 @@ class AuthRepository {
     }
   }
 
+  /// Update user profile on the backend
+  Future<User> updateProfile({String? name, String? phone}) async {
+    try {
+      final data = <String, dynamic>{};
+      if (name != null) data['name'] = name;
+      if (phone != null) data['phone'] = phone;
+
+      final response = await _apiClient.put('/user/profile', data: data);
+      final userData = response['user'] as Map<String, dynamic>;
+      final user = _cachedUser?.copyWith(
+        name: userData['name'] as String? ?? _cachedUser?.name,
+        phone: userData['phone'] as String? ?? _cachedUser?.phone,
+      ) ?? User.fromJson(userData);
+      _cachedUser = user;
+      return user;
+    } catch (e) {
+      logger.e('Update profile error: $e');
+      rethrow;
+    }
+  }
+
   /// Submit KYC
   Future<void> submitKYC({required KYCSubmission submission}) async {
     try {

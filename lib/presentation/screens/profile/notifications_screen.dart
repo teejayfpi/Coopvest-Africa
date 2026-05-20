@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../presentation/widgets/common/cards.dart';
@@ -21,6 +22,40 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
   bool _savingsUpdates = true;
   bool _promotionalOffers = false;
   bool _securityAlerts = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPreferences();
+  }
+
+  Future<void> _loadPreferences() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() {
+        _pushNotifications = prefs.getBool('notif_push') ?? true;
+        _emailNotifications = prefs.getBool('notif_email') ?? true;
+        _smsNotifications = prefs.getBool('notif_sms') ?? false;
+        _transactionAlerts = prefs.getBool('notif_transactions') ?? true;
+        _loanUpdates = prefs.getBool('notif_loans') ?? true;
+        _savingsUpdates = prefs.getBool('notif_savings') ?? true;
+        _promotionalOffers = prefs.getBool('notif_promos') ?? false;
+        _securityAlerts = prefs.getBool('notif_security') ?? true;
+      });
+    }
+  }
+
+  Future<void> _savePreferences() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('notif_push', _pushNotifications);
+    await prefs.setBool('notif_email', _emailNotifications);
+    await prefs.setBool('notif_sms', _smsNotifications);
+    await prefs.setBool('notif_transactions', _transactionAlerts);
+    await prefs.setBool('notif_loans', _loanUpdates);
+    await prefs.setBool('notif_savings', _savingsUpdates);
+    await prefs.setBool('notif_promos', _promotionalOffers);
+    await prefs.setBool('notif_security', _securityAlerts);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -124,11 +159,14 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Notification preferences saved'), backgroundColor: CoopvestColors.success),
-                  );
-                  Navigator.of(context).pop();
+                onPressed: () async {
+                  await _savePreferences();
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Notification preferences saved'), backgroundColor: CoopvestColors.success),
+                    );
+                    Navigator.of(context).pop();
+                  }
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: CoopvestColors.primary,
