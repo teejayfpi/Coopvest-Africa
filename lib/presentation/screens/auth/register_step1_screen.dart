@@ -105,11 +105,20 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
           );
 
       if (mounted) {
-        Navigator.of(context).pushNamed('/register-step2', arguments: {
+        final regArgs = {
           'name': _nameController.text.trim(),
           'phone': _phoneController.text.trim(),
           'email': _emailController.text.trim().toLowerCase(),
-        });
+        };
+
+        // If email is already confirmed (autoconfirm enabled), skip
+        // the verification screen and go straight to onboarding.
+        final sbUser = sb.Supabase.instance.client.auth.currentUser;
+        if (sbUser?.emailConfirmedAt != null) {
+          Navigator.of(context).pushNamed('/register-step3', arguments: regArgs);
+        } else {
+          Navigator.of(context).pushNamed('/register-step2', arguments: regArgs);
+        }
       }
     } catch (e) {
       if (mounted) {
