@@ -325,42 +325,79 @@ class WebSocketService {
   /**
    * Send current loan progress to a specific user
    */
-  sendLoanProgress(loanId, userId) {
-    // TODO: fetch real progress from database in production
-    const mockProgress = {
-      guarantorsFound: 2,
-      guarantorsRequired: 3,
-      guarantors: [
-        {
-          name: 'Jane Smith',
-          phone: '+23480****5678',
-          status: 'approved',
-          timestamp: new Date().toISOString(),
-        },
-        {
-          name: 'Mike Johnson',
-          phone: '+23480****9012',
-          status: 'approved',
-          timestamp: new Date().toISOString(),
-        },
-      ],
-    };
+  async sendLoanProgress(loanId, userId) {
+    try {
+      // 1. Fetch QR code details for the loan
+      const { data: qrData, error: qrError } = await supabase
+        .from('loan_qrs')
+        .select('guarantors_required, guarantors_found')
+        .eq('loan_id', loanId)
+        .maybeSingle();
 
-    this.sendToUser(userId, {
-      type: 'loan_progress',
-      loanId,
-      timestamp: new Date().toISOString(),
-      progress: {
-        found: mockProgress.guarantorsFound,
-        required: mockProgress.guarantorsRequired,
-        percentage: Math.round(
-          (mockProgress.guarantorsFound / mockProgress.guarantorsRequired) * 100
-        ),
-        remaining:
-          mockProgress.guarantorsRequired - mockProgress.guarantorsFound,
-      },
-      guarantors: mockProgress.guarantors,
-    });
+      if (qrError) {
+        logger.error(`Error fetching QR data for loan ${loanId}:`, qrError);
+      }
+
+      // 2. Fetch loan guarantors and join with profile details
+      const { data: guarantors, error: gError } = await supabase
+        .from('loan_guarantors')
+        .select(`
+          status,
+          consented_at,
+          created_at,
+          profiles (
+            name,
+            phone
+          )
+        `)
+        .eq('loan_id', loanId);
+
+      if (gError) {
+        logger.error(`Error fetching guarantors for loan ${loanId}:`, gError);
+      }
+
+      // 3. Structure the progress data
+      const guarantorsRequired = qrData?.guarantors_required || 3;
+      
+      const consentedGuarantors = guarantors 
+        ? guarantors.filter(g => g.status === 'consented' || g.status === 'approved') 
+        : [];
+      const guarantorsFound = consentedGuarantors.length;
+
+      const formattedGuarantors = (guarantors || []).map(g => {
+        const profile = g.profiles || {};
+        let maskedPhone = profile.phone || '';
+        if (maskedPhone.length > 7) {
+          maskedPhone = maskedPhone.slice(0, 7) + '****' + maskedPhone.slice(-4);
+        }
+        return {
+          name: profile.name || 'Unknown',
+          phone: maskedPhone,
+          status: g.status === 'consented' ? 'approved' : g.status, // Map 'consented' to 'approved' for frontend compatibility
+          timestamp: g.consented_at || g.created_at || new Date().toISOString(),
+        };
+      });
+
+      this.sendToUser(userId, {
+        type: 'loan_progress',
+        loanId,
+        timestamp: new Date().toISOString(),
+        progress: {
+          found: guarantorsFound,
+          required: guarantorsRequired,
+          percentage: Math.round((guarantorsFound / guarantorsRequired) * 100),
+          remaining: Math.max(0, guarantorsRequired - guarantorsFound),
+        },
+        guarantors: formattedGuarantors,
+      });
+    } catch (error) {
+      logger.error(`Failed to send real-time loan progress for loan ${loanId} to user ${userId}:`, error);
+      // Fallback to sending basic error or empty status if DB fails
+      this.sendToUser(userId, {
+        type: 'error',
+        message: 'Failed to retrieve real-time loan progress',
+      });
+    }
   }
 
   /**
