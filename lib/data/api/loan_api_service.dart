@@ -36,17 +36,17 @@ class LoanApiService {
 
   /// Confirm guarantee (guarantor accepts)
   Future<GuarantorConfirmResponse> confirmGuarantee(String loanId, GuarantorConfirmRequest request) {
-    return _dio.post('/loans/$loanId/guarantors/confirm', data: request).then((response) => GuarantorConfirmResponse.fromJson(response.data));
+    return _dio.post('/loans/$loanId/guarantors/confirm', data: request.toJson()).then((response) => GuarantorConfirmResponse.fromJson(response.data));
   }
 
   /// Decline guarantee (guarantor rejects)
   Future<GuarantorDeclineResponse> declineGuarantee(String loanId, GuarantorDeclineRequest request) {
-    return _dio.post('/loans/$loanId/guarantors/decline', data: request).then((response) => GuarantorDeclineResponse.fromJson(response.data));
+    return _dio.post('/loans/$loanId/guarantors/decline', data: request.toJson()).then((response) => GuarantorDeclineResponse.fromJson(response.data));
   }
 
   /// Cancel loan application
   Future<LoanCancelResponse> cancelLoan(String loanId, LoanCancelRequest request) {
-    return _dio.post('/loans/$loanId/cancel', data: request).then((response) => LoanCancelResponse.fromJson(response.data));
+    return _dio.post('/loans/$loanId/cancel', data: request.toJson()).then((response) => LoanCancelResponse.fromJson(response.data));
   }
 
   /// Get loan repayment schedule
@@ -56,7 +56,7 @@ class LoanApiService {
 
   /// Make loan repayment
   Future<LoanRepayResponse> makeRepayment(String loanId, LoanRepayRequest request) {
-    return _dio.post('/loans/$loanId/repay', data: request).then((response) => LoanRepayResponse.fromJson(response.data));
+    return _dio.post('/loans/$loanId/repay', data: request.toJson()).then((response) => LoanRepayResponse.fromJson(response.data));
   }
 
   /// Get available loan types
