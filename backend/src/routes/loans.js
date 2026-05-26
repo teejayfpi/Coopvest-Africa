@@ -273,13 +273,14 @@ router.get('/qr-stats', async (req, res) => {
  * after decoding the QR image so the guarantor sees real borrower data.
  */
 router.get(
-  '/qr/:qrId',
+  '/qr/:qrId?',
   authenticate,
-  [param('qrId').notEmpty()],
-  validate,
   async (req, res) => {
     try {
-      const { qrId } = req.params;
+      const qrId = (req.params.qrId || '').trim();
+      if (!qrId) {
+        return res.status(400).json({ success: false, error: 'QR code ID is required' });
+      }
 
       const { data: qrRow, error: qrErr } = await supabase
         .from('loan_qrs')
