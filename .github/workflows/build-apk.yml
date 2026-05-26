@@ -44,11 +44,15 @@ jobs:
           echo "JAVA_HOME=/usr/lib/jvm/java-${{ env.JAVA_VERSION }}-openjdk-amd64" >> $GITHUB_ENV
 
       - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: 'stable'
-          cache: true
+        run: |
+          FLUTTER_TAR="flutter_linux_${{ env.FLUTTER_VERSION }}-stable.tar.xz"
+          echo "Downloading Flutter ${{ env.FLUTTER_VERSION }}..."
+          curl -fsSL "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/$FLUTTER_TAR" \
+            -o /tmp/flutter.tar.xz
+          tar xf /tmp/flutter.tar.xz -C /opt
+          echo "/opt/flutter/bin" >> $GITHUB_PATH
+          /opt/flutter/bin/flutter --version
+          /opt/flutter/bin/flutter config --no-analytics
 
       - name: Install Flutter dependencies
         run: flutter pub get
