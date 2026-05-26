@@ -47,7 +47,7 @@ class PaymentSettingsNotifier extends StateNotifier<PaymentAccountDetails> {
 
   Future<void> loadFromApi() async {
     try {
-      final resp = await _apiClient.get('/admin/payment-settings');
+      final resp = await _apiClient.get('/wallet/payment-settings');
       if (resp is Map<String, dynamic> && resp['success'] == true) {
         state = PaymentAccountDetails.fromJson(resp);
       }
