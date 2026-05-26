@@ -26,6 +26,14 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
   String _selectedPaymentMethod = 'bank_transfer';
   bool _isProcessing = false;
 
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(() {
+      ref.read(paymentSettingsProvider.notifier).loadFromApi();
+    });
+  }
+
   final List<Map<String, dynamic>> _paymentMethods = [
     {'value': 'bank_transfer', 'label': 'Bank Transfer', 'icon': Icons.account_balance},
     {'value': 'card', 'label': 'Debit Card', 'icon': Icons.credit_card},
