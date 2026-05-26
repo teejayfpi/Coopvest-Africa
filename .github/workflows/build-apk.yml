@@ -22,7 +22,7 @@ on:
           - debug
 
 env:
-  FLUTTER_VERSION: '3.24.5'
+  FLUTTER_VERSION: '3.44.0'
   JAVA_VERSION: '17'
 
 jobs:
