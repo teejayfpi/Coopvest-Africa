@@ -108,7 +108,7 @@ const GUARANTOR_SELECT = `
     tenure_months,
     profile_id,
     status,
-    profiles (
+    profiles!loans_profile_id_fkey (
       id,
       name,
       phone

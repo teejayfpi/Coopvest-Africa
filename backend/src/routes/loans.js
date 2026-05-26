@@ -296,7 +296,7 @@ router.get(
             tenure_months,
             status,
             profile_id,
-            profiles (
+            profiles!loans_profile_id_fkey (
               id,
               name,
               phone
