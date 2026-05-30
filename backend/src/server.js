@@ -47,6 +47,10 @@ const watchlistRoutes = require('./routes/watchlist');
 const analyticsRoutes = require('./routes/analytics');
 const adminApiRoutes = require('./routes/adminApi');
 const guarantorRoutes = require('./routes/guarantor');
+const announcementRoutes = require('./routes/announcements');
+const contributionRoutes = require('./routes/contributions');
+const documentRoutes = require('./routes/documents');
+const terminationRoutes = require('./routes/termination');
 
 // Import middleware
 const errorHandler = require('./middleware/errorHandler');
@@ -250,6 +254,10 @@ app.use('/api/v1/settings', settingsRoutes);
 app.use('/api/v1/watchlist', watchlistRoutes);
 app.use('/api/v1/analytics', analyticsRoutes);
 app.use('/api/v1/guarantor', guarantorRoutes);
+app.use('/api/v1/announcements', announcementRoutes);
+app.use('/api/v1/contributions', contributionRoutes);
+app.use('/api/v1/documents', documentRoutes);
+app.use('/api/v1/termination', terminationRoutes);
 
 // ==============================================================================
 // FLUTTER APP COMPATIBILITY — /api/<path> mirrors /api/v1/<path>
@@ -274,6 +282,10 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/watchlist', watchlistRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/guarantor', guarantorRoutes);
+app.use('/api/announcements', announcementRoutes);
+app.use('/api/contributions', contributionRoutes);
+app.use('/api/documents', documentRoutes);
+app.use('/api/termination', terminationRoutes);
 // Root-level alias in case Dio resolves absolute paths from host root
 app.use('/guarantor', guarantorRoutes);
 
