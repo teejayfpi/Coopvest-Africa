@@ -6,7 +6,6 @@ import '../models/rollover_models.dart';
 
 
 
-
 /// API Service for Loan Rollover Operations - Member-only functionality
 ///
 /// NOTE: Admin operations (approvals, rejections) have been moved to the
@@ -19,17 +18,17 @@ class RolloverApiService {
 
   /// Check eligibility for a loan rollover
   Future<RolloverEligibilityResponse> checkEligibility(String loanId) =>
-      _dio.get('/rollovers/$loanId/eligibility')
+      _dio.get('/rollover/$loanId/eligibility')
           .then((r) => RolloverEligibilityResponse.fromJson(r.data));
 
   /// Create a new rollover request
   Future<RolloverRequestResponse> createRolloverRequest(String loanId, RolloverRequest request) =>
-      _dio.post('/rollovers/$loanId', data: request)
+      _dio.post('/rollover/$loanId', data: request)
           .then((r) => RolloverRequestResponse.fromJson(r.data));
 
   /// Get rollover details by ID
   Future<RolloverDetailsResponse> getRolloverDetails(String rolloverId) =>
-      _dio.get('/rollovers/$rolloverId')
+      _dio.get('/rollover/$rolloverId')
           .then((r) => RolloverDetailsResponse.fromJson(r.data));
 
   /// Get all rollover requests for a member
@@ -39,27 +38,27 @@ class RolloverApiService {
 
   /// Invite a guarantor for rollover
   Future<GuarantorInviteResponse> inviteGuarantor(String rolloverId, GuarantorInviteRequest request) =>
-      _dio.post('/rollovers/$rolloverId/guarantors', data: request)
+      _dio.post('/rollover/$rolloverId/guarantors', data: request)
           .then((r) => GuarantorInviteResponse.fromJson(r.data));
 
   /// Get guarantors for a rollover
   Future<GuarantorListResponse> getRolloverGuarantors(String rolloverId) =>
-      _dio.get('/rollovers/$rolloverId/guarantors')
+      _dio.get('/rollover/$rolloverId/guarantors')
           .then((r) => GuarantorListResponse.fromJson(r.data));
 
   /// Guarantor responds to rollover consent request
   Future<GuarantorConsentResponse> guarantorRespond(String rolloverId, String guarantorId, GuarantorRespondRequest request) =>
-      _dio.post('/rollovers/$rolloverId/guarantors/$guarantorId/respond', data: request)
+      _dio.post('/rollover/$rolloverId/guarantors/$guarantorId/respond', data: request)
           .then((r) => GuarantorConsentResponse.fromJson(r.data));
 
   /// Member cancels rollover request
   Future<RolloverActionResponse> cancelRollover(String rolloverId, CancelRequest request) =>
-      _dio.post('/rollovers/$rolloverId/cancel', data: request)
+      _dio.post('/rollover/$rolloverId/cancel', data: request)
           .then((r) => RolloverActionResponse.fromJson(r.data));
 
   /// Replace a guarantor who declined
   Future<GuarantorReplaceResponse> replaceGuarantor(String rolloverId, String guarantorId, GuarantorInviteRequest request) =>
-      _dio.put('/rollovers/$rolloverId/guarantors/$guarantorId', data: request)
+      _dio.put('/rollover/$rolloverId/guarantors/$guarantorId', data: request)
           .then((r) => GuarantorReplaceResponse.fromJson(r.data));
 }
 
