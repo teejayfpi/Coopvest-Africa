@@ -286,37 +286,97 @@ router.post('/salary-consent', [
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared helper — defines which fields are required vs optional across the
+// complete-registration flow. Used by status, profile-completeness, and the
+// POST endpoint so all three stay in sync.
+// ─────────────────────────────────────────────────────────────────────────────
+const REGISTRATION_FIELDS = {
+  personal: {
+    required: ['gender', 'date_of_birth', 'address', 'state', 'monthly_amount'],
+    optional: ['lga', 'contribution_method', 'preferred_payment_day'],
+  },
+  employment: {
+    required: ['occupation', 'employer_name', 'employment_type'],
+    optional: ['employer_staff_id', 'work_address', 'years_of_employment', 'staff_id'],
+  },
+  nextOfKin: {
+    required: ['nok_name', 'nok_relationship', 'nok_phone'],
+    optional: ['nok_address'],
+  },
+  identity: {
+    required: [],
+    optional: ['id_type', 'id_number'],
+  },
+};
+
+function hasValue(v) {
+  return v !== null && v !== undefined && String(v).trim() !== '';
+}
+
+function checkCompletion(personal_info, employment_info) {
+  const p = personal_info || {};
+  const e = employment_info || {};
+
+  const sections = {
+    personal: {
+      missing: REGISTRATION_FIELDS.personal.required.filter((f) => !hasValue(p[f])),
+      filled: REGISTRATION_FIELDS.personal.required.filter((f) => hasValue(p[f])).length,
+      total: REGISTRATION_FIELDS.personal.required.length,
+    },
+    employment: {
+      missing: REGISTRATION_FIELDS.employment.required.filter((f) => !hasValue(e[f])),
+      filled: REGISTRATION_FIELDS.employment.required.filter((f) => hasValue(e[f])).length,
+      total: REGISTRATION_FIELDS.employment.required.length,
+    },
+    nextOfKin: {
+      missing: REGISTRATION_FIELDS.nextOfKin.required.filter((f) => !hasValue(p[f])),
+      filled: REGISTRATION_FIELDS.nextOfKin.required.filter((f) => hasValue(p[f])).length,
+      total: REGISTRATION_FIELDS.nextOfKin.required.length,
+    },
+  };
+
+  const totalRequired = Object.values(sections).reduce((s, sec) => s + sec.total, 0);
+  const totalFilled = Object.values(sections).reduce((s, sec) => s + sec.filled, 0);
+  const allRequiredMissing = Object.values(sections).flatMap((sec) => sec.missing);
+
+  return {
+    sections,
+    totalRequired,
+    totalFilled,
+    completionPercentage: totalRequired === 0 ? 100 : Math.round((totalFilled / totalRequired) * 100),
+    isComplete: allRequiredMissing.length === 0,
+    missingRequiredFields: allRequiredMissing,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // GET /api/v1/auth/complete-registration/status
 // Returns whether the authenticated user has already completed onboarding.
 // The Flutter app calls this on screen load to skip the flow for returning users.
+// FIX: now checks that required fields actually have real values, not just
+// that the JSON object exists (previously any partial save marked users done).
 // ─────────────────────────────────────────────────────────────────────────────
 router.get('/complete-registration/status', authenticate, async (req, res) => {
   try {
-    const [profileRes, kycRes] = await Promise.all([
-      supabase
-        .from('profiles')
-        .select('department')
-        .eq('id', req.user.id)
-        .maybeSingle(),
-      supabase
-        .from('kyc')
-        .select('national_id, personal_info, employment_info')
-        .eq('profile_id', req.user.id)
-        .maybeSingle(),
-    ]);
+    const { data: kycRow, error } = await supabase
+      .from('kyc')
+      .select('national_id, personal_info, employment_info')
+      .eq('profile_id', req.user.id)
+      .maybeSingle();
 
-    if (profileRes.error) throw profileRes.error;
-    if (kycRes.error) throw kycRes.error;
+    if (error) throw error;
 
-    // Consider onboarding complete when the KYC row exists and has personal_info saved.
-    const kycRow = kycRes.data;
-    const completed = !!(
-      kycRow &&
-      kycRow.personal_info &&
-      Object.keys(kycRow.personal_info).length > 0
-    );
+    const { isComplete, completionPercentage, missingRequiredFields } = kycRow
+      ? checkCompletion(kycRow.personal_info, kycRow.employment_info)
+      : { isComplete: false, completionPercentage: 0, missingRequiredFields: [] };
 
-    return res.json({ success: true, completed });
+    return res.json({
+      success: true,
+      completed: isComplete,
+      completionPercentage,
+      missingRequiredFields,
+    });
   } catch (err) {
     logger.error('complete-registration/status error:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -325,9 +385,13 @@ router.get('/complete-registration/status', authenticate, async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/v1/auth/complete-registration
-// Saves all onboarding data collected after email verification.
+// Saves onboarding data collected after email verification.
 // Called by the Flutter registration_onboarding_screen on the final step.
 // Also reachable via the /api/auth/complete-registration compat alias in server.js.
+//
+// Accepts an optional `partial: true` flag for intermediate step saves.
+// Without it, all required fields must be present or the request is rejected
+// with a 422 listing exactly which fields are missing.
 // ─────────────────────────────────────────────────────────────────────────────
 router.post('/complete-registration', authenticate, async (req, res) => {
   try {
@@ -338,7 +402,35 @@ router.post('/complete-registration', authenticate, async (req, res) => {
       monthly_amount, contribution_method, preferred_payment_day,
       nok_name, nok_relationship, nok_phone, nok_address,
       id_type, id_number, staff_id,
+      partial,
     } = req.body;
+
+    // Build the same shape checkCompletion() expects so we can validate inline.
+    const personal_info_candidate = {
+      gender, state, lga, staff_id, id_type,
+      nok_name, nok_relationship, nok_phone, nok_address,
+      monthly_amount, contribution_method, preferred_payment_day,
+    };
+    const employment_info_candidate = {
+      occupation, employer_name, employment_type,
+      employer_staff_id, work_address, years_of_employment,
+    };
+
+    if (!partial) {
+      const { isComplete, missingRequiredFields } = checkCompletion(
+        personal_info_candidate,
+        employment_info_candidate
+      );
+
+      if (!isComplete) {
+        return res.status(422).json({
+          success: false,
+          message: 'Please fill in all required fields before completing registration.',
+          missingRequiredFields,
+          hint: 'Send partial:true to save progress without completing registration.',
+        });
+      }
+    }
 
     // 1. Update the profiles row with employer/dept info
     const { error: profileError } = await supabase
@@ -396,9 +488,53 @@ router.post('/complete-registration', authenticate, async (req, res) => {
       return res.status(500).json({ success: false, error: kycError.message });
     }
 
-    return res.status(200).json({ success: true, message: 'Registration details saved.' });
+    return res.status(200).json({
+      success: true,
+      message: partial
+        ? 'Progress saved. Complete the remaining required fields to finish registration.'
+        : 'Registration details saved.',
+      partial: !!partial,
+    });
   } catch (err) {
     logger.error('complete-registration error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/v1/auth/profile-completeness
+// Returns a per-section breakdown of how complete the user's profile is.
+// Flutter app uses this to show nudge banners and a "Complete your profile" prompt.
+// Response shape:
+//   {
+//     completionPercentage: 45,
+//     isComplete: false,
+//     sections: {
+//       personal:    { filled: 2, total: 5, missing: ['gender','state','monthly_amount'] },
+//       employment:  { filled: 3, total: 3, missing: [] },
+//       nextOfKin:   { filled: 1, total: 3, missing: ['nok_relationship','nok_phone'] },
+//     },
+//     missingRequiredFields: ['gender','state','monthly_amount','nok_relationship','nok_phone'],
+//   }
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/profile-completeness', authenticate, async (req, res) => {
+  try {
+    const { data: kycRow, error } = await supabase
+      .from('kyc')
+      .select('personal_info, employment_info')
+      .eq('profile_id', req.user.id)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    const result = checkCompletion(
+      kycRow?.personal_info || {},
+      kycRow?.employment_info || {}
+    );
+
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    logger.error('profile-completeness error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
