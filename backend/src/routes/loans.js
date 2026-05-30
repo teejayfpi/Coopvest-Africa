@@ -338,6 +338,28 @@ router.get(
 );
 
 /**
+ * GET /api/v1/loans/:loanId/status
+ * Returns the current status of a loan.
+ * Called by Flutter LoanApiService to poll loan state.
+ */
+router.get(
+  '/:loanId/status',
+  authenticate,
+  [param('loanId').notEmpty()],
+  validate,
+  verifyLoanOwnership,
+  async (req, res) => {
+    const loan = req.loan;
+    res.json({
+      success: true,
+      loanId: loan.loan_id || loan.id,
+      status: loan.status,
+      updatedAt: loan.updated_at,
+    });
+  }
+);
+
+/**
  * GET /api/v1/loans/:loanId
  */
 router.get(
@@ -351,14 +373,60 @@ router.get(
   }
 );
 
+/**
+ * POST /api/v1/loans/:loanId/cancel
+ * Cancels a pending loan application.
+ * Called by Flutter LoanDashboardScreen / LoanDetailsScreen cancel action.
+ */
+router.post(
+  '/:loanId/cancel',
+  authenticate,
+  [
+    param('loanId').notEmpty(),
+    body('reason').optional().isString().isLength({ max: 500 }),
+  ],
+  validate,
+  verifyLoanOwnership,
+  async (req, res) => {
+    try {
+      const loan = req.loan;
+      const { reason } = req.body;
+
+      if (!['pending', 'under_review'].includes(loan.status)) {
+        return res.status(400).json({
+          success: false,
+          error: `Only pending or under-review loans can be cancelled. Current status: ${loan.status}`,
+        });
+      }
+
+      const now = new Date().toISOString();
+      const { data: updated, error } = await supabase
+        .from('loans')
+        .update({ status: 'cancelled', cancelled_at: now, updated_at: now })
+        .eq('id', loan.id)
+        .select('*')
+        .single();
+      if (error) throw error;
+
+      await auditLog(req.user.id, 'LOAN_CANCELLED', loan.id, { reason: reason || null });
+
+      res.json({
+        success: true,
+        message: 'Loan application cancelled successfully.',
+        loan: updated,
+      });
+    } catch (err) {
+      logger.error('Loan cancel error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+);
 
 /**
  * POST /api/v1/loans/:loanId/guarantors/confirm
  *
  * Called by the Flutter GuarantorVerificationScreen when a guarantor
  * accepts responsibility for a loan after scanning the borrower's QR code.
- * Finds the loan_guarantors record by loan_id + guarantor_id and marks it
- * as 'consented'. Returns progress toward the required 3 guarantors.
  */
 router.post(
   '/:loanId/guarantors/confirm',
@@ -373,10 +441,8 @@ router.post(
       const { loanId } = req.params;
       const { guarantor_id: guarantorId, guarantor_name, guarantor_phone } = req.body;
 
-      // The guarantor confirming must be the authenticated user or a valid profile
       const actorId = req.user.id;
 
-      // Find the pending guarantor record
       const { data: row, error: findErr } = await supabase
         .from('loan_guarantors')
         .select('id, status, loan_id')
@@ -389,7 +455,6 @@ router.post(
       const now = new Date().toISOString();
 
       if (!row) {
-        // No record yet — create one (guarantor scanned QR before record existed)
         const { error: insertErr } = await supabase
           .from('loan_guarantors')
           .insert({
@@ -410,7 +475,6 @@ router.post(
         if (updateErr) throw updateErr;
       }
 
-      // Update the loan_qrs guarantors_found count
       try {
         const { data: qrRow } = await supabase
           .from('loan_qrs')
@@ -425,7 +489,6 @@ router.post(
         }
       } catch (_) {}
 
-      // Count total confirmed guarantors for this loan
       const { count: confirmedCount } = await supabase
         .from('loan_guarantors')
         .select('id', { count: 'exact', head: true })
@@ -452,8 +515,6 @@ router.post(
 
 /**
  * POST /api/v1/loans/:loanId/guarantors/decline
- *
- * Called when a guarantor declines a loan guarantee request.
  */
 router.post(
   '/:loanId/guarantors/decline',
@@ -501,8 +562,6 @@ router.post(
 
 /**
  * POST /api/v1/loans/:loanId/apply-penalty
- * Applies the ₦3,000 late repayment charge per Loan Policy §4.1 (Stage 2).
- * Only applicable after the 2nd consecutive missed month — not on first miss.
  */
 router.post(
   '/:loanId/apply-penalty',
@@ -561,7 +620,6 @@ router.post(
 
 /**
  * GET /api/v1/loans/:loanId/recovery-status
- * Returns the current recovery stage and penalty info for a loan.
  */
 router.get(
   '/:loanId/recovery-status',
