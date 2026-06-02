@@ -52,11 +52,42 @@ const authenticate = async (req, res, next) => {
     const token = authHeader.split(' ')[1];
 
     let profile;
+    let supabaseUser;
+    
     try {
       const result = await verifyToken(token);
       profile = result.profile;
+      supabaseUser = result.supabaseUser;
     } catch (err) {
       return res.status(401).json({ success: false, error: 'Invalid or expired token' });
+    }
+
+    // Auto-create profile if Supabase user exists but profile doesn't
+    // This handles the case where a user signs up via Supabase but the profile
+    // row hasn't been created yet
+    if (!profile && supabaseUser) {
+      logger.info(`Creating missing profile for user: ${supabaseUser.id}`);
+      
+      const userId = `USR-${Date.now().toString(36).toUpperCase()}`;
+      const { data: newProfile, error: createError } = await supabase
+        .from('profiles')
+        .insert({
+          id: supabaseUser.id,
+          user_id: userId,
+          email: supabaseUser.email,
+          name: supabaseUser.user_metadata?.name || supabaseUser.email?.split('@').first || 'User',
+          phone: supabaseUser.user_metadata?.phone || null,
+          role: 'member',
+        })
+        .select('id, user_id, email, name, phone, role, is_active, is_flagged')
+        .maybeSingle();
+      
+      if (createError) {
+        logger.error('Failed to auto-create profile:', createError.message);
+        return res.status(500).json({ success: false, error: 'Failed to create user profile' });
+      }
+      
+      profile = newProfile;
     }
 
     if (!profile) {
