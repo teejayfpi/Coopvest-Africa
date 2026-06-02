@@ -274,4 +274,111 @@ router.get('/insights', authenticate, async (req, res) => {
   }
 });
 
+/**
+ * PUT /api/v1/user/contribution-method
+ * Update user's contribution method (manual vs payroll)
+ */
+router.put('/contribution-method', authenticate, [
+  body('method').isIn(['manual', 'payroll']).withMessage('Method must be "manual" or "payroll"'),
+  body('monthlyAmount').optional().isFloat({ min: 0 }).withMessage('Monthly amount must be a positive number'),
+  body('preferredDay').optional().isInt({ min: 1, max: 28 }).withMessage('Preferred day must be between 1 and 28')
+], validate, async (req, res) => {
+  try {
+    const { method, monthlyAmount, preferredDay } = req.body;
+    const { userId } = req.user;
+
+    // Build update object
+    const updateData = {
+      contribution_method: method,
+      updated_at: new Date().toISOString()
+    };
+
+    // If manual method, include additional settings
+    if (method === 'manual') {
+      if (monthlyAmount !== undefined) {
+        updateData.preferred_monthly_contribution = monthlyAmount;
+      }
+      if (preferredDay !== undefined) {
+        updateData.contribution_day = preferredDay;
+      }
+    }
+
+    // Fetch profile first to get profile_id
+    const { data: profile, error: profileErr } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('user_id', userId)
+      .single();
+
+    if (profileErr) throw profileErr;
+    if (!profile) {
+      return res.status(404).json({
+        success: false,
+        error: 'Profile not found'
+      });
+    }
+
+    // Update profile with contribution method
+    const { data, error } = await supabase
+      .from('profiles')
+      .update(updateData)
+      .eq('user_id', userId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    logger.info(`User ${userId} updated contribution method to ${method}`);
+
+    res.json({
+      success: true,
+      contributionMethod: {
+        method: data.contribution_method,
+        monthlyAmount: data.preferred_monthly_contribution || null,
+        preferredDay: data.contribution_day || null
+      },
+      message: method === 'manual' 
+        ? 'Manual contribution method saved' 
+        : 'Payroll deduction request submitted'
+    });
+  } catch (error) {
+    logger.error('Update contribution method error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/v1/user/contribution-method
+ * Get user's current contribution method
+ */
+router.get('/contribution-method', authenticate, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('contribution_method, preferred_monthly_contribution, contribution_day')
+      .eq('user_id', req.user.userId)
+      .single();
+
+    if (error && error.code !== 'PGRST116') throw error;
+
+    res.json({
+      success: true,
+      contributionMethod: {
+        method: data?.contribution_method || 'manual',
+        monthlyAmount: data?.preferred_monthly_contribution || 5000,
+        preferredDay: data?.contribution_day || 5
+      }
+    });
+  } catch (error) {
+    logger.error('Get contribution method error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;
