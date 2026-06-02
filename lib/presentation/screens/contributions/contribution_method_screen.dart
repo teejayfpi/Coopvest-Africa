@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
+import '../../../core/network/api_client.dart';
 import '../../../presentation/widgets/common/buttons.dart';
 
 /// Contribution method options
@@ -60,8 +61,18 @@ class _ContributionMethodScreenState
 
     setState(() => _isSaving = true);
     try {
-      // TODO: call API to update contribution method on profile
-      await Future.delayed(const Duration(milliseconds: 800));
+      // Call API to update contribution method
+      // The ApiClient's AuthInterceptor handles token automatically
+      final apiClient = ref.read(apiClientProvider);
+      
+      await apiClient.put(
+        '/user/contribution-method',
+        data: {
+          'method': _selectedMethod == ContributionMethodOption.manual ? 'manual' : 'payroll',
+          'monthlyAmount': _selectedMethod == ContributionMethodOption.manual ? _contributionAmount : null,
+          'preferredDay': _selectedMethod == ContributionMethodOption.manual ? _contributionDay : null,
+        },
+      );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
