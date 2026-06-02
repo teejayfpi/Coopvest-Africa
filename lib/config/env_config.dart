@@ -39,8 +39,8 @@ class EnvConfig {
 }
 
 class EnvironmentContext {
-  static Environment _env = Environment.dev;
-  static EnvConfig _config = EnvConfig.dev;
+  static Environment _env = Environment.staging; // Default to staging for mobile builds
+  static EnvConfig _config = EnvConfig.staging;
 
   static void setEnvironment(Environment env) {
     _env = env;
