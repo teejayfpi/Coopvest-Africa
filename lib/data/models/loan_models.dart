@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import '../../config/app_config.dart';
 
 /// Loan Model
 class Loan extends Equatable {
@@ -51,7 +52,7 @@ class Loan extends Equatable {
       status: json['status'] as String? ?? 'pending',
       purpose: json['purpose'] as String?,
       guarantorsAccepted: json['guarantors_accepted'] as int? ?? 0,
-      guarantorsRequired: json['guarantors_required'] as int? ?? 3,
+      guarantorsRequired: json['guarantors_required'] as int? ?? AppConfig.guarantorsRequired,
       createdAt: json['created_at'] != null ? DateTime.parse(json['created_at'] as String) : DateTime.now(),
       updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at'] as String) : DateTime.now(),
       approvedAt: json['approved_at'] != null
