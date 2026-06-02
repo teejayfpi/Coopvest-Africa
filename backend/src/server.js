@@ -262,7 +262,8 @@ app.use('/api/v1/termination', terminationRoutes);
 // ==============================================================================
 // FLUTTER APP COMPATIBILITY — /api/<path> mirrors /api/v1/<path>
 // The Flutter Dio client uses baseUrl=/api, so all requests hit /api/<path>.
-// Mount every route set at /api/ to avoid 404s.
+// Each route set is mounted at BOTH prefixes to avoid 404s from either client.
+// This is intentional duplication to maintain backward compatibility.
 // ==============================================================================
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/auth', emailVerificationRoutes);
