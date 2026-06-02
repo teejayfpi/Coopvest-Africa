@@ -1,10 +1,8 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../../config/theme_config.dart';
 
-/// Shows a beautiful animated splash screen for [minDuration] before
-/// handing off to [child]. The [isReady] flag signals that app bootstrap
-/// is complete; the screen stays visible until BOTH [isReady] is true AND
-/// [minDuration] has elapsed.
+/// Coopvest Splash Screen with brand-consistent animations
 class SplashScreen extends StatefulWidget {
   final bool isReady;
   final Widget child;
@@ -23,44 +21,38 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen>
     with TickerProviderStateMixin {
-  // intro sequence
   late final AnimationController _introCtrl;
   late final Animation<double> _logoScale;
   late final Animation<double> _logoOpacity;
   late final Animation<Offset> _textSlide;
   late final Animation<double> _textFade;
   late final Animation<double> _taglineFade;
-  late final Animation<double> _badgeFade;
 
-  // pulsing rings (looped)
   late final AnimationController _pulseCtrl;
-
-  // gentle logo float (looped)
   late final AnimationController _floatCtrl;
   late final Animation<double> _floatY;
-
-  // indeterminate shimmer for loading bar (looped)
   late final AnimationController _barCtrl;
-
-  // shimmer sweep (looped)
   late final AnimationController _shimmerCtrl;
-
-  // exit fade — reduced to 150ms delay + 400ms fade (was 300ms + 600ms)
   late final AnimationController _exitCtrl;
   late final Animation<double> _exitFade;
+  late final AnimationController _textCycleCtrl;
+  
+  int _currentTextIndex = 0;
+  final List<String> _loadingTexts = [
+    'Initializing...',
+    'Loading your account...',
+    'Connecting to server...',
+    'Almost ready...',
+  ];
 
   bool _splashVisible = true;
   bool _minElapsed = false;
-
-  /// Guard against _tryDismiss being called simultaneously from
-  /// _onMinElapsed() and didUpdateWidget().
   bool _dismissing = false;
 
   @override
   void initState() {
     super.initState();
 
-    // intro 1.8 s
     _introCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 1800));
 
@@ -90,18 +82,11 @@ class _SplashScreenState extends State<SplashScreen>
           parent: _introCtrl,
           curve: const Interval(0.55, 0.82, curve: Curves.easeIn)),
     );
-    _badgeFade = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-          parent: _introCtrl,
-          curve: const Interval(0.72, 1.0, curve: Curves.easeIn)),
-    );
 
-    // pulse rings
     _pulseCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 2600))
       ..repeat();
 
-    // float
     _floatCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 3200))
       ..repeat(reverse: true);
@@ -109,18 +94,14 @@ class _SplashScreenState extends State<SplashScreen>
       CurvedAnimation(parent: _floatCtrl, curve: Curves.easeInOut),
     );
 
-    // indeterminate loading bar — loops independently of minDuration so it
-    // never misrepresents actual boot progress.
     _barCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 1400))
       ..repeat();
 
-    // shimmer
     _shimmerCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 1800))
       ..repeat();
 
-    // exit: 400ms fade (was 600ms)
     _exitCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 400));
     _exitFade = Tween<double>(begin: 1.0, end: 0.0).animate(
@@ -132,9 +113,17 @@ class _SplashScreenState extends State<SplashScreen>
       }
     });
 
-    // min-duration timer — drives the guard, NOT a visible progress bar
-    Future.delayed(widget.minDuration, _onMinElapsed);
+    _textCycleCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 2500))
+      ..addListener(() {
+        final newIndex = (_textCycleCtrl.value * _loadingTexts.length).floor();
+        if (newIndex != _currentTextIndex && newIndex < _loadingTexts.length) {
+          setState(() => _currentTextIndex = newIndex);
+        }
+      })
+      ..repeat();
 
+    Future.delayed(widget.minDuration, _onMinElapsed);
     _introCtrl.forward();
   }
 
@@ -153,12 +142,10 @@ class _SplashScreenState extends State<SplashScreen>
 
   Future<void> _tryDismiss() async {
     if (!widget.isReady || !_minElapsed) return;
-    // Guard: only one dismiss sequence can run at a time
     if (_dismissing) return;
     _dismissing = true;
 
     if (!_introCtrl.isCompleted) await _introCtrl.forward();
-    // Reduced settle delay: 150ms (was 300ms)
     await Future.delayed(const Duration(milliseconds: 150));
     if (mounted) _exitCtrl.forward();
   }
@@ -171,24 +158,18 @@ class _SplashScreenState extends State<SplashScreen>
     _barCtrl.dispose();
     _shimmerCtrl.dispose();
     _exitCtrl.dispose();
+    _textCycleCtrl.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    // Once the splash has fully faded out, render the child with zero overhead.
-    // The child is NOT built while the splash is visible — avoids wasting
-    // CPU/memory on heavy home screens during the most sensitive startup window.
     if (!_splashVisible) return widget.child;
 
     return AnimatedBuilder(
       animation: Listenable.merge([
-        _introCtrl,
-        _pulseCtrl,
-        _floatCtrl,
-        _barCtrl,
-        _shimmerCtrl,
-        _exitCtrl,
+        _introCtrl, _pulseCtrl, _floatCtrl, _barCtrl, 
+        _shimmerCtrl, _exitCtrl, _textCycleCtrl,
       ]),
       builder: (context, _) => FadeTransition(
         opacity: _exitFade,
@@ -198,19 +179,16 @@ class _SplashScreenState extends State<SplashScreen>
           textSlide: _textSlide.value,
           textFade: _textFade.value,
           taglineFade: _taglineFade.value,
-          badgeFade: _badgeFade.value,
           pulseValue: _pulseCtrl.value,
           floatY: _floatY.value,
           barValue: _barCtrl.value,
           shimmerValue: _shimmerCtrl.value,
-          isReady: widget.isReady,
+          loadingText: _loadingTexts[_currentTextIndex],
         ),
       ),
     );
   }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
 
 class _SplashContent extends StatelessWidget {
   final double logoScale;
@@ -218,19 +196,11 @@ class _SplashContent extends StatelessWidget {
   final Offset textSlide;
   final double textFade;
   final double taglineFade;
-  final double badgeFade;
   final double pulseValue;
   final double floatY;
   final double barValue;
   final double shimmerValue;
-  final bool isReady;
-
-  static const Color _navy      = Color(0xFF080F1C);
-  static const Color _blue      = Color(0xFF1B3A6B);
-  static const Color _midBlue   = Color(0xFF1E4A8A);
-  static const Color _gold      = Color(0xFFD4AF37);
-  static const Color _lightGold = Color(0xFFEDD97C);
-  static const Color _green     = Color(0xFF2E7D32);
+  final String loadingText;
 
   const _SplashContent({
     required this.logoScale,
@@ -238,12 +208,11 @@ class _SplashContent extends StatelessWidget {
     required this.textSlide,
     required this.textFade,
     required this.taglineFade,
-    required this.badgeFade,
     required this.pulseValue,
     required this.floatY,
     required this.barValue,
     required this.shimmerValue,
-    required this.isReady,
+    required this.loadingText,
   });
 
   @override
@@ -251,27 +220,31 @@ class _SplashContent extends StatelessWidget {
     final size = MediaQuery.of(context).size;
 
     return Scaffold(
-      backgroundColor: _navy,
+      backgroundColor: CoopvestColors.primary,
       body: Stack(children: [
-        // radial gradient background
+        // Gradient background using Coopvest colors
         Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             gradient: RadialGradient(
-              center: Alignment(0, -0.20),
+              center: const Alignment(0, -0.20),
               radius: 1.4,
-              colors: [_midBlue, _blue, _navy],
-              stops: [0.0, 0.45, 1.0],
+              colors: [
+                CoopvestColors.primaryLight.withOpacity(0.8),
+                CoopvestColors.primary,
+                CoopvestColors.primaryDark,
+              ],
+              stops: const [0.0, 0.45, 1.0],
             ),
           ),
         ),
 
-        // subtle animated diagonal lines
+        // Animated diagonal lines
         CustomPaint(
           size: size,
           painter: _DiagonalLinePainter(shimmerValue),
         ),
 
-        // pulsing sonar rings
+        // Pulsing rings
         Center(
           child: CustomPaint(
             size: const Size(260, 260),
@@ -279,12 +252,12 @@ class _SplashContent extends StatelessWidget {
           ),
         ),
 
-        // main content
+        // Main content
         SafeArea(
           child: Column(children: [
             const Spacer(flex: 3),
 
-            // floating logo
+            // Floating logo
             Transform.translate(
               offset: Offset(0, floatY * logoOpacity),
               child: Opacity(
@@ -296,107 +269,83 @@ class _SplashContent extends StatelessWidget {
               ),
             ),
 
-            const SizedBox(height: 38),
+            const SizedBox(height: 28),
 
-            // brand name
+            // App name
             SlideTransition(
               position: AlwaysStoppedAnimation<Offset>(textSlide),
               child: Opacity(
                 opacity: textFade,
-                child: Column(children: [
-                  ShaderMask(
-                    shaderCallback: (bounds) => const LinearGradient(
-                      colors: [_lightGold, _gold],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ).createShader(bounds),
-                    child: const Text(
-                      'COOPVEST',
-                      style: TextStyle(
-                        fontSize: 40,
-                        fontWeight: FontWeight.w900,
-                        color: Colors.white,
-                        letterSpacing: 6,
-                        height: 1.0,
-                      ),
-                    ),
+                child: const Text(
+                  'Coopvest Africa',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 28,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
                   ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'AFRICA',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white38,
-                      letterSpacing: 9,
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  Container(
-                    width: 56,
-                    height: 3,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                          colors: [_gold, _lightGold, _gold]),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ]),
+                ),
               ),
             ),
 
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
 
-            // tagline
+            // Tagline
             Opacity(
               opacity: taglineFade,
               child: const Text(
-                'Empowering Financial Inclusion',
-                textAlign: TextAlign.center,
+                'Savings • Loans • Growth',
                 style: TextStyle(
+                  color: Colors.white70,
                   fontSize: 13,
-                  fontWeight: FontWeight.w400,
-                  color: Colors.white38,
-                  letterSpacing: 0.8,
+                  letterSpacing: 2,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ),
 
             const Spacer(flex: 2),
 
-            // indeterminate loading bar + security badge
-            Opacity(
-              opacity: badgeFade,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 52),
-                child: Column(children: [
-                  // Indeterminate sweep — does NOT imply a percentage of boot
-                  // progress, avoiding the misleading "fake progress" problem.
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: _IndeterminateBar(value: barValue),
+            // Loading area
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 52),
+              child: Column(children: [
+                // Animated loading text
+                SizedBox(
+                  height: 18,
+                  child: Text(
+                    loadingText,
+                    style: const TextStyle(
+                      color: Colors.white60,
+                      fontSize: 12,
+                      letterSpacing: 0.5,
+                    ),
                   ),
-                  const SizedBox(height: 22),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.verified_rounded,
-                          size: 11,
-                          color: _green.withOpacity(0.75)),
-                      const SizedBox(width: 5),
-                      Text(
-                        'SECURE  ·  REGULATED  ·  TRUSTED',
-                        style: TextStyle(
-                          fontSize: 9,
-                          letterSpacing: 1.6,
-                          color: Colors.white.withOpacity(0.30),
-                          fontWeight: FontWeight.w600,
-                        ),
+                ),
+                const SizedBox(height: 12),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: _IndeterminateBar(value: barValue),
+                ),
+                const SizedBox(height: 22),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.verified_rounded,
+                        size: 11, color: CoopvestColors.primaryLight.withOpacity(0.7)),
+                    const SizedBox(width: 5),
+                    Text(
+                      'SECURE  ·  REGULATED  ·  TRUSTED',
+                      style: TextStyle(
+                        fontSize: 9,
+                        letterSpacing: 1.6,
+                        color: Colors.white.withOpacity(0.30),
+                        fontWeight: FontWeight.w600,
                       ),
-                    ],
-                  ),
-                ]),
-              ),
+                    ),
+                  ],
+                ),
+              ]),
             ),
 
             const SizedBox(height: 40),
@@ -407,35 +356,24 @@ class _SplashContent extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Indeterminate loading bar — a gold sweep that loops left-to-right.
-// ─────────────────────────────────────────────────────────────────────────────
-
 class _IndeterminateBar extends StatelessWidget {
-  final double value; // 0.0 → 1.0 looping
+  final double value;
   const _IndeterminateBar({required this.value});
-
-  static const Color _gold      = Color(0xFFD4AF37);
-  static const Color _lightGold = Color(0xFFEDD97C);
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, constraints) {
       final total = constraints.maxWidth;
-      // The sweep occupies 40% of the bar width
       const sweepFraction = 0.40;
       final sweepWidth = total * sweepFraction;
-      // Travels from -sweepWidth to total (full pass), driven by [value]
       final rawLeft = value * (total + sweepWidth) - sweepWidth;
       final clampedLeft = rawLeft.clamp(0.0, total);
       final clampedRight = (rawLeft + sweepWidth).clamp(0.0, total);
 
       return SizedBox(
-        height: 2,
+        height: 3,
         child: Stack(children: [
-          // track
           Container(color: Colors.white10),
-          // sweep
           Positioned(
             left: clampedLeft,
             width: clampedRight - clampedLeft,
@@ -445,9 +383,9 @@ class _IndeterminateBar extends StatelessWidget {
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    _gold.withOpacity(0.0),
-                    _lightGold,
-                    _gold.withOpacity(0.0),
+                    CoopvestColors.primaryLight.withOpacity(0.0),
+                    CoopvestColors.primaryLight,
+                    CoopvestColors.primaryLight.withOpacity(0.0),
                   ],
                 ),
               ),
@@ -459,10 +397,6 @@ class _IndeterminateBar extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Logo badge — with asset fallback so a missing logo.png is handled gracefully
-// ─────────────────────────────────────────────────────────────────────────────
-
 class _LogoBadge extends StatelessWidget {
   final double shimmerValue;
   const _LogoBadge({required this.shimmerValue});
@@ -470,7 +404,7 @@ class _LogoBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Stack(alignment: Alignment.center, children: [
-      // outer glow
+      // Outer glow
       Container(
         width: 124,
         height: 124,
@@ -478,38 +412,35 @@ class _LogoBadge extends StatelessWidget {
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFFD4AF37).withOpacity(0.28),
+              color: CoopvestColors.primaryLight.withOpacity(0.3),
               blurRadius: 52,
               spreadRadius: 10,
-            ),
-            BoxShadow(
-              color: const Color(0xFF1B3A6B).withOpacity(0.55),
-              blurRadius: 24,
-              spreadRadius: 2,
             ),
           ],
         ),
       ),
-      // gold ring
+      // Green ring
       Container(
         width: 110,
         height: 110,
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           shape: BoxShape.circle,
           gradient: LinearGradient(
-            colors: [Color(0xFFD4AF37), Color(0xFFEDD97C), Color(0xFFB8962E)],
+            colors: [
+              CoopvestColors.primaryLight,
+              CoopvestColors.primary,
+              CoopvestColors.primaryDark,
+            ],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
+          border: Border.all(color: Colors.white24, width: 2),
         ),
         child: Padding(
-          padding: const EdgeInsets.all(3),
+          padding: const EdgeInsets.all(4),
           child: ClipOval(
             child: Container(
-              color: const Color(0xFF0F2040),
-              // Graceful fallback when logo.png is missing or not declared
-              // in pubspec.yaml — shows gold "CV" initials instead of a
-              // broken-image icon that could be mistaken for intentional design.
+              color: CoopvestColors.primaryDark,
               child: Image.asset(
                 'assets/images/logo.png',
                 fit: BoxFit.cover,
@@ -517,7 +448,7 @@ class _LogoBadge extends StatelessWidget {
                   child: Text(
                     'CV',
                     style: TextStyle(
-                      color: Color(0xFFD4AF37),
+                      color: Colors.white,
                       fontSize: 28,
                       fontWeight: FontWeight.w900,
                       letterSpacing: 2,
@@ -529,7 +460,7 @@ class _LogoBadge extends StatelessWidget {
           ),
         ),
       ),
-      // shimmer sweep
+      // Shimmer sweep
       ClipOval(
         child: SizedBox(
           width: 110,
@@ -540,10 +471,6 @@ class _LogoBadge extends StatelessWidget {
     ]);
   }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Custom painters
-// ─────────────────────────────────────────────────────────────────────────────
 
 class _PulseRingPainter extends CustomPainter {
   final double t;
@@ -563,7 +490,7 @@ class _PulseRingPainter extends CustomPainter {
         center,
         r,
         Paint()
-          ..color = const Color(0xFFD4AF37).withOpacity(alpha)
+          ..color = CoopvestColors.primaryLight.withOpacity(alpha)
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1.5,
       );
@@ -589,7 +516,7 @@ class _ShimmerPainter extends CustomPainter {
       58,
       Paint()
         ..shader = RadialGradient(
-          colors: [Colors.white.withOpacity(0.16), Colors.transparent],
+          colors: [Colors.white.withOpacity(0.12), Colors.transparent],
         ).createShader(Rect.fromCircle(
             center: Offset(cx, cy), radius: 58)),
     );
@@ -606,7 +533,7 @@ class _DiagonalLinePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.white.withOpacity(0.025)
+      ..color = Colors.white.withOpacity(0.02)
       ..strokeWidth = 1;
     const spacing = 52.0;
     final offset = (t * spacing) % spacing;
