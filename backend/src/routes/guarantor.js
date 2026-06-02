@@ -52,48 +52,76 @@ function mapStatusFilter(flutterStatus) {
 /**
  * Build a GuarantorRequest-shaped object from a joined DB row.
  * `row._consentedCount` must be set before calling this.
+ * Fetches borrower profile separately to avoid FK join errors.
  */
-function toGuarantorRequest(row) {
-  const loan     = row.loans     || {};
-  const borrower = loan.profiles || {};
+async function toGuarantorRequest(row) {
+  const loan = row.loans || {};
+
+  // Fetch borrower profile separately (safer without FK join)
+  let borrowerName = 'Coopvest Member';
+  let borrowerPhone = '';
+  if (loan.profile_id) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('name, phone')
+      .eq('id', loan.profile_id)
+      .maybeSingle();
+    if (profile) {
+      borrowerName = profile.name || 'Coopvest Member';
+      borrowerPhone = profile.phone || '';
+    }
+  }
 
   return {
-    id:                row.id,
-    loanId:            row.loan_id,
-    loanType:          loan.loan_type || '',
-    loanAmount:        parseFloat(loan.amount || 0),
-    memberName:        borrower.name  || 'Coopvest Member',
-    memberPhone:       borrower.phone || '',
-    memberId:          loan.profile_id || '',
-    requestedAt:       row.created_at,
-    expiresAt:         null,
-    status:            mapStatus(row.status || 'pending'),
+    id: row.id,
+    loanId: row.loan_id,
+    loanType: loan.loan_type || '',
+    loanAmount: parseFloat(loan.amount || 0),
+    memberName: borrowerName,
+    memberPhone: borrowerPhone,
+    memberId: loan.profile_id || '',
+    requestedAt: row.created_at,
+    expiresAt: null,
+    status: mapStatus(row.status || 'pending'),
     requiredGuarantors: 3,
     currentGuarantors: row._consentedCount || 0,
   };
 }
 
 /** Build a GuaranteedLoan-shaped object from a joined DB row. */
-function toGuaranteedLoan(row) {
-  const loan     = row.loans     || {};
-  const borrower = loan.profiles || {};
+async function toGuaranteedLoan(row) {
+  const loan = row.loans || {};
+
+  // Fetch borrower profile separately
+  let borrowerName = 'Coopvest Member';
+  if (loan.profile_id) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('name')
+      .eq('id', loan.profile_id)
+      .maybeSingle();
+    if (profile) {
+      borrowerName = profile.name || 'Coopvest Member';
+    }
+  }
 
   let status = 'active';
   if (loan.status === 'completed') status = 'completed';
   else if (loan.status === 'defaulted') status = 'defaulted';
 
   return {
-    id:           row.id,
-    loanId:       row.loan_id,
-    loanType:     loan.loan_type || '',
-    loanAmount:   parseFloat(loan.amount || 0),
-    borrowerName: borrower.name  || 'Coopvest Member',
+    id: row.id,
+    loanId: row.loan_id,
+    loanType: loan.loan_type || '',
+    loanAmount: parseFloat(loan.amount || 0),
+    borrowerName: borrowerName,
     guaranteedAt: row.consented_at || row.created_at,
     status,
   };
 }
 
-/** Shared SELECT fragment for loan_guarantors with nested loan + borrower. */
+/** Shared SELECT fragment for loan_guarantors with nested loan + borrower.
+ * Uses separate queries instead of FK joins to avoid foreign key errors. */
 const GUARANTOR_SELECT = `
   id,
   loan_id,
@@ -107,12 +135,7 @@ const GUARANTOR_SELECT = `
     amount,
     tenure_months,
     profile_id,
-    status,
-    profiles!loans_profile_id_fkey (
-      id,
-      name,
-      phone
-    )
+    status
   )
 `;
 
@@ -145,7 +168,7 @@ router.get('/pending-requests', authenticate, async (req, res) => {
     const rows = data || [];
     await attachConsentedCount(rows);
 
-    const requests = rows.map(toGuarantorRequest);
+    const requests = await Promise.all(rows.map(toGuarantorRequest));
     res.json({ success: true, requests, total: requests.length });
   } catch (err) {
     logger.error('Error fetching pending guarantor requests:', err);
@@ -181,7 +204,7 @@ router.get(
       const rows = data || [];
       await attachConsentedCount(rows);
 
-      const requests = rows.map(toGuarantorRequest);
+      const requests = await Promise.all(rows.map(toGuarantorRequest));
       res.json({ success: true, requests, total: requests.length });
     } catch (err) {
       logger.error('Error fetching guarantor requests:', err);
@@ -217,7 +240,8 @@ router.get(
         .eq('status', 'consented');
       row._consentedCount = count || 0;
 
-      res.json({ success: true, ...toGuarantorRequest(row) });
+      const request = await toGuarantorRequest(row);
+      res.json({ success: true, ...request });
     } catch (err) {
       logger.error('Error fetching guarantor request:', err);
       res.status(500).json({ success: false, error: err.message });
@@ -356,7 +380,8 @@ router.get('/my-guarantees', authenticate, async (req, res) => {
 
     if (error) throw error;
 
-    const guarantees = (data || []).map(toGuaranteedLoan);
+    const rows = data || [];
+    const guarantees = await Promise.all(rows.map(toGuaranteedLoan));
     res.json({ success: true, guarantees, total: guarantees.length });
   } catch (err) {
     logger.error('Error fetching my guarantees:', err);

@@ -282,38 +282,42 @@ router.get(
         return res.status(400).json({ success: false, error: 'QR code ID is required' });
       }
 
+      // Fetch QR row
       const { data: qrRow, error: qrErr } = await supabase
         .from('loan_qrs')
-        .select(`
-          qr_id,
-          loan_id,
-          guarantors_required,
-          guarantors_found,
-          expires_at,
-          loans (
-            id,
-            loan_type,
-            amount,
-            tenure_months,
-            status,
-            profile_id,
-            profiles!loans_profile_id_fkey (
-              id,
-              name,
-              phone
-            )
-          )
-        `)
+        .select('qr_id, loan_id, guarantors_required, guarantors_found, expires_at')
         .eq('qr_id', qrId)
         .maybeSingle();
 
-      if (qrErr) throw qrErr;
+      if (qrErr) {
+        logger.error('QR lookup error:', qrErr);
+        throw qrErr;
+      }
       if (!qrRow) {
         return res.status(404).json({ success: false, error: 'QR code not found or expired' });
       }
 
-      const loan = qrRow.loans || {};
-      const borrower = loan.profiles || {};
+      // Fetch loan data (without FK join to avoid foreign key errors)
+      const { data: loanData, error: loanErr } = await supabase
+        .from('loans')
+        .select('id, loan_type, amount, tenure_months, status, profile_id')
+        .eq('id', qrRow.loan_id)
+        .maybeSingle();
+
+      if (loanErr) {
+        logger.error('Loan lookup error:', loanErr);
+        throw loanErr;
+      }
+
+      // Fetch borrower profile separately (safer without FK)
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('id, name, phone')
+        .eq('id', loanData?.profile_id)
+        .maybeSingle();
+
+      const loan = loanData || {};
+      const borrower = profileData || {};
 
       res.json({
         success: true,
