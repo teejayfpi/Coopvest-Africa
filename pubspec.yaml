@@ -2,13 +2,13 @@
 # ─── flutter_native_splash config ─────────────────────────────────────────────
 # Run: dart run flutter_native_splash:create   to generate native assets
 flutter_native_splash:
-  color: "#080F1C"
+  color: "#1B5E20"
   image: assets/images/logo.png
   image_full_screen: false
   android: true
   ios: true
   android_12:
-    color: "#080F1C"
+    color: "#1B5E20"
     image: assets/images/logo.png
   web: false
 
