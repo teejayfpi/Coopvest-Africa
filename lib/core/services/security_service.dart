@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_jailbreak_detection/flutter_jailbreak_detection.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../config/app_config.dart';
@@ -61,63 +62,68 @@ class SecurityService {
     }
   }
 
-  /// Check for jailbreak/root.
-  ///
-  /// In production, integrate `flutter_jailbreak_detection` for real detection.
-  /// Until then, we perform basic heuristic checks on known paths.
+  /// Check for jailbreak/root using flutter_jailbreak_detection package.
+  /// Falls back to basic heuristics if the package is unavailable.
   Future<bool> checkJailbreak() async {
     bool isJailbroken = false;
 
     try {
-      if (Platform.isIOS) {
-        // Heuristic: check for common jailbreak artefacts
-        final suspectPaths = [
-          '/Applications/Cydia.app',
-          '/Library/MobileSubstrate/MobileSubstrate.dylib',
-          '/bin/bash',
-          '/usr/sbin/sshd',
-          '/etc/apt',
-          '/private/var/lib/apt/',
-        ];
-        for (final path in suspectPaths) {
-          if (await File(path).exists()) {
-            isJailbroken = true;
-            break;
-          }
-        }
-      } else if (Platform.isAndroid) {
-        // Heuristic: check for su binary and known root management apps
-        final suspectPaths = [
-          '/system/app/Superuser.apk',
-          '/sbin/su',
-          '/system/bin/su',
-          '/system/xbin/su',
-          '/data/local/xbin/su',
-          '/data/local/bin/su',
-          '/system/sd/xbin/su',
-          '/system/bin/failsafe/su',
-          '/data/local/su',
-        ];
-        for (final path in suspectPaths) {
-          if (await File(path).exists()) {
-            isJailbroken = true;
-            break;
-          }
-        }
-      }
-
-      if (isJailbroken) {
-        logger.w('SECURITY ALERT: Device appears to be jailbroken/rooted');
-        if (AppConfig.terminateOnJailbreak) {
-          logger.e('SECURITY POLICY: Terminating app due to jailbreak detection');
-          // Dismiss gracefully — on a truly compromised device the user can
-          // reopen the app, but server-side device blacklisting is the
-          // authoritative enforcement mechanism.
-          SystemNavigator.pop();
-        }
+      // Primary check: Use the flutter_jailbreak_detection package
+      // which provides comprehensive detection across platforms
+      final detection = await FlutterJailbreakDetection.dartJailbreakDetection;
+      
+      if (detection) {
+        logger.w('SECURITY ALERT: Jailbreak/root detected by package');
+        isJailbroken = true;
       }
     } catch (e) {
-      logger.e('Error during jailbreak detection: $e');
+      logger.w('flutter_jailbreak_detection unavailable, using fallback detection: $e');
+      
+      // Fallback: Basic heuristic checks on known paths
+      // This provides basic detection when the package fails
+      try {
+        if (Platform.isIOS) {
+          final suspectPaths = [
+            '/Applications/Cydia.app',
+            '/Library/MobileSubstrate/MobileSubstrate.dylib',
+            '/bin/bash',
+            '/usr/sbin/sshd',
+            '/etc/apt',
+          ];
+          for (final path in suspectPaths) {
+            if (await File(path).exists()) {
+              isJailbroken = true;
+              break;
+            }
+          }
+        } else if (Platform.isAndroid) {
+          final suspectPaths = [
+            '/system/app/Superuser.apk',
+            '/sbin/su',
+            '/system/bin/su',
+            '/system/xbin/su',
+          ];
+          for (final path in suspectPaths) {
+            if (await File(path).exists()) {
+              isJailbroken = true;
+              break;
+            }
+          }
+        }
+      } catch (fallbackError) {
+        logger.e('Fallback jailbreak detection also failed: $fallbackError');
+      }
+    }
+
+    if (isJailbroken) {
+      logger.w('SECURITY ALERT: Device appears to be jailbroken/rooted');
+      if (AppConfig.terminateOnJailbreak) {
+        logger.e('SECURITY POLICY: Terminating app due to jailbreak detection');
+        // Dismiss gracefully — on a truly compromised device the user can
+        // reopen the app, but server-side device blacklisting is the
+        // authoritative enforcement mechanism.
+        SystemNavigator.pop();
+      }
     }
 
     return isJailbroken;

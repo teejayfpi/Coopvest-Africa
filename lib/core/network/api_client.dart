@@ -53,11 +53,9 @@ class ApiClient {
     _initialized = true;
   }
 
-  Dio get dio {
-    _initialize();
-    return _dio;
-  }
+  Dio get dio => getDio();
 
+  /// Get the Dio HTTP client instance
   Dio getDio() {
     _initialize();
     return _dio;

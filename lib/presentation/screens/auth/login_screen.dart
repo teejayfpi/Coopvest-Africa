@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/utils/utils.dart';
@@ -13,11 +12,11 @@ import '../../widgets/common/buttons.dart';
 import '../../widgets/common/inputs.dart';
 import '../../../data/models/auth_models.dart';
 
-/// Login Screen - Firebase Authentication with Biometric Support
+/// Login Screen - Supabase Authentication with Biometric Support
 /// 
 /// Handles user login via:
-/// 1. Email + Password (Firebase Auth)
-/// 2. Biometric authentication (if previously enabled by user in Security Settings)
+/// 1. Email + Password (Supabase Auth)
+/// 2. Biometric authentication (restores existing Supabase session)
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
 
@@ -34,7 +33,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _isNavigating = false;
 
   final LocalAuthentication _localAuth = LocalAuthentication();
-  final _secureStorage = const FlutterSecureStorage();
   bool _isBiometricAvailable = false;
   bool _isBiometricEnabled = false;
   bool _biometricPrompted = false;
@@ -63,7 +61,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       final prefs = await SharedPreferences.getInstance();
       final isEnabled = prefs.getBool('biometric_enabled') ?? false;
       
-      // Also check if there's a valid Firebase session (for returning users)
+      // Also check if there's a valid Supabase session (for returning users)
       final authRepo = ref.read(authRepositoryProvider);
       final hasSession = await authRepo.hasValidSession();
       
@@ -101,38 +99,26 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (didAuthenticate) {
         final authRepo = ref.read(authRepositoryProvider);
         
-        // First, try to restore existing Firebase session (no re-login needed)
+        // Restore existing Supabase session (no re-login needed)
+        // Supabase persists the session, so biometric just unlocks it
         if (await authRepo.hasValidSession()) {
           try {
             final user = await authRepo.restoreSessionWithBiometric();
             await ref.read(authProvider.notifier).getCurrentUser();
-            // ref.listen will navigate to /home once auth state transitions
             return;
           } catch (e) {
-            logger.w('Session restore failed, trying stored credentials: $e');
+            logger.w('Session restore failed: $e');
           }
         }
         
-        // Fallback: Get stored credentials and login
-        final prefs = await SharedPreferences.getInstance();
-        final email = prefs.getString('biometric_email');
-        final password = await _secureStorage.read(key: 'biometric_password');
-        
-        if (email != null && password != null) {
-          await ref.read(authProvider.notifier).login(
-            email: email,
-            password: password,
+        // No valid session exists - user must login with email/password first
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please login with email first to enable biometric login'),
+              backgroundColor: CoopvestColors.warning,
+            ),
           );
-          // ref.listen will navigate to /home once auth state transitions
-        } else {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Please login with email first to enable biometric login'),
-                backgroundColor: CoopvestColors.warning,
-              ),
-            );
-          }
         }
       }
     } on PlatformException catch (e) {
@@ -161,13 +147,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         email: _emailController.text.trim(),
         password: _passwordController.text,
       );
-      
-      // Store credentials for biometric login (if biometric is enabled)
-      final prefs = await SharedPreferences.getInstance();
-      if (prefs.getBool('biometric_enabled') ?? false) {
-        await prefs.setString('biometric_email', _emailController.text.trim());
-        await _secureStorage.write(key: 'biometric_password', value: _passwordController.text);
-      }
+      // Supabase persists the session automatically - no need to store credentials
+      // Biometric authentication will work on next login using the persisted session
       
     } catch (e) {
       if (mounted) {
