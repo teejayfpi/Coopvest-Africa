@@ -24,7 +24,7 @@ allprojects {
 // Set JVM target globally for all subprojects
 subprojects {
     afterEvaluate { project ->
-        if (project.plugins.has('com.android.library') || project.plugins.has('com.android.application')) {
+        if (project.hasProperty('android')) {
             project.android {
                 compileOptions {
                     sourceCompatibility JavaVersion.VERSION_17
