@@ -3,7 +3,6 @@ import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_jailbreak_detection/flutter_jailbreak_detection.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../config/app_config.dart';
@@ -62,67 +61,55 @@ class SecurityService {
     }
   }
 
-  /// Check for jailbreak/root using flutter_jailbreak_detection package.
-  /// Falls back to basic heuristics if the package is unavailable.
+  /// Check for jailbreak/root using platform-specific detection.
+  /// Uses fallback heuristic detection since flutter_jailbreak_detection has
+  /// API compatibility issues.
   Future<bool> checkJailbreak() async {
     bool isJailbroken = false;
 
     try {
-      // Primary check: Use the flutter_jailbreak_detection package
-      // which provides comprehensive detection across platforms
-      final flutterJailbreak = FlutterJailbreakDetection();
-      final detection = await flutterJailbreak.jailbroken;
-      
-      if (detection) {
-        logger.w('SECURITY ALERT: Jailbreak/root detected by package');
-        isJailbroken = true;
-      }
-    } catch (e) {
-      logger.w('flutter_jailbreak_detection unavailable, using fallback detection: $e');
-      
-      // Fallback: Basic heuristic checks on known paths
-      // This provides basic detection when the package fails
-      try {
-        if (Platform.isIOS) {
-          final suspectPaths = [
-            '/Applications/Cydia.app',
-            '/Library/MobileSubstrate/MobileSubstrate.dylib',
-            '/bin/bash',
-            '/usr/sbin/sshd',
-            '/etc/apt',
-          ];
-          for (final path in suspectPaths) {
-            if (await File(path).exists()) {
-              isJailbroken = true;
-              break;
-            }
-          }
-        } else if (Platform.isAndroid) {
-          final suspectPaths = [
-            '/system/app/Superuser.apk',
-            '/sbin/su',
-            '/system/bin/su',
-            '/system/xbin/su',
-          ];
-          for (final path in suspectPaths) {
-            if (await File(path).exists()) {
-              isJailbroken = true;
-              break;
-            }
+      // Use basic heuristic checks on known paths
+      // This provides basic detection across platforms
+      if (Platform.isIOS) {
+        final suspectPaths = [
+          '/Applications/Cydia.app',
+          '/Library/MobileSubstrate/MobileSubstrate.dylib',
+          '/bin/bash',
+          '/usr/sbin/sshd',
+          '/etc/apt',
+        ];
+        for (final path in suspectPaths) {
+          if (await File(path).exists()) {
+            logger.w('SECURITY ALERT: Jailbreak path detected: $path');
+            isJailbroken = true;
+            break;
           }
         }
-      } catch (fallbackError) {
-        logger.e('Fallback jailbreak detection also failed: $fallbackError');
+      } else if (Platform.isAndroid) {
+        final suspectPaths = [
+          '/system/app/Superuser.apk',
+          '/sbin/su',
+          '/system/bin/su',
+          '/system/xbin/su',
+          '/data/local/su',
+          '/su/bin/su',
+        ];
+        for (final path in suspectPaths) {
+          if (await File(path).exists()) {
+            logger.w('SECURITY ALERT: Root path detected: $path');
+            isJailbroken = true;
+            break;
+          }
+        }
       }
+    } catch (e) {
+      logger.e('Jailbreak detection failed: $e');
     }
 
     if (isJailbroken) {
       logger.w('SECURITY ALERT: Device appears to be jailbroken/rooted');
       if (AppConfig.terminateOnJailbreak) {
         logger.e('SECURITY POLICY: Terminating app due to jailbreak detection');
-        // Dismiss gracefully — on a truly compromised device the user can
-        // reopen the app, but server-side device blacklisting is the
-        // authoritative enforcement mechanism.
         SystemNavigator.pop();
       }
     }
