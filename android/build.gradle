@@ -29,6 +29,21 @@ subprojects {
     project.evaluationDependsOn(':app')
 }
 
+// Fix namespace for plugins that don't have it (required for AGP 8.0+)
+subprojects { project ->
+    project.plugins.withId('com.android.library') {
+        project.android {
+            if (namespace == null || namespace.isEmpty()) {
+                def manifestFile = file("${project.projectDir}/src/main/AndroidManifest.xml")
+                if (manifestFile.exists()) {
+                    def manifest = new XmlSlurper().parse(manifestFile)
+                    namespace = manifest.@package.toString()
+                }
+            }
+        }
+    }
+}
+
 tasks.register("clean", Delete) {
     delete rootProject.buildDir
 }
