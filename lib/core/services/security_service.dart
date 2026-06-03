@@ -70,7 +70,8 @@ class SecurityService {
     try {
       // Primary check: Use the flutter_jailbreak_detection package
       // which provides comprehensive detection across platforms
-      final detection = await FlutterJailbreakDetection.dartJailbreakDetection;
+      final flutterJailbreak = FlutterJailbreakDetection();
+      final detection = await flutterJailbreak.jailbroken;
       
       if (detection) {
         logger.w('SECURITY ALERT: Jailbreak/root detected by package');
