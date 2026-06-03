@@ -46,7 +46,6 @@ dependencies:
 
   # Security & Authentication
   local_auth: ^2.1.0
-  flutter_jailbreak_detection: ^1.3.0
   encrypt: ^5.0.0
   dart_jsonwebtoken: ^2.12.0
   google_sign_in: ^6.1.6
