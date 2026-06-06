@@ -9,6 +9,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/network/api_client.dart';
+import '../../../presentation/providers/auth_provider.dart';
 import '../../../presentation/widgets/common/cards.dart';
 import 'guarantor_verification_screen.dart';
 
@@ -101,6 +102,10 @@ class _QRScannerScreenState extends ConsumerState<QRScannerScreen> {
       }
 
       if (mounted) {
+        // Get current user for phone number
+        final authState = ref.read(authProvider);
+        final userPhone = authState.user?.phone;
+        
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
             builder: (context) => GuarantorVerificationScreen(
@@ -111,6 +116,7 @@ class _QRScannerScreenState extends ConsumerState<QRScannerScreen> {
               loanTenor:    (data['loanTenure']   as int?)    ?? 12,
               guarantorId:  widget.guarantorId,
               guarantorName: widget.guarantorName,
+              guarantorPhone: userPhone,
             ),
           ),
         );

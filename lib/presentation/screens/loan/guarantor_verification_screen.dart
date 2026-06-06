@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../data/api/loan_api_service.dart';
+import '../../../presentation/providers/wallet_provider.dart';
 import '../../../presentation/widgets/common/buttons.dart';
 import '../../../presentation/widgets/common/cards.dart';
 
@@ -65,12 +66,17 @@ class _GuarantorVerificationScreenState
     });
 
     try {
+      // Get actual savings balance from wallet
+      final walletState = ref.read(walletProvider);
+      final savingsBalance = walletState.wallet?.totalSavings ?? 
+                            walletState.wallet?.balance ?? 0.0;
+      
       final loanApiService = ref.read(loanApiServiceProvider);
       final request = GuarantorConfirmRequest(
         guarantorId:   widget.guarantorId,
         guarantorName: widget.guarantorName,
         guarantorPhone: widget.guarantorPhone ?? '',
-        savingsBalance: 0.0,
+        savingsBalance: savingsBalance,
       );
 
       await loanApiService.confirmGuarantee(widget.loanId, request);

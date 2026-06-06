@@ -97,6 +97,8 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
   String _selectedLoanType = 'Quick Loan';
   String _loanStatus = '';
   String _loanId = '';
+  String? _qrId; // QR ID from backend after generating QR code
+  String? _qrCodeData; // Full QR code data string from backend
   String? _rejectionReason;
   bool _showQrCode = false;
   bool _isSubmitting = false;
@@ -118,6 +120,10 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
     return amount + (amount * interestRate / 100);
   }
 
+  // Returns full QR data string for scanning (from backend or fallback)
+  String get _qrDataForDisplay => _qrCodeData ?? '{"qrId":"${_qrId ?? _loanId}","loanId":"$_loanId"}';
+
+  // Fallback display for legacy UI (shows loan ID)
   String get _formattedLoanId => 'COOP-${_loanId}';
 
   // Check if user is eligible for loan based on membership duration and contributions
@@ -541,11 +547,14 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
 
       // Generate unique loan ID
       final loanId = '${widget.userId}-LOAN-${DateTime.now().millisecondsSinceEpoch}';
+      String? backendLoanId = loanId;
+      String? qrId;
+      String? qrCodeData;
 
-      // Register loan with backend (fire-and-forget; don't block UI on failure)
+      // Register loan with backend
       final apiClient = ref.read(apiClientProvider);
       try {
-        await apiClient.post('/loans/register', data: {
+        final regResponse = await apiClient.post('/loans/register', data: {
           'loanRef': loanId,
           'loanType': _selectedLoanType,
           'amount': requestedAmount,
@@ -554,14 +563,33 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
           'interestRate': loanInfo['interest'],
           'tenorMonths': loanInfo['duration'],
         });
-      } catch (_) {
-        // Backend registration is best-effort; local flow continues regardless
+        
+        // Get the actual loan ID from backend response
+        if (regResponse != null && regResponse['loanId'] != null) {
+          backendLoanId = regResponse['loanId'];
+        }
+        
+        // Generate QR code via backend
+        final qrResponse = await apiClient.post('/loans/$backendLoanId/generate-qr', data: {
+          'applicantName': widget.userName,
+          'applicantPhone': widget.userPhone,
+        });
+        
+        if (qrResponse != null && qrResponse['qr'] != null) {
+          qrId = qrResponse['qr']['id'];
+          qrCodeData = qrResponse['qr']['data']; // Full JSON string from backend
+        }
+      } catch (e) {
+        // Backend errors - continue with local fallback IDs
+        debugPrint('Backend QR generation failed, using fallback: $e');
       }
 
       // Simple approval logic (15%+ savings = Approved, 10–15% = Pending Review)
       if (monthlySavings >= requestedAmount * 0.15) {
         setState(() {
-          _loanId = loanId;
+          _loanId = backendLoanId ?? loanId;
+          _qrId = qrId;
+          _qrCodeData = qrCodeData;
           _loanStatus = 'Approved';
           _rejectionReason = null;
           _showQrCode = true;
@@ -572,7 +600,9 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
         _showSuccessDialog();
       } else if (monthlySavings >= requestedAmount * 0.1) {
         setState(() {
-          _loanId = loanId;
+          _loanId = backendLoanId ?? loanId;
+          _qrId = qrId;
+          _qrCodeData = qrCodeData;
           _loanStatus = 'Pending Review';
           _rejectionReason = null;
           _showQrCode = true;
@@ -1086,7 +1116,7 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
               )),
               const SizedBox(height: 24),
               QrImageView(
-                data: _formattedLoanId,
+                data: _qrDataForDisplay,
                 version: QrVersions.auto,
                 size: 200.0,
                 foregroundColor: isDarkMode ? Colors.white : Colors.black,
