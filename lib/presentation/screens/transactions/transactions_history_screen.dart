@@ -104,28 +104,46 @@ class TransactionsHistoryScreen extends ConsumerWidget {
             ),
             // Transaction List
             Expanded(
-              child: transactions.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
+              child: RefreshIndicator(
+                onRefresh: () async {
+                  await ref.read(walletProvider.notifier).loadTransactions();
+                },
+                color: CoopvestColors.primary,
+                child: transactions.isEmpty
+                    ? ListView(
                         children: [
-                          Icon(Icons.receipt_long, color: context.textSecondary, size: 64),
-                          const SizedBox(height: 16),
-                          Text(
-                            'No transactions yet',
-                            style: TextStyle(color: context.textSecondary, fontSize: 16),
+                          SizedBox(
+                            height: MediaQuery.of(context).size.height * 0.5,
+                            child: Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.receipt_long, color: context.textSecondary, size: 64),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    'No transactions yet',
+                                    style: TextStyle(color: context.textSecondary, fontSize: 16),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Pull down to refresh',
+                                    style: TextStyle(color: context.textSecondary.withOpacity(0.7), fontSize: 12),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         ],
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        itemCount: transactions.length,
+                        itemBuilder: (context, index) {
+                          final txn = transactions[index];
+                          return _buildTransactionItem(context, txn);
+                        },
                       ),
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: transactions.length,
-                      itemBuilder: (context, index) {
-                        final txn = transactions[index];
-                        return _buildTransactionItem(context, txn);
-                      },
-                    ),
+              ),
             ),
           ],
         ),
