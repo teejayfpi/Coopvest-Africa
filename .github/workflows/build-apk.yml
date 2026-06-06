@@ -134,7 +134,7 @@ jobs:
 
       # ── Upload release APK ──────────────────────────────────────────────────
       # Artifact names include the run number so every build produces a unique
-      # artifact. Retention is 90 days for release, 30 days for debug.
+      # artifact. Retention is 7 days for release, 3 days for debug to save storage.
       # To download: go to Actions → select the run → Artifacts section at the
       # bottom of the run summary page and click the artifact name.
       - name: Upload release APK artifact
@@ -144,7 +144,7 @@ jobs:
         with:
           name: coopvest-release-apk-${{ github.run_number }}
           path: ${{ steps.locate_apk.outputs.apk_path }}
-          retention-days: 90
+          retention-days: 7
           if-no-files-found: error
           compression-level: 6
 
@@ -155,7 +155,7 @@ jobs:
         with:
           name: coopvest-debug-apk-${{ github.run_number }}
           path: ${{ steps.locate_apk.outputs.apk_path }}
-          retention-days: 30
+          retention-days: 3
           if-no-files-found: error
           compression-level: 6
 
