@@ -169,7 +169,16 @@ class ApiClient {
 
       String? errorMessage;
       if (data is Map<String, dynamic>) {
+        // Check for single error field first
         errorMessage = data['error'] as String? ?? data['message'] as String? ?? data['msg'] as String?;
+        // If no single error, check for validation errors array
+        if (errorMessage == null && data['errors'] != null) {
+          final errors = data['errors'] as List?;
+          if (errors != null && errors.isNotEmpty) {
+            final firstError = errors.first as Map<String, dynamic>?;
+            errorMessage = firstError?['msg'] as String? ?? firstError?['message'] as String?;
+          }
+        }
       }
 
       switch (statusCode) {
