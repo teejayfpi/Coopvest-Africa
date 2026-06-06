@@ -110,9 +110,16 @@ class WalletRepository {
   /// Make contribution
   Future<Transaction> makeContribution(double amount, {String? description}) async {
     try {
+      final Map<String, dynamic> requestData = {
+        'amount': amount,
+      };
+      if (description != null) {
+        requestData['description'] = description;
+      }
+      
       final response = await _apiClient.post(
         '/wallet/contribute',
-        data: {'amount': amount, if (description != null) 'description': description},
+        data: requestData,
       );
 
       final data = response as Map<String, dynamic>;
