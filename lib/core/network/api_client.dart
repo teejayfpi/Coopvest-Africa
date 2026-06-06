@@ -159,6 +159,71 @@ class ApiClient {
     }
   }
 
+  /// Retry with exponential backoff for transient failures
+  Future<dynamic> retryRequest({
+    required Future<dynamic> Function() request,
+    int maxRetries = 3,
+    Duration initialDelay = const Duration(seconds: 1),
+  }) async {
+    int attempts = 0;
+    Duration delay = initialDelay;
+    
+    while (true) {
+      try {
+        return await request();
+      } catch (e) {
+        attempts++;
+        
+        // Don't retry for client errors (4xx) except 429 (rate limit)
+        if (e is ServerException && e.statusCode != null && e.statusCode! < 500 && e.statusCode != 429) {
+          rethrow;
+        }
+        
+        // Don't retry for auth errors
+        if (e is AuthException) {
+          rethrow;
+        }
+        
+        if (attempts >= maxRetries) {
+          rethrow;
+        }
+        
+        // Exponential backoff: 1s, 2s, 4s...
+        await Future.delayed(delay);
+        delay *= 2;
+        
+        logger.w('Retry attempt $attempts/$maxRetries after ${delay.inMilliseconds}ms');
+      }
+    }
+  }
+
+  /// GET with retry
+  Future<dynamic> getWithRetry(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    Options? options,
+    int maxRetries = 3,
+  }) async {
+    return retryRequest(
+      request: () => get(path, queryParameters: queryParameters, options: options),
+      maxRetries: maxRetries,
+    );
+  }
+
+  /// POST with retry
+  Future<dynamic> postWithRetry(
+    String path, {
+    dynamic data,
+    Map<String, dynamic>? queryParameters,
+    Options? options,
+    int maxRetries = 3,
+  }) async {
+    return retryRequest(
+      request: () => post(path, data: data, queryParameters: queryParameters, options: options),
+      maxRetries: maxRetries,
+    );
+  }
+
   /// Handle errors
   Exception _handleError(DioException error) {
     logger.e('API Error: ${error.message}', error: error, stackTrace: error.stackTrace);
