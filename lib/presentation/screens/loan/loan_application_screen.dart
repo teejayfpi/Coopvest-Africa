@@ -585,6 +585,9 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
       }
 
       // Simple approval logic (15%+ savings = Approved, 10–15% = Pending Review)
+      // Only show QR code if backend QR generation succeeded
+      final bool showQr = qrId != null && qrId!.isNotEmpty;
+      
       if (monthlySavings >= requestedAmount * 0.15) {
         setState(() {
           _loanId = backendLoanId ?? loanId;
@@ -592,12 +595,12 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
           _qrCodeData = qrCodeData;
           _loanStatus = 'Approved';
           _rejectionReason = null;
-          _showQrCode = true;
+          _showQrCode = showQr;
           _isSubmitting = false;
         });
 
         // Show success dialog
-        _showSuccessDialog();
+        _showSuccessDialog(showQr: showQr);
       } else if (monthlySavings >= requestedAmount * 0.1) {
         setState(() {
           _loanId = backendLoanId ?? loanId;
@@ -605,11 +608,11 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
           _qrCodeData = qrCodeData;
           _loanStatus = 'Pending Review';
           _rejectionReason = null;
-          _showQrCode = true;
+          _showQrCode = showQr;
           _isSubmitting = false;
         });
 
-        _showPendingDialog();
+        _showPendingDialog(showQr: showQr);
       } else {
         setState(() {
           _loanStatus = 'Rejected';
@@ -627,7 +630,7 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
     }
   }
 
-  void _showSuccessDialog() {
+  void _showSuccessDialog({bool showQr = true}) {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -644,34 +647,42 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
           children: [
             Text('Your ${_selectedLoanType} application has been APPROVED!', style: const TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
-            const Text(
-              'To complete the process, please share the QR code (now visible at the bottom of the screen) with your 3 guarantors.',
+            Text(
+              showQr 
+                ? 'To complete the process, please share the QR code (now visible at the bottom of the screen) with your 3 guarantors.'
+                : 'Your loan has been approved. QR code generation is temporarily unavailable. Please try again later or contact support.',
               textAlign: TextAlign.center,
             ),
           ],
         ),
         actions: [
-          PrimaryButton(
-            label: 'View QR Code',
-            onPressed: () {
-              Navigator.of(context).pop();
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (_scrollController.hasClients) {
-                  _scrollController.animateTo(
-                    _scrollController.position.maxScrollExtent,
-                    duration: const Duration(milliseconds: 600),
-                    curve: Curves.easeInOut,
-                  );
-                }
-              });
-            },
-          ),
+          if (showQr)
+            PrimaryButton(
+              label: 'View QR Code',
+              onPressed: () {
+                Navigator.of(context).pop();
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (_scrollController.hasClients) {
+                    _scrollController.animateTo(
+                      _scrollController.position.maxScrollExtent,
+                      duration: const Duration(milliseconds: 600),
+                      curve: Curves.easeInOut,
+                    );
+                  }
+                });
+              },
+            )
+          else
+            PrimaryButton(
+              label: 'OK',
+              onPressed: () => Navigator.of(context).pop(),
+            ),
         ],
       ),
     );
   }
 
-  void _showPendingDialog() {
+  void _showPendingDialog({bool showQr = true}) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -687,28 +698,36 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
           children: [
             Text('Your ${_selectedLoanType} application is now under review.'),
             const SizedBox(height: 16),
-            const Text(
-              'Please share the QR code with your 3 guarantors. Once all 3 guarantors confirm, your loan will be processed.',
+            Text(
+              showQr
+                ? 'Please share the QR code with your 3 guarantors. Once all 3 guarantors confirm, your loan will be processed.'
+                : 'Your application is under review. QR code generation is temporarily unavailable. Please try again later or contact support.',
               textAlign: TextAlign.center,
             ),
           ],
         ),
         actions: [
-          PrimaryButton(
-            label: 'View QR Code',
-            onPressed: () {
-              Navigator.of(context).pop();
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (_scrollController.hasClients) {
-                  _scrollController.animateTo(
-                    _scrollController.position.maxScrollExtent,
-                    duration: const Duration(milliseconds: 600),
-                    curve: Curves.easeInOut,
-                  );
-                }
-              });
-            },
-          ),
+          if (showQr)
+            PrimaryButton(
+              label: 'View QR Code',
+              onPressed: () {
+                Navigator.of(context).pop();
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (_scrollController.hasClients) {
+                    _scrollController.animateTo(
+                      _scrollController.position.maxScrollExtent,
+                      duration: const Duration(milliseconds: 600),
+                      curve: Curves.easeInOut,
+                    );
+                  }
+                });
+              },
+            )
+          else
+            PrimaryButton(
+              label: 'OK',
+              onPressed: () => Navigator.of(context).pop(),
+            ),
         ],
       ),
     );
