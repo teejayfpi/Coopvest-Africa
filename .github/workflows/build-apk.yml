@@ -132,22 +132,29 @@ jobs:
             find build -name "*.apk" 2>/dev/null || echo "(no apk files found)"
           fi
 
-      # ── Upload release APK ──────────────────────────────────────────────────
-      # Artifact names include the run number so every build produces a unique
-      # artifact. Retention is 7 days for release, 3 days for debug to save storage.
-      # To download: go to Actions → select the run → Artifacts section at the
-      # bottom of the run summary page and click the artifact name.
-      - name: Upload release APK artifact
-        id: upload_release
-        uses: actions/upload-artifact@v4
+      # ── Upload release APK via GitHub Release ───────────────────────────────
+      # Use GitHub Release instead of artifact storage to avoid quota issues.
+      # Releases don't count against artifact storage limits.
+      - name: Upload to GitHub Release
         if: ${{ steps.locate_apk.outputs.apk_found == 'true' && github.event.inputs.build_type != 'debug' }}
-        with:
-          name: coopvest-release-apk-${{ github.run_number }}
-          path: ${{ steps.locate_apk.outputs.apk_path }}
-          retention-days: 7
-          if-no-files-found: error
-          compression-level: 6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Create a tag-based release with the APK attached
+          TAG="build-${{ github.run_number }}-$(date +%Y%m%d-%H%M%S)"
+          echo "Creating release tag: $TAG"
+          
+          # Create tag and release
+          gh release create "$TAG" \
+            "${{ steps.locate_apk.outputs.apk_path }}" \
+            --title "Build #${{ github.run_number }} ($(date +%Y-%m-%d))" \
+            --notes "Auto-generated release for build #${{ github.run_number }}" \
+            --target ${{ github.ref }}
+          
+          echo "Release created successfully!"
+          echo "release_tag=$TAG" >> $GITHUB_OUTPUT
 
+      # ── Fallback: Upload debug APK as artifact (smaller, less frequent) ───────
       - name: Upload debug APK artifact
         id: upload_debug
         uses: actions/upload-artifact@v4
@@ -155,7 +162,7 @@ jobs:
         with:
           name: coopvest-debug-apk-${{ github.run_number }}
           path: ${{ steps.locate_apk.outputs.apk_path }}
-          retention-days: 3
+          retention-days: 1
           if-no-files-found: error
           compression-level: 6
 
@@ -190,11 +197,19 @@ jobs:
             if [ "${{ steps.locate_apk.outputs.apk_found }}" = "true" ]; then
               echo "### ⬇️ Download your APK"
               echo ""
-              echo "**[Click here → go to this run and scroll to Artifacts at the bottom](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})**"
-              echo ""
-              echo "The file is named: \`coopvest-${{ github.event.inputs.build_type || 'release' }}-apk-${{ github.run_number }}\`"
-              echo ""
-              echo "> Artifacts are kept for ${{ github.event.inputs.build_type == 'debug' && '30' || '90' }} days. If the link shows 404, trigger a new build."
+              if [ "${{ github.event.inputs.build_type }}" = "debug" ]; then
+                echo "**[Click here → go to this run and scroll to Artifacts at the bottom](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})**"
+                echo ""
+                echo "The file is named: \`coopvest-debug-apk-${{ github.run_number }}\`"
+                echo ""
+                echo "> Debug artifacts are kept for 1 day."
+              else
+                echo "**APK uploaded to GitHub Release**"
+                echo ""
+                echo "**[Click here to download the release](${{ github.server_url }}/${{ github.repository }}/releases)**: look for the latest release with tag \`build-${{ github.run_number }}-*\`"
+                echo ""
+                echo "> Releases are not automatically deleted and don't count against artifact storage quota."
+              fi
             else
               echo "### Build failed — no APK was produced"
               echo ""
