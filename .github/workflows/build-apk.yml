@@ -144,12 +144,19 @@ jobs:
           TAG="build-${{ github.run_number }}-$(date +%Y%m%d-%H%M%S)"
           echo "Creating release tag: $TAG"
           
+          # Use the head SHA for PRs, or the ref for pushes
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            TARGET_SHA="${{ github.event.pull_request.head.sha }}"
+          else
+            TARGET_SHA="${{ github.sha }}"
+          fi
+          
           # Create tag and release
           gh release create "$TAG" \
             "${{ steps.locate_apk.outputs.apk_path }}" \
             --title "Build #${{ github.run_number }} ($(date +%Y-%m-%d))" \
             --notes "Auto-generated release for build #${{ github.run_number }}" \
-            --target ${{ github.ref }}
+            --target "$TARGET_SHA"
           
           echo "Release created successfully!"
           echo "release_tag=$TAG" >> $GITHUB_OUTPUT
