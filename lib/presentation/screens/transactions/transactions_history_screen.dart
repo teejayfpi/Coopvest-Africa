@@ -152,7 +152,7 @@ class TransactionsHistoryScreen extends ConsumerWidget {
   }
 
   Widget _buildTransactionItem(BuildContext context, Transaction txn) {
-    final isCredit = txn.type == 'contribution' || txn.type == 'loan_disbursement' || txn.type == 'refund';
+    final isCredit = txn.isCredit;
     
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),

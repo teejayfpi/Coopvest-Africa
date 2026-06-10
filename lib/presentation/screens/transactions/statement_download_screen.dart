@@ -473,7 +473,7 @@ class _StatementDownloadScreenState extends ConsumerState<StatementDownloadScree
 
   List<pw.Widget> _buildPdfTransactions(List<Transaction> transactions) {
     return transactions.map((txn) {
-      final isCredit = txn.type == 'contribution' || txn.type == 'loan_disbursement' || txn.type == 'refund';
+      final isCredit = txn.isCredit;
       return [
         pw.Container(
           padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 4),
@@ -504,11 +504,11 @@ class _StatementDownloadScreenState extends ConsumerState<StatementDownloadScree
 
   pw.Widget _buildPdfSummary(List<Transaction> transactions, Wallet? wallet) {
     final totalCredits = transactions
-        .where((t) => t.type == 'contribution' || t.type == 'loan_disbursement' || t.type == 'refund')
+        .where((t) => t.isCredit)
         .fold(0.0, (sum, t) => sum + t.amount);
 
     final totalDebits = transactions
-        .where((t) => t.type != 'contribution' && t.type != 'loan_disbursement' && t.type != 'refund')
+        .where((t) => !t.isCredit)
         .fold(0.0, (sum, t) => sum + t.amount);
 
     return pw.Container(

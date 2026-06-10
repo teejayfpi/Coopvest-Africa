@@ -60,13 +60,13 @@ router.get('/summary', async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('transactions')
-      .select('type, amount')
+      .select('category, amount')
       .eq('profile_id', req.user.id);
     if (error) throw error;
 
     const totals = (data || []).reduce(
       (acc, t) => {
-        if (t.type === 'credit') acc.credits += Number(t.amount);
+        if (t.category === 'credit') acc.credits += Number(t.amount);
         else acc.debits += Number(t.amount);
         return acc;
       },
@@ -80,12 +80,12 @@ router.get('/summary', async (req, res) => {
 });
 
 router.get('/credits', async (req, res) => {
-  req.query.type = 'credit';
+  req.query.category = 'credit';
   return router.handle(Object.assign(req, { url: '/', method: 'GET' }), res);
 });
 
 router.get('/debits', async (req, res) => {
-  req.query.type = 'debit';
+  req.query.category = 'debit';
   return router.handle(Object.assign(req, { url: '/', method: 'GET' }), res);
 });
 
@@ -122,7 +122,7 @@ router.get('/stats/monthly', async (req, res) => {
     since.setMonth(since.getMonth() - 12);
     const { data, error } = await supabase
       .from('transactions')
-      .select('type, amount, created_at')
+      .select('category, amount, created_at')
       .eq('profile_id', req.user.id)
       .gte('created_at', since.toISOString());
     if (error) throw error;
@@ -131,7 +131,7 @@ router.get('/stats/monthly', async (req, res) => {
     for (const t of data || []) {
       const key = new Date(t.created_at).toISOString().slice(0, 7);
       if (!buckets[key]) buckets[key] = { month: key, credits: 0, debits: 0, count: 0 };
-      if (t.type === 'credit') buckets[key].credits += Number(t.amount);
+      if (t.category === 'credit') buckets[key].credits += Number(t.amount);
       else buckets[key].debits += Number(t.amount);
       buckets[key].count += 1;
     }

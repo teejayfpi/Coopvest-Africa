@@ -6,6 +6,7 @@
  * Postgres arithmetic.
  */
 
+const crypto = require('crypto');
 const express = require('express');
 const { body } = require('express-validator');
 const router = express.Router();
@@ -16,6 +17,7 @@ const validate = require('../middleware/validate');
 const logger = require('../utils/logger');
 
 const newRef = (prefix) => `${prefix}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+const newTransactionId = () => `TXN-${crypto.randomUUID()}`;
 
 async function ensureWallet(profileId) {
   const { data, error } = await supabase
@@ -55,7 +57,13 @@ async function adjustBalance(profileId, delta) {
 async function recordTransaction(profileId, row) {
   const { data, error } = await supabase
     .from('transactions')
-    .insert({ profile_id: profileId, reference: newRef('TXN'), status: 'completed', ...row })
+    .insert({
+      transaction_id: newTransactionId(),
+      profile_id: profileId,
+      reference: newRef('TXN'),
+      status: 'completed',
+      ...row,
+    })
     .select('*')
     .single();
   if (error) throw error;
@@ -115,8 +123,8 @@ router.post(
       const { amount, description } = req.body;
       const wallet = await adjustBalance(req.user.id, Number(amount));
       const txn = await recordTransaction(req.user.id, {
-        type: 'credit',
-        category: 'deposit',
+        type: 'deposit',
+        category: 'credit',
         amount,
         description: description || 'Wallet deposit',
       });
@@ -141,8 +149,8 @@ router.post(
       const { amount, description } = req.body;
       const wallet = await adjustBalance(req.user.id, Number(amount));
       const txn = await recordTransaction(req.user.id, {
-        type: 'credit',
-        category: 'contribution',
+        type: 'deposit',
+        category: 'credit',
         amount,
         description: description || 'Wallet contribution',
       });
@@ -167,8 +175,8 @@ router.post(
       const { amount, description } = req.body;
       const wallet = await adjustBalance(req.user.id, -Number(amount));
       const txn = await recordTransaction(req.user.id, {
-        type: 'debit',
-        category: 'withdrawal',
+        type: 'withdrawal',
+        category: 'debit',
         amount,
         description: description || 'Wallet withdrawal',
       });
@@ -212,20 +220,20 @@ router.post(
       await adjustBalance(recipient.id, Number(amount));
 
       const senderTxn = await recordTransaction(req.user.id, {
-        type: 'debit',
-        category: 'transfer_out',
+        type: 'transfer_out',
+        category: 'debit',
         amount,
         description: description || `Transfer to ${recipient.name || recipient.user_id}`,
         reference: ref,
-        counterparty_id: recipient.id,
+        metadata: { counterparty_id: recipient.id },
       });
       await recordTransaction(recipient.id, {
-        type: 'credit',
-        category: 'transfer_in',
+        type: 'transfer_in',
+        category: 'credit',
         amount,
         description: description || `Transfer from ${req.user.name || req.user.userId}`,
         reference: ref,
-        counterparty_id: req.user.id,
+        metadata: { counterparty_id: req.user.id },
       });
 
       res.status(201).json({ success: true, wallet: sender, transaction: senderTxn });
@@ -326,7 +334,7 @@ router.get('/statement', authenticate, async (req, res) => {
 
     const totals = (data || []).reduce(
       (acc, t) => {
-        if (t.type === 'credit') acc.credits += Number(t.amount);
+        if (t.category === 'credit') acc.credits += Number(t.amount);
         else acc.debits += Number(t.amount);
         return acc;
       },

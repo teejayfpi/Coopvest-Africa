@@ -87,7 +87,8 @@ class Wallet extends Equatable {
 class Transaction extends Equatable {
   final String id;
   final String walletId;
-  final String type; // contribution, withdrawal, interest, loan_repayment
+  final String type; // deposit, withdrawal, transfer_in, transfer_out, interest, loan_repayment
+  final String? category; // credit, debit
   final double amount;
   final String status; // pending, completed, failed
   final String? description;
@@ -99,6 +100,7 @@ class Transaction extends Equatable {
     required this.id,
     required this.walletId,
     required this.type,
+    this.category,
     required this.amount,
     required this.status,
     this.description,
@@ -107,11 +109,20 @@ class Transaction extends Equatable {
     required this.updatedAt,
   });
 
+  /// True when the transaction increases the wallet balance.
+  /// Prefers the backend `category` field, falling back to known credit types.
+  bool get isCredit {
+    if (category != null) return category == 'credit';
+    return const ['deposit', 'transfer_in', 'contribution', 'loan_disbursement', 'refund', 'interest']
+        .contains(type);
+  }
+
   factory Transaction.fromJson(Map<String, dynamic> json) {
     return Transaction(
       id: json['id'] as String? ?? '',
       walletId: json['wallet_id'] as String? ?? '',
-      type: json['type'] as String? ?? 'credit',
+      type: json['type'] as String? ?? 'deposit',
+      category: json['category'] as String?,
       amount: (json['amount'] as num?)?.toDouble() ?? 0.0,
       status: json['status'] as String? ?? 'completed',
       description: json['description'] as String?,
@@ -130,6 +141,7 @@ class Transaction extends Equatable {
       'id': id,
       'wallet_id': walletId,
       'type': type,
+      'category': category,
       'amount': amount,
       'status': status,
       'description': description,
@@ -144,6 +156,7 @@ class Transaction extends Equatable {
     id,
     walletId,
     type,
+    category,
     amount,
     status,
     description,
