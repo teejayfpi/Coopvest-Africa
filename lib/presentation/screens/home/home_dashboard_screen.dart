@@ -349,18 +349,41 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
                         shape: BoxShape.circle,
                         border: Border.all(color: Colors.white.withOpacity(0.3), width: 2),
                       ),
-                      child: CircleAvatar(
-                        radius: 22,
-                        backgroundColor: Colors.white.withOpacity(0.2),
-                        child: Text(
-                          _getInitials(fullName),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
+                      child: user?.profilePicture != null && user!.profilePicture!.isNotEmpty
+                          ? ClipOval(
+                              child: Image.network(
+                                user.profilePicture!,
+                                width: 44,
+                                height: 44,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return CircleAvatar(
+                                    radius: 22,
+                                    backgroundColor: Colors.white.withOpacity(0.2),
+                                    child: Text(
+                                      _getInitials(fullName),
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            )
+                          : CircleAvatar(
+                              radius: 22,
+                              backgroundColor: Colors.white.withOpacity(0.2),
+                              child: Text(
+                                _getInitials(fullName),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
                     ),
                   ),
                 ],

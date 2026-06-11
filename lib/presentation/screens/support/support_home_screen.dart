@@ -5,7 +5,7 @@ import '../../../config/theme_extension.dart';
 import 'ticket_list_screen.dart';
 import 'ticket_creation_screen.dart';
 
-/// Support Home Screen
+/// Support/Complaints Home Screen
 class SupportHomeScreen extends ConsumerWidget {
   const SupportHomeScreen({Key? key}) : super(key: key);
 
@@ -19,7 +19,7 @@ class SupportHomeScreen extends ConsumerWidget {
           icon: Icon(Icons.arrow_back, color: context.iconPrimary),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: Text('Support Center', style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold)),
+        title: Text('Help & Support', style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold)),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -27,6 +27,7 @@ class SupportHomeScreen extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Welcome banner
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
@@ -38,7 +39,7 @@ class SupportHomeScreen extends ConsumerWidget {
                     Container(
                       width: 60, height: 60,
                       decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
-                      child: const Icon(Icons.headset_mic, color: Colors.white, size: 30),
+                      child: const Icon(Icons.support_agent, color: Colors.white, size: 30),
                     ),
                     const SizedBox(width: 16),
                     const Expanded(
@@ -47,55 +48,131 @@ class SupportHomeScreen extends ConsumerWidget {
                         children: [
                           Text('How can we help?', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                           SizedBox(height: 4),
-                          Text('Create a support ticket and our team will assist you.', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                          Text('Submit a complaint and our team will assist you promptly.', style: TextStyle(color: Colors.white70, fontSize: 14)),
                         ],
                       ),
                     ),
                   ],
                 ),
               ),
+              
               const SizedBox(height: 32),
-              Text('Quick Actions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: context.textPrimary)),
+              
+              // Quick Actions
+              Text('Submit a Complaint', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: context.textPrimary)),
               const SizedBox(height: 16),
+              
               SizedBox(
                 width: double.infinity, height: 56,
                 child: ElevatedButton.icon(
                   onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const TicketCreationScreen())),
-                  icon: const Icon(Icons.add, color: Colors.white),
-                  label: const Text('Create New Ticket', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  icon: const Icon(Icons.report_problem, color: Colors.white),
+                  label: const Text('Submit New Complaint', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   style: ElevatedButton.styleFrom(backgroundColor: CoopvestColors.primary, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
                 ),
               ),
+              
               const SizedBox(height: 12),
+              
               SizedBox(
                 width: double.infinity, height: 56,
                 child: OutlinedButton.icon(
                   onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const TicketListScreen())),
                   icon: const Icon(Icons.inbox_outlined),
-                  label: const Text('My Tickets', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  label: const Text('View My Complaints', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   style: OutlinedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
                 ),
               ),
+              
               const SizedBox(height: 32),
-              Text('Common Help Topics', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: context.textPrimary)),
+              
+              // Common Help Topics
+              Text('Common Issues', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: context.textPrimary)),
               const SizedBox(height: 16),
-              _buildHelpTopic(context, Icons.account_balance_wallet, 'Loans & Credit', 'Loan applications, repayments, guarantor requests'),
-              _buildHelpTopic(context, Icons.group_add, 'Guarantor Requests', 'Being a guarantor, consent issues'),
-              _buildHelpTopic(context, Icons.verified_user, 'Account & KYC', 'Profile updates, identity verification'),
+              
+              _buildHelpTopic(
+                context, 
+                Icons.account_balance_wallet, 
+                'Loan & Contribution Issues', 
+                'Problems with loan applications, repayments, or savings',
+                () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const TicketCreationScreen(preselectedCategory: 'loan_issue'))),
+              ),
+              
+              _buildHelpTopic(
+                context, 
+                Icons.payments, 
+                'Withdrawal Delays', 
+                'Issues with fund withdrawals or transfer delays',
+                () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const TicketCreationScreen(preselectedCategory: 'withdrawal'))),
+              ),
+              
+              _buildHelpTopic(
+                context, 
+                Icons.person, 
+                'Account & KYC', 
+                'Profile updates, identity verification problems',
+                () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const TicketCreationScreen(preselectedCategory: 'account_kyc'))),
+              ),
+              
+              _buildHelpTopic(
+                context, 
+                Icons.bug_report, 
+                'App Errors', 
+                'Technical bugs or errors in the app',
+                () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const TicketCreationScreen(preselectedCategory: 'technical_bug'))),
+              ),
+              
+              _buildHelpTopic(
+                context, 
+                Icons.handshake, 
+                'Guarantor Issues', 
+                'Guarantor requests or consent problems',
+                () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const TicketCreationScreen(preselectedCategory: 'guarantor_consent'))),
+              ),
+              
               const SizedBox(height: 32),
+              
+              // Response time info
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(color: context.cardBackground, borderRadius: BorderRadius.circular(12)),
                 child: Row(
                   children: [
-                    Icon(Icons.info_outline, color: context.textSecondary),
+                    Icon(Icons.access_time, color: CoopvestColors.primary),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text('Response Time', style: TextStyle(fontWeight: FontWeight.bold, color: context.textPrimary)),
-                          Text('We typically respond within 24 hours on business days.', style: TextStyle(fontSize: 13, color: context.textSecondary)),
+                          Text('We typically respond within 24-48 hours on business days.', style: TextStyle(fontSize: 13, color: context.textSecondary)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              
+              const SizedBox(height: 16),
+              
+              // Urgency notice
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: CoopvestColors.warning.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: CoopvestColors.warning.withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.priority_high, color: CoopvestColors.warning),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Urgent Issue?', style: TextStyle(fontWeight: FontWeight.bold, color: context.textPrimary)),
+                          Text('Select "Urgent" priority when submitting if it requires immediate attention.', style: TextStyle(fontSize: 12, color: context.textSecondary)),
                         ],
                       ),
                     ),
@@ -109,11 +186,11 @@ class SupportHomeScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildHelpTopic(BuildContext context, IconData icon, String title, String description) {
+  Widget _buildHelpTopic(BuildContext context, IconData icon, String title, String description, VoidCallback onTap) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: InkWell(
-        onTap: () {},
+        onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Container(
           padding: const EdgeInsets.all(16),

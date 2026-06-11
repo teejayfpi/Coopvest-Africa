@@ -103,6 +103,14 @@ class _StatementDownloadScreenState extends ConsumerState<StatementDownloadScree
     }
   }
 
+  Future<void> _loadTransactions() async {
+    try {
+      await ref.read(walletProvider.notifier).loadTransactions(pageSize: 100);
+    } catch (e) {
+      logger.e('Load transactions error: $e');
+    }
+  }
+
   Future<void> _generateAndDownloadStatement() async {
     if (_startDate == null || _endDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -119,8 +127,13 @@ class _StatementDownloadScreenState extends ConsumerState<StatementDownloadScree
     });
 
     try {
+      // First load real transactions from the API
+      await _loadTransactions();
+      
       final walletState = ref.read(walletProvider);
       final user = ref.read(currentUserProvider);
+      
+      // Get transactions - this should now have real data
       final transactions = walletState.transactions;
 
       // Filter transactions by date range
