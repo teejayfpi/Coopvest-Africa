@@ -92,6 +92,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen>
       final apiClient = ref.read(apiClientProvider);
       await apiClient.post('/auth/request-password-reset', data: {
         'email': _emailController.text.trim().toLowerCase(),
+        'type': 'mobile',
       });
     } catch (_) {
       // Backend always returns success to prevent email enumeration.
