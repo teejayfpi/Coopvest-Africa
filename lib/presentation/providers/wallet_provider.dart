@@ -107,8 +107,8 @@ class WalletRepository {
     }
   }
 
-  /// Make contribution
-  Future<Transaction> makeContribution(double amount, {String? description}) async {
+  /// Make contribution - returns Map with transaction and message
+  Future<Map<String, dynamic>> makeContribution(double amount, {String? description}) async {
     try {
       final Map<String, dynamic> requestData = {
         'amount': amount,
@@ -123,8 +123,14 @@ class WalletRepository {
       );
 
       final data = response as Map<String, dynamic>;
-      final txnData = data['transaction'] as Map<String, dynamic>? ?? data;
-      return Transaction.fromJson(txnData);
+      
+      // Return the full response including message
+      return {
+        'transaction': data['transaction'],
+        'deposit_request': data['deposit_request'],
+        'message': data['message'] ?? 'Your deposit is pending verification.',
+        'success': data['success'] == true,
+      };
     } catch (e) {
       logger.e('Make contribution error: $e');
       rethrow;
@@ -307,23 +313,30 @@ class WalletNotifier extends StateNotifier<WalletState> {
     }
   }
 
-  /// Make contribution
-  Future<void> makeContribution({
+  /// Make contribution - returns Map with transaction and message
+  Future<Map<String, dynamic>> makeContribution({
     required double amount,
     String? description,
   }) async {
     state = state.copyWith(status: WalletStatus.loading);
     try {
-      final transaction = await _walletRepository.makeContribution(amount, description: description);
+      final result = await _walletRepository.makeContribution(amount, description: description);
 
-      // Reload wallet
-      await loadWallet();
+      // Note: We don't reload wallet immediately since deposit is pending verification
+      // The wallet will be updated after admin verification
+      // Instead, add the pending transaction to the list
 
-      // Add transaction to list
-      state = state.copyWith(
-        status: WalletStatus.loaded,
-        transactions: [transaction, ...state.transactions],
-      );
+      if (result['transaction'] != null) {
+        final pendingTxn = Transaction.fromJson(result['transaction'] as Map<String, dynamic>);
+        state = state.copyWith(
+          status: WalletStatus.loaded,
+          transactions: [pendingTxn, ...state.transactions],
+        );
+      } else {
+        state = state.copyWith(status: WalletStatus.loaded);
+      }
+
+      return result;
     } catch (e) {
       logger.e('Make contribution error: $e');
       state = state.copyWith(

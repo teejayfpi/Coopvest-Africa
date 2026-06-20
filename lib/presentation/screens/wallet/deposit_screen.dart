@@ -45,11 +45,11 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
     setState(() => _isProcessing = true);
     try {
       final amount = double.parse(_amountController.text.replaceAll(',', ''));
-      await ref.read(walletProvider.notifier).makeContribution(
+      final result = await ref.read(walletProvider.notifier).makeContribution(
         amount: amount,
         description: 'Wallet deposit via ${_selectedPaymentMethod.replaceAll('_', ' ')}',
       );
-      _showSuccessDialog();
+      _showPendingDialog(result['message'] ?? 'Your deposit is pending verification.');
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Deposit failed: $e'), backgroundColor: CoopvestColors.error),
@@ -70,7 +70,7 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
     );
   }
 
-  void _showSuccessDialog() {
+  void _showPendingDialog(String message) {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -78,21 +78,41 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
         backgroundColor: context.cardBackground,
         title: Row(
           children: [
-            const Icon(Icons.check_circle, color: CoopvestColors.success),
+            const Icon(Icons.hourglass_empty, color: CoopvestColors.warning),
             const SizedBox(width: 8),
-            Text('Deposit Submitted', style: TextStyle(color: context.textPrimary)),
+            Text('Pending Verification', style: TextStyle(color: context.textPrimary)),
           ],
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'Your deposit of ₦${_amountController.text} has been submitted.',
+              'Your deposit of ₦${_amountController.text} has been submitted for verification.',
               textAlign: TextAlign.center,
               style: TextStyle(color: context.textSecondary),
             ),
-            const SizedBox(height: 16),
-            if (_selectedPaymentMethod == 'bank_transfer')
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: CoopvestColors.warning.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline, color: CoopvestColors.warning, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      message,
+                      style: const TextStyle(color: CoopvestColors.warning, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (_selectedPaymentMethod == 'bank_transfer') ...[
+              const SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -100,24 +120,12 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Text(
-                  'Please transfer the exact amount to the account details shown. Your wallet will be credited once payment is confirmed.',
+                  'Please transfer the exact amount to the Opay account and include your registered name as the narration. Your deposit will be verified by an admin.',
                   style: TextStyle(color: CoopvestColors.primary, fontSize: 12),
                   textAlign: TextAlign.center,
                 ),
-              )
-            else
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: CoopvestColors.info.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Text(
-                  'Your wallet will be credited once payment is confirmed.',
-                  style: TextStyle(color: CoopvestColors.info, fontSize: 12),
-                  textAlign: TextAlign.center,
-                ),
               ),
+            ],
           ],
         ),
         actions: [

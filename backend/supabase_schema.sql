@@ -218,6 +218,39 @@ CREATE INDEX IF NOT EXISTS idx_transactions_status ON public.transactions(status
 CREATE INDEX IF NOT EXISTS idx_transactions_reference ON public.transactions(reference);
 
 -- -----------------------------------------------------------------------------
+-- Deposit Requests (for manual bank transfer verification)
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.deposit_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  profile_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+  transaction_id UUID REFERENCES public.transactions(id) ON DELETE SET NULL,
+  amount DECIMAL(18, 2) NOT NULL,
+  currency TEXT DEFAULT 'NGN',
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending','verified','rejected','cancelled')),
+  payment_proof_url TEXT,
+  payment_reference TEXT,
+  payment_date TIMESTAMPTZ,
+  bank_name TEXT,
+  sender_account_name TEXT,
+  sender_account_number TEXT,
+  admin_notes TEXT,
+  verified_by UUID REFERENCES public.profiles(id),
+  verified_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_deposit_requests_profile ON public.deposit_requests(profile_id);
+CREATE INDEX IF NOT EXISTS idx_deposit_requests_status ON public.deposit_requests(status);
+CREATE INDEX IF NOT EXISTS idx_deposit_requests_created ON public.deposit_requests(created_at DESC);
+
+-- RLS for deposit_requests
+DROP POLICY IF EXISTS deposit_requests_self_select ON public.deposit_requests;
+DROP POLICY IF EXISTS deposit_requests_self_modify ON public.deposit_requests;
+CREATE POLICY deposit_requests_self_select ON public.deposit_requests FOR SELECT USING (profile_id = auth.uid() OR public.is_staff());
+CREATE POLICY deposit_requests_self_modify ON public.deposit_requests FOR ALL USING (public.is_staff()) WITH CHECK (public.is_staff());
+
+-- -----------------------------------------------------------------------------
 -- Bank accounts
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.bank_accounts (

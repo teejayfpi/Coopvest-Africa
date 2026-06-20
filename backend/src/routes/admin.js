@@ -294,4 +294,351 @@ router.delete('/organizations/:id', async (req, res) => {
   }
 });
 
+// =============================================================================
+// Deposit Verification Endpoints
+// =============================================================================
+
+/**
+ * GET /api/v1/admin/deposits
+ * Get all pending deposit requests for admin review
+ */
+router.get('/deposits', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+    const page = parseInt(req.query.page) || 1;
+    const status = req.query.status || 'pending'; // default to pending
+    const profileId = req.query.profile_id; // optional filter by user
+
+    let query = supabase
+      .from('deposit_requests')
+      .select(`
+        *,
+        profile:profiles(id, user_id, name, email, phone)
+      `, { count: 'exact' })
+      .eq('status', status)
+      .order('created_at', { ascending: false })
+      .range((page - 1) * limit, page * limit - 1);
+
+    if (profileId) {
+      query = query.eq('profile_id', profileId);
+    }
+
+    const { data, error, count } = await query;
+
+    if (error) throw error;
+
+    // Also get transaction details for each deposit request
+    const depositRequests = await Promise.all(
+      (data || []).map(async (deposit) => {
+        const { data: txn } = await supabase
+          .from('transactions')
+          .select('*')
+          .eq('id', deposit.transaction_id)
+          .maybeSingle();
+        return { ...deposit, transaction: txn };
+      })
+    );
+
+    res.json({
+      success: true,
+      deposits: depositRequests,
+      pagination: { page, limit, total: count || 0 },
+    });
+  } catch (err) {
+    logger.error('admin deposits get error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/v1/admin/deposits/:id
+ * Get single deposit request details
+ */
+router.get('/deposits/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const { data: deposit, error } = await supabase
+      .from('deposit_requests')
+      .select(`
+        *,
+        profile:profiles(id, user_id, name, email, phone),
+        transaction:transactions(*)
+      `)
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!deposit) {
+      return res.status(404).json({ success: false, error: 'Deposit request not found' });
+    }
+
+    res.json({ success: true, deposit });
+  } catch (err) {
+    logger.error('admin deposit get error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/v1/admin/deposits/:id/verify
+ * Verify and approve a deposit request (credits user's wallet)
+ */
+router.post('/deposits/:id/verify', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { notes } = req.body; // optional admin notes
+
+    // Get deposit request
+    const { data: deposit, error: fetchErr } = await supabase
+      .from('deposit_requests')
+      .select('*, transaction:transactions(*)')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (fetchErr) throw fetchErr;
+    if (!deposit) {
+      return res.status(404).json({ success: false, error: 'Deposit request not found' });
+    }
+
+    if (deposit.status !== 'pending') {
+      return res.status(400).json({
+        success: false,
+        error: `Deposit already ${deposit.status}. Cannot verify.`
+      });
+    }
+
+    const profileId = deposit.profile_id;
+    const amount = Number(deposit.amount);
+
+    // Credit user's wallet
+    const wallet = await ensureWallet(profileId);
+    const newBalance = Number(wallet.balance) + amount;
+
+    // Update wallet balance
+    const { data: updatedWallet, error: walletErr } = await supabase
+      .from('wallets')
+      .update({
+        balance: newBalance,
+        last_updated: new Date().toISOString()
+      })
+      .eq('id', wallet.id)
+      .select()
+      .single();
+
+    if (walletErr) throw walletErr;
+
+    // Update transaction to completed
+    if (deposit.transaction_id) {
+      await supabase
+        .from('transactions')
+        .update({
+          status: 'completed',
+          completed_at: new Date().toISOString(),
+          balance_before: wallet.balance,
+          balance_after: newBalance,
+          metadata: {
+            ...(deposit.transaction?.metadata || {}),
+            verified_by: req.user.id,
+            verified_at: new Date().toISOString(),
+            deposit_request_id: id,
+          }
+        })
+        .eq('id', deposit.transaction_id);
+    }
+
+    // Update deposit request status
+    const { data: updatedDeposit, error: updateErr } = await supabase
+      .from('deposit_requests')
+      .update({
+        status: 'verified',
+        verified_by: req.user.id,
+        verified_at: new Date().toISOString(),
+        admin_notes: notes || null,
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateErr) throw updateErr;
+
+    logger.info(`Deposit ${id} verified by admin ${req.user.id}: ₦${amount} to user ${profileId}`);
+
+    res.json({
+      success: true,
+      message: `Deposit of ₦${amount.toLocaleString()} has been verified and credited to wallet.`,
+      deposit: updatedDeposit,
+      wallet: updatedWallet,
+    });
+  } catch (err) {
+    logger.error('admin deposit verify error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/v1/admin/deposits/:id/reject
+ * Reject a deposit request
+ */
+router.post('/deposits/:id/reject', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+
+    if (!reason) {
+      return res.status(400).json({
+        success: false,
+        error: 'Rejection reason is required'
+      });
+    }
+
+    // Get deposit request
+    const { data: deposit, error: fetchErr } = await supabase
+      .from('deposit_requests')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (fetchErr) throw fetchErr;
+    if (!deposit) {
+      return res.status(404).json({ success: false, error: 'Deposit request not found' });
+    }
+
+    if (deposit.status !== 'pending') {
+      return res.status(400).json({
+        success: false,
+        error: `Deposit already ${deposit.status}. Cannot reject.`
+      });
+    }
+
+    // Update deposit request status
+    const { data: updatedDeposit, error: updateErr } = await supabase
+      .from('deposit_requests')
+      .update({
+        status: 'rejected',
+        admin_notes: reason,
+        verified_by: req.user.id,
+        verified_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateErr) throw updateErr;
+
+    // Update transaction to failed
+    if (deposit.transaction_id) {
+      await supabase
+        .from('transactions')
+        .update({
+          status: 'failed',
+          failure_reason: reason,
+        })
+        .eq('id', deposit.transaction_id);
+    }
+
+    logger.info(`Deposit ${id} rejected by admin ${req.user.id}: ${reason}`);
+
+    res.json({
+      success: true,
+      message: 'Deposit request has been rejected.',
+      deposit: updatedDeposit,
+    });
+  } catch (err) {
+    logger.error('admin deposit reject error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/v1/admin/deposits/bulk-verify
+ * Verify multiple deposits at once
+ */
+router.post('/deposits/bulk-verify', async (req, res) => {
+  try {
+    const { deposit_ids } = req.body;
+
+    if (!Array.isArray(deposit_ids) || deposit_ids.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'deposit_ids array is required'
+      });
+    }
+
+    const results = { verified: [], failed: [] };
+
+    for (const id of deposit_ids) {
+      try {
+        // Get deposit request
+        const { data: deposit } = await supabase
+          .from('deposit_requests')
+          .select('*, transaction:transactions(*)')
+          .eq('id', id)
+          .maybeSingle();
+
+        if (!deposit || deposit.status !== 'pending') {
+          results.failed.push({ id, reason: 'Not found or not pending' });
+          continue;
+        }
+
+        const profileId = deposit.profile_id;
+        const amount = Number(deposit.amount);
+
+        // Credit wallet
+        const wallet = await ensureWallet(profileId);
+        const newBalance = Number(wallet.balance) + amount;
+
+        await supabase
+          .from('wallets')
+          .update({
+            balance: newBalance,
+            last_updated: new Date().toISOString()
+          })
+          .eq('id', wallet.id);
+
+        // Update transaction
+        if (deposit.transaction_id) {
+          await supabase
+            .from('transactions')
+            .update({
+              status: 'completed',
+              completed_at: new Date().toISOString(),
+              balance_before: wallet.balance,
+              balance_after: newBalance,
+            })
+            .eq('id', deposit.transaction_id);
+        }
+
+        // Update deposit request
+        await supabase
+          .from('deposit_requests')
+          .update({
+            status: 'verified',
+            verified_by: req.user.id,
+            verified_at: new Date().toISOString(),
+          })
+          .eq('id', id);
+
+        results.verified.push({ id, amount });
+      } catch (err) {
+        results.failed.push({ id, reason: err.message });
+      }
+    }
+
+    logger.info(`Bulk deposit verification by admin ${req.user.id}: ${results.verified.length} verified, ${results.failed.length} failed`);
+
+    res.json({
+      success: true,
+      message: `Verified ${results.verified.length} deposits, ${results.failed.length} failed.`,
+      results,
+    });
+  } catch (err) {
+    logger.error('admin bulk deposit verify error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Import ensureWallet from wallet routes for use here
+const { ensureWallet } = require('./wallet');
+
 module.exports = router;

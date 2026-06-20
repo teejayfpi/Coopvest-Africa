@@ -137,30 +137,107 @@ router.post(
 );
 
 /**
- * POST /api/v1/wallet/contribute - Alias for deposit (used by Flutter app)
+ * POST /api/v1/wallet/contribute - Creates a pending deposit request (requires admin verification)
  */
 router.post(
   '/contribute',
   authenticate,
-  [body('amount').isFloat({ min: 0.01 }), body('description').optional().isString()],
+  [
+    body('amount').isFloat({ min: 0.01 }),
+    body('description').optional().isString(),
+    body('payment_reference').optional().isString(),
+    body('payment_date').optional().isISO8601(),
+    body('bank_name').optional().isString(),
+    body('sender_account_name').optional().isString(),
+    body('sender_account_number').optional().isString(),
+  ],
   validate,
   async (req, res) => {
     try {
-      const { amount, description } = req.body;
-      const wallet = await adjustBalance(req.user.id, Number(amount));
+      const { amount, description, payment_reference, payment_date, bank_name, sender_account_name, sender_account_number } = req.body;
+
+      // Create a PENDING transaction (no wallet credit yet)
       const txn = await recordTransaction(req.user.id, {
         type: 'deposit',
         category: 'credit',
         amount,
+        status: 'pending', // Will be updated to 'completed' after admin verification
         description: description || 'Wallet contribution',
+        payment_method: 'bank_transfer',
       });
-      res.status(201).json({ success: true, wallet, transaction: txn });
+
+      // Create deposit request record for admin verification
+      const { data: depositRequest, error: depositErr } = await supabase
+        .from('deposit_requests')
+        .insert({
+          profile_id: req.user.id,
+          transaction_id: txn.id,
+          amount: Number(amount),
+          currency: 'NGN',
+          status: 'pending',
+          payment_reference: payment_reference || null,
+          payment_date: payment_date || null,
+          bank_name: bank_name || null,
+          sender_account_name: sender_account_name || null,
+          sender_account_number: sender_account_number || null,
+        })
+        .select('*')
+        .single();
+
+      if (depositErr) {
+        logger.error('Deposit request creation error:', depositErr);
+        throw depositErr;
+      }
+
+      logger.info(`Deposit request created for user ${req.user.id}: ₦${amount}`);
+
+      res.status(201).json({
+        success: true,
+        message: 'Deposit submitted for verification. Your wallet will be credited once an admin confirms your payment.',
+        transaction: txn,
+        deposit_request: depositRequest,
+      });
     } catch (err) {
       logger.error('contribute error:', err);
       res.status(err.statusCode || 500).json({ success: false, error: err.message });
     }
   }
 );
+
+/**
+ * GET /api/v1/wallet/deposit-requests - Get user's deposit requests
+ */
+router.get('/deposit-requests', authenticate, async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+    const page = parseInt(req.query.page) || 1;
+    const status = req.query.status; // optional filter
+
+    let query = supabase
+      .from('deposit_requests')
+      .select('*', { count: 'exact' })
+      .eq('profile_id', req.user.id)
+      .order('created_at', { ascending: false })
+      .range((page - 1) * limit, page * limit - 1);
+
+    if (status) {
+      query = query.eq('status', status);
+    }
+
+    const { data, error, count } = await query;
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      deposit_requests: data || [],
+      pagination: { page, limit, total: count || 0 },
+    });
+  } catch (err) {
+    logger.error('Get deposit requests error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 /**
  * POST /api/v1/wallet/withdraw
