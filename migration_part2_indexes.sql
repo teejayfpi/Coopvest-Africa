@@ -1,0 +1,1 @@
+CREATE INDEX idx_deposit_requests_profile ON public.deposit_requests(profile_id)

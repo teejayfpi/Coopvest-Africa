@@ -1,0 +1,1 @@
+CREATE INDEX idx_deposit_requests_created ON public.deposit_requests(created_at DESC)

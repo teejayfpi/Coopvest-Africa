@@ -1,0 +1,1 @@
+CREATE INDEX idx_deposit_requests_status ON public.deposit_requests(status)

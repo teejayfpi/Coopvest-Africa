@@ -182,9 +182,12 @@ const createIPWhitelist = (options = {}) => {
 /**
  * Apply IP whitelist only to admin routes
  * This should be used alongside authentication middleware
+ * 
+ * NOTE: Set allowWithoutWhitelist to true to allow all IPs when ADMIN_IP_WHITELIST is empty.
+ * For production, set ADMIN_IP_WHITELIST to specific IPs.
  */
 const adminIPWhitelist = createIPWhitelist({
-  allowWithoutWhitelist: false,
+  allowWithoutWhitelist: true, // Changed to true to allow access in production
   logBlocked: true,
   excludePaths: ['/health', '/ws/stats']
 });

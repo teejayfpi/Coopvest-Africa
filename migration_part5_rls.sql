@@ -1,0 +1,1 @@
+ALTER TABLE public.deposit_requests ENABLE ROW LEVEL SECURITY
