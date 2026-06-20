@@ -943,4 +943,150 @@ router.post(
   }
 );
 
+// ---------------------------------------------------------------------------
+// Role Management (superadmin only)
+// ---------------------------------------------------------------------------
+
+// Get all admin accounts with their roles
+router.get('/admins', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, user_id, name, email, role, is_active, created_at')
+      .in('role', ['admin', 'superadmin', 'staff'])
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    res.json({ success: true, admins: data || [] });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Get all available roles
+router.get('/roles', async (req, res) => {
+  try {
+    const roles = [
+      { role_key: 'superadmin', label: 'Super Admin', description: 'Full system access', hierarchy: 3 },
+      { role_key: 'admin', label: 'Admin', description: 'Most administrative access', hierarchy: 2 },
+      { role_key: 'staff', label: 'Staff', description: 'Limited administrative access', hierarchy: 1 },
+    ];
+    res.json({ success: true, roles });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Update admin role (superadmin only)
+router.patch('/admins/:id/role', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { role } = req.body;
+
+    const validRoles = ['admin', 'superadmin', 'staff'];
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Invalid role. Must be one of: admin, superadmin, staff' 
+      });
+    }
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({ role })
+      .eq('id', id)
+      .select('id, user_id, name, email, role')
+      .single();
+
+    if (error) throw error;
+    if (!data) return res.status(404).json({ success: false, error: 'Admin not found' });
+
+    res.json({ success: true, admin: data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Add new admin (by email)
+router.post('/admins', async (req, res) => {
+  try {
+    const { email, name, role } = req.body;
+
+    if (!email || !role) {
+      return res.status(400).json({ success: false, error: 'Email and role are required' });
+    }
+
+    // Find user by email in auth
+    const { data: authUser, error: authError } = await supabase.auth.admin.listUsers();
+    if (authError) throw authError;
+
+    const user = authUser.users.find(u => u.email === email);
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found. They must sign up first.' });
+    }
+
+    // Update or create profile
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .upsert({
+        id: user.id,
+        user_id: user.id,
+        name: name || user.email.split('@')[0],
+        email: user.email,
+        role: role,
+      })
+      .select('id, user_id, name, email, role')
+      .single();
+
+    if (profileError) throw profileError;
+
+    res.status(201).json({ success: true, admin: profile });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Remove admin role (revert to member)
+router.delete('/admins/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({ role: 'member' })
+      .eq('id', id)
+      .select('id, user_id, name, email, role')
+      .single();
+
+    if (error) throw error;
+    if (!data) return res.status(404).json({ success: false, error: 'Admin not found' });
+
+    res.json({ success: true, message: 'Admin role removed', admin: data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Toggle admin active status
+router.patch('/admins/:id/status', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { is_active } = req.body;
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({ is_active })
+      .eq('id', id)
+      .select('id, user_id, name, email, role, is_active')
+      .single();
+
+    if (error) throw error;
+    if (!data) return res.status(404).json({ success: false, error: 'Admin not found' });
+
+    res.json({ success: true, admin: data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;
