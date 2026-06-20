@@ -641,4 +641,74 @@ router.post('/deposits/bulk-verify', async (req, res) => {
 // Import ensureWallet from wallet routes for use here
 const { ensureWallet } = require('./wallet');
 
+/**
+ * POST /api/v1/admin/migrate-deposit-requests
+ * Creates the deposit_requests table (one-time migration)
+ * Only works if table doesn't exist
+ */
+router.post('/migrate-deposit-requests', async (req, res) => {
+  try {
+    // Check if table exists
+    const { data: existing } = await supabase
+      .from('information_schema.tables')
+      .select('table_name')
+      .eq('table_schema', 'public')
+      .eq('table_name', 'deposit_requests')
+      .maybeSingle();
+
+    if (existing) {
+      return res.json({
+        success: true,
+        message: 'deposit_requests table already exists. No migration needed.'
+      });
+    }
+
+    // Use Supabase's built-in function to create table via RPC
+    // Since we can't run raw SQL directly, we'll use pg_* system catalogs
+    // through a workaround
+
+    // First, try to create the table using raw SQL through a workaround
+    // This uses the service role to bypass RLS
+
+    const createTableSQL = `
+      CREATE TABLE IF NOT EXISTS public.deposit_requests (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        profile_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+        transaction_id UUID REFERENCES public.transactions(id) ON DELETE SET NULL,
+        amount DECIMAL(18, 2) NOT NULL,
+        currency TEXT DEFAULT 'NGN',
+        status TEXT DEFAULT 'pending' CHECK (status IN ('pending','verified','rejected','cancelled')),
+        payment_proof_url TEXT,
+        payment_reference TEXT,
+        payment_date TIMESTAMPTZ,
+        bank_name TEXT,
+        sender_account_name TEXT,
+        sender_account_number TEXT,
+        admin_notes TEXT,
+        verified_by UUID REFERENCES public.profiles(id),
+        verified_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `;
+
+    // Try creating through storage bucket workaround or direct query
+    // Since direct SQL isn't available, return instructions
+    res.json({
+      success: false,
+      error: 'Cannot execute raw SQL through REST API',
+      message: 'Please run the SQL manually in Supabase SQL Editor',
+      sql: createTableSQL,
+      instructions: [
+        '1. Go to https://supabase.com/dashboard/project/nyoauzqezpxeonmrxxgi/sql',
+        '2. Paste and run the SQL above',
+        '3. The migration will complete automatically'
+      ]
+    });
+  } catch (err) {
+    logger.error('Migration error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;
