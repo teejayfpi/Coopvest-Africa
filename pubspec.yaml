@@ -1,17 +1,4 @@
 
-# ─── flutter_native_splash config ─────────────────────────────────────────────
-# Run: dart run flutter_native_splash:create   to generate native assets
-flutter_native_splash:
-  color: "#1B5E20"
-  image: assets/images/logo.png
-  image_full_screen: false
-  android: true
-  ios: true
-  android_12:
-    color: "#1B5E20"
-    image: assets/images/logo.png
-  web: false
-
 name: coopvest_mobile
 description: Secure, scalable mobile application for Coopvest Africa cooperative financial services.
 publish_to: 'none'
@@ -105,8 +92,6 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-
-  flutter_native_splash: ^2.4.1
 
   flutter_lints: ^2.0.0
   build_runner: ^2.4.0
