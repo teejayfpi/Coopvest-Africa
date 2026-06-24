@@ -47,6 +47,7 @@ import 'presentation/screens/savings/savings_goals_screen.dart';
 import 'presentation/screens/search/global_search_screen.dart';
 import 'config/env_config.dart';
 import 'presentation/providers/theme_provider.dart';
+import 'presentation/screens/splash_screen.dart';
 import 'presentation/screens/rollover/rollover_eligibility_screen.dart';
 import 'presentation/screens/rollover/rollover_request_screen.dart';
 import 'presentation/screens/rollover/guarantor_consent_screen.dart';
@@ -356,6 +357,9 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
       },
     );
 
-    return app;
+    return SplashScreen(
+      isReady: _isSessionRestored,
+      child: app,
+    );
   }
 }
