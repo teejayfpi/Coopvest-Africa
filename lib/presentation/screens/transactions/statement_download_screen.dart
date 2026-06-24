@@ -17,6 +17,7 @@ import '../../../presentation/providers/wallet_provider.dart';
 import '../../../presentation/providers/auth_provider.dart';
 import '../../../presentation/widgets/common/buttons.dart';
 import '../../../presentation/widgets/common/cards.dart';
+import '../../../core/services/logger_service.dart';
 
 /// Statement Download Screen - Allows users to download their account statements
 class StatementDownloadScreen extends ConsumerStatefulWidget {
@@ -27,6 +28,8 @@ class StatementDownloadScreen extends ConsumerStatefulWidget {
 }
 
 class _StatementDownloadScreenState extends ConsumerState<StatementDownloadScreen> {
+  final LoggerService _logger = LoggerService();
+
   DateTime? _startDate;
   DateTime? _endDate;
   bool _isGenerating = false;

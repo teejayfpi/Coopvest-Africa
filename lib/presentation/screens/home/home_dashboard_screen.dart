@@ -349,10 +349,10 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
                         shape: BoxShape.circle,
                         border: Border.all(color: Colors.white.withOpacity(0.3), width: 2),
                       ),
-                      child: user?.profilePicture != null && user!.profilePicture!.isNotEmpty
+                      child: ref.watch(currentUserProvider)?.profilePicture != null && ref.watch(currentUserProvider)!.profilePicture!.isNotEmpty
                           ? ClipOval(
                               child: Image.network(
-                                user.profilePicture!,
+                                ref.watch(currentUserProvider)!.profilePicture!,
                                 width: 44,
                                 height: 44,
                                 fit: BoxFit.cover,
