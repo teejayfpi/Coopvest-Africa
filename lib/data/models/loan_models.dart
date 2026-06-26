@@ -282,3 +282,45 @@ class LoansState extends Equatable {
   @override
   List<Object?> get props => [status, loans, selectedLoan, guarantors, error];
 }
+
+/// Loan Type Info for displaying available loan types
+class LoanTypeInfo extends Equatable {
+  final String name;
+  final double minAmount;
+  final double maxAmount;
+  final int tenure;
+  final double interestRate;
+  final String? description;
+  final List<int>? tenures;
+
+  const LoanTypeInfo({
+    required this.name,
+    required this.minAmount,
+    required this.maxAmount,
+    required this.tenure,
+    required this.interestRate,
+    this.description,
+    this.tenures,
+  });
+
+  factory LoanTypeInfo.fromJson(Map<String, dynamic> json) {
+    return LoanTypeInfo(
+      name: json['name'] as String? ?? '',
+      minAmount: (json['minAmount'] as num?)?.toDouble() ?? 
+                  (json['min_amount'] as num?)?.toDouble() ?? 0.0,
+      maxAmount: (json['maxAmount'] as num?)?.toDouble() ?? 
+                 (json['max_amount'] as num?)?.toDouble() ?? 0.0,
+      tenure: json['tenure'] as int? ?? 
+              json['duration'] as int? ?? 12,
+      interestRate: (json['interestRate'] as num?)?.toDouble() ?? 
+                     (json['interest_rate'] as num?)?.toDouble() ?? 0.0,
+      description: json['description'] as String?,
+      tenures: json['tenures'] != null 
+          ? (json['tenures'] as List).cast<int>() 
+          : null,
+    );
+  }
+
+  @override
+  List<Object?> get props => [name, minAmount, maxAmount, tenure, interestRate, description, tenures];
+}

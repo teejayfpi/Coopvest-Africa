@@ -478,10 +478,10 @@ class _StatementDownloadScreenState extends ConsumerState<StatementDownloadScree
       padding: const pw.EdgeInsets.symmetric(vertical: 8, horizontal: 4),
       child: pw.Row(
         children: [
-          pw.Expanded(flex: 2, child: pw.Text('Date', style: const pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold))),
-          pw.Expanded(flex: 4, child: pw.Text('Description', style: const pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold))),
-          pw.Expanded(flex: 2, child: pw.Text('Type', style: const pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold))),
-          pw.Expanded(flex: 2, child: pw.Text('Amount', style: const pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.right)),
+          pw.Expanded(flex: 2, child: pw.Text('Date', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold))),
+          pw.Expanded(flex: 4, child: pw.Text('Description', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold))),
+          pw.Expanded(flex: 2, child: pw.Text('Type', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold))),
+          pw.Expanded(flex: 2, child: pw.Text('Amount', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.right)),
         ],
       ),
     );

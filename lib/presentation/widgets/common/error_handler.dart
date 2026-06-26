@@ -25,13 +25,13 @@ class _GlobalErrorHandlerState extends State<GlobalErrorHandler> {
   void initState() {
     super.initState();
     // Set up global error handling
-    WidgetsBinding.instance.addErrorHandler(_handleError);
+    FlutterError.onError = _handleFlutterError;
   }
 
-  void _handleError(dynamic error) {
+  void _handleFlutterError(FlutterErrorDetails details) {
     setState(() {
       _hasError = true;
-      _errorMessage = error?.toString() ?? 'An unknown error occurred';
+      _errorMessage = details.exceptionAsString();
     });
     widget.onError?.call();
   }

@@ -34,7 +34,7 @@ class ErrorRetryWidget extends StatelessWidget {
               message,
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: context.textSecondary,
+                color: Theme.of(context).textTheme.bodyMedium?.color,
                 fontSize: 16,
               ),
             ),
@@ -89,14 +89,14 @@ class EmptyStateWidget extends StatelessWidget {
             Icon(
               icon,
               size: 80,
-              color: context.textSecondary.withOpacity(0.5),
+              color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5),
             ),
             const SizedBox(height: 24),
             Text(
               title,
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: context.textPrimary,
+                color: Theme.of(context).textTheme.bodyLarge?.color,
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
               ),
@@ -107,7 +107,7 @@ class EmptyStateWidget extends StatelessWidget {
                 subtitle!,
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: context.textSecondary,
+                  color: Theme.of(context).textTheme.bodyMedium?.color,
                   fontSize: 14,
                 ),
               ),

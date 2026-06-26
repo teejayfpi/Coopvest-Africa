@@ -39,14 +39,18 @@ class LoanRepository {
       await _offlineDataManager.savePendingOperation(operation);
       
       // Return mock loan for offline mode
+      final tenure = _getTenure(loanType);
+      final interestRate = _getInterestRate(loanType);
+      final monthlyRepayment = _calculateMonthlyRepayment(amount, interestRate, tenure);
       final loan = Loan(
         id: 'OFFLINE-${DateTime.now().millisecondsSinceEpoch}',
         userId: userId,
+        type: loanType,
         amount: amount,
-        tenure: _getTenure(loanType),
-        interestRate: _getInterestRate(loanType),
-        monthlyRepayment: _calculateMonthlyRepayment(amount, _getInterestRate(loanType), _getTenure(loanType)),
-        totalRepayment: _calculateTotalRepayment(amount, _getInterestRate(loanType)),
+        tenure: tenure,
+        interestRate: interestRate,
+        monthlyRepayment: monthlyRepayment,
+        totalRepayment: _calculateTotalRepayment(amount, interestRate),
         status: 'pending_offline',
         purpose: purpose,
         guarantorsAccepted: 0,
@@ -61,11 +65,10 @@ class LoanRepository {
     try {
       final result = await _apiService.applyForLoan(
         LoanApplicationRequest(
-          userId: userId,
           loanType: loanType,
-          amount: amount,
+          loanAmount: amount,
+          tenureMonths: _getTenure(loanType),
           purpose: purpose,
-          monthlySavings: monthlySavings,
         ),
       );
 
@@ -73,6 +76,7 @@ class LoanRepository {
         final loan = Loan(
           id: result.loan!.id,
           userId: result.loan!.userId,
+          type: result.loan!.loanType,
           amount: result.loan!.amount,
           tenure: result.loan!.tenure,
           interestRate: result.loan!.interestRate,
@@ -113,13 +117,14 @@ class LoanRepository {
     }
 
     try {
-      final result = await _apiService.getUserLoans(userId);
+      final result = await _apiService.getUserLoans();
 
       if (result.success) {
         final loans = result.loans.map((e) {
           return Loan(
             id: e.id,
             userId: e.userId,
+            type: e.loanType,
             amount: e.amount,
             tenure: e.tenure,
             interestRate: e.interestRate,
@@ -283,17 +288,6 @@ class LoanRepository {
     }
   }
 
-  // Helper methods
-  int _getTenure(String loanType) {
-    final types = _getHardcodedLoanTypes();
-    return types.firstWhere((e) => e.name == loanType).duration;
-  }
-
-  double _getInterestRate(String loanType) {
-    final types = _getHardcodedLoanTypes();
-    return types.firstWhere((e) => e.name == loanType).interestRate;
-  }
-
   double _calculateMonthlyRepayment(double amount, double interestRate, int tenure) {
     final rate = interestRate / 100 / 12;
     final tenureDouble = tenure.toDouble();
@@ -328,53 +322,59 @@ class LoanRepository {
     return [
       LoanTypeData(
         name: 'Quick Loan',
-        description: 'Short-term emergency cash for members in urgent need',
-        duration: 4,
-        interestRate: 7.5,
         minAmount: 5000,
         maxAmount: 50000,
+        interestRate: 7.5,
+        tenures: [4],
       ),
       LoanTypeData(
         name: 'Flexi Loan',
-        description: 'Flexible repayment plan for personal or business needs',
-        duration: 6,
-        interestRate: 7.0,
         minAmount: 10000,
         maxAmount: 100000,
+        interestRate: 7.0,
+        tenures: [6],
       ),
       LoanTypeData(
         name: 'Stable Loan (12 months)',
-        description: 'Long-term stability with the lowest interest rate',
-        duration: 12,
-        interestRate: 5.0,
         minAmount: 20000,
         maxAmount: 200000,
+        interestRate: 5.0,
+        tenures: [12],
       ),
       LoanTypeData(
         name: 'Stable Loan (18 months)',
-        description: 'Extended repayment for larger projects or investments',
-        duration: 18,
-        interestRate: 7.0,
         minAmount: 30000,
         maxAmount: 300000,
+        interestRate: 7.0,
+        tenures: [18],
       ),
       LoanTypeData(
         name: 'Premium Loan',
-        description: 'Premium access for established members with higher limits',
-        duration: 24,
-        interestRate: 14.0,
         minAmount: 50000,
         maxAmount: 500000,
+        interestRate: 14.0,
+        tenures: [24],
       ),
       LoanTypeData(
         name: 'Maxi Loan',
-        description: 'Maximum loan for major investments and business expansion',
-        duration: 36,
-        interestRate: 19.0,
         minAmount: 100000,
         maxAmount: 1000000,
+        interestRate: 19.0,
+        tenures: [36],
       ),
     ];
+  }
+
+  int _getTenure(String loanType) {
+    final types = _getHardcodedLoanTypes();
+    final type = types.firstWhere((e) => e.name == loanType, orElse: () => types.first);
+    return type.tenures.isNotEmpty ? type.tenures.first : 12;
+  }
+
+  double _getInterestRate(String loanType) {
+    final types = _getHardcodedLoanTypes();
+    final type = types.firstWhere((e) => e.name == loanType, orElse: () => types.first);
+    return type.interestRate;
   }
 
   List<Loan> _getMockLoans(String userId) {
@@ -382,6 +382,7 @@ class LoanRepository {
       Loan(
         id: 'COOP-$userId-LOAN-001',
         userId: userId,
+        type: 'Quick Loan',
         amount: 50000,
         tenure: 4,
         interestRate: 7.5,
@@ -397,6 +398,7 @@ class LoanRepository {
       Loan(
         id: 'COOP-$userId-LOAN-002',
         userId: userId,
+        type: 'Flexi Loan',
         amount: 100000,
         tenure: 6,
         interestRate: 7.0,

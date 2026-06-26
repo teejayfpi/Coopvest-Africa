@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
+import '../../../data/models/notification_models.dart';
 import '../../../presentation/providers/notifications_provider.dart';
 import '../../widgets/common/cards.dart';
 

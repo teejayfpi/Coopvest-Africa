@@ -76,7 +76,7 @@ class EnhancedCard extends StatelessWidget {
     return BoxDecoration(
       color: backgroundColor ?? context.cardBackground,
       borderRadius: borderRadius ?? BorderRadius.circular(CoopvestRadius.card),
-      border: border ?? BorderSide(color: context.dividerColor.withOpacity(0.5)),
+      border: border ?? Border.all(color: context.dividerColor.withOpacity(0.5)),
       boxShadow: elevation != null
           ? [BoxShadow(color: isDarkMode ? Colors.black26 : CoopvestColorsEnhanced.shadowMedium, blurRadius: elevation! * 2)]
           : (isDarkMode ? CoopvestShadows.none : CoopvestShadows.medium),
