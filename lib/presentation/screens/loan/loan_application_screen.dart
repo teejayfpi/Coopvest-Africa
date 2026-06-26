@@ -585,8 +585,15 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
       }
 
       // Simple approval logic (15%+ savings = Approved, 10–15% = Pending Review)
-      // Only show QR code if backend QR generation succeeded
-      final bool showQr = qrId != null && qrId!.isNotEmpty;
+      final bool showQr = true; // Always show QR code
+      
+      // Generate local QR data if backend didn't provide one
+      if (qrCodeData == null || qrCodeData!.isEmpty) {
+        // Create a local QR data with all loan info
+        final loanStatusText = monthlySavings >= requestedAmount * 0.15 ? 'Approved' : 'Pending Review';
+        qrCodeData = 'COOPVEST_LOAN|${backendLoanId ?? loanId}|$_selectedLoanType|₦$requestedAmount|${widget.userName}|${widget.userPhone}|$loanStatusText';
+        qrId = backendLoanId ?? loanId;
+      }
       
       if (monthlySavings >= requestedAmount * 0.15) {
         setState(() {
@@ -699,9 +706,7 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
             Text('Your ${_selectedLoanType} application is now under review.'),
             const SizedBox(height: 16),
             Text(
-              showQr
-                ? 'Please share the QR code with your 3 guarantors. Once all 3 guarantors confirm, your loan will be processed.'
-                : 'Your application is under review. QR code generation is temporarily unavailable. Please try again later or contact support.',
+              'Please share the QR code with your 3 guarantors. Once all 3 guarantors confirm, your loan will be processed.',
               textAlign: TextAlign.center,
             ),
           ],
