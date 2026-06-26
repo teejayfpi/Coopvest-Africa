@@ -5,6 +5,7 @@ import 'dart:async';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/services/sound_service.dart';
 
 /// Ticket Detail Screen
 class TicketDetailScreen extends ConsumerStatefulWidget {
@@ -39,10 +40,22 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
   }
 
   Future<void> _loadTicketDetails() async {
+    final previousMessageCount = _messages.length;
     try {
       final response = await ApiClient().getDio().get('/tickets/${widget.ticketId}');
       if (response.data['success'] == true && mounted) {
-        setState(() { _ticket = response.data['ticket']; _messages = response.data['messages'] ?? []; _isLoading = false; });
+        final newMessages = response.data['messages'] ?? [];
+        // Play sound when admin replies (new message from admin)
+        if (!_isLoading && newMessages.length > previousMessageCount) {
+          final existingIds = _messages.map((m) => m['id']).toSet();
+          final hasNewAdminMessage = newMessages.any((m) => 
+            !existingIds.contains(m['id']) && m['senderType'] != 'user'
+          );
+          if (hasNewAdminMessage) {
+            SoundService().playTicketReplySound();
+          }
+        }
+        setState(() { _ticket = response.data['ticket']; _messages = newMessages; _isLoading = false; });
       } else {
         setState(() { _errorMessage = response.data['error'] ?? 'Failed to load ticket'; _isLoading = false; });
       }
