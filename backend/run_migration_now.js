@@ -2,7 +2,7 @@ const { Client } = require('pg');
 
 // User's Supabase connection string
 const client = new Client({
-  connectionString: 'postgresql://postgres:Temiloluwa@1963@db.nyoauzqezpxeonmrxxgi.supabase.co:5432/postgres',
+  connectionString: 'postgresql://postgres.Temiloluwa%401963@aws-0-us-east-1-975937489815.pooler.supabase.com:6543/postgres',
   ssl: { rejectUnauthorized: false }
 });
 
@@ -38,7 +38,21 @@ const statements = [
 
   // Step 4: Create policies
   `CREATE POLICY deposit_requests_self_select ON public.deposit_requests FOR SELECT USING (profile_id = auth.uid() OR public.is_staff())`,
-  `CREATE POLICY deposit_requests_self_modify ON public.deposit_requests FOR ALL USING (public.is_staff()) WITH CHECK (public.is_staff())`
+  `CREATE POLICY deposit_requests_self_modify ON public.deposit_requests FOR ALL USING (public.is_staff()) WITH CHECK (public.is_staff())`,
+
+  // Step 5: Fix is_staff() function to include 'super_admin' role (with underscore)
+  `DROP FUNCTION IF EXISTS public.is_staff()`,
+  `CREATE OR REPLACE FUNCTION public.is_staff()
+   RETURNS boolean
+   LANGUAGE sql
+   STABLE
+   AS $$
+     SELECT EXISTS (
+       SELECT 1 FROM public.profiles p
+       WHERE p.id = auth.uid()
+         AND p.role IN ('admin','super_admin','superadmin','staff','operator','viewer')
+     )
+   $$`
 ];
 
 async function migrate() {

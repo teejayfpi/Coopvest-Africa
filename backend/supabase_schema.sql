@@ -662,7 +662,7 @@ AS $$
   SELECT EXISTS (
     SELECT 1 FROM public.profiles p
     WHERE p.id = auth.uid()
-      AND p.role IN ('admin','superadmin','staff')
+      AND p.role IN ('admin','super_admin','superadmin','staff','operator','viewer')
   )
 $$;
 
