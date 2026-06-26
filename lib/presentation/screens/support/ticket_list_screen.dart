@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/services/sound_service.dart';
 import 'ticket_detail_screen.dart';
 
 /// Ticket List Screen
@@ -40,7 +41,16 @@ class _TicketListScreenState extends ConsumerState<TicketListScreen> {
       if (_selectedStatus.isNotEmpty) params['status'] = _selectedStatus;
       final response = await ApiClient().getDio().get('/tickets', queryParameters: params);
       if (response.data['success'] == true && mounted) {
-        setState(() { _tickets = response.data['tickets'] ?? []; });
+        final newTickets = response.data['tickets'] ?? [];
+        // Play sound if there are new tickets
+        if (newTickets.isNotEmpty && _tickets.isNotEmpty) {
+          final existingIds = _tickets.map((t) => t['id']).toSet();
+          final hasNew = newTickets.any((t) => !existingIds.contains(t['id']));
+          if (hasNew) {
+            SoundService().playNotificationSound();
+          }
+        }
+        setState(() { _tickets = newTickets; });
       } else {
         setState(() { _errorMessage = response.data['error'] ?? 'Failed to load tickets'; });
       }
