@@ -51,6 +51,7 @@ const announcementRoutes = require('./routes/announcements');
 const contributionRoutes = require('./routes/contributions');
 const documentRoutes = require('./routes/documents');
 const terminationRoutes = require('./routes/termination');
+const featuresRoutes = require('./routes/features');
 
 // Import middleware
 const errorHandler = require('./middleware/errorHandler');
@@ -287,6 +288,8 @@ app.use('/api/announcements', announcementRoutes);
 app.use('/api/contributions', contributionRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/termination', terminationRoutes);
+app.use('/api', featuresRoutes);
+app.use('/api/mobile-features', featuresRoutes);
 // Root-level alias in case Dio resolves absolute paths from host root
 app.use('/guarantor', guarantorRoutes);
 
