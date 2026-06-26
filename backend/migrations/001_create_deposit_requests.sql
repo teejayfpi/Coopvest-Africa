@@ -44,10 +44,11 @@ CREATE TRIGGER set_updated_at
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
 -- Add is_staff() helper function if not exists
+-- Fixed: Added 'super_admin' role (with underscore) which is used in the database
 CREATE OR REPLACE FUNCTION public.is_staff()
 RETURNS BOOLEAN AS $$
   SELECT EXISTS (
     SELECT 1 FROM public.profiles
-    WHERE id = auth.uid() AND role IN ('admin', 'superadmin', 'staff')
+    WHERE id = auth.uid() AND role IN ('admin', 'super_admin', 'superadmin', 'staff', 'operator', 'viewer')
   );
 $$ LANGUAGE sql SECURITY DEFINER STABLE;

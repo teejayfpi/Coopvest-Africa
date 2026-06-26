@@ -64,6 +64,20 @@ DROP POLICY IF EXISTS deposit_requests_self_modify ON public.deposit_requests;
 CREATE POLICY deposit_requests_self_select ON public.deposit_requests FOR SELECT USING (profile_id = auth.uid() OR public.is_staff());
 CREATE POLICY deposit_requests_self_modify ON public.deposit_requests FOR ALL USING (public.is_staff()) WITH CHECK (public.is_staff());
 
+-- Add is_staff() helper function (fixed: Added 'super_admin' role with underscore)
+DROP FUNCTION IF EXISTS public.is_staff();
+CREATE OR REPLACE FUNCTION public.is_staff()
+RETURNS boolean
+LANGUAGE sql
+STABLE
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.profiles p
+    WHERE p.id = auth.uid()
+      AND p.role IN ('admin','super_admin','superadmin','staff','operator','viewer')
+  )
+$$;
+
 -- Add auto-update trigger
 DROP TRIGGER IF EXISTS set_updated_at ON public.deposit_requests;
 CREATE TRIGGER set_updated_at
