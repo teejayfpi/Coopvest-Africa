@@ -205,6 +205,7 @@ class _SplashScreenState extends State<SplashScreen>
         _fadeController,
         _pulseController,
         _particleController,
+        _rotateController,
       ]),
       builder: (context, child) {
         final pulseScale = 1.0 + (_pulseController.value * 0.08);
@@ -223,21 +224,32 @@ class _SplashScreenState extends State<SplashScreen>
           ),
           child: Stack(
             children: [
-              // Animated background particles
-              ...List.generate(20, (index) {
-                final delay = index * 0.15;
+              // Animated background particles - rising bubbles
+              ...List.generate(30, (index) {
+                final delay = index * 0.08;
                 final progress = (_particleAnimation.value + delay) % 1.0;
+                final startX = (index * 37) % MediaQuery.of(context).size.width;
+                // Slight horizontal drift
+                final drift = (index % 2 == 0 ? 1 : -1) * (progress * 20);
+                
                 return Positioned(
-                  left: (index * 47) % MediaQuery.of(context).size.width,
-                  top: progress * MediaQuery.of(context).size.height,
+                  left: startX + drift,
+                  bottom: -20 + (progress * (MediaQuery.of(context).size.height + 40)),
                   child: Opacity(
-                    opacity: 0.3 * (1 - progress),
+                    opacity: 0.4 + 0.4 * (1 - (progress * 2 - 1).abs()), // Fade in middle, dim at ends
                     child: Container(
-                      width: 4 + (index % 3) * 2,
-                      height: 4 + (index % 3) * 2,
+                      width: 6 + (index % 4) * 2,
+                      height: 6 + (index % 4) * 2,
                       decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(2),
+                        color: Colors.white.withOpacity(0.6),
+                        borderRadius: BorderRadius.circular(3),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.white.withOpacity(0.3),
+                            blurRadius: 4,
+                            spreadRadius: 1,
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -251,7 +263,7 @@ class _SplashScreenState extends State<SplashScreen>
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // Animated Logo with pulse and slight rotation
+                      // Animated Logo with pulse and glow effect
                       Transform.scale(
                         scale: _scaleAnimation.value * pulseScale,
                         child: Transform.rotate(
@@ -263,10 +275,17 @@ class _SplashScreenState extends State<SplashScreen>
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(32),
                               boxShadow: [
+                                // Outer glow - pulsing
+                                BoxShadow(
+                                  color: Colors.white.withOpacity(0.3 * pulseScale),
+                                  blurRadius: 40 * pulseScale,
+                                  spreadRadius: 5 * pulseScale,
+                                ),
+                                // Inner shadow
                                 BoxShadow(
                                   color: Colors.black.withOpacity(0.3),
-                                  blurRadius: 30,
-                                  offset: const Offset(0, 15),
+                                  blurRadius: 20,
+                                  offset: const Offset(0, 8),
                                 ),
                               ],
                             ),
@@ -295,16 +314,26 @@ class _SplashScreenState extends State<SplashScreen>
                       
                       const SizedBox(height: 40),
                       
-                      // App Name with shimmer effect
+                      // App Name with shimmer animation
                       ShaderMask(
-                        shaderCallback: (bounds) => LinearGradient(
-                          colors: [
-                            Colors.white,
-                            Colors.white.withOpacity(0.8),
-                            Colors.white,
-                          ],
-                          stops: const [0.0, 0.5, 1.0],
-                        ).createShader(bounds),
+                        shaderCallback: (bounds) {
+                          return LinearGradient(
+                            colors: [
+                              Colors.white,
+                              Colors.white.withOpacity(0.6),
+                              Colors.white,
+                              Colors.white.withOpacity(0.6),
+                              Colors.white,
+                            ],
+                            stops: [
+                              0.0,
+                              (_particleAnimation.value * 0.4 + 0.3) % 1.0,
+                              (_particleAnimation.value * 0.4 + 0.5) % 1.0,
+                              (_particleAnimation.value * 0.4 + 0.7) % 1.0,
+                              1.0,
+                            ],
+                          ).createShader(bounds);
+                        },
                         child: const Text(
                           'Coopvest Africa',
                           style: TextStyle(
@@ -377,19 +406,34 @@ class _SplashScreenState extends State<SplashScreen>
                       
                       const SizedBox(height: 20),
                       
-                      // Loading dots animation
+                      // Loading dots animation - sequential bouncing
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: List.generate(3, (index) {
-                          final delay = index * 0.2;
-                          final animValue = (_pulseController.value + delay) % 1.0;
-                          return Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 4),
-                            width: 8,
-                            height: 8,
+                          // Create a sequential animation where each dot bounces in turn
+                          final phaseOffset = index * 0.33;
+                          final bounceValue = (_particleController.value + phaseOffset) % 1.0;
+                          // Use sine wave for smooth bounce effect
+                          final bounceHeight = (bounceValue < 0.5 
+                              ? bounceValue * 2 
+                              : 2 - bounceValue * 2);
+                          final opacity = 0.4 + (bounceValue * 0.6);
+                          
+                          return AnimatedContainer(
+                            duration: const Duration(milliseconds: 300),
+                            margin: const EdgeInsets.symmetric(horizontal: 6),
+                            width: 10,
+                            height: 10 + (bounceHeight * 6), // Bouncing height
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.3 + animValue * 0.7),
-                              shape: BoxShape.circle,
+                              color: Colors.white.withOpacity(opacity),
+                              borderRadius: BorderRadius.circular(5),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.white.withOpacity(opacity * 0.5),
+                                  blurRadius: 4 + bounceHeight * 4,
+                                  spreadRadius: bounceHeight * 2,
+                                ),
+                              ],
                             ),
                           );
                         }),

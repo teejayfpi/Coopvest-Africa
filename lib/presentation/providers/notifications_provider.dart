@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/network/api_client.dart';
 import '../../core/utils/utils.dart';
+import '../../core/services/sound_service.dart';
 import '../../data/models/notification_models.dart';
 
 /// Notification Repository
@@ -98,6 +99,7 @@ class NotificationsState {
 /// Notification Notifier
 class NotificationsNotifier extends StateNotifier<NotificationsState> {
   final NotificationRepository _repository;
+  final SoundService _soundService = SoundService();
 
   NotificationsNotifier(this._repository) : super(const NotificationsState());
 
@@ -178,6 +180,11 @@ class NotificationsNotifier extends StateNotifier<NotificationsState> {
   void addNotification(AppNotification notification) {
     final updatedNotifications = [notification, ...state.notifications];
     final unreadCount = updatedNotifications.where((n) => !n.isRead).length;
+
+    // Play notification sound for new unread notifications
+    if (!notification.isRead) {
+      _soundService.playNotificationSound();
+    }
 
     state = state.copyWith(
       notifications: updatedNotifications,

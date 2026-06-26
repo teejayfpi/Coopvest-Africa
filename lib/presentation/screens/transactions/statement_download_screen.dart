@@ -426,9 +426,9 @@ class _StatementDownloadScreenState extends ConsumerState<StatementDownloadScree
       child: pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
         children: [
-          _buildPdfStatItem('Wallet Balance', '₦${(wallet?.balance ?? 0).formatNumber()}', true),
-          _buildPdfStatItem('Total Contributions', '₦${(wallet?.totalContributions ?? 0).formatNumber()}', false),
-          _buildPdfStatItem('Total Withdrawals', '₦${(wallet?.availableForWithdrawal ?? 0).formatNumber()}', false),
+          _buildPdfStatItem('Current Balance', '₦${(wallet?.balance ?? 0).formatNumber()}', true),
+          _buildPdfStatItem('Total Savings', '₦${(wallet?.totalContributions ?? 0).formatNumber()}', false),
+          _buildPdfStatItem('Available Withdrawal', '₦${(wallet?.availableForWithdrawal ?? 0).formatNumber()}', false),
         ],
       ),
     );
@@ -488,6 +488,23 @@ class _StatementDownloadScreenState extends ConsumerState<StatementDownloadScree
   }
 
   List<pw.Widget> _buildPdfTransactions(List<Transaction> transactions) {
+    if (transactions.isEmpty) {
+      return [
+        pw.Container(
+          padding: const pw.EdgeInsets.all(20),
+          child: pw.Center(
+            child: pw.Text(
+              'No transactions found for this period',
+              style: const pw.TextStyle(
+                fontSize: 12,
+                color: PdfColors.grey600,
+              ),
+            ),
+          ),
+        ),
+      ];
+    }
+    
     return transactions.map((txn) {
       final isCredit = txn.isCredit;
       return [
@@ -519,13 +536,20 @@ class _StatementDownloadScreenState extends ConsumerState<StatementDownloadScree
   }
 
   pw.Widget _buildPdfSummary(List<Transaction> transactions, Wallet? wallet) {
-    final totalCredits = transactions
-        .where((t) => t.isCredit)
-        .fold(0.0, (sum, t) => sum + t.amount);
-
-    final totalDebits = transactions
-        .where((t) => !t.isCredit)
-        .fold(0.0, (sum, t) => sum + t.amount);
+    // Calculate totals based on actual transaction amounts
+    double totalCredits = 0.0;
+    double totalDebits = 0.0;
+    
+    for (final t in transactions) {
+      if (t.isCredit) {
+        totalCredits += t.amount;
+      } else {
+        totalDebits += t.amount;
+      }
+    }
+    
+    // Net change: Credits minus Debits
+    final netChange = totalCredits - totalDebits;
 
     return pw.Container(
       margin: const pw.EdgeInsets.only(top: 20),
@@ -537,9 +561,9 @@ class _StatementDownloadScreenState extends ConsumerState<StatementDownloadScree
       child: pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
         children: [
-          _buildPdfSummaryItem('Total Credits', totalCredits, true),
-          _buildPdfSummaryItem('Total Debits', totalDebits, false),
-          _buildPdfSummaryItem('Net Change', totalCredits - totalDebits, true),
+          _buildPdfSummaryItem('Total Deposits', totalCredits, true),
+          _buildPdfSummaryItem('Total Withdrawals', totalDebits, false),
+          _buildPdfSummaryItem('Net Change', netChange, netChange >= 0),
         ],
       ),
     );
