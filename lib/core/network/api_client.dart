@@ -18,10 +18,26 @@ final apiClientProvider = Provider<ApiClient>((ref) {
   return ApiClient();
 });
 
+/// Session expired callback type
+typedef SessionExpiredCallback = void Function();
+
 /// API Client Implementation
 class ApiClient {
   late final Dio _dio;
   bool _initialized = false;
+  
+  /// Static callback for session expiration (set from main.dart)
+  static SessionExpiredCallback? _onSessionExpired;
+
+  /// Set session expired callback
+  static void setSessionExpiredCallback(SessionExpiredCallback callback) {
+    _onSessionExpired = callback;
+  }
+
+  /// Trigger session expired
+  static void triggerSessionExpired() {
+    _onSessionExpired?.call();
+  }
 
   ApiClient() {
     _initialize();
@@ -250,7 +266,9 @@ class ApiClient {
         case 400:
           return ValidationException(errorMessage ?? 'Bad request');
         case 401:
-          return AuthException(errorMessage ?? 'Unauthorized. Please login again.');
+          // Trigger session expired callback for proper navigation
+          ApiClient.triggerSessionExpired();
+          return AuthException(errorMessage ?? 'Session expired. Please login again.');
         case 403:
           return AuthException(errorMessage ?? 'Access forbidden');
         case 404:
