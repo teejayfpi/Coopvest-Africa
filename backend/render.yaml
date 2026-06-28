@@ -44,6 +44,7 @@ services:
       - key: CORS_ORIGIN
         value: "*"
       - key: MOBILE_API_SERVICE_TOKEN
-        generateValue: true
+        sync: false
+        value: "ekK2H0BSDfk1/v/6GDhlyJHmY2/JJPgqpNphiAj8hHw="
     healthCheckPath: /health
     autoDeploy: true
