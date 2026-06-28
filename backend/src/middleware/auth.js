@@ -156,17 +156,32 @@ const requireAdmin = (req, res, next) => {
 };
 
 const requireService = async (req, res, next) => {
-  const expected = process.env.MOBILE_API_SERVICE_TOKEN || process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const provided = req.headers['x-service-token'] || req.headers['X-Service-Token'] || req.headers['authorization']?.replace('Bearer ', '');
-
-  // If service token is provided and matches, grant service access
-  if (provided && expected && provided === expected) {
-    req.service = { name: 'admin-web', role: 'service' };
-    return next();
+  // Accept both service token and SUPABASE_SERVICE_ROLE_KEY as valid auth
+  const serviceToken = process.env.MOBILE_API_SERVICE_TOKEN;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  
+  const xServiceToken = req.headers['x-service-token'] || req.headers['X-Service-Token'];
+  const authHeader = req.headers.authorization;
+  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
+  
+  // Check if the provided token matches either service token or service role key
+  const provided = xServiceToken || bearerToken;
+  
+  if (provided) {
+    // Check against MOBILE_API_SERVICE_TOKEN
+    if (serviceToken && provided === serviceToken) {
+      req.service = { name: 'admin-web', role: 'service' };
+      return next();
+    }
+    
+    // Check against SUPABASE_SERVICE_ROLE_KEY
+    if (serviceRoleKey && provided === serviceRoleKey) {
+      req.service = { name: 'admin-web', role: 'service' };
+      return next();
+    }
   }
 
-  // If no service token or it doesn't match, try to authenticate as admin user
-  const authHeader = req.headers.authorization;
+  // If no direct match, try to authenticate as admin user via Supabase JWT
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.split(' ')[1];
     try {
@@ -189,12 +204,6 @@ const requireService = async (req, res, next) => {
   }
 
   // Neither service token nor valid admin user provided
-  if (!expected) {
-    return res.status(503).json({
-      success: false,
-      error: 'Service token auth is not configured on this backend',
-    });
-  }
   return res.status(401).json({ success: false, error: 'Invalid or missing service token' });
 };
 
