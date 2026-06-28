@@ -155,22 +155,47 @@ const requireAdmin = (req, res, next) => {
   });
 };
 
-const requireService = (req, res, next) => {
+const requireService = async (req, res, next) => {
   const expected = process.env.MOBILE_API_SERVICE_TOKEN || process.env.SUPABASE_SERVICE_ROLE_KEY;
   const provided = req.headers['x-service-token'] || req.headers['X-Service-Token'] || req.headers['authorization']?.replace('Bearer ', '');
 
+  // If service token is provided and matches, grant service access
+  if (provided && expected && provided === expected) {
+    req.service = { name: 'admin-web', role: 'service' };
+    return next();
+  }
+
+  // If no service token or it doesn't match, try to authenticate as admin user
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.split(' ')[1];
+    try {
+      const result = await verifyToken(token);
+      if (result.profile && ['admin', 'superadmin', 'staff'].includes(result.profile.role)) {
+        req.user = {
+          id: result.profile.id,
+          email: result.profile.email,
+          userId: result.profile.user_id,
+          name: result.profile.name,
+          role: result.profile.role || 'member',
+          isFlagged: result.profile.is_flagged === true,
+        };
+        req.token = token;
+        return next();
+      }
+    } catch (_) {
+      // Token verification failed, fall through to error
+    }
+  }
+
+  // Neither service token nor valid admin user provided
   if (!expected) {
     return res.status(503).json({
       success: false,
       error: 'Service token auth is not configured on this backend',
     });
   }
-  if (!provided || provided !== expected) {
-    return res.status(401).json({ success: false, error: 'Invalid or missing service token' });
-  }
-
-  req.service = { name: 'admin-web', role: 'service' };
-  next();
+  return res.status(401).json({ success: false, error: 'Invalid or missing service token' });
 };
 
 module.exports = {
