@@ -69,6 +69,84 @@ async function logMemberActivity(profileId, activityType, description, metadata 
 // ============================================================================
 
 /**
+ * GET /api/v2/admin/kyc/summary
+ * Get KYC statistics summary
+ */
+router.get('/summary', async (req, res) => {
+  try {
+    const { data: total, count: totalCount } = await supabase
+      .from('profiles')
+      .select('id', { count: 'exact', head: true });
+
+    const { data: verified } = await supabase
+      .from('profiles')
+      .select('id', { count: 'exact', head: true })
+      .eq('kyc_verified', true);
+
+    const { data: pending } = await supabase
+      .from('kyc')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'pending');
+
+    const { data: rejected } = await supabase
+      .from('kyc')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'rejected');
+
+    const { data: inactive } = await supabase
+      .from('profiles')
+      .select('id', { count: 'exact', head: true })
+      .eq('is_active', false);
+
+    res.json({
+      success: true,
+      summary: {
+        total_members: totalCount || 0,
+        kyc_verified: verified || 0,
+        kyc_pending: pending || 0,
+        kyc_rejected: rejected || 0,
+        inactive_accounts: inactive || 0,
+        verification_rate: totalCount > 0 ? Math.round((verified / totalCount) * 100) : 0
+      }
+    });
+  } catch (err) {
+    logger.error('kyc summary error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/v2/admin/kyc/pending
+ * List pending KYC submissions
+ */
+router.get('/pending', async (req, res) => {
+  try {
+    const { page, limit, from, to } = paging(req);
+    
+    const { data, error, count } = await supabase
+      .from('kyc')
+      .select(`
+        *,
+        profile:profiles(id, user_id, name, email, phone, member_id, is_active, kyc_verified)
+      `, { count: 'exact' })
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+      .range(from, to);
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      pendingKyc: data || [],
+      pagination: { page, limit, total: count || 0 }
+    });
+  } catch (err) {
+    logger.error('pending kyc error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * GET /api/v1/admin/kyc
  * List all KYC records with pagination and filters
  */
