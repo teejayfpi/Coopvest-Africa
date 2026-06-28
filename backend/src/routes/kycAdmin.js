@@ -127,7 +127,7 @@ router.get('/pending', async (req, res) => {
       .from('kyc')
       .select(`
         *,
-        profile:profiles(id, user_id, name, email, phone, member_id, is_active, kyc_verified)
+        profile:profiles(id, user_id, name, email, phone, is_active, kyc_verified)
       `, { count: 'exact' })
       .eq('status', 'pending')
       .order('created_at', { ascending: false })
