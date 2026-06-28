@@ -155,55 +155,33 @@ const requireAdmin = (req, res, next) => {
   });
 };
 
-const requireService = async (req, res, next) => {
-  // Accept both service token and SUPABASE_SERVICE_ROLE_KEY as valid auth
+const requireService = (req, res, next) => {
+  // Get the expected tokens from environment
   const serviceToken = process.env.MOBILE_API_SERVICE_TOKEN;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   
+  // Check X-Service-Token header first (preferred method)
   const xServiceToken = req.headers['x-service-token'] || req.headers['X-Service-Token'];
-  const authHeader = req.headers.authorization;
-  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
-  
-  // Check if the provided token matches either service token or service role key
-  const provided = xServiceToken || bearerToken;
-  
-  if (provided) {
-    // Check against MOBILE_API_SERVICE_TOKEN
-    if (serviceToken && provided === serviceToken) {
-      req.service = { name: 'admin-web', role: 'service' };
-      return next();
-    }
-    
-    // Check against SUPABASE_SERVICE_ROLE_KEY
-    if (serviceRoleKey && provided === serviceRoleKey) {
+  if (xServiceToken) {
+    if ((serviceToken && xServiceToken === serviceToken) || (serviceRoleKey && xServiceToken === serviceRoleKey)) {
       req.service = { name: 'admin-web', role: 'service' };
       return next();
     }
   }
-
-  // If no direct match, try to authenticate as admin user via Supabase JWT
+  
+  // Check Authorization Bearer header
+  const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.split(' ')[1];
-    try {
-      const result = await verifyToken(token);
-      if (result.profile && ['admin', 'superadmin', 'staff'].includes(result.profile.role)) {
-        req.user = {
-          id: result.profile.id,
-          email: result.profile.email,
-          userId: result.profile.user_id,
-          name: result.profile.name,
-          role: result.profile.role || 'member',
-          isFlagged: result.profile.is_flagged === true,
-        };
-        req.token = token;
+    const bearerToken = authHeader.split(' ')[1];
+    if (bearerToken) {
+      if ((serviceToken && bearerToken === serviceToken) || (serviceRoleKey && bearerToken === serviceRoleKey)) {
+        req.service = { name: 'admin-web', role: 'service' };
         return next();
       }
-    } catch (_) {
-      // Token verification failed, fall through to error
     }
   }
-
-  // Neither service token nor valid admin user provided
+  
+  // No valid token found
   return res.status(401).json({ success: false, error: 'Invalid or missing service token' });
 };
 
