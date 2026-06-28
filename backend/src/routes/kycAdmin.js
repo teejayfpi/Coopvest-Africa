@@ -157,7 +157,7 @@ router.get('/', async (req, res) => {
       .from('kyc')
       .select(`
         *,
-        profile:profiles(id, user_id, name, email, phone, member_id, is_active, is_flagged)
+        profile:profiles(id, user_id, name, email, phone, is_active, is_flagged)
       `, { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(from, to);
