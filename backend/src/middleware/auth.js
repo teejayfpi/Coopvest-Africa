@@ -156,8 +156,8 @@ const requireAdmin = (req, res, next) => {
 };
 
 const requireService = (req, res, next) => {
-  const expected = process.env.MOBILE_API_SERVICE_TOKEN;
-  const provided = req.headers['x-service-token'] || req.headers['X-Service-Token'];
+  const expected = process.env.MOBILE_API_SERVICE_TOKEN || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const provided = req.headers['x-service-token'] || req.headers['X-Service-Token'] || req.headers['authorization']?.replace('Bearer ', '');
 
   if (!expected) {
     return res.status(503).json({
