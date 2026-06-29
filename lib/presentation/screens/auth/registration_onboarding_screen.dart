@@ -36,7 +36,7 @@ class _OnboardingData {
   String idNumber = '';
   String staffId = '';
 
-  // Step 4 – Employment (required for salary deduction, optional for direct deposit)
+  // Step 4 – Employment (all fields required)
   String occupation = '';
   String employerName = '';
   String employmentType = '';
@@ -270,40 +270,32 @@ class _RegistrationOnboardingScreenState
       return false;
     }
 
-    // Employer info is required only for salary deduction
-    if (_data.requiresEmployerInfo) {
-      if (_employerCtrl.text.trim().isEmpty) {
-        _showError('Please enter your employer/organization name.');
-        return false;
-      }
-      if (_data.employmentType.isEmpty) {
-        _showError('Please select your employment type.');
-        return false;
-      }
-      if (_employerStaffIdCtrl.text.trim().isEmpty) {
-        _showError('Please enter your staff ID number.');
-        return false;
-      }
-      if (_workAddressCtrl.text.trim().isEmpty) {
-        _showError('Please enter your work address.');
-        return false;
-      }
-      if (_data.yearsOfEmployment.isEmpty) {
-        _showError('Please select your years of employment.');
-        return false;
-      }
-      _data.employerName = _employerCtrl.text.trim();
-      _data.employerStaffId = _employerStaffIdCtrl.text.trim();
-      _data.workAddress = _workAddressCtrl.text.trim();
-    } else {
-      // For direct deposit, employer fields are optional
-      // But still save them if provided
-      _data.employerName = _employerCtrl.text.trim();
-      _data.employerStaffId = _employerStaffIdCtrl.text.trim();
-      _data.workAddress = _workAddressCtrl.text.trim();
+    // All fields are now required for all contribution types
+    if (_employerCtrl.text.trim().isEmpty) {
+      _showError('Please enter your employer/organization name.');
+      return false;
+    }
+    if (_data.employmentType.isEmpty) {
+      _showError('Please select your employment type.');
+      return false;
+    }
+    if (_employerStaffIdCtrl.text.trim().isEmpty) {
+      _showError('Please enter your staff ID number.');
+      return false;
+    }
+    if (_workAddressCtrl.text.trim().isEmpty) {
+      _showError('Please enter your work address.');
+      return false;
+    }
+    if (_data.yearsOfEmployment.isEmpty) {
+      _showError('Please select your years of employment.');
+      return false;
     }
 
     _data.occupation = _occupationCtrl.text.trim();
+    _data.employerName = _employerCtrl.text.trim();
+    _data.employerStaffId = _employerStaffIdCtrl.text.trim();
+    _data.workAddress = _workAddressCtrl.text.trim();
     return true;
   }
 
@@ -1136,8 +1128,6 @@ class _EmploymentStepState extends State<_EmploymentStep> {
 
   @override
   Widget build(BuildContext context) {
-    final bool requiresEmployerInfo = widget.data.requiresEmployerInfo;
-
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
       child: Column(
@@ -1146,9 +1136,7 @@ class _EmploymentStepState extends State<_EmploymentStep> {
           _SectionHeader(
               icon: Icons.business_center_outlined,
               title: 'Employment Information',
-              subtitle: requiresEmployerInfo
-                  ? 'Your employer information is required for salary deduction setup.'
-                  : 'This helps us assess your financial profile for loan eligibility.'),
+              subtitle: 'Please fill in all fields to complete your registration.'),
           const SizedBox(height: 20),
 
           AppTextField(
@@ -1158,165 +1146,67 @@ class _EmploymentStepState extends State<_EmploymentStep> {
           ),
           const SizedBox(height: 20),
 
-          // Employer fields - only shown when salary deduction is selected
-          if (requiresEmployerInfo) ...[
-            AppTextField(
-              label: 'Employer / Organization Name *',
-              hint: 'Enter your organization\'s full name',
-              controller: widget.employerCtrl,
-            ),
-            const SizedBox(height: 20),
+          AppTextField(
+            label: 'Employer / Organization Name *',
+            hint: 'Enter your organization\'s full name',
+            controller: widget.employerCtrl,
+          ),
+          const SizedBox(height: 20),
 
-            _FieldLabel(label: 'Employment Type *'),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              value: widget.data.employmentType.isEmpty
-                  ? null
-                  : widget.data.employmentType,
-              hint: const Text('Select Employment Type'),
-              decoration: InputDecoration(
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10)),
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              ),
-              items: _employmentTypes
-                  .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-                  .toList(),
-              onChanged: (v) =>
-                  setState(() => widget.data.employmentType = v ?? ''),
+          _FieldLabel(label: 'Employment Type *'),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<String>(
+            value: widget.data.employmentType.isEmpty
+                ? null
+                : widget.data.employmentType,
+            hint: const Text('Select Employment Type'),
+            decoration: InputDecoration(
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10)),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             ),
-            const SizedBox(height: 20),
+            items: _employmentTypes
+                .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                .toList(),
+            onChanged: (v) =>
+                setState(() => widget.data.employmentType = v ?? ''),
+          ),
+          const SizedBox(height: 20),
 
-            AppTextField(
-              label: 'Staff ID Number *',
-              hint: 'Your official staff/employee ID',
-              controller: widget.employerStaffIdCtrl,
-            ),
-            const SizedBox(height: 20),
+          AppTextField(
+            label: 'Staff ID Number *',
+            hint: 'Your official staff/employee ID',
+            controller: widget.employerStaffIdCtrl,
+          ),
+          const SizedBox(height: 20),
 
-            AppTextField(
-              label: 'Work Address *',
-              hint: 'Office address of your employer',
-              controller: widget.workAddressCtrl,
-            ),
-            const SizedBox(height: 20),
+          AppTextField(
+            label: 'Work Address *',
+            hint: 'Office address of your employer',
+            controller: widget.workAddressCtrl,
+          ),
+          const SizedBox(height: 20),
 
-            _FieldLabel(label: 'Years of Employment *'),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              value: widget.data.yearsOfEmployment.isEmpty
-                  ? null
-                  : widget.data.yearsOfEmployment,
-              hint: const Text('Select years of employment'),
-              decoration: InputDecoration(
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10)),
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              ),
-              items: _yearsOptions
-                  .map((y) => DropdownMenuItem(value: y, child: Text(y)))
-                  .toList(),
-              onChanged: (v) =>
-                  setState(() => widget.data.yearsOfEmployment = v ?? ''),
+          _FieldLabel(label: 'Years of Employment *'),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<String>(
+            value: widget.data.yearsOfEmployment.isEmpty
+                ? null
+                : widget.data.yearsOfEmployment,
+            hint: const Text('Select years of employment'),
+            decoration: InputDecoration(
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10)),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             ),
-          ] else ...[
-            // For direct deposit, show optional employer fields with clear labeling
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: CoopvestColors.info.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: CoopvestColors.info.withOpacity(0.25),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.info_outline,
-                    color: CoopvestColors.info,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Employer information is optional. You can skip these fields if you prefer.',
-                      style: TextStyle(
-                        color: CoopvestColors.info,
-                        fontSize: 12,
-                        height: 1.4,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            AppTextField(
-              label: 'Employer / Organization Name (Optional)',
-              hint: 'Enter your organization\'s full name',
-              controller: widget.employerCtrl,
-            ),
-            const SizedBox(height: 20),
-
-            _FieldLabel(label: 'Employment Type (Optional)'),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              value: widget.data.employmentType.isEmpty
-                  ? null
-                  : widget.data.employmentType,
-              hint: const Text('Select Employment Type'),
-              decoration: InputDecoration(
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10)),
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              ),
-              items: _employmentTypes
-                  .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-                  .toList(),
-              onChanged: (v) =>
-                  setState(() => widget.data.employmentType = v ?? ''),
-            ),
-            const SizedBox(height: 20),
-
-            AppTextField(
-              label: 'Staff ID Number (Optional)',
-              hint: 'Your official staff/employee ID',
-              controller: widget.employerStaffIdCtrl,
-            ),
-            const SizedBox(height: 20),
-
-            AppTextField(
-              label: 'Work Address (Optional)',
-              hint: 'Office address of your employer',
-              controller: widget.workAddressCtrl,
-            ),
-            const SizedBox(height: 20),
-
-            _FieldLabel(label: 'Years of Employment (Optional)'),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              value: widget.data.yearsOfEmployment.isEmpty
-                  ? null
-                  : widget.data.yearsOfEmployment,
-              hint: const Text('Select years of employment'),
-              decoration: InputDecoration(
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10)),
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              ),
-              items: _yearsOptions
-                  .map((y) => DropdownMenuItem(value: y, child: Text(y)))
-                  .toList(),
-              onChanged: (v) =>
-                  setState(() => widget.data.yearsOfEmployment = v ?? ''),
-            ),
-          ],
+            items: _yearsOptions
+                .map((y) => DropdownMenuItem(value: y, child: Text(y)))
+                .toList(),
+            onChanged: (v) =>
+                setState(() => widget.data.yearsOfEmployment = v ?? ''),
+          ),
           const SizedBox(height: 8),
         ],
       ),

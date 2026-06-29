@@ -196,35 +196,10 @@ class _ContributionTypeSelectionScreenState
 
               // Continue Button
               PrimaryButton(
-                label: 'Continue',
+                label: _selectedType == null ? 'Select a Contribution Type' : 'Continue',
                 onPressed: _continueToRegistration,
                 width: double.infinity,
                 isEnabled: _selectedType != null,
-              ),
-
-              const SizedBox(height: 16),
-
-              // Skip for now option
-              Center(
-                child: TextButton(
-                  onPressed: () {
-                    // Default to direct deposit if user skips
-                    final updatedData =
-                        Map<String, String>.from(widget.registrationData);
-                    updatedData['contribution_type'] = 'direct_deposit';
-                    Navigator.of(context).pushNamed(
-                      '/register-step3',
-                      arguments: updatedData,
-                    );
-                  },
-                  child: Text(
-                    'I\'ll decide later',
-                    style: TextStyle(
-                      color: context.textSecondary,
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
               ),
 
               const SizedBox(height: 24),
