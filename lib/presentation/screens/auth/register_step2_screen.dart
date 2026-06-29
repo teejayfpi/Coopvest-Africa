@@ -124,8 +124,9 @@ class _RegisterStep2ScreenState extends ConsumerState<RegisterStep2Screen> {
             content: Text('Email verified successfully!'),
             backgroundColor: CoopvestColors.success,
           ));
+          // Navigate to contribution type selection before KYC registration
           Navigator.of(context).pushNamed(
-            '/register-step3',
+            '/contribution-type-selection',
             arguments: widget.registrationData,
           );
         }

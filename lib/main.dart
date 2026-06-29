@@ -19,6 +19,7 @@ import 'presentation/screens/auth/login_screen.dart';
 import 'presentation/screens/auth/register_step1_screen.dart';
 import 'presentation/screens/auth/register_step2_screen.dart';
 import 'presentation/screens/auth/registration_onboarding_screen.dart';
+import 'presentation/screens/auth/contribution_type_selection_screen.dart';
 import 'presentation/screens/auth/google_complete_screen.dart';
 import 'presentation/screens/auth/salary_deduction_consent_screen.dart';
 import 'presentation/screens/auth/account_activation_screen.dart';
@@ -222,6 +223,13 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
               as Map<String, String>?;
           return RegisterStep2Screen(
             email: args?['email'] ?? '',
+            registrationData: args ?? {},
+          );
+        },
+        '/contribution-type-selection': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments
+              as Map<String, String>?;
+          return ContributionTypeSelectionScreen(
             registrationData: args ?? {},
           );
         },
