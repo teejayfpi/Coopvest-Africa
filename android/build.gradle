@@ -24,6 +24,15 @@ allprojects {
     }
 }
 
+// Disable NDK requirement for Firebase Crashlytics
+subprojects {
+    afterEvaluate { project ->
+        project.extensions.findByName('crashlytics')?.apply {
+            ext.enableCrashlytics = false
+        }
+    }
+}
+
 // Set JVM target globally for all subprojects
 subprojects {
     afterEvaluate { project ->
