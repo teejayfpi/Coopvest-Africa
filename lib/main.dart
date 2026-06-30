@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'firebase_options.dart';
+import 'core/services/logger_service.dart';
 import 'config/app_config.dart';
 import 'config/theme_config.dart';
 import 'config/theme_enhanced.dart';
@@ -73,6 +75,42 @@ Future<void> _fcmBackgroundHandler(RemoteMessage message) async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Set up global error handler for uncaught Flutter errors
+  FlutterError.onError = (FlutterErrorDetails details) {
+    logger.error(
+      'Uncaught Flutter Error',
+      details.exception,
+      details.stack,
+    );
+    
+    // Report to Crashlytics in production
+    FirebaseCrashlytics.instance.recordError(
+      details.exception,
+      details.stack,
+      reason: 'Uncaught Flutter error in main isolate',
+    );
+    
+    // Re-throw to let Flutter handle it
+    FlutterError.presentError(details);
+  };
+
+  // Set up async error handler for unhandled promise rejections
+  PlatformDispatcher.instance.onError = (error, stack) {
+    logger.error(
+      'Unhandled Platform Error',
+      error,
+      stack,
+    );
+    
+    FirebaseCrashlytics.instance.recordError(
+      error,
+      stack,
+      reason: 'Unhandled platform error',
+    );
+    
+    return true;
+  };
 
   const envString = String.fromEnvironment('ENV', defaultValue: 'prod');
   final env = Environment.values.firstWhere(
