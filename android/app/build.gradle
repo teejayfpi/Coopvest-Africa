@@ -37,7 +37,6 @@ def projectDir = project.rootProject.projectDir
 android {
     namespace "com.coopvestafrica.app"
     compileSdk 36
-    ndkVersion "27.0.12077973"
 
     compileOptions {
         coreLibraryDesugaringEnabled true
