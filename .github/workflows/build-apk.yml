@@ -57,6 +57,12 @@ jobs:
           /opt/flutter/bin/flutter --version
           /opt/flutter/bin/flutter config --no-analytics
 
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          sdk-version: 36
+          ndk-version: "27.0.12077973"
+
       - name: Install Flutter dependencies
         run: flutter pub get
 
