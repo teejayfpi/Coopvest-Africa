@@ -138,7 +138,7 @@ class ContributionReminderService {
     }
   }
 
-  List<MonthlyContribution> contributions)(List<MonthlyContribution> contributions) {
+  MonthlyContribution? _getThisMonthContribution(List<MonthlyContribution> contributions) {
     final now = DateTime.now();
     final thisMonth = DateTime(now.year, now.month);
     
