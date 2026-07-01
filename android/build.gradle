@@ -12,7 +12,6 @@ buildscript {
         classpath 'com.android.tools.build:gradle:8.9.1'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
         classpath 'com.google.gms:google-services:4.3.15'
-        classpath 'com.google.firebase:firebase-crashlytics-gradle:2.9.9'
     }
 }
 
@@ -21,15 +20,6 @@ allprojects {
         google()
         mavenCentral()
         maven { url 'https://maven.aliyun.com/repository/public' }
-    }
-}
-
-// Disable NDK requirement for Firebase Crashlytics
-subprojects {
-    afterEvaluate { project ->
-        project.extensions.findByName('crashlytics')?.apply {
-            ext.enableCrashlytics = false
-        }
     }
 }
 
