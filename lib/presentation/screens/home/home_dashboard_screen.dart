@@ -5,6 +5,7 @@ import 'dart:async';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/extensions/number_extensions.dart';
+import '../../../core/services/contribution_reminder_service.dart';
 import '../../../data/models/wallet_models.dart';
 import '../../../data/models/loan_models.dart';
 import '../../../data/models/announcement_models.dart';
@@ -13,6 +14,7 @@ import '../../../data/models/document_models.dart';
 import '../../../presentation/providers/auth_provider.dart';
 import '../../../presentation/providers/wallet_provider.dart';
 import '../../../presentation/providers/loan_provider.dart';
+import '../../../presentation/providers/contributions/contribution_provider.dart';
 import '../../../presentation/providers/insights_provider.dart';
 import '../../../presentation/providers/notifications_provider.dart';
 import '../../../presentation/providers/announcement_provider.dart';
@@ -89,15 +91,42 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
 
   Future<void> _loadData() async {
     try {
-      await Future.wait([
+      // Load all required data in parallel
+      final results = await Future.wait([
         ref.read(walletProvider.notifier).loadWallet(),
         ref.read(loanProvider.notifier).getLoans(),
+        ref.read(contributionProvider.notifier).loadContributions(),
       ]);
+
+      // Check and send contribution reminders after data is loaded
+      _checkContributionReminders();
     } catch (e) {
       if (mounted) {
         debugPrint('Error loading dashboard data: $e');
       }
     }
+  }
+
+  void _checkContributionReminders() {
+    final reminderService = ref.read(contributionReminderServiceProvider);
+    final user = ref.read(currentUserProvider);
+    final walletState = ref.read(walletProvider);
+    final contributionState = ref.read(contributionProvider);
+
+    if (user == null) return;
+
+    // Get user's preferred contribution day (default to 5th of month)
+    final preferredDay = 5; // This should come from user settings
+    final monthlyAmount = contributionState.contributions.isNotEmpty
+        ? contributionState.contributions.first.amount
+        : 5000.0; // Default minimum
+
+    reminderService.checkAndSendReminders(
+      contributions: contributionState.contributions,
+      monthlyAmount: monthlyAmount,
+      preferredDay: preferredDay,
+      totalSavings: walletState.wallet?.totalContributions ?? 0.0,
+    );
   }
 
   @override

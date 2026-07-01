@@ -609,6 +609,83 @@ class NotificationService {
     );
   }
 
+  // ── Contribution Reminder Notifications ──────────────────────────────────────
+
+  /// Reminder: Contribution is due in X days
+  Future<void> showContributionReminderNotification({
+    required int daysUntilDue,
+    required double monthlyAmount,
+  }) async {
+    final daysText = daysUntilDue == 1 ? 'tomorrow' : 'in $daysUntilDue days';
+    await _showLocalNotification(
+      title: 'Contribution Reminder',
+      body: 'Your monthly contribution of \u20a6${monthlyAmount.formatNumber()} is due $daysText.',
+      payload: jsonEncode({'type': 'contribution_reminder', 'daysUntilDue': daysUntilDue}),
+      channelId: _channelSavingsId,
+    );
+  }
+
+  /// Reminder: No contribution made this month
+  Future<void> showNoContributionThisMonthNotification({
+    required double monthlyAmount,
+    required int dayOfMonth,
+  }) async {
+    await _showLocalNotification(
+      title: 'Contribution Due Today',
+      body: 'You haven\'t made your monthly contribution of \u20a6${monthlyAmount.formatNumber()} yet. Pay today to stay on track!',
+      payload: jsonEncode({'type': 'contribution_due_today'}),
+      channelId: _channelSavingsId,
+    );
+  }
+
+  /// Reminder: Missed contribution (overdue)
+  Future<void> showMissedContributionNotification({
+    required double monthlyAmount,
+    required int daysOverdue,
+  }) async {
+    final daysText = daysOverdue == 1 ? 'day' : 'days';
+    await _showLocalNotification(
+      title: 'Contribution Overdue',
+      body: 'Your contribution of \u20a6${monthlyAmount.formatNumber()} is $daysOverdue $daysText overdue. Please pay immediately to maintain your good standing.',
+      payload: jsonEncode({'type': 'contribution_overdue', 'daysOverdue': daysOverdue}),
+      channelId: _channelSavingsId,
+      importance: AndroidNotificationImportance.high,
+    );
+  }
+
+  /// Reminder: Contribution streak reminder (encouragement)
+  Future<void> showContributionStreakNotification({
+    required int streakMonths,
+    required double totalSavings,
+  }) async {
+    final streakText = streakMonths == 1 ? 'month' : 'months';
+    await _showLocalNotification(
+      title: 'Keep It Up! 🎉',
+      body: 'You\'ve contributed consistently for $streakMonths $streakText! Your total savings: \u20a6${totalSavings.formatNumber()}',
+      payload: jsonEncode({'type': 'contribution_streak', 'streakMonths': streakMonths}),
+      channelId: _channelSavingsId,
+    );
+  }
+
+  /// Reminder: Loan eligibility reminder based on contribution
+  Future<void> showLoanEligibilityReminderNotification({
+    required double currentSavings,
+    required double savingsRequired,
+    required double loanAmount,
+  }) async {
+    final remaining = savingsRequired - currentSavings;
+    await _showLocalNotification(
+      title: 'Loan Eligibility Update',
+      body: 'You\'re \u20a6${remaining.formatNumber()} away from qualifying for a \u20a6${loanAmount.formatNumber()} loan!',
+      payload: jsonEncode({
+        'type': 'loan_eligibility_reminder',
+        'currentSavings': currentSavings,
+        'savingsRequired': savingsRequired,
+      }),
+      channelId: _channelSavingsId,
+    );
+  }
+
   // ── Wallet notifications ──────────────────────────────────────────────────────
 
   Future<void> showWalletCreditedNotification(double amount, {String? description}) async {
