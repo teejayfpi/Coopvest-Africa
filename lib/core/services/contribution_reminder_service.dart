@@ -1,7 +1,5 @@
-import 'dart:convert';
-import 'package:dio/dio.dart';
 import 'notification_service.dart';
-import '../../data/models/contribution_models.dart';
+import '../../data/models/contributions/monthly_contribution.dart';
 import '../../config/app_config.dart';
 import '../network/api_client.dart';
 import 'logger_service.dart';
@@ -29,7 +27,7 @@ class ContributionReminderService {
   /// Check and send appropriate contribution reminders
   /// Called on app startup and periodically while app is open
   Future<void> checkAndSendReminders({
-    required List<Contribution> contributions,
+    required List<MonthlyContribution> contributions,
     required double monthlyAmount,
     required int preferredDay,
     required double totalSavings,
@@ -110,7 +108,7 @@ class ContributionReminderService {
   /// Sync contribution status with backend for cron job processing
   Future<void> syncContributionStatus({
     required String userId,
-    required List<Contribution> contributions,
+    required List<MonthlyContribution> contributions,
     required double monthlyAmount,
     required int preferredDay,
     required String contributionMethod,
@@ -140,7 +138,7 @@ class ContributionReminderService {
     }
   }
 
-  Contribution? _getThisMonthContribution(List<Contribution> contributions) {
+  List<MonthlyContribution> contributions)(List<MonthlyContribution> contributions) {
     final now = DateTime.now();
     final thisMonth = DateTime(now.year, now.month);
     
@@ -158,10 +156,10 @@ class ContributionReminderService {
     return null;
   }
 
-  int _calculateContributionStreak(List<Contribution> contributions) {
+  int _calculateContributionStreak(List<MonthlyContribution> contributions) {
     if (contributions.isEmpty) return 0;
     
-    final sortedContributions = List<Contribution>.from(contributions)
+    final sortedContributions = List<MonthlyContribution>.from(contributions)
       ..sort((a, b) => (b.createdAt ?? DateTime(2000)).compareTo(a.createdAt ?? DateTime(2000)));
     
     int streak = 0;

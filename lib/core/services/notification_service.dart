@@ -649,7 +649,7 @@ class NotificationService {
       body: 'Your contribution of \u20a6${monthlyAmount.formatNumber()} is $daysOverdue $daysText overdue. Please pay immediately to maintain your good standing.',
       payload: jsonEncode({'type': 'contribution_overdue', 'daysOverdue': daysOverdue}),
       channelId: _channelSavingsId,
-      importance: AndroidNotificationImportance.high,
+      
     );
   }
 
