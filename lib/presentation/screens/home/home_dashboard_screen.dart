@@ -6,6 +6,7 @@ import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/extensions/number_extensions.dart';
 import '../../../core/services/contribution_reminder_service.dart';
+// contributionReminderService is a singleton, no Provider needed
 import '../../../data/models/wallet_models.dart';
 import '../../../data/models/loan_models.dart';
 import '../../../data/models/announcement_models.dart';
@@ -108,24 +109,35 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
   }
 
   void _checkContributionReminders() {
-    final reminderService = ref.read(contributionReminderServiceProvider);
     final user = ref.read(currentUserProvider);
     final walletState = ref.read(walletProvider);
     final contributionState = ref.read(contributionProvider);
 
     if (user == null) return;
 
-    // Get user's preferred contribution day (default to 5th of month)
-    final preferredDay = 5; // This should come from user settings
-    final monthlyAmount = contributionState.contributions.isNotEmpty
-        ? contributionState.contributions.first.amount
-        : 5000.0; // Default minimum
+    // Get user's contribution method from settings
+    // Default to 'manual' if not set (assume manual until proven payroll)
+    const contributionMethod = 'manual';
+    
+    // Use defaults - backend will have accurate user preferences
+    const preferredDay = 5; // Default to 5th of month
+    const monthlyAmount = 5000.0; // Minimum contribution
 
-    reminderService.checkAndSendReminders(
+    // Use singleton service
+    contributionReminderService.checkAndSendReminders(
       contributions: contributionState.contributions,
       monthlyAmount: monthlyAmount,
       preferredDay: preferredDay,
       totalSavings: walletState.wallet?.totalContributions ?? 0.0,
+    );
+
+    // Sync status with backend for cron job processing
+    contributionReminderService.syncContributionStatus(
+      userId: user.id,
+      contributions: contributionState.contributions,
+      monthlyAmount: monthlyAmount,
+      preferredDay: preferredDay,
+      contributionMethod: contributionMethod,
     );
   }
 
