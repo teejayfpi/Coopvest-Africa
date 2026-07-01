@@ -58,9 +58,31 @@ jobs:
           /opt/flutter/bin/flutter config --no-analytics
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          sdk-version: 36
+        run: |
+          # Check if SDK already exists on ubuntu-latest
+          if [ -d "/usr/local/lib/android/sdk" ]; then
+            export ANDROID_HOME="/usr/local/lib/android/sdk"
+          else
+            mkdir -p $HOME/android-sdk
+            export ANDROID_HOME="$HOME/android-sdk"
+            cd $HOME/android-sdk
+            
+            # Download command line tools
+            curl -s -o cmdline-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+            unzip -q cmdline-tools.zip
+            mkdir -p cmdline-tools/latest
+            mv cmdline-tools/bin cmdline-tools/latest/ 2>/dev/null || true
+            mv cmdline-tools/lib cmdline-tools/latest/ 2>/dev/null || true
+            mv cmdline-tools/NOTICE.txt cmdline-tools/latest/ 2>/dev/null || true
+            mv cmdline-tools/source.properties cmdline-tools/latest/ 2>/dev/null || true
+          fi
+          
+          export PATH="$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools"
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;27.0.12077973" || true
+          
+          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
 
       - name: Install Flutter dependencies
         run: flutter pub get
