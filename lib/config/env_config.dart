@@ -24,15 +24,15 @@ class EnvConfig {
       );
 
   static EnvConfig get staging => EnvConfig(
-        // Staging: Render deployment
-        apiBaseUrl: 'https://coopvest-api.onrender.com/api/v1',
+        // Staging: Vercel Admin Dashboard API
+        apiBaseUrl: 'https://admin-dashboard-api-server.vercel.app/api',
         appName: 'Coopvest Staging',
         enableLogging: true,
       );
 
   static EnvConfig get prod => EnvConfig(
-        // Production: Render deployment
-        apiBaseUrl: 'https://coopvest-api.onrender.com/api/v1',
+        // Production: Vercel Admin Dashboard API
+        apiBaseUrl: 'https://admin-dashboard-api-server.vercel.app/api',
         appName: 'Coopvest Africa',
         enableLogging: false,
       );
