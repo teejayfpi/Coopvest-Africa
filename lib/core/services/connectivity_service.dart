@@ -70,7 +70,7 @@ final connectivityProvider = ChangeNotifierProvider<ConnectivityService>((ref) {
   return ConnectivityService();
 });
 
-/// Offline Banner Widget - shows when offline
+/// Offline Banner Widget - shows when offline (updated for connectivity_plus v5+)
 class OfflineBanner extends ConsumerWidget {
   const OfflineBanner({super.key});
 
