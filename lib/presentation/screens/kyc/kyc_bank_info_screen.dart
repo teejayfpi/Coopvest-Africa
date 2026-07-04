@@ -96,6 +96,18 @@ class _KYCBankInfoScreenState extends ConsumerState<KYCBankInfoScreen> {
       return;
     }
 
+    // Save bank details to KYC state
+    final kycNotifier = ref.read(kycProvider.notifier);
+    final bankCode = BankTypes.getBankCode(_selectedBank!);
+    kycNotifier.updateBankDetails(
+      bankName: _selectedBank,
+      bankCode: bankCode,
+      accountNumber: _accountNumberController.text,
+      accountName: _accountNameController.text,
+      accountType: _selectedAccountType,
+      bvn: _bvnController.text,
+    );
+
     Navigator.of(context).pushNamed('/kyc-complete');
   }
 
