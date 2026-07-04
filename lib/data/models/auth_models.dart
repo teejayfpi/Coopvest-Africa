@@ -20,6 +20,7 @@ class User extends Equatable {
   final String? profilePicture; // URL to user's profile picture
   final String? referralCode;
   final bool isEmailVerified;
+  final bool registrationCompleted; // true if user completed registration flow
   final DateTime createdAt;
   final DateTime? updatedAt;
 
@@ -42,6 +43,7 @@ class User extends Equatable {
     this.profilePicture,
     this.referralCode,
     this.isEmailVerified = false,
+    this.registrationCompleted = false,
     required this.createdAt,
     this.updatedAt,
   });
@@ -94,6 +96,7 @@ class User extends Equatable {
       profilePicture: json['profile_picture'] as String? ?? json['profilePicture'] as String?,
       referralCode: json['referral_code'] as String? ?? json['referralCode'] as String?,
       isEmailVerified: json['isEmailVerified'] as bool? ?? json['is_email_verified'] as bool? ?? json['emailVerified'] as bool? ?? false,
+      registrationCompleted: json['registration_completed'] as bool? ?? json['registrationCompleted'] as bool? ?? false,
       createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt'] as String) : (json['created_at'] != null ? DateTime.parse(json['created_at'] as String) : DateTime.now()),
       updatedAt: json['updatedAt'] != null ? DateTime.parse(json['updatedAt'] as String) : (json['updated_at'] != null ? DateTime.parse(json['updated_at'] as String) : null),
     );
@@ -137,6 +140,7 @@ class User extends Equatable {
     String? state,
     String? country,
     bool? isEmailVerified,
+    bool? registrationCompleted,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -156,6 +160,7 @@ class User extends Equatable {
       state: state ?? this.state,
       country: country ?? this.country,
       isEmailVerified: isEmailVerified ?? this.isEmailVerified,
+      registrationCompleted: registrationCompleted ?? this.registrationCompleted,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

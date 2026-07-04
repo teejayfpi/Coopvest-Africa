@@ -57,6 +57,7 @@ import 'presentation/screens/rollover/rollover_request_screen.dart';
 import 'presentation/screens/rollover/guarantor_consent_screen.dart';
 import 'presentation/screens/rollover/guarantor_response_screen.dart';
 import 'presentation/screens/rollover/rollover_status_screen.dart';
+import 'presentation/widgets/auth_guard.dart';
 
 // Supabase project credentials (anon key is safe to embed in client code)
 const _supabaseUrl = 'https://nyoauzqezpxeonmrxxgi.supabase.co';
@@ -250,9 +251,11 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
       theme: CoopvestTheme.lightTheme,
       darkTheme: CoopvestTheme.darkTheme,
       themeMode: themeMode,
-      home: authStatus == AuthStatus.authenticated
-          ? const MainContainer()
-          : const WelcomeScreen(),
+      home: AuthGuard(
+        child: authStatus == AuthStatus.authenticated
+            ? const MainContainer()
+            : const WelcomeScreen(),
+      ),
       routes: {
         '/welcome': (context) => const WelcomeScreen(),
         '/login': (context) => const LoginScreen(),
