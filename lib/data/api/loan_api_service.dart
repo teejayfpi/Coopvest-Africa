@@ -35,13 +35,31 @@ class LoanApiService {
   }
 
   /// Confirm guarantee (guarantor accepts)
+  /// Calls the /guarantor/requests/:requestId/accept endpoint.
+  /// The guarantorId in the request is the loan_guarantors record ID.
   Future<GuarantorConfirmResponse> confirmGuarantee(String loanId, GuarantorConfirmRequest request) {
-    return _dio.post('/loans/$loanId/guarantors/confirm', data: request.toJson()).then((response) => GuarantorConfirmResponse.fromJson(response.data));
+    return _dio.post('/guarantor/requests/${request.guarantorId}/accept', data: request.toJson()).then((response) {
+      // Map the backend response to GuarantorConfirmResponse
+      return GuarantorConfirmResponse(
+        success: response.data['success'] as bool? ?? true,
+        message: response.data['message'] as String? ?? 'Guarantee confirmed',
+        guarantorStatus: 'accepted',
+        guarantorsNowConfirmed: 0,
+      );
+    });
   }
 
   /// Decline guarantee (guarantor rejects)
+  /// Calls the /guarantor/requests/:requestId/decline endpoint.
+  /// The guarantorId in the request is the loan_guarantors record ID.
   Future<GuarantorDeclineResponse> declineGuarantee(String loanId, GuarantorDeclineRequest request) {
-    return _dio.post('/loans/$loanId/guarantors/decline', data: request.toJson()).then((response) => GuarantorDeclineResponse.fromJson(response.data));
+    return _dio.post('/guarantor/requests/${request.guarantorId}/decline', data: request.toJson()).then((response) {
+      // Map the backend response to GuarantorDeclineResponse
+      return GuarantorDeclineResponse(
+        success: response.data['success'] as bool? ?? true,
+        message: response.data['message'] as String? ?? 'Guarantee declined',
+      );
+    });
   }
 
   /// Cancel loan application
