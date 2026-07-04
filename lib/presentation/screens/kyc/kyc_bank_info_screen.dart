@@ -19,7 +19,7 @@ class KYCBankInfoScreen extends ConsumerStatefulWidget {
 class _KYCBankInfoScreenState extends ConsumerState<KYCBankInfoScreen> {
   late TextEditingController _accountNumberController;
   late TextEditingController _accountNameController;
-  late TextEditingController _bvnController;
+  
   
   String? _selectedBank;
   String? _selectedAccountType;
@@ -35,14 +35,12 @@ class _KYCBankInfoScreenState extends ConsumerState<KYCBankInfoScreen> {
     super.initState();
     _accountNumberController = TextEditingController();
     _accountNameController = TextEditingController();
-    _bvnController = TextEditingController();
   }
 
   @override
   void dispose() {
     _accountNumberController.dispose();
     _accountNameController.dispose();
-    _bvnController.dispose();
     super.dispose();
   }
 
@@ -91,10 +89,6 @@ class _KYCBankInfoScreenState extends ConsumerState<KYCBankInfoScreen> {
       _showError('Please select your account type');
       return;
     }
-    if (_bvnController.text.length != 11) {
-      _showError('BVN must be 11 digits');
-      return;
-    }
 
     // Save bank details to KYC state
     final kycNotifier = ref.read(kycProvider.notifier);
@@ -105,7 +99,6 @@ class _KYCBankInfoScreenState extends ConsumerState<KYCBankInfoScreen> {
       accountNumber: _accountNumberController.text,
       accountName: _accountNameController.text,
       accountType: _selectedAccountType,
-      bvn: _bvnController.text,
     );
 
     Navigator.of(context).pushNamed('/kyc-complete');
@@ -243,15 +236,6 @@ class _KYCBankInfoScreenState extends ConsumerState<KYCBankInfoScreen> {
                     _selectedAccountType = value;
                   });
                 },
-              ),
-              const SizedBox(height: 20),
-
-              AppTextField(
-                label: 'BVN *',
-                hint: 'Enter 11-digit BVN',
-                controller: _bvnController,
-                keyboardType: TextInputType.number,
-                maxLength: 11,
               ),
 
               const SizedBox(height: 40),

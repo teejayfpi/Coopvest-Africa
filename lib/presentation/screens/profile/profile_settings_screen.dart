@@ -6,6 +6,7 @@ import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../presentation/widgets/common/cards.dart';
 import '../kyc/kyc_employment_details_screen.dart';
+import '../kyc/kyc_bank_info_screen.dart';
 import '../support/support_home_screen.dart';
 import '../security/security_settings_screen.dart';
 import '../membership/membership_screen.dart';
@@ -100,8 +101,8 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
         },
         {
           'icon': Icons.upload_file_outlined,
-          'label': 'Upload Documents',
-          'subtitle': 'Submit KYC and other documents',
+          'label': 'Complete KYC',
+          'subtitle': 'Verify your identity and bank details',
         },
       ],
     },
@@ -558,7 +559,7 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
         break;
       case 'Upload Documents':
         Navigator.of(context).push(
-          MaterialPageRoute(builder: (context) => const DocumentUploadScreen()),
+          MaterialPageRoute(builder: (context) => const KYCBankInfoScreen()),
         );
         break;
       case 'My Referrals':
