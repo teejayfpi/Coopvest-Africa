@@ -402,6 +402,8 @@ router.post('/complete-registration', authenticate, async (req, res) => {
       monthly_amount, contribution_method, preferred_payment_day,
       nok_name, nok_relationship, nok_phone, nok_address,
       id_type, id_number, staff_id,
+      // Bank info fields
+      bank_name, bank_code, account_number, account_name, account_type,
       partial,
     } = req.body;
 
@@ -469,6 +471,12 @@ router.post('/complete-registration', authenticate, async (req, res) => {
             monthly_amount,
             contribution_method,
             preferred_payment_day,
+            // Bank info
+            bank_name,
+            bank_code,
+            account_number,
+            account_name,
+            account_type,
           },
           employment_info: {
             occupation,
