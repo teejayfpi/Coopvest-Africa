@@ -9,6 +9,7 @@ import '../../../core/utils/utils.dart';
 import '../../widgets/common/buttons.dart';
 import '../../widgets/common/inputs.dart';
 import '../../../core/network/api_client.dart';
+import '../../../data/models/kyc_models.dart';
 
 // ---------------------------------------------------------------------------
 // Contribution type enum
@@ -371,33 +372,7 @@ class _RegistrationOnboardingScreenState
   }
 
   String _getBankCode(String bankName) {
-    final banks = [
-      {'label': 'Ecobank Nigeria', 'code': '050'},
-      {'label': 'Access Bank', 'code': '044'},
-      {'label': 'Guaranty Trust Bank (GTBank)', 'code': '058'},
-      {'label': 'United Bank for Africa (UBA)', 'code': '033'},
-      {'label': 'Zenith Bank', 'code': '057'},
-      {'label': 'First Bank of Nigeria', 'code': '011'},
-      {'label': 'Fidelity Bank', 'code': '070'},
-      {'label': ' Sterling Bank', 'code': '232'},
-      {'label': 'Union Bank of Nigeria', 'code': '032'},
-      {'label': 'Diamond Bank', 'code': '063'},
-      {'label': 'Skye Bank', 'code': '076'},
-      {'label': 'Stanbic IBTC Bank', 'code': '221'},
-      {'label': 'Citibank Nigeria', 'code': '023'},
-      {'label': 'Standard Chartered Bank', 'code': '068'},
-      {'label': 'Keystone Bank', 'code': '082'},
-      {'label': 'Enterprise Bank', 'code': '084'},
-      {'label': 'Heritage Bank', 'code': '030'},
-      {'label': 'FCMB (First City Monument Bank)', 'code': '214'},
-      {'label': 'Jaiz Bank', 'code': '301'},
-      {'label': 'SunTrust Bank', 'code': '100'},
-    ];
-    final bank = banks.firstWhere(
-      (b) => b['label'] == bankName,
-      orElse: () => {'code': ''},
-    );
-    return bank['code'] ?? '';
+    return BankTypes.getBankCode(bankName);
   }
 
   void _showError(String message) {
@@ -1733,34 +1708,6 @@ class _BankInfoStep extends StatelessWidget {
     required this.onVerifyAccount,
   });
 
-  final List<Map<String, dynamic>> _banks = [
-    {'label': 'Ecobank Nigeria', 'code': '050'},
-    {'label': 'Access Bank', 'code': '044'},
-    {'label': 'Guaranty Trust Bank (GTBank)', 'code': '058'},
-    {'label': 'United Bank for Africa (UBA)', 'code': '033'},
-    {'label': 'Zenith Bank', 'code': '057'},
-    {'label': 'First Bank of Nigeria', 'code': '011'},
-    {'label': 'Fidelity Bank', 'code': '070'},
-    {'label': 'Sterling Bank', 'code': '232'},
-    {'label': 'Union Bank of Nigeria', 'code': '032'},
-    {'label': 'Diamond Bank', 'code': '063'},
-    {'label': 'Skye Bank', 'code': '076'},
-    {'label': 'Stanbic IBTC Bank', 'code': '221'},
-    {'label': 'Citibank Nigeria', 'code': '023'},
-    {'label': 'Standard Chartered Bank', 'code': '068'},
-    {'label': 'Keystone Bank', 'code': '082'},
-    {'label': 'Heritage Bank', 'code': '030'},
-    {'label': 'FCMB (First City Monument Bank)', 'code': '214'},
-    {'label': 'Jaiz Bank', 'code': '301'},
-    {'label': 'SunTrust Bank', 'code': '100'},
-  ];
-
-  final List<Map<String, dynamic>> _accountTypes = [
-    {'label': 'Savings', 'value': 'savings'},
-    {'label': 'Current', 'value': 'current'},
-    {'label': 'Corporate', 'value': 'corporate'},
-  ];
-
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
@@ -1802,7 +1749,7 @@ class _BankInfoStep extends StatelessWidget {
                 value: selectedBank,
                 hint: const Text('Select your bank'),
                 isExpanded: true,
-                items: _banks.map((bank) {
+                items: BankTypes.banks.map((bank) {
                   return DropdownMenuItem<String>(
                     value: bank['label'] as String,
                     child: Text(bank['label'] as String),
@@ -1895,7 +1842,7 @@ class _BankInfoStep extends StatelessWidget {
                 value: selectedAccountType,
                 hint: const Text('Select account type'),
                 isExpanded: true,
-                items: _accountTypes.map((type) {
+                items: BankAccountTypes.types.map((type) {
                   return DropdownMenuItem<String>(
                     value: type['value'] as String,
                     child: Text(type['label'] as String),
