@@ -104,6 +104,25 @@ class KYCRepository {
     }
   }
 
+  /// Upload avatar/profile picture
+  Future<String> uploadAvatar(String filePath) async {
+    try {
+      final formData = FormData.fromMap({
+        'avatar': await MultipartFile.fromFile(filePath),
+      });
+
+      final response = await _apiClient.post(
+        '/kyc/upload-avatar',
+        data: formData,
+      );
+
+      return response['path'] as String;
+    } catch (e) {
+      logger.e('Upload avatar error: $e');
+      rethrow;
+    }
+  }
+
   /// Request organization approval
   Future<void> requestOrganizationApproval(String organizationName) async {
     try {
