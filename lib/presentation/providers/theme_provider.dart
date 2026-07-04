@@ -3,12 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Theme Mode Provider
+/// Auto-detects system preference by default, but allows manual override
 final themeModeProvider = StateNotifierProvider<ThemeNotifier, ThemeMode>((ref) {
   return ThemeNotifier();
 });
 
 class ThemeNotifier extends StateNotifier<ThemeMode> {
-  ThemeNotifier() : super(ThemeMode.light) {
+  ThemeNotifier() : super(ThemeMode.system) {
     _loadTheme();
   }
 
@@ -19,11 +20,25 @@ class ThemeNotifier extends StateNotifier<ThemeMode> {
     final themeIndex = prefs.getInt(_themeKey);
     if (themeIndex != null) {
       state = ThemeMode.values[themeIndex];
+    } else {
+      // Default to system preference
+      state = ThemeMode.system;
     }
   }
 
   Future<void> toggleTheme() async {
-    state = state == ThemeMode.light ? ThemeMode.dark : ThemeMode.light;
+    // Cycle through: system -> light -> dark -> system
+    switch (state) {
+      case ThemeMode.system:
+        state = ThemeMode.light;
+        break;
+      case ThemeMode.light:
+        state = ThemeMode.dark;
+        break;
+      case ThemeMode.dark:
+        state = ThemeMode.system;
+        break;
+    }
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_themeKey, state.index);
   }
@@ -32,5 +47,16 @@ class ThemeNotifier extends StateNotifier<ThemeMode> {
     state = mode;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_themeKey, state.index);
+  }
+
+  String get themeLabel {
+    switch (state) {
+      case ThemeMode.system:
+        return 'System';
+      case ThemeMode.light:
+        return 'Light';
+      case ThemeMode.dark:
+        return 'Dark';
+    }
   }
 }

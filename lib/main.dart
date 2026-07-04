@@ -58,6 +58,8 @@ import 'presentation/screens/rollover/guarantor_consent_screen.dart';
 import 'presentation/screens/rollover/guarantor_response_screen.dart';
 import 'presentation/screens/rollover/rollover_status_screen.dart';
 import 'presentation/widgets/auth_guard.dart';
+import 'core/services/connectivity_service.dart';
+import 'presentation/widgets/error_widgets.dart';
 
 // Supabase project credentials (anon key is safe to embed in client code)
 const _supabaseUrl = 'https://nyoauzqezpxeonmrxxgi.supabase.co';
@@ -251,10 +253,28 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
       theme: CoopvestTheme.lightTheme,
       darkTheme: CoopvestTheme.darkTheme,
       themeMode: themeMode,
-      home: AuthGuard(
-        child: authStatus == AuthStatus.authenticated
-            ? const MainContainer()
-            : const WelcomeScreen(),
+      home: Consumer(
+        builder: (context, ref, _) {
+          // Listen for connectivity changes
+          final connectivity = ref.watch(connectivityProvider);
+          
+          return Column(
+            children: [
+              // Offline banner at top when offline
+              if (!connectivity.isOnline)
+                const OfflineBanner(),
+              
+              // Main app content with AuthGuard
+              Expanded(
+                child: AuthGuard(
+                  child: authStatus == AuthStatus.authenticated
+                      ? const MainContainer()
+                      : const WelcomeScreen(),
+                ),
+              ),
+            ],
+          );
+        },
       ),
       routes: {
         '/welcome': (context) => const WelcomeScreen(),
