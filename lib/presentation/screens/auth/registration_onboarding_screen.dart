@@ -55,7 +55,14 @@ class _OnboardingData {
   String nokPhone = '';
   String nokAddress = '';
 
-  // Step 7 – Terms
+  // Step 7 – Bank Information
+  String bankName = '';
+  String bankCode = '';
+  String accountNumber = '';
+  String accountName = '';
+  String accountType = '';
+
+  // Step 8 – Terms
   bool acceptedTerms = false;
   bool acceptedContributionPolicy = false;
   bool acceptedLoanPolicy = false;
@@ -101,7 +108,7 @@ class _RegistrationOnboardingScreenState
   bool _isSubmitting = false;
   bool _isCheckingStatus = true;
 
-  static const int _totalSteps = 7;
+  static const int _totalSteps = 8;
 
   final _stepTitles = [
     'Welcome',
@@ -110,6 +117,7 @@ class _RegistrationOnboardingScreenState
     'Employment',
     'Contribution',
     'Next of Kin',
+    'Bank Info',
     'Terms',
   ];
 
@@ -136,6 +144,13 @@ class _RegistrationOnboardingScreenState
   final _nokNameCtrl = TextEditingController();
   final _nokPhoneCtrl = TextEditingController();
   final _nokAddressCtrl = TextEditingController();
+
+  // Step 7 controllers (Bank Info)
+  final _bankNameCtrl = TextEditingController();
+  final _accountNumberCtrl = TextEditingController();
+  final _accountNameCtrl = TextEditingController();
+  String? _selectedBank;
+  String? _selectedAccountType;
 
   @override
   void initState() {
@@ -185,6 +200,9 @@ class _RegistrationOnboardingScreenState
     _nokNameCtrl.dispose();
     _nokPhoneCtrl.dispose();
     _nokAddressCtrl.dispose();
+    _bankNameCtrl.dispose();
+    _accountNumberCtrl.dispose();
+    _accountNameCtrl.dispose();
     super.dispose();
   }
 
@@ -200,6 +218,9 @@ class _RegistrationOnboardingScreenState
     }
     if (_currentStep == 5) {
       if (!_validateStep6()) return;
+    }
+    if (_currentStep == 6) {
+      if (!_validateStep7()) return;
     }
     if (_currentStep < _totalSteps - 1) {
       setState(() => _currentStep++);
@@ -324,12 +345,85 @@ class _RegistrationOnboardingScreenState
     return true;
   }
 
+  bool _validateStep7() {
+    if (_selectedBank == null || _selectedBank!.isEmpty) {
+      _showError('Please select your bank.');
+      return false;
+    }
+    if (_accountNumberCtrl.text.trim().length != 10) {
+      _showError('Account number must be 10 digits.');
+      return false;
+    }
+    if (_accountNameCtrl.text.trim().isEmpty) {
+      _showError('Please verify your account name.');
+      return false;
+    }
+    if (_selectedAccountType == null || _selectedAccountType!.isEmpty) {
+      _showError('Please select your account type.');
+      return false;
+    }
+    _data.bankName = _selectedBank!;
+    _data.bankCode = _getBankCode(_selectedBank!);
+    _data.accountNumber = _accountNumberCtrl.text.trim();
+    _data.accountName = _accountNameCtrl.text.trim();
+    _data.accountType = _selectedAccountType!;
+    return true;
+  }
+
+  String _getBankCode(String bankName) {
+    final banks = [
+      {'label': 'Ecobank Nigeria', 'code': '050'},
+      {'label': 'Access Bank', 'code': '044'},
+      {'label': 'Guaranty Trust Bank (GTBank)', 'code': '058'},
+      {'label': 'United Bank for Africa (UBA)', 'code': '033'},
+      {'label': 'Zenith Bank', 'code': '057'},
+      {'label': 'First Bank of Nigeria', 'code': '011'},
+      {'label': 'Fidelity Bank', 'code': '070'},
+      {'label': ' Sterling Bank', 'code': '232'},
+      {'label': 'Union Bank of Nigeria', 'code': '032'},
+      {'label': 'Diamond Bank', 'code': '063'},
+      {'label': 'Skye Bank', 'code': '076'},
+      {'label': 'Stanbic IBTC Bank', 'code': '221'},
+      {'label': 'Citibank Nigeria', 'code': '023'},
+      {'label': 'Standard Chartered Bank', 'code': '068'},
+      {'label': 'Keystone Bank', 'code': '082'},
+      {'label': 'Enterprise Bank', 'code': '084'},
+      {'label': 'Heritage Bank', 'code': '030'},
+      {'label': 'FCMB (First City Monument Bank)', 'code': '214'},
+      {'label': 'Jaiz Bank', 'code': '301'},
+      {'label': 'SunTrust Bank', 'code': '100'},
+    ];
+    final bank = banks.firstWhere(
+      (b) => b['label'] == bankName,
+      orElse: () => {'code': ''},
+    );
+    return bank['code'] ?? '';
+  }
+
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(message),
       backgroundColor: CoopvestColors.error,
       duration: const Duration(seconds: 3),
     ));
+  }
+
+  void _verifyAccountName() async {
+    if (_selectedBank == null || _accountNumberCtrl.text.length != 10) {
+      _showError('Please select a bank and enter 10-digit account number');
+      return;
+    }
+    // In production, call your API to verify account name
+    // For now, simulate verification
+    setState(() {
+      _accountNameCtrl.text = 'Verified Account Name';
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Account verified successfully'),
+        backgroundColor: CoopvestColors.success,
+      ),
+    );
   }
 
   /// Shows a dialog with the error message and two actions:
@@ -405,6 +499,12 @@ class _RegistrationOnboardingScreenState
         'nok_relationship': _data.nokRelationship,
         'nok_phone': _data.nokPhone,
         'nok_address': _data.nokAddress,
+        // Bank Information
+        'bank_name': _data.bankName,
+        'bank_code': _data.bankCode,
+        'account_number': _data.accountNumber,
+        'account_name': _data.accountName,
+        'account_type': _data.accountType,
         // Add contribution type to submission
         'contribution_type': _data.contributionType == _ContributionType.salaryDeduction
             ? 'salary_deduction'
@@ -524,6 +624,16 @@ class _RegistrationOnboardingScreenState
                     nokNameCtrl: _nokNameCtrl,
                     nokPhoneCtrl: _nokPhoneCtrl,
                     nokAddressCtrl: _nokAddressCtrl),
+                _BankInfoStep(
+                    data: _data,
+                    selectedBank: _selectedBank,
+                    selectedAccountType: _selectedAccountType,
+                    accountNumberCtrl: _accountNumberCtrl,
+                    accountNameCtrl: _accountNameCtrl,
+                    onBankChanged: (bank) => setState(() => _selectedBank = bank),
+                    onAccountTypeChanged: (type) => setState(() => _selectedAccountType = type),
+                    onVerifyAccount: _verifyAccountName,
+                ),
                 _TermsStep(
                     data: _data,
                     onAcceptAll: () => setState(() {})),
@@ -1602,6 +1712,205 @@ class _NextOfKinStepState extends State<_NextOfKinStep> {
 // ---------------------------------------------------------------------------
 // Step 7: Terms & Agreement
 // ---------------------------------------------------------------------------
+class _BankInfoStep extends StatelessWidget {
+  final _OnboardingData data;
+  final String? selectedBank;
+  final String? selectedAccountType;
+  final TextEditingController accountNumberCtrl;
+  final TextEditingController accountNameCtrl;
+  final Function(String?) onBankChanged;
+  final Function(String?) onAccountTypeChanged;
+  final VoidCallback onVerifyAccount;
+
+  const _BankInfoStep({
+    required this.data,
+    required this.selectedBank,
+    required this.selectedAccountType,
+    required this.accountNumberCtrl,
+    required this.accountNameCtrl,
+    required this.onBankChanged,
+    required this.onAccountTypeChanged,
+    required this.onVerifyAccount,
+  });
+
+  final List<Map<String, dynamic>> _banks = [
+    {'label': 'Ecobank Nigeria', 'code': '050'},
+    {'label': 'Access Bank', 'code': '044'},
+    {'label': 'Guaranty Trust Bank (GTBank)', 'code': '058'},
+    {'label': 'United Bank for Africa (UBA)', 'code': '033'},
+    {'label': 'Zenith Bank', 'code': '057'},
+    {'label': 'First Bank of Nigeria', 'code': '011'},
+    {'label': 'Fidelity Bank', 'code': '070'},
+    {'label': 'Sterling Bank', 'code': '232'},
+    {'label': 'Union Bank of Nigeria', 'code': '032'},
+    {'label': 'Diamond Bank', 'code': '063'},
+    {'label': 'Skye Bank', 'code': '076'},
+    {'label': 'Stanbic IBTC Bank', 'code': '221'},
+    {'label': 'Citibank Nigeria', 'code': '023'},
+    {'label': 'Standard Chartered Bank', 'code': '068'},
+    {'label': 'Keystone Bank', 'code': '082'},
+    {'label': 'Heritage Bank', 'code': '030'},
+    {'label': 'FCMB (First City Monument Bank)', 'code': '214'},
+    {'label': 'Jaiz Bank', 'code': '301'},
+    {'label': 'SunTrust Bank', 'code': '100'},
+  ];
+
+  final List<Map<String, dynamic>> _accountTypes = [
+    {'label': 'Savings', 'value': 'savings'},
+    {'label': 'Current', 'value': 'current'},
+    {'label': 'Corporate', 'value': 'corporate'},
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Bank Information',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: context.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Enter your bank account details for receiving payouts and refunds',
+            style: TextStyle(color: context.textSecondary),
+          ),
+          const SizedBox(height: 24),
+          // Bank Dropdown
+          Text(
+            'Select Bank *',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: context.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(
+              border: Border.all(color: context.dividerColor),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: selectedBank,
+                hint: const Text('Select your bank'),
+                isExpanded: true,
+                items: _banks.map((bank) {
+                  return DropdownMenuItem<String>(
+                    value: bank['label'] as String,
+                    child: Text(bank['label'] as String),
+                  );
+                }).toList(),
+                onChanged: onBankChanged,
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          // Account Number
+          Text(
+            'Account Number *',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: context.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextFormField(
+            controller: accountNumberCtrl,
+            keyboardType: TextInputType.number,
+            maxLength: 10,
+            decoration: InputDecoration(
+              hintText: 'Enter 10-digit account number',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              counterText: '',
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Verify Account Button
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              onPressed: onVerifyAccount,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: CoopvestColors.primary,
+                side: const BorderSide(color: CoopvestColors.primary),
+              ),
+              child: const Text('Verify Account'),
+            ),
+          ),
+          const SizedBox(height: 20),
+          // Account Name (verified)
+          Text(
+            'Account Name',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: context.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextFormField(
+            controller: accountNameCtrl,
+            readOnly: true,
+            decoration: InputDecoration(
+              hintText: 'Verified account name will appear here',
+              filled: true,
+              fillColor: CoopvestColors.success.withOpacity(0.1),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: CoopvestColors.success),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: CoopvestColors.success),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          // Account Type
+          Text(
+            'Account Type *',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: context.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(
+              border: Border.all(color: context.dividerColor),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: selectedAccountType,
+                hint: const Text('Select account type'),
+                isExpanded: true,
+                items: _accountTypes.map((type) {
+                  return DropdownMenuItem<String>(
+                    value: type['value'] as String,
+                    child: Text(type['label'] as String),
+                  );
+                }).toList(),
+                onChanged: onAccountTypeChanged,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _TermsStep extends StatelessWidget {
   final _OnboardingData data;
   final VoidCallback onAcceptAll;
