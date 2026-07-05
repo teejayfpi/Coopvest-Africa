@@ -88,58 +88,6 @@ router.get('/overview', async (req, res) => {
 });
 
 /**
- * GET /api/v1/admin/members
- * List all members (admin JWT auth)
- */
-router.get('/members', async (req, res) => {
-  try {
-    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 20));
-    const from = (page - 1) * limit;
-    const to = page * limit - 1;
-
-    let q = supabase
-      .from('profiles')
-      .select('*', { count: 'exact' })
-      .order('created_at', { ascending: false })
-      .range(from, to);
-
-    if (req.query.q) {
-      q = q.or(`name.ilike.%${req.query.q}%,email.ilike.%${req.query.q}%,user_id.ilike.%${req.query.q}%`);
-    }
-    if (req.query.role) {
-      q = q.eq('role', req.query.role);
-    }
-    if (req.query.status === 'active') {
-      q = q.eq('is_active', true);
-    } else if (req.query.status === 'suspended') {
-      q = q.eq('is_active', false);
-    }
-    if (req.query.isFlagged === 'true') {
-      q = q.eq('is_flagged', true);
-    }
-
-    const { data, error, count } = await q;
-
-    if (error) throw error;
-
-    res.json({
-      success: true,
-      data: data || [],
-      pagination: {
-        page,
-        limit,
-        total: count || 0,
-        totalPages: Math.ceil((count || 0) / limit)
-      }
-    });
-  } catch (err) {
-    logger.error('admin members list error:', err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-/**
  * PUT /api/v1/admin/payment-settings
  * Update payment account details
  */
