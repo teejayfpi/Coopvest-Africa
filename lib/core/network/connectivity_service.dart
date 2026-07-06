@@ -23,24 +23,16 @@ class ConnectivityService {
   /// Initialize and start listening for connectivity changes
   Future<void> initialize() async {
     // Check initial status
-    final result = await _connectivity.checkConnectivity();
-    _updateConnectionStatus(result);
+    final results = await _connectivity.checkConnectivity();
+    _updateConnectionStatus(results);
     
-    // Listen for changes
-    _connectivity.onConnectivityChanged.listen((result) {
-      _updateConnectionStatus(result);
+    // Listen for changes (v6 returns List<ConnectivityResult>)
+    _connectivity.onConnectivityChanged.listen((results) {
+      _updateConnectionStatus(results);
     });
   }
 
-  void _updateConnectionStatus(dynamic result) {
-    // Handle both List<ConnectivityResult> and single ConnectivityResult
-    List<ConnectivityResult> results;
-    if (result is List) {
-      results = result.cast<ConnectivityResult>();
-    } else {
-      results = [result as ConnectivityResult];
-    }
-    
+  void _updateConnectionStatus(List<ConnectivityResult> results) {
     final hasConnection = results.isNotEmpty && 
         !results.contains(ConnectivityResult.none);
     
@@ -52,8 +44,8 @@ class ConnectivityService {
 
   /// Check connectivity manually
   Future<bool> checkConnectivity() async {
-    final result = await _connectivity.checkConnectivity();
-    _updateConnectionStatus(result);
+    final results = await _connectivity.checkConnectivity();
+    _updateConnectionStatus(results);
     return _isConnected;
   }
 
