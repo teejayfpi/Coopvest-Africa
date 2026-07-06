@@ -9,7 +9,7 @@ enum ConnectivityStatus { online, offline, checking }
 /// Connectivity Service - monitors network status
 class ConnectivityService extends ChangeNotifier {
   final Connectivity _connectivity = Connectivity();
-  StreamSubscription<ConnectivityResult>? _subscription;
+  StreamSubscription<List<ConnectivityResult>>? _subscription;
   ConnectivityStatus _status = ConnectivityStatus.checking;
   bool _showOfflineBanner = false;
 
@@ -30,9 +30,11 @@ class ConnectivityService extends ChangeNotifier {
     _subscription = _connectivity.onConnectivityChanged.listen(_updateStatus);
   }
 
-  void _updateStatus(ConnectivityResult result) {
+  void _updateStatus(List<ConnectivityResult> results) {
     final wasOffline = !isOnline;
-    final isNowOffline = result == ConnectivityResult.none;
+    // Check if any result indicates connectivity is available
+    final isNowOffline = results.isEmpty || 
+                          results.every((r) => r == ConnectivityResult.none);
 
     if (isNowOffline) {
       _status = ConnectivityStatus.offline;
