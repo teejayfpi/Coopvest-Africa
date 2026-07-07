@@ -54,6 +54,8 @@ const contributionRoutes = require('./routes/contributions');
 const documentRoutes = require('./routes/documents');
 const terminationRoutes = require('./routes/termination');
 const featuresRoutes = require('./routes/features');
+const paymentProofRoutes = require('./routes/paymentProofs');
+const paymentProofAdminRoutes = require('./routes/paymentProofAdmin');
 
 // Import middleware
 const errorHandler = require('./middleware/errorHandler');
@@ -261,6 +263,7 @@ app.use('/api/v1/announcements', announcementRoutes);
 app.use('/api/v1/contributions', contributionRoutes);
 app.use('/api/v1/documents', documentRoutes);
 app.use('/api/v1/termination', terminationRoutes);
+app.use('/api/v1/payment-proofs', paymentProofRoutes);
 
 // ==============================================================================
 // FLUTTER APP COMPATIBILITY — /api/<path> mirrors /api/v1/<path>
@@ -290,6 +293,7 @@ app.use('/api/announcements', announcementRoutes);
 app.use('/api/contributions', contributionRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/termination', terminationRoutes);
+app.use('/api/payment-proofs', paymentProofRoutes);
 app.use('/api', featuresRoutes);
 app.use('/api/mobile-features', featuresRoutes);
 // Root-level alias in case Dio resolves absolute paths from host root
@@ -322,6 +326,7 @@ app.get('/api/auth/kyc/status', (req, res, next) => {
 app.use('/api/v2/admin', adminApiRoutes);
 app.use('/api/v2/admin/kyc', kycAdminRoutes);
 app.use('/api/v2/admin/members', memberDetailRoutes);
+app.use('/api/v2/admin/payment-proofs', paymentProofAdminRoutes);
 
 // In-app admin console endpoints (member JWT + IP whitelist)
 app.use('/api/v1/admin', adminIPWhitelist, adminRoutes);
