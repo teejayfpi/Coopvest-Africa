@@ -198,7 +198,10 @@ DECLARE
   ];
 BEGIN
   FOREACH tbl IN ARRAY tables LOOP
-    DROP TRIGGER IF EXISTS set_updated_at ON public.payment_proofs;
+    EXECUTE format(
+      'DROP TRIGGER IF EXISTS set_updated_at ON public.%I;',
+      tbl
+    );
     EXECUTE format(
       'CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.%I
        FOR EACH ROW EXECUTE FUNCTION public.set_updated_at()',
