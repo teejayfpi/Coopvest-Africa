@@ -261,14 +261,33 @@ router.post(
     try {
       const { requestId } = req.params;
 
-      const { data: row, error: fetchErr } = await supabase
-        .from('loan_guarantors')
-        .select('id, loan_id, qr_id, status')
-        .eq('id', requestId)
-        .eq('guarantor_id', req.user.id)
-        .maybeSingle();
+      // Support two caller flows:
+      //  1. Guarantor dashboard — passes loan_guarantors.id (the PK)
+      //  2. QR-scan flow in the Flutter app — passes loans.id (the loan UUID)
+      // Try by PK first; if nothing found, try by loan_id.
+      let row = null;
+      {
+        const { data: byId, error: err1 } = await supabase
+          .from('loan_guarantors')
+          .select('id, loan_id, qr_id, status')
+          .eq('id', requestId)
+          .eq('guarantor_id', req.user.id)
+          .maybeSingle();
+        if (err1) throw err1;
+        row = byId;
+      }
 
-      if (fetchErr) throw fetchErr;
+      if (!row) {
+        const { data: byLoanId, error: err2 } = await supabase
+          .from('loan_guarantors')
+          .select('id, loan_id, qr_id, status')
+          .eq('loan_id', requestId)
+          .eq('guarantor_id', req.user.id)
+          .maybeSingle();
+        if (err2) throw err2;
+        row = byLoanId;
+      }
+
       if (!row) return res.status(404).json({ success: false, error: 'Guarantor request not found' });
       if (row.status !== 'pending') {
         return res.status(400).json({ success: false, error: `Request is already ${mapStatus(row.status)}` });
@@ -276,10 +295,11 @@ router.post(
 
       const now = new Date().toISOString();
 
+      // Always update by the resolved PK (row.id), not the raw requestId param
       const { error: updateErr } = await supabase
         .from('loan_guarantors')
         .update({ status: 'consented', consented_at: now, updated_at: now })
-        .eq('id', requestId);
+        .eq('id', row.id);
 
       if (updateErr) throw updateErr;
 
@@ -303,7 +323,7 @@ router.post(
         actor_id: req.user.id,
         action: 'GUARANTOR_CONSENTED',
         target_model: 'LoanGuarantor',
-        target_id: requestId,
+        target_id: row.id,
         metadata: { loanId: row.loan_id },
       }).catch(() => {});
 
@@ -328,14 +348,30 @@ router.post(
       const { requestId } = req.params;
       const { reason } = req.body || {};
 
-      const { data: row, error: fetchErr } = await supabase
-        .from('loan_guarantors')
-        .select('id, loan_id, status')
-        .eq('id', requestId)
-        .eq('guarantor_id', req.user.id)
-        .maybeSingle();
+      // Same dual-lookup as /accept: try by PK first, then by loan_id (QR scan flow).
+      let row = null;
+      {
+        const { data: byId, error: err1 } = await supabase
+          .from('loan_guarantors')
+          .select('id, loan_id, status')
+          .eq('id', requestId)
+          .eq('guarantor_id', req.user.id)
+          .maybeSingle();
+        if (err1) throw err1;
+        row = byId;
+      }
 
-      if (fetchErr) throw fetchErr;
+      if (!row) {
+        const { data: byLoanId, error: err2 } = await supabase
+          .from('loan_guarantors')
+          .select('id, loan_id, status')
+          .eq('loan_id', requestId)
+          .eq('guarantor_id', req.user.id)
+          .maybeSingle();
+        if (err2) throw err2;
+        row = byLoanId;
+      }
+
       if (!row) return res.status(404).json({ success: false, error: 'Guarantor request not found' });
       if (row.status !== 'pending') {
         return res.status(400).json({ success: false, error: `Request is already ${mapStatus(row.status)}` });
@@ -343,10 +379,11 @@ router.post(
 
       const now = new Date().toISOString();
 
+      // Always update by the resolved PK (row.id), not the raw requestId param
       const { error: updateErr } = await supabase
         .from('loan_guarantors')
         .update({ status: 'rejected', updated_at: now })
-        .eq('id', requestId);
+        .eq('id', row.id);
 
       if (updateErr) throw updateErr;
 
@@ -354,7 +391,7 @@ router.post(
         actor_id: req.user.id,
         action: 'GUARANTOR_REJECTED',
         target_model: 'LoanGuarantor',
-        target_id: requestId,
+        target_id: row.id,
         metadata: { loanId: row.loan_id, reason: reason || null },
       }).catch(() => {});
 
