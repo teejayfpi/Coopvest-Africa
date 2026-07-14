@@ -226,6 +226,7 @@ class NotificationService {
       case 'wallet_debited':
       case 'deposit':
       case 'withdrawal':
+      case 'deposit_rejected':
         return _channelWalletId;
       case 'otp':
       case 'otp_sent':
@@ -301,6 +302,10 @@ class NotificationService {
           navigatorKey.currentState?.pushNamed('/savings-goal');
           break;
         case 'wallet_credited':
+        case 'deposit_rejected':
+          // Take user to the deposit status tracker so they can see full timeline + admin notes
+          navigatorKey.currentState?.pushNamed('/deposit-status');
+          break;
         case 'wallet_debited':
         case 'deposit':
         case 'withdrawal':
