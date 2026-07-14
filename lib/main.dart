@@ -425,7 +425,7 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
           );
         },
 
-        '/deposit-status': (context) => const DepositStatusScreen(),
+        '/deposit-status': (context) => DepositStatusScreen(),
       },
     );
 
