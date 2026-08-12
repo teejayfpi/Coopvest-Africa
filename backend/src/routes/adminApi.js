@@ -744,6 +744,228 @@ router.get('/loans/portfolio-summary', async (req, res) => {
   }
 });
 
+// ─── Deposits ───────────────────────────────────────────────────────────────
+// The Admin Dashboard "Contributions > Deposits" tab and the Deposit
+// Verification page call /api/admin/deposits* (frontend deposit-hooks). These
+// read from the `deposit_requests` table and join profiles so member names show.
+
+/**
+ * GET /api/admin/deposits
+ */
+router.get('/deposits', async (req, res) => {
+  try {
+    const { page, limit, from, to } = paging(req);
+    let q = supabase
+      .from('deposit_requests')
+      .select('*, profile:profiles!profile_id(id, user_id, name, email, phone)', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(from, to);
+    if (req.query.status) q = q.eq('status', req.query.status);
+    if (req.query.memberId) q = q.eq('profile_id', req.query.memberId);
+    const { data, error, count } = await q;
+    if (error) throw error;
+
+    const rows = (data || []).map((d) => {
+      const p = d.profile || {};
+      return {
+        id: d.id,
+        memberId: p.user_id || d.profile_id,
+        memberName: p.name || '',
+        memberEmail: p.email || null,
+        memberPhone: p.phone || null,
+        amount: Number(d.amount || 0),
+        status: d.status || 'pending',
+        paymentMethod: d.payment_method || (d.metadata && d.metadata.payment_method) || 'bank_transfer',
+        reference: d.reference || d.payment_reference || d.transaction_id || null,
+        date: d.created_at,
+        createdAt: d.created_at,
+        verifiedAt: d.verified_at || null,
+        verifiedBy: d.verified_by || null,
+        adminNotes: d.admin_notes || null,
+        rejectionReason: d.rejection_reason || null,
+        bankName: d.bank_name || null,
+        senderAccountName: d.sender_account_name || null,
+        senderAccountNumber: d.sender_account_number || null,
+        paymentProofUrl: d.payment_proof_url || null,
+        paymentReference: d.payment_reference || null,
+        raw: d,
+      };
+    });
+
+    res.json({
+      success: true,
+      data: rows,
+      deposits: rows,
+      total: count || 0,
+      page,
+      limit,
+      totalPages: Math.max(1, Math.ceil((count || 0) / limit)),
+      pagination: { page, limit, total: count || 0 },
+    });
+  } catch (err) {
+    logger.error('admin deposits list error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/admin/deposits/summary
+ */
+router.get('/deposits/summary', async (req, res) => {
+  try {
+    const { data: deposits, error } = await supabase
+      .from('deposit_requests')
+      .select('id, status, amount');
+    if (error) throw error;
+    const all = deposits || [];
+    const sum = (arr) => arr.reduce((s, d) => s + Number(d.amount || 0), 0);
+    const pending = all.filter((d) => d.status === 'pending');
+    const verified = all.filter((d) => d.status === 'verified');
+    const rejected = all.filter((d) => d.status === 'rejected');
+    res.json({
+      success: true,
+      data: {
+        totalCount: all.length,
+        pendingCount: pending.length,
+        verifiedCount: verified.length,
+        rejectedCount: rejected.length,
+        pendingAmount: sum(pending),
+        verifiedAmount: sum(verified),
+        rejectedAmount: sum(rejected),
+        totalAmount: sum(all),
+      },
+    });
+  } catch (err) {
+    logger.error('admin deposits summary error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/admin/deposits/:id
+ */
+router.get('/deposits/:id', async (req, res) => {
+  try {
+    const { data: d, error } = await supabase
+      .from('deposit_requests')
+      .select('*, profile:profiles!profile_id(id, user_id, name, email, phone)')
+      .eq('id', req.params.id)
+      .maybeSingle();
+    if (error) throw error;
+    if (!d) return res.status(404).json({ success: false, error: 'Deposit request not found' });
+    const p = d.profile || {};
+    res.json({
+      success: true,
+      deposit: {
+        id: d.id, memberId: p.user_id || d.profile_id, memberName: p.name || '',
+        memberEmail: p.email || null, amount: Number(d.amount || 0), status: d.status,
+        paymentMethod: d.payment_method || 'bank_transfer', reference: d.reference || null,
+        date: d.created_at, createdAt: d.created_at, adminNotes: d.admin_notes || null,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * PATCH /api/admin/deposits/:id/verify
+ * Verify (approve) a deposit request — credits the member's wallet.
+ */
+router.patch('/deposits/:id/verify', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { adminNotes } = req.body || {};
+    const adminId = req.user.id;
+
+    const { data: deposit, error: fetchErr } = await supabase
+      .from('deposit_requests')
+      .select('*, transaction:transactions(*)')
+      .eq('id', id)
+      .maybeSingle();
+    if (fetchErr) throw fetchErr;
+    if (!deposit) return res.status(404).json({ success: false, error: 'Deposit request not found' });
+    if (deposit.status !== 'pending') {
+      return res.status(400).json({ success: false, error: `Deposit already ${deposit.status}. Cannot verify.` });
+    }
+
+    const amount = Number(deposit.amount);
+    let wallet = null;
+    try {
+      const { ensureWallet } = require('./wallet');
+      wallet = await ensureWallet(deposit.profile_id);
+    } catch (_) { /* wallet service optional */ }
+
+    let newBalance = null;
+    if (wallet && wallet.id) {
+      newBalance = Number(wallet.balance) + amount;
+      const { error: wErr } = await supabase
+        .from('wallets')
+        .update({ balance: newBalance, last_updated: new Date().toISOString() })
+        .eq('id', wallet.id);
+      if (wErr) throw wErr;
+    }
+
+    if (deposit.transaction_id) {
+      await supabase.from('transactions').update({
+        status: 'completed',
+        completed_at: new Date().toISOString(),
+        balance_before: wallet ? wallet.balance : null,
+        balance_after: newBalance,
+        metadata: { ...((deposit.transaction && deposit.transaction.metadata) || {}), verified_by: adminId, verified_at: new Date().toISOString(), deposit_request_id: id },
+      }).eq('id', deposit.transaction_id);
+    }
+
+    const { data: updated, error: updateErr } = await supabase
+      .from('deposit_requests')
+      .update({ status: 'verified', verified_by: adminId, verified_at: new Date().toISOString(), admin_notes: adminNotes || null })
+      .eq('id', id)
+      .select()
+      .single();
+    if (updateErr) throw updateErr;
+
+    res.json({ success: true, message: `Deposit of ₦${amount.toLocaleString()} verified and credited to wallet.`, deposit: updated });
+  } catch (err) {
+    logger.error('admin deposit verify error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * PATCH /api/admin/deposits/:id/reject
+ */
+router.patch('/deposits/:id/reject', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { adminNotes } = req.body || {};
+    const adminId = req.user.id;
+
+    const { data: deposit, error: fetchErr } = await supabase
+      .from('deposit_requests')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+    if (fetchErr) throw fetchErr;
+    if (!deposit) return res.status(404).json({ success: false, error: 'Deposit request not found' });
+    if (deposit.status !== 'pending') {
+      return res.status(400).json({ success: false, error: `Deposit already ${deposit.status}. Cannot reject.` });
+    }
+
+    const { data: updated, error: updateErr } = await supabase
+      .from('deposit_requests')
+      .update({ status: 'rejected', rejected_by: adminId, rejected_at: new Date().toISOString(), admin_notes: adminNotes || null })
+      .eq('id', id)
+      .select()
+      .single();
+    if (updateErr) throw updateErr;
+
+    res.json({ success: true, message: 'Deposit rejected.', deposit: updated });
+  } catch (err) {
+    logger.error('admin deposit reject error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 /**
  * GET /api/v1/admin/contributions
  * Paginated list of all member contributions (read from the transactions
