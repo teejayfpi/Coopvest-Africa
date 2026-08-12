@@ -953,11 +953,15 @@ router.patch('/deposits/:id/reject', async (req, res) => {
 
     const { data: updated, error: updateErr } = await supabase
       .from('deposit_requests')
-      .update({ status: 'rejected', rejected_by: adminId, rejected_at: new Date().toISOString(), admin_notes: adminNotes || null })
+      .update({ status: 'rejected', admin_notes: adminNotes || 'Rejected by admin', verified_by: adminId, verified_at: new Date().toISOString() })
       .eq('id', id)
       .select()
       .single();
     if (updateErr) throw updateErr;
+
+    if (deposit.transaction_id) {
+      await supabase.from('transactions').update({ status: 'failed', failure_reason: adminNotes || 'Rejected by admin' }).eq('id', deposit.transaction_id);
+    }
 
     res.json({ success: true, message: 'Deposit rejected.', deposit: updated });
   } catch (err) {
