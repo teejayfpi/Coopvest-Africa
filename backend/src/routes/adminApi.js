@@ -412,7 +412,7 @@ router.get('/loans', async (req, res) => {
     const { page, limit, from, to } = paging(req);
     let q = supabase
       .from('loans')
-      .select('*', { count: 'exact' })
+      .select('*, profile:profiles(id, user_id, name, email, phone)', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(from, to);
     if (req.query.status) q = q.eq('status', req.query.status);
@@ -421,15 +421,53 @@ router.get('/loans', async (req, res) => {
     else if (req.query.memberId) q = q.eq('profile_id', req.query.memberId);
     const { data, error, count } = await q;
     if (error) throw error;
-    const loansArr = data || [];
-    res.json({ success: true, data: loansArr, loans: loansArr, pagination: { page, limit, total: count || 0 } });
+
+    // Map raw loans rows to the Loan shape the Admin Dashboard frontend expects
+    // (memberName, memberId, loanId, balance, interestRate, etc.). Raw columns
+    // (profile_id, loan_id, base_interest_rate, remaining_balance) are kept too
+    // for backward compatibility.
+    const toLoanDto = (l) => {
+      const profile = l.profile || {};
+      return {
+        ...l,
+        profile: undefined,
+        id: l.id,
+        loanId: l.loan_id,
+        memberId: profile.user_id || l.profile_id,
+        memberIdProfile: l.profile_id,
+        memberName: profile.name || '',
+        memberEmail: profile.email || null,
+        memberPhone: profile.phone || null,
+        amount: Number(l.amount || 0),
+        balance: Number(l.remaining_balance ?? l.amount ?? 0),
+        interestRate: Number(l.effective_interest_rate ?? l.base_interest_rate ?? 0),
+        tenure: l.tenure_months ?? null,
+        purpose: l.purpose ?? null,
+        status: l.status,
+        disbursedDate: l.disbursed_at ?? null,
+        dueDate: l.maturity_date ?? l.next_due_date ?? null,
+        nextPaymentDate: l.next_due_date ?? null,
+        monthlyPayment: l.monthly_repayment ?? null,
+        rejectionReason: l.rejected_reason ?? null,
+        createdAt: l.created_at,
+        guarantors: [],
+      };
+    };
+
+    const loansArr = (data || []).map(toLoanDto);
+    res.json({ success: true, data: loansArr, loans: loansArr, total: count || 0, page, limit, pagination: { page, limit, total: count || 0 } });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
 /**
- * POST /api/v1/admin/loans/:id/decision
+ * POST /api/admin/loans/:id/decision
+ * Approve or reject a loan. `decision` is 'approve' | 'reject'.
+ *
+ * The `loans` table has no `decided_at`/`decision_reason` columns, so we write
+ * to the columns that actually exist: approved_by/approved_at (approve) or
+ * rejected_reason/rejected_by (reject). `req.user.id` is the admin profile id.
  */
 router.post(
   '/loans/:id/decision',
@@ -440,12 +478,15 @@ router.post(
   validate,
   async (req, res) => {
     try {
-      const status = req.body.decision === 'approve' ? 'approved' : 'rejected';
-      const update = {
-        status,
-        decided_at: new Date().toISOString(),
-        decision_reason: req.body.reason || null,
-      };
+      const approve = req.body.decision === 'approve';
+      const now = new Date().toISOString();
+      const reason = req.body.reason || null;
+      const adminId = req.user?.id || null;
+
+      const update = approve
+        ? { status: 'approved', approved_by: adminId, approved_at: now, rejected_reason: null, rejected_by: null, updated_at: now }
+        : { status: 'rejected', rejected_reason: reason, rejected_by: adminId, approved_by: null, approved_at: null, updated_at: now };
+
       const { data, error } = await supabase
         .from('loans')
         .update(update)
@@ -454,13 +495,63 @@ router.post(
         .maybeSingle();
       if (error) throw error;
       if (!data) return res.status(404).json({ success: false, error: 'Loan not found' });
-      await logAdminAction(`LOAN_${status.toUpperCase()}`, { model: 'Loan', id: data.id }, { reason: req.body.reason });
-      res.json({ success: true, loan: data });
+      await logAdminAction(`LOAN_${approve ? 'APPROVED' : 'REJECTED'}`, { model: 'Loan', id: data.id }, { reason, adminId });
+      res.json({ success: true, loan: data, data });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
     }
   }
 );
+
+/**
+ * POST /api/admin/loans/:id/approve
+ * Convenience alias so the Admin Dashboard frontend (which calls
+ * `/api/loans/:id/approve`) can approve without reshaping the request.
+ */
+router.post('/loans/:id/approve', async (req, res) => {
+  req.body = { ...req.body, decision: 'approve' };
+  // Delegate to the decision handler above by re-running the logic inline.
+  try {
+    const now = new Date().toISOString();
+    const adminId = req.user?.id || null;
+    const { data, error } = await supabase
+      .from('loans')
+      .update({ status: 'approved', approved_by: adminId, approved_at: now, rejected_reason: null, rejected_by: null, updated_at: now })
+      .eq('id', req.params.id)
+      .select('*')
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ success: false, error: 'Loan not found' });
+    await logAdminAction('LOAN_APPROVED', { model: 'Loan', id: data.id }, { adminId });
+    res.json({ success: true, loan: data, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/admin/loans/:id/reject
+ * Convenience alias for the Admin Dashboard frontend's `/api/loans/:id/reject`.
+ */
+router.post('/loans/:id/reject', async (req, res) => {
+  try {
+    const now = new Date().toISOString();
+    const adminId = req.user?.id || null;
+    const reason = (req.body && (req.body.reason || req.body.rejectionReason)) || null;
+    const { data, error } = await supabase
+      .from('loans')
+      .update({ status: 'rejected', rejected_reason: reason, rejected_by: adminId, approved_by: null, approved_at: null, updated_at: now })
+      .eq('id', req.params.id)
+      .select('*')
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ success: false, error: 'Loan not found' });
+    await logAdminAction('LOAN_REJECTED', { model: 'Loan', id: data.id }, { reason, adminId });
+    res.json({ success: true, loan: data, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 /**
  * GET /api/v1/admin/wallets
@@ -633,6 +724,57 @@ router.get('/loans/portfolio-summary', async (req, res) => {
 
     res.json({ success: true, data: summary });
   } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/v1/admin/contributions
+ * Paginated list of all member contributions (read from the transactions
+ * table). Joined with profiles so the Admin Dashboard Contributions page can
+ * show member names. Returns the Contribution shape the frontend expects
+ * (memberName, memberId, amount, month, paymentMethod, status, etc.).
+ */
+router.get('/contributions', async (req, res) => {
+  try {
+    const { page, limit, from, to } = paging(req);
+    let q = supabase
+      .from('transactions')
+      .select('*, profile:profiles!transactions_profile_id_fkey(id, user_id, name, email, phone)', { count: 'exact' })
+      .in('type', CONTRIBUTION_TYPES)
+      .order('created_at', { ascending: false })
+      .range(from, to);
+    if (req.query.status) q = q.eq('status', req.query.status);
+    if (req.query.memberId) q = q.eq('profile_id', req.query.memberId);
+    const { data, error, count } = await q;
+    if (error) throw error;
+
+    const mapContribution = (t) => {
+      const profile = t.profile || {};
+      const when = t.completed_at || t.created_at;
+      const base = toContribution(t);
+      return {
+        ...base,
+        memberId: profile.user_id || t.profile_id,
+        memberName: profile.name || '',
+        memberEmail: profile.email || null,
+        transactionRef: t.reference || t.id,
+      };
+    };
+
+    const rows = (data || []).map(mapContribution);
+    res.json({
+      success: true,
+      data: rows,
+      contributions: rows,
+      total: count || 0,
+      page,
+      limit,
+      totalPages: Math.max(1, Math.ceil((count || 0) / limit)),
+      pagination: { page, limit, total: count || 0 },
+    });
+  } catch (err) {
+    logger.error('admin contributions list error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -1115,6 +1257,9 @@ router.get('/dashboard/summary', async (req, res) => {
     const loansData = totalLoans.data || [];
     const disbursedLoans = loansData.filter(l => ['disbursed', 'active', 'approved'].includes(l.status));
     const disbursedAmount = disbursedLoans.reduce((sum, l) => sum + Number(l.amount || 0), 0);
+    // totalLoansIssued should reflect ALL loan applications (incl. pending) so a
+    // newly created loan shows up immediately on the dashboard.
+    const totalLoansAmount = loansData.reduce((sum, l) => sum + Number(l.amount || 0), 0);
     const completedLoans = loansData.filter(l => l.status === 'completed');
     const completedAmount = completedLoans.reduce((sum, l) => sum + Number(l.amount || 0), 0);
 
@@ -1180,7 +1325,7 @@ router.get('/dashboard/summary', async (req, res) => {
         totalContributions: totalContribSum,
         totalSavings: totalContribSum,
         loansDisbursed: disbursedLoans.length,
-        totalLoansIssued: disbursedAmount,
+        totalLoansIssued: totalLoansAmount,
         repaymentRate: Math.round(repaymentRate * 10) / 10,
         pendingCompliance: kycPending.count || 0,
         openSupportTickets: openTickets.count || 0,
