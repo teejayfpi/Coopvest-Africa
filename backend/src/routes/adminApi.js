@@ -712,14 +712,30 @@ router.get('/loans/portfolio-summary', async (req, res) => {
     
     const summary = {
       totalLoans: loansData.length,
-      activeLoans: loansData.filter(l => ['active', 'approved'].includes(l.status)).length,
-      completedLoans: loansData.filter(l => l.status === 'completed').length,
-      defaultedLoans: loansData.filter(l => 
-        l.status === 'active' && l.next_due_date && new Date(l.next_due_date) < now
+      activeLoans: loansData.filter(l => ['active', 'approved', 'disbursed'].includes(l.status)).length,
+      completedLoans: loansData.filter(l => ['completed', 'repaid'].includes(l.status)).length,
+      defaultedLoans: loansData.filter(l =>
+        ['active', 'disbursed'].includes(l.status) && l.next_due_date && new Date(l.next_due_date) < now
       ).length,
       totalAmount: loansData.reduce((sum, l) => sum + Number(l.amount || 0), 0),
-      activeAmount: loansData.filter(l => ['active', 'approved'].includes(l.status))
-        .reduce((sum, l) => sum + Number(l.amount || 0), 0)
+      activeAmount: loansData.filter(l => ['active', 'approved', 'disbursed'].includes(l.status))
+        .reduce((sum, l) => sum + Number(l.amount || 0), 0),
+      // Aliases the Admin Dashboard frontend (LoanPortfolioSummary) reads:
+      totalDisbursed: loansData.filter(l => ['active', 'approved', 'disbursed'].includes(l.status))
+        .reduce((sum, l) => sum + Number(l.amount || 0), 0),
+      outstanding: loansData.filter(l => ['active', 'approved', 'disbursed'].includes(l.status))
+        .reduce((sum, l) => sum + Number(l.remaining_balance ?? l.amount ?? 0), 0),
+      collected: loansData.filter(l => ['completed', 'repaid'].includes(l.status))
+        .reduce((sum, l) => sum + Number(l.amount || 0), 0),
+      defaulted: loansData.filter(l =>
+        ['active', 'disbursed'].includes(l.status) && l.next_due_date && new Date(l.next_due_date) < now
+      ).length,
+      repaymentRate: 0,
+      activeCount: loansData.filter(l => ['active', 'approved', 'disbursed'].includes(l.status)).length,
+      defaultedCount: loansData.filter(l =>
+        ['active', 'disbursed'].includes(l.status) && l.next_due_date && new Date(l.next_due_date) < now
+      ).length,
+      pendingCount: loansData.filter(l => l.status === 'pending').length,
     };
 
     res.json({ success: true, data: summary });
