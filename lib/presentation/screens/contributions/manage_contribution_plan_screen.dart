@@ -299,6 +299,7 @@ class _PendingReductionBanner extends ConsumerWidget {
 
   Widget _infoRow(BuildContext context, String label, String value) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox(
           width: 130,
@@ -306,11 +307,15 @@ class _PendingReductionBanner extends ConsumerWidget {
               style: TextStyle(
                   color: context.textSecondary, fontSize: 12)),
         ),
-        Text(value,
-            style: TextStyle(
-                color: context.textPrimary,
-                fontWeight: FontWeight.w600,
-                fontSize: 12)),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(value,
+              textAlign: TextAlign.end,
+              style: TextStyle(
+                  color: context.textPrimary,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12)),
+        ),
       ],
     );
   }

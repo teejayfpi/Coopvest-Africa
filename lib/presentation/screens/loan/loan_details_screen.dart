@@ -238,10 +238,24 @@ class LoanDetailsScreen extends ConsumerWidget {
 
   Widget _buildSummaryRow(BuildContext context, String label, String value) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: TextStyle(color: context.textSecondary)),
-        Text(value, style: TextStyle(fontWeight: FontWeight.bold, color: context.textPrimary)),
+        Flexible(
+          child: Text(
+            label,
+            style: TextStyle(color: context.textSecondary),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        const SizedBox(width: 16),
+        Flexible(
+          child: Text(
+            value,
+            style: TextStyle(fontWeight: FontWeight.bold, color: context.textPrimary),
+            textAlign: TextAlign.end,
+          ),
+        ),
       ],
     );
   }

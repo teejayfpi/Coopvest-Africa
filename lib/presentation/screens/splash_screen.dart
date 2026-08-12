@@ -35,7 +35,11 @@ class _SplashScreenState extends State<SplashScreen>
   bool _soundPlayed = false;
   int _elapsedSeconds = 0;
   
-  static const int splashDurationSeconds = 30;
+  /// Total time the splash screen stays visible before revealing the app.
+  /// The splash always runs for this full duration so that every element
+  /// (logo, app name, tagline, loader, timer and loading dots) gets rendered
+  /// and animated correctly.
+  static const int splashDurationSeconds = 40;
 
   @override
   void initState() {
@@ -147,17 +151,12 @@ class _SplashScreenState extends State<SplashScreen>
         _elapsedSeconds++;
       });
       
-      // Auto-dismiss after 30 seconds
+      // The splash always runs for the full configured duration so that all of its content renders before the app is revealed.
       if (_elapsedSeconds >= splashDurationSeconds) {
         _dismissSplash();
         return false;
       }
       
-      // Also dismiss if app is ready
-      if (widget.isReady && !_dismissed) {
-        _dismissSplash();
-        return false;
-      }
       
       return _showSplash;
     });
@@ -166,9 +165,8 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   void didUpdateWidget(SplashScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.isReady && !_dismissed) {
-      _dismissSplash();
-    }
+    // The splash runs for its full duration regardless of readiness so that
+    // all content is displayed. isReady is only used once the timer elapses.
   }
 
   Future<void> _dismissSplash() async {
@@ -209,7 +207,16 @@ class _SplashScreenState extends State<SplashScreen>
       ]),
       builder: (context, child) {
         final pulseScale = 1.0 + (_pulseController.value * 0.08);
-        
+        final mq = MediaQuery.of(context);
+        final size = mq.size;
+        final viewPadding = mq.viewPadding;
+        final safeTop = viewPadding.top;
+        final safeBottom = viewPadding.bottom;
+        // Scale spacing down on short/narrow screens so the splash content
+        // never overflows the viewport.
+        final scale = size.height < 640 ? 0.82 : (size.height < 800 ? 0.9 : 1.0);
+        double sp(double v) => v * scale;
+
         return Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
@@ -228,13 +235,13 @@ class _SplashScreenState extends State<SplashScreen>
               ...List.generate(30, (index) {
                 final delay = index * 0.08;
                 final progress = (_particleAnimation.value + delay) % 1.0;
-                final startX = (index * 37) % MediaQuery.of(context).size.width;
+                final startX = (index * 37) % size.width;
                 // Slight horizontal drift
                 final drift = (index % 2 == 0 ? 1 : -1) * (progress * 20);
-                
+
                 return Positioned(
                   left: startX + drift,
-                  bottom: -20 + (progress * (MediaQuery.of(context).size.height + 40)),
+                  bottom: -20 + (progress * (size.height + 40)),
                   child: Opacity(
                     opacity: 0.4 + 0.4 * (1 - (progress * 2 - 1).abs()), // Fade in middle, dim at ends
                     child: Container(
@@ -255,190 +262,220 @@ class _SplashScreenState extends State<SplashScreen>
                   ),
                 );
               }),
-              
-              // Main content
+
+              // Main content - scrollable so it never overflows on small screens
               Opacity(
                 opacity: _fadeAnimation.value,
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // Animated Logo with pulse and glow effect
-                      Transform.scale(
-                        scale: _scaleAnimation.value * pulseScale,
-                        child: Transform.rotate(
-                          angle: _rotateAnimation.value,
-                          child: Container(
-                            width: 140,
-                            height: 140,
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(32),
-                              boxShadow: [
-                                // Outer glow - pulsing
-                                BoxShadow(
-                                  color: Colors.white.withOpacity(0.3 * pulseScale),
-                                  blurRadius: 40 * pulseScale,
-                                  spreadRadius: 5 * pulseScale,
-                                ),
-                                // Inner shadow
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.3),
-                                  blurRadius: 20,
-                                  offset: const Offset(0, 8),
-                                ),
-                              ],
-                            ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(32),
-                              child: Image.asset(
-                                'assets/images/logo.png',
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) {
-                                  return Center(
-                                    child: Text(
-                                      'CV',
-                                      style: TextStyle(
-                                        color: CoopvestColors.primary,
-                                        fontSize: 56,
-                                        fontWeight: FontWeight.bold,
+                child: SafeArea(
+                  top: true,
+                  bottom: true,
+                  child: SingleChildScrollView(
+                    physics: const ClampingScrollPhysics(),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minHeight: size.height - safeTop - safeBottom,
+                      ),
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 24, vertical: 16),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Animated Logo with pulse and glow effect
+                              Transform.scale(
+                                scale: _scaleAnimation.value * pulseScale,
+                                child: Transform.rotate(
+                                  angle: _rotateAnimation.value,
+                                  child: Container(
+                                    width: sp(140),
+                                    height: sp(140),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(32),
+                                      boxShadow: [
+                                        // Outer glow - pulsing
+                                        BoxShadow(
+                                          color: Colors.white
+                                              .withOpacity(0.3 * pulseScale),
+                                          blurRadius: 40 * pulseScale,
+                                          spreadRadius: 5 * pulseScale,
+                                        ),
+                                        // Inner shadow
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.3),
+                                          blurRadius: 20,
+                                          offset: const Offset(0, 8),
+                                        ),
+                                      ],
+                                    ),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(32),
+                                      child: Image.asset(
+                                        'assets/images/logo.png',
+                                        fit: BoxFit.cover,
+                                        errorBuilder:
+                                            (context, error, stackTrace) {
+                                          return Center(
+                                            child: Text(
+                                              'CV',
+                                              style: TextStyle(
+                                                color: CoopvestColors.primary,
+                                                fontSize: sp(56),
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          );
+                                        },
                                       ),
                                     ),
-                                  );
-                                },
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      
-                      const SizedBox(height: 40),
-                      
-                      // App Name with shimmer animation
-                      ShaderMask(
-                        shaderCallback: (bounds) {
-                          return LinearGradient(
-                            colors: [
-                              Colors.white,
-                              Colors.white.withOpacity(0.6),
-                              Colors.white,
-                              Colors.white.withOpacity(0.6),
-                              Colors.white,
-                            ],
-                            stops: [
-                              0.0,
-                              (_particleAnimation.value * 0.4 + 0.3) % 1.0,
-                              (_particleAnimation.value * 0.4 + 0.5) % 1.0,
-                              (_particleAnimation.value * 0.4 + 0.7) % 1.0,
-                              1.0,
-                            ],
-                          ).createShader(bounds);
-                        },
-                        child: const Text(
-                          'Coopvest Africa',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1.5,
-                          ),
-                        ),
-                      ),
-                      
-                      const SizedBox(height: 12),
-                      
-                      // Tagline
-                      Text(
-                        'Savings • Loans • Growth',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.85),
-                          fontSize: 16,
-                          letterSpacing: 3,
-                        ),
-                      ),
-                      
-                      const SizedBox(height: 60),
-                      
-                      // Animated loading indicator
-                      SizedBox(
-                        width: 50,
-                        height: 50,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 3,
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            Colors.white.withOpacity(0.9),
-                          ),
-                        ),
-                      ),
-                      
-                      const SizedBox(height: 40),
-                      
-                      // Timer display
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(30),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.timer_outlined,
-                              color: Colors.white.withOpacity(0.9),
-                              size: 20,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              '${_elapsedSeconds}s / ${splashDurationSeconds}s',
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.9),
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      
-                      const SizedBox(height: 20),
-                      
-                      // Loading dots animation - sequential bouncing
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: List.generate(3, (index) {
-                          // Create a sequential animation where each dot bounces in turn
-                          final phaseOffset = index * 0.33;
-                          final bounceValue = (_particleController.value + phaseOffset) % 1.0;
-                          // Use sine wave for smooth bounce effect
-                          final bounceHeight = (bounceValue < 0.5 
-                              ? bounceValue * 2 
-                              : 2 - bounceValue * 2);
-                          final opacity = 0.4 + (bounceValue * 0.6);
-                          
-                          return AnimatedContainer(
-                            duration: const Duration(milliseconds: 300),
-                            margin: const EdgeInsets.symmetric(horizontal: 6),
-                            width: 10,
-                            height: 10 + (bounceHeight * 6), // Bouncing height
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(opacity),
-                              borderRadius: BorderRadius.circular(5),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.white.withOpacity(opacity * 0.5),
-                                  blurRadius: 4 + bounceHeight * 4,
-                                  spreadRadius: bounceHeight * 2,
+                                  ),
                                 ),
-                              ],
-                            ),
-                          );
-                        }),
+                              ),
+
+                              SizedBox(height: sp(40)),
+
+                              // App Name with shimmer animation
+                              ShaderMask(
+                                shaderCallback: (bounds) {
+                                  return LinearGradient(
+                                    colors: [
+                                      Colors.white,
+                                      Colors.white.withOpacity(0.6),
+                                      Colors.white,
+                                      Colors.white.withOpacity(0.6),
+                                      Colors.white,
+                                    ],
+                                    stops: [
+                                      0.0,
+                                      (_particleAnimation.value * 0.4 + 0.3) %
+                                          1.0,
+                                      (_particleAnimation.value * 0.4 + 0.5) %
+                                          1.0,
+                                      (_particleAnimation.value * 0.4 + 0.7) %
+                                          1.0,
+                                      1.0,
+                                    ],
+                                  ).createShader(bounds);
+                                },
+                                child: Text(
+                                  'Coopvest Africa',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: scale < 1 ? 26 : 32,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 1.5,
+                                  ),
+                                ),
+                              ),
+
+                              SizedBox(height: sp(12)),
+
+                              // Tagline
+                              Text(
+                                'Savings • Loans • Growth',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.85),
+                                  fontSize: 16,
+                                  letterSpacing: 3,
+                                ),
+                              ),
+
+                              SizedBox(height: sp(60)),
+
+                              // Animated loading indicator
+                              SizedBox(
+                                width: 50,
+                                height: 50,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 3,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.white.withOpacity(0.9),
+                                  ),
+                                ),
+                              ),
+
+                              SizedBox(height: sp(40)),
+
+                              // Timer display
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 20,
+                                  vertical: 10,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(30),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.timer_outlined,
+                                      color: Colors.white.withOpacity(0.9),
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      '${_elapsedSeconds}s / ${splashDurationSeconds}s',
+                                      style: TextStyle(
+                                        color: Colors.white.withOpacity(0.9),
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                              SizedBox(height: sp(20)),
+
+                              // Loading dots animation - sequential bouncing
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                mainAxisSize: MainAxisSize.min,
+                                children: List.generate(3, (index) {
+                                  // Create a sequential animation where each dot bounces in turn
+                                  final phaseOffset = index * 0.33;
+                                  final bounceValue =
+                                      (_particleController.value + phaseOffset) %
+                                          1.0;
+                                  // Use sine wave for smooth bounce effect
+                                  final bounceHeight = (bounceValue < 0.5
+                                      ? bounceValue * 2
+                                      : 2 - bounceValue * 2);
+                                  final opacity = 0.4 + (bounceValue * 0.6);
+
+                                  return AnimatedContainer(
+                                    duration:
+                                        const Duration(milliseconds: 300),
+                                    margin:
+                                        const EdgeInsets.symmetric(horizontal: 6),
+                                    width: 10,
+                                    height:
+                                        10 + (bounceHeight * 6), // Bouncing height
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withOpacity(opacity),
+                                      borderRadius: BorderRadius.circular(5),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.white
+                                              .withOpacity(opacity * 0.5),
+                                          blurRadius: 4 + bounceHeight * 4,
+                                          spreadRadius: bounceHeight * 2,
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ),
