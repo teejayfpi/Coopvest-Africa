@@ -1051,8 +1051,23 @@ router.get('/contributions/summary', async (req, res) => {
       totalSaved: savingsData.reduce((sum, s) => sum + Number(s.total_saved || 0), 0),
       monthlySavings: savingsData.reduce((sum, s) => sum + Number(s.monthly_savings || 0), 0),
       monthlyContributions: thisMonthTx.reduce((sum, t) => sum + Number(t.amount || 0), 0),
-      transactionCount: txData.length
+      transactionCount: txData.length,
+      // Fields consumed by the Admin Dashboard Contributions summary cards.
+      totalCollected: txData.reduce((sum, t) => sum + Number(t.amount || 0), 0),
+      thisMonth: thisMonthTx.reduce((sum, t) => sum + Number(t.amount || 0), 0),
+      overdue: 0,
+      pending: 0
     };
+
+    // Also compute pending count from non-completed contribution transactions.
+    try {
+      const { count: pendingCount } = await supabase
+        .from('transactions')
+        .select('id', { count: 'exact', head: true })
+        .in('type', CONTRIBUTION_TYPES)
+        .eq('status', 'pending');
+      summary.pending = pendingCount || 0;
+    } catch (_) { /* ignore */ }
 
     res.json({ success: true, data: summary });
   } catch (err) {
