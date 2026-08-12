@@ -65,7 +65,26 @@ class RolloverRequestScreen extends ConsumerWidget {
   Widget _buildSummaryRow(BuildContext context, String label, dynamic value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(label, style: TextStyle(fontSize: 13, color: context.textSecondary)), Text(value.toString(), style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: context.textPrimary))]),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Flexible(
+            child: Text(label,
+                style: TextStyle(fontSize: 13, color: context.textSecondary),
+                overflow: TextOverflow.ellipsis),
+          ),
+          const SizedBox(width: 16),
+          Flexible(
+            child: Text(value.toString(),
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: context.textPrimary),
+                textAlign: TextAlign.end),
+          ),
+        ],
+      ),
     );
   }
 
