@@ -1213,6 +1213,80 @@ router.get('/compliance/summary', async (req, res) => {
 });
 
 /**
+ * GET /api/v1/admin/compliance
+ * Lists KYC compliance items (derived from profiles + kyc_documents)
+ */
+router.get('/compliance', async (req, res) => {
+  try {
+    const { page, limit, from, to } = paging(req);
+    let q = supabase
+      .from('profiles')
+      .select('id, name, email, kyc_status, kyc_verified, id_type, id_number, is_flagged, created_at', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(from, to);
+    if (req.query.status === 'pending') q = q.eq('kyc_verified', false);
+    if (req.query.status === 'approved') q = q.eq('kyc_verified', true);
+    const { data, error, count } = await q;
+    if (error) throw error;
+
+    const items = (data || []).map((p) => ({
+      id: p.id,
+      memberId: p.id,
+      memberName: p.name || p.email,
+      type: p.id_type || 'national_id',
+      status: p.kyc_verified ? 'approved' : (p.kyc_status || 'pending'),
+      description: `${p.id_type || 'KYC'} verification for ${p.name || p.email}`,
+      submittedAt: p.created_at,
+      reviewedAt: p.kyc_verified ? p.created_at : null,
+      reviewedBy: p.kyc_verified ? 'Administrator' : null,
+      riskLevel: p.is_flagged ? 'high' : 'low',
+    }));
+
+    res.json({ success: true, data: items, total: count || 0, page, limit });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/v1/admin/compliance/:id/approve  | /reject
+ * Approves or rejects a member's KYC
+ */
+router.post('/compliance/:id/approve', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({ kyc_verified: true, kyc_status: 'approved' })
+      .eq('id', id)
+      .select('id, name, email')
+      .single();
+    if (error) throw error;
+    await logAdminAction('KYC_APPROVE', { model: 'Profile', id }, { member: data?.name || id });
+    res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/compliance/:id/reject', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({ kyc_verified: false, kyc_status: 'rejected' })
+      .eq('id', id)
+      .select('id, name, email')
+      .single();
+    if (error) throw error;
+    await logAdminAction('KYC_REJECT', { model: 'Profile', id }, { member: data?.name || id });
+    res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * GET /api/v1/admin/support
  * Returns support tickets summary
  */
