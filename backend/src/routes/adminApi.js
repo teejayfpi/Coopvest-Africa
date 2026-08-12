@@ -1466,7 +1466,18 @@ router.post(
   validate,
   async (req, res) => {
     try {
-      const { title, message, type, profileIds } = req.body;
+      const { title, message, type, category, profileIds } = req.body;
+
+      // The notifications.type column has a CHECK constraint that only allows
+      // specific values (announcement/transaction/loan/system/reminder/...).
+      // The dashboard sends UI severities (info/warning/success/error) which
+      // are not valid DB types, so store the severity in `category` and pick a
+      // safe DB type here.
+      const ALLOWED_TYPES = ['announcement', 'transaction', 'loan', 'system', 'reminder', 'savings', 'kyc', 'withdrawal', 'payment', 'contribution'];
+      const uiType = String(type || '').toLowerCase();
+      const dbType = ALLOWED_TYPES.includes(uiType) ? uiType : 'system';
+      const dbCategory = category || uiType || 'info';
+
       let targetIds = profileIds;
       if (!Array.isArray(targetIds) || targetIds.length === 0) {
         const { data } = await supabase.from('profiles').select('id').eq('is_active', true);
@@ -1478,7 +1489,8 @@ router.post(
         profile_id: pid,
         title,
         message,
-        type: type || 'announcement',
+        type: dbType,
+        category: dbCategory,
         is_read: false,
       }));
       const { error } = await supabase.from('notifications').insert(rows);
