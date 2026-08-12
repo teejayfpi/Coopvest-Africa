@@ -444,8 +444,8 @@ router.get('/loans', async (req, res) => {
         tenure: l.tenure_months ?? null,
         purpose: l.purpose ?? null,
         status: l.status,
-        disbursedDate: l.disbursed_at ?? null,
-        dueDate: l.maturity_date ?? l.next_due_date ?? null,
+        disbursedDate: l.approved_at ?? null,
+        dueDate: l.next_due_date ?? null,
         nextPaymentDate: l.next_due_date ?? null,
         monthlyPayment: l.monthly_repayment ?? null,
         rejectionReason: l.rejected_reason ?? null,
@@ -979,17 +979,17 @@ router.get('/analytics/repayment-trend', async (req, res) => {
       // Get all loans that were active during this month
       const { data: loans } = await supabase
         .from('loans')
-        .select('status, maturity_date, disbursed_at')
-        .lte('disbursed_at', monthEnd.toISOString());
+        .select('status, next_due_date, approved_at')
+        .lte('approved_at', monthEnd.toISOString());
 
       const loansData = loans || [];
       const activeLoans = loansData.filter(l => 
         ['active', 'disbursed'].includes(l.status) || 
-        (l.maturity_date && new Date(l.maturity_date) < monthEnd)
+        (l.next_due_date && new Date(l.next_due_date) < monthEnd)
       );
       
       const defaultedLoans = activeLoans.filter(l => 
-        l.maturity_date && new Date(l.maturity_date) < monthEnd
+        l.next_due_date && new Date(l.next_due_date) < monthEnd
       );
       
       const repaymentRate = activeLoans.length > 0 
@@ -1018,7 +1018,7 @@ router.get('/analytics/risk-exposure', async (req, res) => {
   try {
     const { data: loans } = await supabase
       .from('loans')
-      .select('status, amount, maturity_date, disbursed_at');
+      .select('status, amount, next_due_date, approved_at');
 
     const loansData = loans || [];
     const now = new Date();
@@ -1027,17 +1027,17 @@ router.get('/analytics/risk-exposure', async (req, res) => {
 
     const activeLoans = loansData.filter(l => ['active', 'disbursed'].includes(l.status));
     const defaultedLoans = activeLoans.filter(l =>
-      l.maturity_date && new Date(l.maturity_date) < now
+      l.next_due_date && new Date(l.next_due_date) < now
     );
     const atRisk30 = activeLoans.filter(l =>
-      l.maturity_date &&
-      new Date(l.maturity_date) >= now &&
-      new Date(l.maturity_date) <= thirtyDaysFromNow
+      l.next_due_date &&
+      new Date(l.next_due_date) >= now &&
+      new Date(l.next_due_date) <= thirtyDaysFromNow
     );
     const atRisk90 = activeLoans.filter(l =>
-      l.maturity_date &&
-      new Date(l.maturity_date) > thirtyDaysFromNow &&
-      new Date(l.maturity_date) <= ninetyDaysFromNow
+      l.next_due_date &&
+      new Date(l.next_due_date) > thirtyDaysFromNow &&
+      new Date(l.next_due_date) <= ninetyDaysFromNow
     );
 
     const totalExposure = activeLoans.reduce((sum, l) => sum + Number(l.amount || 0), 0);
@@ -1053,11 +1053,11 @@ router.get('/analytics/risk-exposure', async (req, res) => {
       d.setMonth(d.getMonth() - i);
       const monthEnd = new Date(d.getFullYear(), d.getMonth() + 1, 0);
       const monthActive = activeLoans.filter(l =>
-        l.disbursed_at && new Date(l.disbursed_at) <= monthEnd &&
-        (!l.maturity_date || new Date(l.maturity_date) >= new Date(d.getFullYear(), d.getMonth(), 1))
+        l.approved_at && new Date(l.approved_at) <= monthEnd &&
+        (!l.next_due_date || new Date(l.next_due_date) >= new Date(d.getFullYear(), d.getMonth(), 1))
       );
       const monthDefaulted = monthActive.filter(l =>
-        l.maturity_date && new Date(l.maturity_date) < monthEnd
+        l.next_due_date && new Date(l.next_due_date) < monthEnd
       );
       const exposure = monthActive.reduce((sum, l) => sum + Number(l.amount || 0), 0);
       const defaultedAmt = monthDefaulted.reduce((sum, l) => sum + Number(l.amount || 0), 0);
@@ -1104,12 +1104,12 @@ router.get('/analytics/defaulter-trend', async (req, res) => {
       
       const { data: loans } = await supabase
         .from('loans')
-        .select('status, maturity_date')
+        .select('status, next_due_date')
         .in('status', ['active', 'disbursed']);
 
       const loansData = loans || [];
       const defaultedLoans = loansData.filter(l => 
-        l.maturity_date && new Date(l.maturity_date) < monthEnd
+        l.next_due_date && new Date(l.next_due_date) < monthEnd
       );
 
       trend.push({
@@ -1248,17 +1248,21 @@ router.get('/dashboard/summary', async (req, res) => {
       // KYC pending
       supabase.from('profiles').select('id', { count: 'exact', head: true })
         .eq('is_active', true).eq('kyc_verified', false),
-      // Total loans
-      supabase.from('loans').select('id, status, amount, disbursed_at, maturity_date'),
+      // Total loans — only select columns that actually exist on the `loans`
+      // table. Selecting a non-existent column makes PostgREST return
+      // { data: null, error }, which zeroes every loan total.
+      supabase.from('loans').select('id, status, amount, remaining_balance, created_at'),
       // Active loans (approved/disbursed, not completed/repaid)
       supabase.from('loans').select('id, status, amount', { count: 'exact', head: true })
         .in('status', ['approved', 'disbursed', 'active']),
-      // Defaulters (loans past due date)
+      // Defaulters (loans past their next due date).
       supabase.from('loans').select('id', { count: 'exact', head: true })
         .in('status', ['active', 'disbursed'])
-        .lt('maturity_date', new Date().toISOString()),
-      // Total savings (from savings table)
-      supabase.from('savings').select('total_saved'),
+        .lt('next_due_date', new Date().toISOString()),
+      // Total contributions (sum of all completed contribution transactions).
+      supabase.from('transactions').select('amount')
+        .in('type', CONTRIBUTION_TYPES)
+        .eq('status', 'completed'),
       // This month's contributions (from transactions)
       supabase.from('transactions').select('amount')
         .in('type', ['deposit', 'savings_deposit', 'transfer_in'])
@@ -1298,9 +1302,9 @@ router.get('/dashboard/summary', async (req, res) => {
     const thisMonthTotal = (monthlyContributions.data || []).reduce((sum, c) => sum + Number(c.amount || 0), 0);
     const monthlyGrowth = lastMonthTotal > 0 ? ((thisMonthTotal - lastMonthTotal) / lastMonthTotal * 100) : (thisMonthTotal > 0 ? 100 : 0);
 
-    // Total savings sum (from savings table)
-    const savingsData = totalSavings.data || [];
-    const totalContribSum = savingsData.reduce((sum, s) => sum + Number(s.total_saved || 0), 0);
+    // Total contributions sum (from completed contribution transactions)
+    const contributionsData = totalSavings.data || [];
+    const totalContribSum = contributionsData.reduce((sum, s) => sum + Number(s.amount || 0), 0);
 
     // Investments sum
     const investmentsData = totalInvestments.data || [];
@@ -1669,7 +1673,7 @@ router.get('/loans/status-breakdown', async (req, res) => {
       let status = l.status;
       
       // Check for default
-      if (['active', 'disbursed'].includes(l.status) && l.maturity_date && new Date(l.maturity_date) < now) {
+      if (['active', 'disbursed'].includes(l.status) && l.next_due_date && new Date(l.next_due_date) < now) {
         status = 'defaulted';
       }
 
