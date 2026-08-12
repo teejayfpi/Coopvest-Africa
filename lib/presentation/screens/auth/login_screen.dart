@@ -338,30 +338,36 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    _TrustBadgeItem(
-                      icon: Icons.lock_outline_rounded,
-                      label: 'SSL Encrypted',
-                      color: const Color(0xFF1B3A6B),
+                    Expanded(
+                      child: _TrustBadgeItem(
+                        icon: Icons.lock_outline_rounded,
+                        label: 'SSL Encrypted',
+                        color: const Color(0xFF1B3A6B),
+                      ),
                     ),
                     Container(
                       width: 1,
                       height: 32,
                       color: const Color(0xFF1B3A6B).withOpacity(0.15),
                     ),
-                    _TrustBadgeItem(
-                      icon: Icons.verified_user_outlined,
-                      label: 'Secure Login',
-                      color: const Color(0xFF2E7D32),
+                    Expanded(
+                      child: _TrustBadgeItem(
+                        icon: Icons.verified_user_outlined,
+                        label: 'Secure Login',
+                        color: const Color(0xFF2E7D32),
+                      ),
                     ),
                     Container(
                       width: 1,
                       height: 32,
                       color: const Color(0xFF1B3A6B).withOpacity(0.15),
                     ),
-                    _TrustBadgeItem(
-                      icon: Icons.shield_outlined,
-                      label: 'Data Protected',
-                      color: const Color(0xFF1B3A6B),
+                    Expanded(
+                      child: _TrustBadgeItem(
+                        icon: Icons.shield_outlined,
+                        label: 'Data Protected',
+                        color: const Color(0xFF1B3A6B),
+                      ),
                     ),
                   ],
                 ),
@@ -396,6 +402,9 @@ class _TrustBadgeItem extends StatelessWidget {
         const SizedBox(height: 5),
         Text(
           label,
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: TextStyle(
             fontSize: 10,
             fontWeight: FontWeight.w600,

@@ -260,7 +260,7 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
             ),
             const SizedBox(height: 8),
             Text(
-              'N${contribution.amount.formatNumber()}',
+              '₦${contribution.amount.formatNumber()}',
               style: const TextStyle(
                 fontSize: 36,
                 fontWeight: FontWeight.bold,
@@ -275,7 +275,7 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
-                'N${(contribution.amount).formatNumber()} received',
+                '₦${(contribution.amount).formatNumber()} received',
                 style: const TextStyle(
                   color: CoopvestColors.success,
                   fontSize: 12,

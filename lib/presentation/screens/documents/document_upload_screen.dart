@@ -494,7 +494,13 @@ class _DocumentUploadScreenState extends ConsumerState<DocumentUploadScreen> {
                   children: [
                     Icon(_getIconForType(type.icon), size: 20),
                     const SizedBox(width: 8),
-                    Text(type.label),
+                    Expanded(
+                      child: Text(
+                        type.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                   ],
                 ),
               );
@@ -1011,7 +1017,13 @@ class _DocumentUploadFormState extends ConsumerState<DocumentUploadForm> {
                     children: [
                       Icon(_getIconForType(type.icon), size: 20),
                       const SizedBox(width: 8),
-                      Text(type.label),
+                      Expanded(
+                        child: Text(
+                          type.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                     ],
                   ),
                 );

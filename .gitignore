@@ -108,3 +108,6 @@ uploads/
 
 # Node.js
 node_modules/
+
+# Downloaded build artifacts
+artifacts/

@@ -336,10 +336,11 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
     final walletState = ref.watch(walletProvider);
     final wallet = walletState.wallet;
     final totalBalance = (wallet?.balance ?? 0.0) + (wallet?.totalContributions ?? 0.0);
-    
+    final topInset = MediaQuery.of(context).padding.top;
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.only(top: 50, left: 20, right: 20, bottom: 60),
+      padding: EdgeInsets.only(top: topInset + 16, left: 20, right: 20, bottom: 60),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -418,10 +419,12 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
                         shape: BoxShape.circle,
                         border: Border.all(color: Colors.white.withOpacity(0.3), width: 2),
                       ),
-                      child: ref.watch(currentUserProvider)?.profilePicture != null && ref.watch(currentUserProvider)!.profilePicture!.isNotEmpty
-                          ? ClipOval(
+                      child: () {
+                          final pic = ref.watch(currentUserProvider)?.profilePicture;
+                          if (pic != null && pic.isNotEmpty) {
+                            return ClipOval(
                               child: Image.network(
-                                ref.watch(currentUserProvider)!.profilePicture!,
+                                pic,
                                 width: 44,
                                 height: 44,
                                 fit: BoxFit.cover,
@@ -440,19 +443,21 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
                                   );
                                 },
                               ),
-                            )
-                          : CircleAvatar(
-                              radius: 22,
-                              backgroundColor: Colors.white.withOpacity(0.2),
-                              child: Text(
-                                _getInitials(fullName),
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                            );
+                          }
+                          return CircleAvatar(
+                            radius: 22,
+                            backgroundColor: Colors.white.withOpacity(0.2),
+                            child: Text(
+                              _getInitials(fullName),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
+                          );
+                        }(),
                     ),
                   ),
                 ],
@@ -908,7 +913,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
                 ),
               ],
             ),
-            const Spacer(),
+            const SizedBox(height: 16),
             Text(
               statusText,
               style: TextStyle(
