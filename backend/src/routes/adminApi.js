@@ -726,17 +726,17 @@ router.get('/analytics/risk-exposure', async (req, res) => {
     const ninetyDaysFromNow = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
 
     const activeLoans = loansData.filter(l => ['active', 'disbursed'].includes(l.status));
-    const defaultedLoans = activeLoans.filter(l => 
+    const defaultedLoans = activeLoans.filter(l =>
       l.maturity_date && new Date(l.maturity_date) < now
     );
     const atRisk30 = activeLoans.filter(l =>
-      l.maturity_date && 
-      new Date(l.maturity_date) >= now && 
+      l.maturity_date &&
+      new Date(l.maturity_date) >= now &&
       new Date(l.maturity_date) <= thirtyDaysFromNow
     );
     const atRisk90 = activeLoans.filter(l =>
-      l.maturity_date && 
-      new Date(l.maturity_date) > thirtyDaysFromNow && 
+      l.maturity_date &&
+      new Date(l.maturity_date) > thirtyDaysFromNow &&
       new Date(l.maturity_date) <= ninetyDaysFromNow
     );
 
@@ -745,9 +745,34 @@ router.get('/analytics/risk-exposure', async (req, res) => {
     const atRisk30Amount = atRisk30.reduce((sum, l) => sum + Number(l.amount || 0), 0);
     const atRisk90Amount = atRisk90.reduce((sum, l) => sum + Number(l.amount || 0), 0);
 
-    res.json({ 
-      success: true, 
-      data: {
+    // Monthly risk-exposure trend (for the dashboard BarChart, which expects { month, exposure }[]).
+    const months = parseInt(req.query.months, 10) || 6;
+    const trend = [];
+    for (let i = months - 1; i >= 0; i--) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      const monthEnd = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+      const monthActive = activeLoans.filter(l =>
+        l.disbursed_at && new Date(l.disbursed_at) <= monthEnd &&
+        (!l.maturity_date || new Date(l.maturity_date) >= new Date(d.getFullYear(), d.getMonth(), 1))
+      );
+      const monthDefaulted = monthActive.filter(l =>
+        l.maturity_date && new Date(l.maturity_date) < monthEnd
+      );
+      const exposure = monthActive.reduce((sum, l) => sum + Number(l.amount || 0), 0);
+      const defaultedAmt = monthDefaulted.reduce((sum, l) => sum + Number(l.amount || 0), 0);
+      trend.push({
+        month: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+        exposure: Math.round(exposure * 100) / 100,
+        defaultedAmount: Math.round(defaultedAmt * 100) / 100,
+        defaultedCount: monthDefaulted.length,
+      });
+    }
+
+    res.json({
+      success: true,
+      data: trend,
+      summary: {
         totalExposure,
         defaultedAmount,
         defaultedCount: defaultedLoans.length,
@@ -978,19 +1003,57 @@ router.get('/dashboard/summary', async (req, res) => {
     const investmentsData = totalInvestments.data || [];
     const totalInvestSum = investmentsData.reduce((sum, i) => sum + Number(i.amount || 0), 0);
 
+    // Member growth: new profiles this month vs last month
+    const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    const [{ count: membersThisMonth }, { count: membersLastMonth }] = await Promise.all([
+      supabase.from('profiles').select('id', { count: 'exact', head: true }).gte('created_at', monthStart.toISOString()),
+      supabase.from('profiles').select('id', { count: 'exact', head: true }).gte('created_at', lastMonthStart.toISOString()).lt('created_at', monthStart.toISOString()),
+    ]);
+    const membersGrowth = membersLastMonth > 0 ? Math.round(((membersThisMonth - membersLastMonth) / membersLastMonth) * 1000) / 10 : (membersThisMonth > 0 ? 100 : 0);
+
+    // Loans growth: loans created this month vs last month
+    const [{ count: loansThisMonth }, { count: loansLastMonth }] = await Promise.all([
+      supabase.from('loans').select('id', { count: 'exact', head: true }).gte('created_at', monthStart.toISOString()),
+      supabase.from('loans').select('id', { count: 'exact', head: true }).gte('created_at', lastMonthStart.toISOString()).lt('created_at', monthStart.toISOString()),
+    ]);
+    const loansGrowth = loansLastMonth > 0 ? Math.round(((loansThisMonth - loansLastMonth) / loansLastMonth) * 1000) / 10 : (loansThisMonth > 0 ? 100 : 0);
+
+    const savingsGrowth = monthlyGrowth;
+    const contributionsGrowth = monthlyGrowth;
+
+    // Active organizations (organizations table, if present)
+    let activeOrganizations = 0;
+    try {
+      const { count: orgCount } = await supabase.from('organizations').select('id', { count: 'exact', head: true }).eq('is_active', true);
+      activeOrganizations = orgCount || 0;
+    } catch { /* organizations table may not exist */ }
+
     res.json({
       success: true,
       data: {
-        totalSavingsVolume: totalContribSum,
-        totalLoansIssued: disbursedAmount,
-        activeMembers: activeMembers.count || 0,
+        // Primary field names (aligned with the Admin-Dashboard DashboardSummary type)
         totalMembers: totalMembers.count || 0,
+        activeMembers: activeMembers.count || 0,
+        activeLoans: activeLoans.count || 0,
+        totalContributions: totalContribSum,
+        totalSavings: totalContribSum,
+        loansDisbursed: disbursedLoans.length,
+        totalLoansIssued: disbursedAmount,
         repaymentRate: Math.round(repaymentRate * 10) / 10,
-        monthlyGrowth: Math.round(monthlyGrowth * 10) / 10,
+        pendingCompliance: kycPending.count || 0,
+        openSupportTickets: openTickets.count || 0,
+        totalInvestments: totalInvestSum,
         riskExposure: defaulters.count || 0,
         activeDefaulters: defaulters.count || 0,
+        activeOrganizations,
+        monthlyGrowth: Math.round(monthlyGrowth * 10) / 10,
+        membersGrowth,
+        loansGrowth,
+        savingsGrowth,
+        contributionsGrowth,
+        // Backward-compatible aliases (older consumers may still read these)
+        totalSavingsVolume: totalContribSum,
         monthlySavingsVolume: thisMonthTotal,
-        totalInvestments: totalInvestSum,
         pendingKYC: kycPending.count || 0,
         openTickets: openTickets.count || 0,
         loans: {
