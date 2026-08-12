@@ -1492,6 +1492,40 @@ router.post(
 );
 
 /**
+ * POST /api/v1/admin/notifications/:id/read
+ * Admin marks a single notification as read (any profile).
+ */
+router.post('/notifications/:id/read', async (req, res) => {
+  try {
+    const { error } = await supabase
+      .from('notifications')
+      .update({ is_read: true, read_at: new Date().toISOString() })
+      .eq('id', req.params.id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/v1/admin/notifications/read-all
+ * Admin marks all notifications as read.
+ */
+router.post('/notifications/read-all', async (req, res) => {
+  try {
+    const { error } = await supabase
+      .from('notifications')
+      .update({ is_read: true, read_at: new Date().toISOString() })
+      .eq('is_read', false);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * GET /api/v1/admin/overview
  */
 router.get('/overview', async (req, res) => {
