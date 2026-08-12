@@ -696,6 +696,75 @@ router.get('/notifications', async (req, res) => {
 });
 
 /**
+ * GET /api/admin/risk-scoring
+ * Computes a per-member risk score from loans, savings and KYC signals.
+ */
+router.get('/risk-scoring', async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 100));
+
+    const { data: profiles, error: pErr } = await supabase
+      .from('profiles')
+      .select('id, user_id, name, email, is_active, kyc_status, kyc_verified')
+      .order('created_at', { ascending: false });
+    if (pErr) throw pErr;
+
+    const { data: loans, error: lErr } = await supabase
+      .from('loans')
+      .select('id, profile_id, amount, status');
+    if (lErr) throw lErr;
+
+    const loansByProfile = (loans || []).reduce((acc, l) => {
+      const pid = l.profile_id;
+      if (!pid) return acc;
+      (acc[pid] = acc[pid] || []).push(l);
+      return acc;
+    }, {});
+
+    const members = (profiles || []).map((p) => {
+      const pLoans = loansByProfile[p.id] || [];
+      const activeLoans = pLoans.filter((l) => ['active', 'approved', 'disbursed'].includes(l.status)).length;
+      const defaultedLoans = pLoans.filter((l) => l.status === 'defaulted').length;
+      const totalBalance = pLoans
+        .filter((l) => ['active', 'disbursed'].includes(l.status))
+        .reduce((s, l) => s + Number(l.amount || 0), 0);
+
+      let score = 100;
+      score -= activeLoans * 5;
+      score -= defaultedLoans * 25;
+      if (p.kyc_verified === false) score -= 15;
+      if (defaultedLoans > 0) score -= 15;
+      score = Math.max(0, Math.min(100, score));
+
+      const riskLevel = score >= 80 ? 'low' : score >= 60 ? 'medium' : 'high';
+      return {
+        id: p.id,
+        memberId: p.user_id || p.id,
+        memberName: p.name || p.email || 'Unknown',
+        score,
+        riskLevel,
+        factors: {
+          activeLoans,
+          defaultedLoans,
+          totalBalance,
+          isFlagged: defaultedLoans > 0,
+          kycVerified: p.kyc_verified === true,
+        },
+        lastUpdated: new Date().toISOString(),
+      };
+    });
+
+    const start = (page - 1) * limit;
+    const paged = members.slice(start, start + limit);
+    res.json({ success: true, data: paged, total: members.length, page, limit });
+  } catch (err) {
+    logger.error('risk-scoring error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * GET /api/v1/admin/loans/portfolio-summary
  * Returns loan portfolio summary for dashboard
  */
@@ -1408,10 +1477,9 @@ router.post(
       const rows = targetIds.map((pid) => ({
         profile_id: pid,
         title,
-        body: message,
+        message,
         type: type || 'announcement',
-        read: false,
-        archived: false,
+        is_read: false,
       }));
       const { error } = await supabase.from('notifications').insert(rows);
       if (error) throw error;
