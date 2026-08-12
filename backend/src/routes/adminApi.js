@@ -51,7 +51,11 @@ router.get('/members', async (req, res) => {
       .select('*', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(from, to);
-    if (req.query.q) q = q.or(`name.ilike.%${req.query.q}%,email.ilike.%${req.query.q}%,user_id.ilike.%${req.query.q}%`);
+    // The Admin Dashboard sends the search term as `search` (see
+    // src/pages/members and src/pages/member-contributions); older callers
+    // may use `q`. Honor either.
+    const searchTerm = req.query.search || req.query.q;
+    if (searchTerm) q = q.or(`name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%,user_id.ilike.%${searchTerm}%`);
     if (req.query.role) q = q.eq('role', req.query.role);
     if (req.query.isFlagged === 'true') q = q.eq('is_flagged', true);
     if (req.query.isActive === 'false') q = q.eq('is_active', false);
