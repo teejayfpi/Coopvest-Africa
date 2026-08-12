@@ -412,7 +412,7 @@ router.get('/loans', async (req, res) => {
     const { page, limit, from, to } = paging(req);
     let q = supabase
       .from('loans')
-      .select('*, profile:profiles(id, user_id, name, email, phone)', { count: 'exact' })
+      .select('*, profile:profiles!profile_id(id, user_id, name, email, phone)', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(from, to);
     if (req.query.status) q = q.eq('status', req.query.status);
@@ -740,7 +740,7 @@ router.get('/contributions', async (req, res) => {
     const { page, limit, from, to } = paging(req);
     let q = supabase
       .from('transactions')
-      .select('*, profile:profiles!transactions_profile_id_fkey(id, user_id, name, email, phone)', { count: 'exact' })
+      .select('*, profile:profiles!profile_id(id, user_id, name, email, phone)', { count: 'exact' })
       .in('type', CONTRIBUTION_TYPES)
       .order('created_at', { ascending: false })
       .range(from, to);
