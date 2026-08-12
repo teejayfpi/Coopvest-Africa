@@ -166,6 +166,144 @@ router.get('/members/:id/transactions', async (req, res) => {
   }
 });
 
+// Transaction types that count as a "contribution" (member savings/deposits).
+const CONTRIBUTION_TYPES = ['deposit', 'savings_deposit', 'transfer_in'];
+
+// Map a raw `transactions` row to the contribution shape expected by the
+// Admin Dashboard Member Contributions page.
+function toContribution(t) {
+  const when = t.completed_at || t.created_at;
+  return {
+    id: t.id,
+    memberId: t.profile_id,
+    amount: Number(t.amount || 0),
+    date: when,
+    month: when ? String(when).slice(0, 7) : '',
+    paymentMethod: t.payment_method || '',
+    reference: t.reference || '',
+    receivedBy: (t.metadata && (t.metadata.verified_by || t.metadata.received_by)) || '',
+    remarks: t.description || '',
+    status: t.status || 'completed',
+    createdAt: t.created_at,
+    updatedAt: t.updated_at,
+  };
+}
+
+// Insert an audit_logs row capturing a contribution change. Never throws.
+async function logContributionAudit({ action, contributionId, previous, next, reason, admin }) {
+  try {
+    await supabase.from('audit_logs').insert({
+      actor_id: admin?.id || null,
+      action,
+      target_model: 'contribution',
+      target_id: contributionId,
+      metadata: {
+        previousValue: previous || null,
+        newValue: next || null,
+        reason: reason || '',
+        adminName: admin?.name || 'Unknown',
+        adminEmail: admin?.email || '',
+        source: 'admin-web',
+      },
+    });
+  } catch (err) {
+    logger.warn('contribution audit_logs insert failed:', err.message);
+  }
+}
+
+/**
+ * GET /api/v1/admin/members/:id/contributions
+ * Paginated contribution history for a member (reads from the transactions table).
+ */
+router.get('/members/:id/contributions', async (req, res) => {
+  try {
+    const { page, limit, from, to } = paging(req);
+    const { data, error, count } = await supabase
+      .from('transactions')
+      .select('*', { count: 'exact' })
+      .eq('profile_id', req.params.id)
+      .in('type', CONTRIBUTION_TYPES)
+      .order('created_at', { ascending: false })
+      .range(from, to);
+    if (error) throw error;
+
+    const total = count || 0;
+    res.json({
+      success: true,
+      data: (data || []).map(toContribution),
+      contributions: (data || []).map(toContribution),
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+      pagination: { page, limit, total },
+    });
+  } catch (err) {
+    logger.error('admin member contributions error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/v1/admin/members/:id/contributions
+ * Record a manual contribution for a member.
+ */
+router.post('/members/:id/contributions', async (req, res) => {
+  try {
+    const { amount, date, month, paymentMethod, reference, remarks, notify } = req.body || {};
+    if (!amount || !date) {
+      return res.status(400).json({ success: false, error: 'amount and date are required' });
+    }
+
+    // Ensure the member exists.
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('id', req.params.id)
+      .maybeSingle();
+    if (profileError) throw profileError;
+    if (!profile) return res.status(404).json({ success: false, error: 'Member not found' });
+
+    const row = {
+      profile_id: req.params.id,
+      type: 'deposit',
+      category: 'credit',
+      amount: Number(amount),
+      currency: 'NGN',
+      status: 'completed',
+      payment_method: paymentMethod || 'bank_transfer',
+      reference: reference || null,
+      description: remarks || null,
+      completed_at: date,
+      metadata: {
+        month: month || (date ? String(date).slice(0, 7) : ''),
+        verified_by: req.user.id,
+        received_by: req.user.id,
+        source: 'admin-manual',
+        notify: notify !== false,
+      },
+    };
+
+    const { data, error } = await supabase
+      .from('transactions')
+      .insert(row)
+      .select('*')
+      .single();
+    if (error) throw error;
+
+    await logContributionAudit({
+      action: 'contribution.create',
+      contributionId: data.id,
+      previous: null,
+      next: toContribution(data),
+      reason: 'Manual contribution recorded by admin',
+      admin: req.user,
+    });
+
+    res.status(201).json({ success: true, data: toContribution(data) });
+  } catch (err) {
+    logger.error('admin add contribution error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 /**
  * GET /api/v1/admin/members/:id
  */
@@ -1211,6 +1349,129 @@ router.get('/contributions/monthly', async (req, res) => {
     });
   } catch (err) {
     logger.error('monthly contributions error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/v1/admin/contributions/:id/audit-log
+ * Returns the audit trail for a single contribution.
+ */
+router.get('/contributions/:id/audit-log', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('audit_logs')
+      .select('*')
+      .eq('target_model', 'contribution')
+      .eq('target_id', req.params.id)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+
+    const logs = (data || []).map((l) => {
+      const m = l.metadata || {};
+      const when = l.created_at;
+      return {
+        id: l.id,
+        adminName: m.adminName || 'Unknown',
+        action: l.action,
+        previousValue: m.previousValue || '',
+        newValue: m.newValue || '',
+        reason: m.reason || '',
+        date: when,
+        createdAt: when,
+        time: when ? new Date(when).toLocaleTimeString() : '',
+      };
+    });
+    res.json({ success: true, data: logs, logs });
+  } catch (err) {
+    logger.error('contribution audit-log error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * PUT /api/v1/admin/contributions/:id
+ * Edit a contribution's amount/date/reference/remarks. Requires a reason.
+ */
+router.put('/contributions/:id', async (req, res) => {
+  try {
+    const { amount, date, reference, remarks, reason } = req.body || {};
+    if (!reason) {
+      return res.status(400).json({ success: false, error: 'A reason is required to edit a contribution' });
+    }
+
+    const { data: existing, error: fetchError } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq('id', req.params.id)
+      .maybeSingle();
+    if (fetchError) throw fetchError;
+    if (!existing) return res.status(404).json({ success: false, error: 'Contribution not found' });
+
+    const updates = {};
+    if (amount !== undefined) updates.amount = Number(amount);
+    if (date) updates.completed_at = date;
+    if (reference !== undefined) updates.reference = reference || null;
+    if (remarks !== undefined) updates.description = remarks || null;
+
+    const { data, error } = await supabase
+      .from('transactions')
+      .update(updates)
+      .eq('id', req.params.id)
+      .select('*')
+      .single();
+    if (error) throw error;
+
+    await logContributionAudit({
+      action: 'contribution.update',
+      contributionId: req.params.id,
+      previous: toContribution(existing),
+      next: toContribution(data),
+      reason,
+      admin: req.user,
+    });
+
+    res.json({ success: true, data: toContribution(data) });
+  } catch (err) {
+    logger.error('admin edit contribution error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * DELETE /api/v1/admin/contributions/:id
+ * Remove a contribution. Requires a reason (logged for audit).
+ */
+router.delete('/contributions/:id', async (req, res) => {
+  try {
+    const { reason } = req.body || {};
+    if (!reason) {
+      return res.status(400).json({ success: false, error: 'A reason is required to delete a contribution' });
+    }
+
+    const { data: existing, error: fetchError } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq('id', req.params.id)
+      .maybeSingle();
+    if (fetchError) throw fetchError;
+    if (!existing) return res.status(404).json({ success: false, error: 'Contribution not found' });
+
+    const { error } = await supabase.from('transactions').delete().eq('id', req.params.id);
+    if (error) throw error;
+
+    await logContributionAudit({
+      action: 'contribution.delete',
+      contributionId: req.params.id,
+      previous: toContribution(existing),
+      next: null,
+      reason,
+      admin: req.user,
+    });
+
+    res.json({ success: true, data: { id: req.params.id, deleted: true } });
+  } catch (err) {
+    logger.error('admin delete contribution error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
