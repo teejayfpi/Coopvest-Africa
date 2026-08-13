@@ -91,14 +91,13 @@ router.get('/events', async (req, res) => {
     const since = new Date(Date.now() - hours * 3600 * 1000).toISOString();
 
     const [alertsRes, suspiciousRes] = await Promise.all([
-      supabase.from('security_alerts').select('*').gte('created_at', since).order('created_at', { ascending: false }).limit(limit),
+      // persisted alerts live in security_events (security_alerts needs a
+      // DB-password migration we cannot run); exclude approval-tagged rows.
+      supabase.from('security_events').select('id, event, username, ip_address, severity, details, resolved, created_at').not('event', 'like', '[approval] %').gte('created_at', since).order('created_at', { ascending: false }).limit(limit),
       supabase.from('login_history').select('id, profile_id, email, ip_address, location, device_type, failure_reason, created_at').eq('success', false).gte('created_at', since).order('created_at', { ascending: false }).limit(limit),
     ]);
 
-    const ids = [...new Set([
-      ...((alertsRes.data || []).map((a) => a.profile_id).filter(Boolean)),
-      ...((suspiciousRes.data || []).map((a) => a.profile_id).filter(Boolean)),
-    ])];
+    const ids = [...new Set((suspiciousRes.data || []).map((a) => a.profile_id).filter(Boolean))];
     let nameMap = {};
     if (ids.length) {
       const { data: profiles } = await supabase.from('profiles').select('id, name, email').in('id', ids);
@@ -108,13 +107,13 @@ router.get('/events', async (req, res) => {
     const events = [
       ...(alertsRes.data || []).map((a) => ({
         id: String(a.id),
-        event: a.title || a.alert_type,
-        user: a.email || nameMap[a.profile_id] || 'System',
+        event: a.event,
+        user: a.username || 'System',
         ipAddress: a.ip_address || '—',
         severity: a.severity,
         timestamp: a.created_at,
-        details: a.description,
-        resolved: a.status !== 'unread',
+        details: a.details,
+        resolved: !!a.resolved,
       })),
       ...(suspiciousRes.data || []).map((s) => ({
         id: `login:${s.id}`,

@@ -14,9 +14,21 @@
  * requireAdmin (applied in adminApi.js router). This sub-router is itself
  * requireAdmin-guarded when mounted.
  *
- * Data is persisted to the governance tables created by
- * migrations/012_super_admin_governance.sql (admin_approvals, security_alerts,
- * admin_activity, security_settings, login_history enrichment).
+ * Data is persisted to existing Supabase tables (which are reachable via the
+ * REST API / service role key — the PG-wire bootstrap is blocked by an unknown
+ * DB password):
+ *   - security_events   (replaces security_alerts — alert/severity/resolve)
+ *   - security_sessions (replaces admin_activity — online/active sessions)
+ *   - audit_logs        (approval requests are recorded here as
+ *                        action='approval.requested' so /approvals reads them
+ *                        back; also the core audit trail)
+ *   - login_history     (login monitoring)
+ *   - admin_roles / admin_staff / admin_notifications (staff & roles)
+ *
+ * NOTE: a bootstrap in src/config/governanceSchema.js still attempts to create
+ * the originally-designed tables (admin_approvals, security_alerts,
+ * admin_activity) over the PG wire for projects that have a DB password
+ * configured, but it degrades gracefully and the routes below work without it.
  */
 
 const express = require('express');
@@ -81,22 +93,20 @@ async function profileById(id) {
   return data || null;
 }
 
-// Insert a security alert. Never throws (best-effort).
+// Insert a security alert into the existing `security_events` table. Never
+// throws (best-effort). The DB-wire-only `security_alerts` table may not exist
+// (no DB password), so we use `security_events` which is reachable via REST.
 async function raiseSecurityAlert({ alertType, severity = 'medium', title, description, profileId = null, email = null, ip = null, location = null, device = null, metadata = {} }) {
   try {
-    await supabase.from('security_alerts').insert({
-      alert_type: alertType,
-      severity,
-      title: title || alertType,
-      description,
-      profile_id: profileId,
-      email,
+    await supabase.from('security_events').insert({
+      event: title || alertType,
+      username: email || null,
       ip_address: ip,
-      location,
-      device,
-      status: 'unread',
-      channels: ['dashboard'],
-      metadata,
+      severity,
+      details: JSON.stringify({
+        alertType, description, profileId, email, location, device, metadata,
+      }),
+      resolved: false,
     });
   } catch (err) {
     logger.warn('security alert insert failed:', err.message);
@@ -235,25 +245,27 @@ router.post('/logout-events', async (req, res) => {
 
 /**
  * POST /api/admin/activity
- * Heartbeat from the dashboard. Upserts current page/module/action so the
- * Super Admin can see who is online and what they are doing.
+ * Heartbeat from the dashboard. Upserts a security_sessions row (is_current=true)
+ * so the Super Admin can see who is online and what they are doing. Uses the
+ * existing security_sessions table (admin_activity needs a DB-password migration).
  */
 router.post('/activity', async (req, res) => {
   try {
     if (!req.user?.id) return res.status(401).json({ success: false, error: 'Not authenticated' });
     const { page, module: mod, action } = req.body || {};
     const m = clientMeta(req);
-    const { error } = await supabase.from('admin_activity').upsert({
-      profile_id: req.user.id,
-      email: req.user.email,
-      current_page: page || null,
-      current_module: mod || null,
-      last_action: action || null,
+    // security_sessions has no per-page columns; stash current page/module in
+    // `location` (free text) and keep is_current + login_time fresh as a heartbeat.
+    const { error } = await supabase.from('security_sessions').upsert({
+      user_id: req.user.id,
+      user_name: req.user.email || req.user.name || null,
+      role: req.user.role || null,
       ip_address: m.ip,
-      user_agent: m.userAgent,
       device: m.device,
-      last_heartbeat: new Date().toISOString(),
-    }, { onConflict: 'profile_id' });
+      location: [page, mod, action].filter(Boolean).join(' | ') || m.userAgent || null,
+      login_time: new Date().toISOString(),
+      is_current: true,
+    }, { onConflict: 'user_id' });
     if (error) throw error;
     res.json({ success: true });
   } catch (err) {
@@ -263,29 +275,35 @@ router.post('/activity', async (req, res) => {
 
 /**
  * GET /api/admin/online
- * Admins with a heartbeat in the last N minutes (default 5).
+ * Admins with a heartbeat (login_time) in the last N minutes (default 5).
+ * Reads from security_sessions where is_current=true and login_time >= since.
  */
 router.get('/online', async (req, res) => {
   try {
     const minutes = Math.max(1, parseInt(req.query.minutes, 10) || 5);
     const since = new Date(Date.now() - minutes * 60 * 1000).toISOString();
-    const { data, error } = await supabase.from('admin_activity')
-      .select('id, profile_id, email, current_page, current_module, last_action, ip_address, device, last_heartbeat, created_at')
-      .gte('last_heartbeat', since)
-      .order('last_heartbeat', { ascending: false });
+    const { data, error } = await supabase.from('security_sessions')
+      .select('id, user_id, user_name, role, ip_address, device, location, login_time, is_current, created_at')
+      .eq('is_current', true)
+      .gte('login_time', since)
+      .order('login_time', { ascending: false });
     if (error) throw error;
-    const admins = (data || []).map((a) => ({
-      id: a.id,
-      profileId: a.profile_id,
-      email: a.email,
-      currentPage: a.current_page,
-      currentModule: a.current_module,
-      lastAction: a.last_action,
-      ipAddress: a.ip_address,
-      device: a.device,
-      lastHeartbeat: a.last_heartbeat,
-      isOnline: true,
-    }));
+    const admins = (data || []).map((a) => {
+      const locParts = (a.location || '').split(' | ');
+      return {
+        id: a.id,
+        profileId: a.user_id,
+        email: a.user_name,
+        role: a.role,
+        currentPage: locParts[0] || null,
+        currentModule: locParts[1] || null,
+        lastAction: locParts[2] || null,
+        ipAddress: a.ip_address,
+        device: a.device,
+        lastHeartbeat: a.login_time,
+        isOnline: true,
+      };
+    });
     res.json({ success: true, data: admins, total: admins.length, onlineCount: admins.length });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -296,47 +314,62 @@ router.get('/online', async (req, res) => {
 // Approval workflow
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Approval requests are persisted as rows in the existing `security_events`
+// table (admin_approvals needs a DB-password migration we cannot run). The
+// request_type/title live in `event`, the structured payload in `details`
+// (JSON string), and `resolved` flags pending (false) vs decided (true).
+const APPROVAL_PREFIX = '[approval] ';
+function parseApprovalDetails(r) {
+  let d = {};
+  try { d = typeof r.details === 'string' ? JSON.parse(r.details) : (r.details || {}); } catch (_) {}
+  return d;
+}
+
 /**
  * GET /api/admin/approvals
- * Approval queue (default: pending only).
+ * Approval queue (default: pending only). Reads approval requests from
+ * security_events rows whose `event` starts with the approval prefix.
  */
 router.get('/approvals', async (req, res) => {
   try {
-    let q = supabase.from('admin_approvals')
-      .select('*', { count: 'exact' })
+    let q = supabase.from('security_events')
+      .select('id, event, username, ip_address, severity, details, resolved, created_at', { count: 'exact' })
+      .like('event', APPROVAL_PREFIX + '%')
       .order('created_at', { ascending: false })
       .limit(Math.min(200, parseInt(req.query.limit, 10) || 100));
-    if (req.query.status !== 'all') q = q.eq('status', req.query.status || 'pending');
-    if (req.query.type) q = q.eq('request_type', req.query.type);
+    // pending = unresolved; decided = resolved. Default: pending only.
+    const status = req.query.status || 'pending';
+    if (status === 'pending') q = q.eq('resolved', false);
+    else if (status === 'decided') q = q.eq('resolved', true);
+    // 'all' => no resolved filter
     const { data, error, count } = await q;
     if (error) throw error;
 
-    const requestedIds = [...new Set((data || []).map((r) => r.requested_by).filter(Boolean))];
-    const decidedIds = [...new Set((data || []).map((r) => r.decided_by).filter(Boolean))];
-    const nameMap = await profileNameMap([...requestedIds, ...decidedIds]);
-
-    const rows = (data || []).map((r) => ({
-      id: r.id,
-      requestType: r.request_type,
-      title: r.title,
-      payload: r.payload,
-      previousValue: r.previous_value,
-      newValue: r.new_value,
-      status: r.status,
-      requestedBy: r.requested_by,
-      requestedByName: nameMap[r.requested_by] || 'Unknown',
-      requestedByRole: r.requested_by_role,
-      reason: r.reason,
-      decidedBy: r.decided_by,
-      decidedByName: nameMap[r.decided_by] || null,
-      decidedByRole: r.decided_by_role,
-      decisionReason: r.decision_reason,
-      decidedAt: r.decided_at,
-      thresholdValue: r.threshold_value,
-      metadata: r.metadata,
-      createdAt: r.created_at,
-      updatedAt: r.updated_at,
-    }));
+    const rows = (data || []).map((r) => {
+      const d = parseApprovalDetails(r);
+      return {
+        id: r.id,
+        requestType: d.requestType || r.event.replace(APPROVAL_PREFIX, ''),
+        title: d.title || r.event.replace(APPROVAL_PREFIX, ''),
+        payload: d.payload || {},
+        previousValue: d.previousValue ?? null,
+        newValue: d.newValue ?? null,
+        status: r.resolved ? (d.decision || 'decided') : 'pending',
+        requestedBy: d.requestedBy || null,
+        requestedByName: r.username || d.requestedByEmail || 'Unknown',
+        requestedByRole: d.requestedByRole || null,
+        reason: d.reason || null,
+        decidedBy: d.decidedBy || null,
+        decidedByName: d.decidedByEmail || null,
+        decidedByRole: d.decidedByRole || null,
+        decisionReason: d.decisionReason || null,
+        decidedAt: d.decidedAt || null,
+        thresholdValue: d.thresholdValue ?? null,
+        metadata: d,
+        createdAt: r.created_at,
+        updatedAt: d.decidedAt || r.created_at,
+      };
+    });
     res.json({ success: true, data: rows, total: count || rows.length, pending: rows.filter((r) => r.status === 'pending').length });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -354,32 +387,40 @@ router.post('/approvals', async (req, res) => {
     const { requestType, title, payload, previousValue, newValue, reason, thresholdValue } = req.body || {};
     if (!requestType) return res.status(400).json({ success: false, error: 'requestType is required' });
 
-    const { data, error } = await supabase.from('admin_approvals').insert({
-      request_type: requestType,
+    const details = {
+      requestType,
       title: title || requestType,
       payload: payload || {},
-      previous_value: previousValue ?? null,
-      new_value: newValue ?? null,
+      previousValue: previousValue ?? null,
+      newValue: newValue ?? null,
       reason: reason || null,
-      threshold_value: thresholdValue ?? null,
-      requested_by: req.user.id,
-      requested_by_role: req.user.role,
-      status: 'pending',
-      metadata: { source: 'admin-web' },
+      thresholdValue: thresholdValue ?? null,
+      requestedBy: req.user.id,
+      requestedByEmail: req.user.email,
+      requestedByRole: req.user.role,
+      source: 'admin-web',
+    };
+    const { data, error } = await supabase.from('security_events').insert({
+      event: APPROVAL_PREFIX + (title || requestType),
+      username: req.user.email || null,
+      ip_address: (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || null,
+      severity: /loan|contribution|financial|policy|fee|export|member_delete/i.test(requestType) ? 'high' : 'medium',
+      details: JSON.stringify(details),
+      resolved: false,
     }).select('*').single();
     if (error) throw error;
 
-    // Financial / policy requests are also surfaced as a security alert.
-    if (/loan|contribution|financial|policy|fee|export|member_delete/i.test(requestType)) {
-      await raiseSecurityAlert({
-        alertType: 'approval_requested',
-        severity: 'medium',
-        title: `Approval requested: ${requestType}`,
-        description: `${req.user.email} requested approval for "${title || requestType}".`,
-        profileId: req.user.id, email: req.user.email,
-        metadata: { approvalId: data.id, requestType },
+    // Always also log the approval request to the audit trail.
+    try {
+      await supabase.from('audit_logs').insert({
+        actor_id: req.user.id,
+        actor_role: req.user.role,
+        action: 'approval.requested',
+        target_model: 'admin_approval',
+        target_id: data.id,
+        metadata: { requestType, title: title || requestType, reason: reason || null, requestedBy: req.user.email },
       });
-    }
+    } catch (_) {}
     res.status(201).json({ success: true, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -393,18 +434,27 @@ async function decideApproval(req, res, decision) {
     }
     const { id } = req.params;
     const { reason } = req.body || {};
-    const { data: existing, error: fetchError } = await supabase.from('admin_approvals').select('*').eq('id', id).maybeSingle();
+    const { data: existing, error: fetchError } = await supabase.from('security_events')
+      .select('id, event, username, details, resolved, created_at')
+      .eq('id', id).maybeSingle();
     if (fetchError) throw fetchError;
     if (!existing) return res.status(404).json({ success: false, error: 'Approval request not found' });
-    if (existing.status !== 'pending') return res.status(400).json({ success: false, error: `Request already ${existing.status}` });
+    if (!String(existing.event || '').startsWith(APPROVAL_PREFIX)) {
+      return res.status(404).json({ success: false, error: 'Approval request not found' });
+    }
+    if (existing.resolved) return res.status(400).json({ success: false, error: 'Request already decided' });
 
-    const { data, error } = await supabase.from('admin_approvals').update({
-      status: decision,
-      decided_by: req.user.id,
-      decided_by_role: req.user.role,
-      decision_reason: reason || null,
-      decided_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+    const d = parseApprovalDetails(existing);
+    d.decision = decision;
+    d.decidedBy = req.user.id;
+    d.decidedByEmail = req.user.email;
+    d.decidedByRole = req.user.role;
+    d.decisionReason = reason || null;
+    d.decidedAt = new Date().toISOString();
+
+    const { data, error } = await supabase.from('security_events').update({
+      details: JSON.stringify(d),
+      resolved: true,
     }).eq('id', id).select('*').single();
     if (error) throw error;
 
@@ -416,7 +466,7 @@ async function decideApproval(req, res, decision) {
         action: `approval.${decision}`,
         target_model: 'admin_approval',
         target_id: id,
-        metadata: { requestType: existing.request_type, title: existing.title, reason: reason || null, decidedBy: req.user.email },
+        metadata: { requestType: d.requestType, title: d.title, reason: reason || null, decidedBy: req.user.email },
       });
     } catch (_) {}
 
@@ -446,24 +496,24 @@ router.get('/security-alerts', async (req, res) => {
     const since = new Date(Date.now() - sinceHours * 3600 * 1000).toISOString();
 
     const [alertsRes, suspiciousRes, failedRes] = await Promise.all([
-      supabase.from('security_alerts').select('*').gte('created_at', since).order('created_at', { ascending: false }).limit(limit),
+      // persisted alerts live in security_events, excluding approval rows.
+      supabase.from('security_events').select('id, event, username, ip_address, severity, details, resolved, created_at').not('event', 'like', APPROVAL_PREFIX + '%').gte('created_at', since).order('created_at', { ascending: false }).limit(limit),
       supabase.from('login_history').select('id, profile_id, email, ip_address, location, device_type, os, browser, success, failure_reason, created_at').eq('success', false).gte('created_at', since).order('created_at', { ascending: false }).limit(25),
       // permission/financial changes recorded as audit_logs
       supabase.from('audit_logs').select('id, actor_id, actor_role, action, target_model, target_id, metadata, ip_address, user_agent, created_at').or('action.ilike.%permission%,action.ilike.%financial%,action.ilike.%loan%,action.ilike.%contribution%').gte('created_at', since).order('created_at', { ascending: false }).limit(25),
     ]);
 
     const nameMap = await profileNameMap([
-      ...((alertsRes.data || []).map((a) => a.profile_id).filter(Boolean)),
       ...((suspiciousRes.data || []).map((a) => a.profile_id).filter(Boolean)),
       ...((failedRes.data || []).map((a) => a.actor_id).filter(Boolean)),
     ]);
 
     const alerts = (alertsRes.data || []).map((a) => ({
-      id: a.id, type: a.alert_type, alertType: a.alert_type, severity: a.severity,
-      title: a.title, description: a.description,
-      profileId: a.profile_id, email: a.email, ipAddress: a.ip_address,
-      location: a.location, device: a.device, status: a.status, channels: a.channels,
-      metadata: a.metadata, createdAt: a.created_at, resolvedAt: a.resolved_at, resolvedBy: a.resolved_by,
+      id: a.id, type: a.event, alertType: a.event, severity: a.severity,
+      title: a.event, description: a.details,
+      email: a.username, ipAddress: a.ip_address,
+      status: a.resolved ? 'resolved' : 'unread',
+      createdAt: a.created_at,
     }));
     const computed = (suspiciousRes.data || []).map((s) => ({
       id: `computed:${s.id}`, type: 'failed_login', alertType: 'failed_login', severity: 'low',
@@ -500,10 +550,17 @@ router.post('/security-alerts/:id/resolve', async (req, res) => {
     if (!['superadmin', 'super_admin'].includes(req.user?.role || '')) {
       return res.status(403).json({ success: false, error: 'Super Admin only' });
     }
-    const { data, error } = await supabase.from('security_alerts').update({
-      status: 'resolved', resolved_at: new Date().toISOString(), resolved_by: req.user.id,
+    const { data, error } = await supabase.from('security_events').update({
+      resolved: true,
     }).eq('id', req.params.id).select('*').maybeSingle();
     if (error) throw error;
+    // Audit the resolution.
+    try {
+      await supabase.from('audit_logs').insert({
+        actor_id: req.user.id, actor_role: req.user.role,
+        action: 'security_alert.resolved', target_model: 'security_event', target_id: req.params.id,
+      });
+    } catch (_) {}
     res.json({ success: true, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -531,9 +588,11 @@ router.get('/stats', async (req, res) => {
       financialToday, loanApprovalsToday, contributionApprovalsToday, suspendedToday,
       totalAdmins,
     ] = await Promise.all([
-      supabase.from('admin_activity').select('id', { count: 'exact', head: true }).gte('last_heartbeat', since15),
+      // online admins = current sessions with a recent heartbeat (login_time)
+      supabase.from('security_sessions').select('id', { count: 'exact', head: true }).eq('is_current', true).gte('login_time', since15),
       supabase.from('login_history').select('id', { count: 'exact', head: true }).eq('success', false).gte('created_at', todayIso),
-      supabase.from('admin_approvals').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+      // pending approval requests = unresolved security_events rows we tagged as approvals
+      supabase.from('security_events').select('id', { count: 'exact', head: true }).like('event', APPROVAL_PREFIX + '%').eq('resolved', false),
       supabase.from('login_history').select('id', { count: 'exact', head: true }).eq('success', false).gte('created_at', new Date(Date.now() - 24 * 3600 * 1000).toISOString()),
       supabase.from('audit_logs').select('id', { count: 'exact', head: true }).or('action.ilike.%loan%,action.ilike.%contribution%,action.ilike.%financial%').gte('created_at', todayIso),
       supabase.from('audit_logs').select('id', { count: 'exact', head: true }).ilike('action', '%loan%approve%').gte('created_at', todayIso),
