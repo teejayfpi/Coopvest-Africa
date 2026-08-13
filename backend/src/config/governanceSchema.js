@@ -20,24 +20,32 @@ let ran = false;
 
 // Connection candidates, tried in order. The first that connects wins.
 //
-// Supabase transaction/session pooler connection format (the working one, per
-// backend/run_migration_now.js): the username is `postgres.<DB_PASSWORD>` and
-// there is no separate password field — the DB password is embedded in the
-// username. The DB password is `Temiloluwa@1963` (URL-encoded `Temiloluwa%401963`).
+// The project's old connection strings referenced
+// `aws-0-us-east-1-975937489815.pooler.supabase.com`, which is now NXDOMAIN —
+// Supabase's pooler hostname dropped the account-number suffix. The current
+// pooler host is `aws-0-us-east-1.pooler.supabase.com` (resolves to IPv4).
+//
+// Supabase pooler username conventions (we try both, since the repo has used
+// each at different times):
+//   - `postgres.<project-ref>` with the DB password as the password (current
+//     Supabase dashboard format).
+//   - `postgres.<DB_PASSWORD>` with no separate password (legacy format used
+//     by backend/run_migration_now.js). The DB password is `Temiloluwa@1963`.
 //
 // 1. An explicit SUPABASE_DB_URL if provided (highest priority — lets the
 //    operator override with any working connection string).
-// 2. transaction pooler (port 6543) — `postgres.<password>` username.
-// 3. session pooler (port 5432 on the pooler host) — same username format.
-// 4. direct connection (db.<ref>.supabase.co:5432) — bare `postgres` user with
-//    the DB password as the password.
+// 2. transaction pooler (port 6543) — project-ref username.
+// 3. transaction pooler (port 6543) — password-as-username (legacy).
+// 4. session pooler (port 5432) — project-ref username.
+// 5. direct connection (db.<ref>.supabase.co:5432, IPv6 only) — bare `postgres`
+//    user with the DB password.
 const DB_PASSWORD = process.env.SUPABASE_DB_PASSWORD || 'Temiloluwa@1963';
 const REF = 'nyoauzqezpxeonmrxxgi';
-const POOLER_HOST = 'aws-0-us-east-1-975937489815.pooler.supabase.com';
-const POOLER_USER = `postgres.${DB_PASSWORD}`; // Supabase pooler convention
+const POOLER_HOST = 'aws-0-us-east-1.pooler.supabase.com';
 const CONNECTION_CANDIDATES = [
-  `postgresql://${encodeURIComponent(POOLER_USER)}@${POOLER_HOST}:6543/postgres`,
-  `postgresql://${encodeURIComponent(POOLER_USER)}@${POOLER_HOST}:5432/postgres`,
+  `postgresql://postgres.${REF}:${encodeURIComponent(DB_PASSWORD)}@${POOLER_HOST}:6543/postgres`,
+  `postgresql://${encodeURIComponent(`postgres.${DB_PASSWORD}`)}@${POOLER_HOST}:6543/postgres`,
+  `postgresql://postgres.${REF}:${encodeURIComponent(DB_PASSWORD)}@${POOLER_HOST}:5432/postgres`,
   `postgresql://postgres:${encodeURIComponent(DB_PASSWORD)}@db.${REF}.supabase.co:5432/postgres`,
 ];
 
