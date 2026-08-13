@@ -41,7 +41,11 @@ async function ensureGovernanceSchema() {
   if (ran) return;
   ran = true;
 
-  const sqlPath = path.join(__dirname, '..', 'migrations', '012_super_admin_governance.sql');
+  // governanceSchema.js lives in backend/src/config/, so the migrations dir is
+  // two levels up: backend/migrations/. (A single '..' would resolve to
+  // backend/src/migrations, which does not exist — this was the original bug
+  // that silently skipped the bootstrap on every deploy.)
+  const sqlPath = path.join(__dirname, '..', '..', 'migrations', '012_super_admin_governance.sql');
   let sql;
   try {
     sql = fs.readFileSync(sqlPath, 'utf8');
@@ -162,7 +166,7 @@ module.exports = { ensureGovernanceSchema, runGovernanceDiagnostics };
 // Super Admin can see exactly which connection worked and which statements
 // failed. Used by the /api/admin/governance-bootstrap-debug endpoint.
 async function runGovernanceDiagnostics() {
-  const sqlPath = path.join(__dirname, '..', 'migrations', '012_super_admin_governance.sql');
+  const sqlPath = path.join(__dirname, '..', '..', 'migrations', '012_super_admin_governance.sql');
   let sql;
   try {
     sql = fs.readFileSync(sqlPath, 'utf8');
