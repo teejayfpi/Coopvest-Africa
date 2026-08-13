@@ -155,5 +155,70 @@ function splitSqlStatements(sql) {
   return out;
 }
 
-module.exports = { ensureGovernanceSchema };
+module.exports = { ensureGovernanceSchema, runGovernanceDiagnostics };
+
+// On-demand diagnostic runner (ignores the `ran` cache). Tries every connection
+// candidate, applies each statement, and returns a structured result so the
+// Super Admin can see exactly which connection worked and which statements
+// failed. Used by the /api/admin/governance-bootstrap-debug endpoint.
+async function runGovernanceDiagnostics() {
+  const sqlPath = path.join(__dirname, '..', 'migrations', '012_super_admin_governance.sql');
+  let sql;
+  try {
+    sql = fs.readFileSync(sqlPath, 'utf8');
+  } catch (e) {
+    return { ok: false, error: 'migration file not found', detail: e.message };
+  }
+  const statements = splitSqlStatements(sql);
+  const connectionString = process.env.SUPABASE_DB_URL;
+  const candidates = connectionString ? [connectionString, ...CONNECTION_CANDIDATES] : CONNECTION_CANDIDATES;
+  const attempts = [];
+  let client = null;
+  let usedCandidate = null;
+  for (const cs of candidates) {
+    const masked = cs.replace(/:[^:@]+@/, ':***@');
+    const c = new Client({ connectionString: cs, ssl: { rejectUnauthorized: false }, connectionTimeoutMillis: 12000 });
+    try {
+      await c.connect();
+      attempts.push({ url: masked, ok: true });
+      client = c;
+      usedCandidate = masked;
+      break;
+    } catch (err) {
+      attempts.push({ url: masked, ok: false, error: err.message });
+      try { await c.end(); } catch (_) {}
+    }
+  }
+  if (!client) {
+    return { ok: false, error: 'no connection candidate succeeded', attempts };
+  }
+  const applied = [];
+  const failed = [];
+  const start = Date.now();
+  try {
+    for (const stmt of statements) {
+      try {
+        await client.query(stmt);
+        applied.push(stmt.replace(/\s+/g, ' ').slice(0, 50));
+      } catch (err) {
+        const msg = String(err.message || '');
+        if (/already exists|duplicate|conflict/i.test(msg)) { applied.push('(idempotent) ' + stmt.replace(/\s+/g, ' ').slice(0, 40)); continue; }
+        failed.push({ error: msg, stmt: stmt.replace(/\s+/g, ' ').slice(0, 80) });
+      }
+    }
+    return {
+      ok: true,
+      connectedVia: usedCandidate,
+      attempts,
+      statementCount: statements.length,
+      appliedCount: applied.length,
+      failedCount: failed.length,
+      elapsedMs: Date.now() - start,
+      applied: applied.slice(0, 50),
+      failed: failed.slice(0, 20),
+    };
+  } finally {
+    try { await client.end(); } catch (_) {}
+  }
+}
 
