@@ -56,6 +56,8 @@ const contributionRoutes = require('./routes/contributions');
 const documentRoutes = require('./routes/documents');
 const terminationRoutes = require('./routes/termination');
 const featuresRoutes = require('./routes/features');
+const { ensureGovernanceSchema } = require('./config/governanceSchema');
+const securityRoutes = require('./routes/security');
 
 // Import middleware
 const errorHandler = require('./middleware/errorHandler');
@@ -300,6 +302,74 @@ app.use('/api/mobile-features', featuresRoutes);
 // Admin API routes mounted at /api/admin AFTER other routes to avoid conflicts
 // Provides /api/admin/dashboard/*, /api/admin/contributions/monthly, /api/admin/loans/status-breakdown
 app.use('/api/admin', adminApiRoutes);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PUBLIC login-event recorder (no JWT) — the dashboard login page calls this
+// immediately after every Supabase auth attempt, including FAILED attempts
+// where no session token exists yet. Mounted AFTER the guarded /api/admin
+// router, but as a POST it does not shadow the guarded GET /login-history/log.
+// It is intentionally unauthenticated so failed logins can be recorded.
+// ─────────────────────────────────────────────────────────────────────────────
+app.post('/api/admin/login-history/log', async (req, res) => {
+  try {
+    const { email, success, failure_reason, device_type, browser, os, profile_id } = req.body || {};
+    const ua = req.headers['user-agent'] || '';
+    const ip = (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim();
+    const governanceMod = require('./routes/governance');
+    const { recordLogin, raiseSecurityAlert } = governanceMod;
+
+    let pid = profile_id || null;
+    if (!pid && email) {
+      const { data: prof } = await supabase.from('profiles').select('id, role, is_active').ilike('email', email).maybeSingle();
+      pid = prof?.id || null;
+    }
+
+    await recordLogin({ profileId: pid, email, success: !!success, failureReason: failure_reason, req });
+
+    if (success === false && pid) {
+      const { data: prof } = await supabase.from('profiles').select('is_active').eq('id', pid).maybeSingle();
+      if (prof && prof.is_active === false) {
+        await raiseSecurityAlert({
+          alertType: 'disabled_account_login', severity: 'critical',
+          title: 'Disabled account login attempt',
+          description: `Account ${email || pid} attempted to log in while disabled.`,
+          profileId: pid, email, ip, device: device_type,
+        });
+      }
+    }
+
+    if (success === false && ip) {
+      const since = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+      const { count } = await supabase.from('login_history').select('id', { count: 'exact', head: true }).eq('ip_address', ip).eq('success', false).gte('created_at', since);
+      if ((count || 0) >= 3) {
+        await raiseSecurityAlert({
+          alertType: 'multiple_failed_logins', severity: 'high',
+          title: 'Multiple failed login attempts',
+          description: `${count} failed logins from ${ip} in the last 10 minutes.`,
+          profileId: pid, email, ip, device: device_type,
+        });
+      }
+    }
+
+    try {
+      await supabase.from('audit_logs').insert({
+        actor_id: pid || null,
+        action: success ? 'LOGIN_SUCCESS' : 'LOGIN_FAILED',
+        target_model: 'auth',
+        metadata: { email, device_type, browser, os, failure_reason: failure_reason || null },
+        ip_address: ip,
+        user_agent: ua,
+      });
+    } catch (_) {}
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+// Security & Access page routes (consumed by /pages/security-access). Mounted
+// at /api/security so the frontend's relative calls resolve.
+app.use('/api/security', securityRoutes);
 // Root-level alias in case Dio resolves absolute paths from host root
 app.use('/guarantor', guarantorRoutes);
 
@@ -374,6 +444,12 @@ server.listen(PORT, '0.0.0.0', () => {
   logger.info(`📦 Environment: ${process.env.NODE_ENV || 'development'}`);
   logger.info(`🔒 HTTPS Enforced: ${process.env.NODE_ENV === 'production'}`);
   logger.info(`🛡️ IP Whitelisting: ${process.env.ADMIN_IP_WHITELIST ? 'Enabled' : 'Disabled'}`);
+});
+
+// Apply governance schema (idempotent) once the server is up. Non-fatal on
+// failure — endpoints degrade gracefully if the pooler is unreachable.
+ensureGovernanceSchema().catch((err) => {
+  logger.warn('governance schema bootstrap threw:', err.message);
 });
 
 // ==============================================================================
