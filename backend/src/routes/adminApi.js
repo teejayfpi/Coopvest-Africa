@@ -75,16 +75,25 @@ router.post('/backfill-registration-completed', async (req, res) => {
     }
 
     const now = new Date().toISOString();
-    const { error: updErr } = await supabase
+    const update = await supabase
       .from('profiles')
       .update({ registration_completed: true, completed_at: now, updated_at: now })
       .in('id', targetIds)
       .eq('registration_completed', false);
-    if (updErr) throw updErr;
+    if (update.error) throw update.error;
 
-    await logAdminAction('backfill-registration-completed', null, { count: targetIds.length });
+    // PostgREST doesn't return affected rows by default; re-query to count
+    // how many targets are still false so the response reflects reality.
+    const { data: stillFalse } = await supabase
+      .from('profiles')
+      .select('id')
+      .in('id', targetIds)
+      .eq('registration_completed', false);
+    const updated = targetIds.length - (stillFalse?.length || 0);
 
-    return res.json({ success: true, updated: targetIds.length, profileIds: targetIds });
+    await logAdminAction('backfill-registration-completed', null, { count: updated });
+
+    return res.json({ success: true, updated, profileIds: targetIds });
   } catch (err) {
     logger.error('backfill-registration-completed error:', err);
     return res.status(500).json({ success: false, error: err.message });
