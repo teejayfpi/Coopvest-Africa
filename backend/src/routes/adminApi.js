@@ -74,6 +74,15 @@ router.post('/backfill-registration-completed', async (req, res) => {
       return res.json({ success: true, updated: 0, message: 'No profiles needed backfill.' });
     }
 
+    // Count how many targets are still false BEFORE updating, so we can report
+    // the actual number flipped (PostgREST doesn't return affected rows).
+    const { data: falseBefore } = await supabase
+      .from('profiles')
+      .select('id')
+      .in('id', targetIds)
+      .eq('registration_completed', false);
+    const beforeFalse = falseBefore?.length || 0;
+
     const now = new Date().toISOString();
     const update = await supabase
       .from('profiles')
@@ -82,14 +91,12 @@ router.post('/backfill-registration-completed', async (req, res) => {
       .eq('registration_completed', false);
     if (update.error) throw update.error;
 
-    // PostgREST doesn't return affected rows by default; re-query to count
-    // how many targets are still false so the response reflects reality.
     const { data: stillFalse } = await supabase
       .from('profiles')
       .select('id')
       .in('id', targetIds)
       .eq('registration_completed', false);
-    const updated = targetIds.length - (stillFalse?.length || 0);
+    const updated = beforeFalse - (stillFalse?.length || 0);
 
     await logAdminAction('backfill-registration-completed', null, { count: updated });
 
