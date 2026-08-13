@@ -18,8 +18,24 @@ const logger = require('../utils/logger');
 
 let ran = false;
 
-const POOLER_CONN =
-  'postgresql://postgres.eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im55b2F1enFlenB4ZW9ubXJ4eGdpIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NDI4MjczNSwiZXhwIjoyMDg5ODU4NzM1fQ.zCX5ZMW42kwjszRmT6HREZOCjTs5z7ZlXidK4BM-coM@aws-0-us-east-1-975937489815.pooler.supabase.com:6543/postgres';
+// Connection candidates, tried in order. The first that connects wins.
+// 1. An explicit SUPABASE_DB_URL if provided.
+// 2. The Supabase session pooler (port 5432 on the pooler host) — same host the
+//    dashboard recommends for serverless/short-lived connections.
+// 3. The transaction pooler (port 6543) — used by backend/pg_migrate.js.
+// 4. The direct connection (db.<ref>.supabase.co:5432) — used by
+//    backend/run-governance-migration.js. The service role key is used as the
+//    password for the `postgres.<ref>` pooler users and for the bare
+//    `postgres` direct user.
+const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im55b2F1enFlenB4ZW9ubXJ4eGdpIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NDI4MjczNSwiZXhwIjoyMDg5ODU4NzM1fQ.zCX5ZMW42kwjszRmT6HREZOCjTs5z7ZlXidK4BM-coM';
+const REF = 'nyoauzqezpxeonmrxxgi';
+const POOLER_HOST = 'aws-0-us-east-1-975937489815.pooler.supabase.com';
+const CONNECTION_CANDIDATES = [
+  `postgresql://postgres.${REF}:${encodeURIComponent(SERVICE_ROLE)}@${POOLER_HOST}:5432/postgres`,
+  `postgresql://postgres.${REF}:${encodeURIComponent(SERVICE_ROLE)}@${POOLER_HOST}:6543/postgres`,
+  `postgresql://postgres:${encodeURIComponent(SERVICE_ROLE)}@db.${REF}.supabase.co:5432/postgres`,
+];
 
 async function ensureGovernanceSchema() {
   if (ran) return;
@@ -34,8 +50,8 @@ async function ensureGovernanceSchema() {
     return;
   }
 
-  const connectionString = process.env.SUPABASE_DB_URL || POOLER_CONN;
-  const client = new Client({ connectionString, ssl: { rejectUnauthorized: false }, connectionTimeoutMillis: 15000 });
+  const connectionString = process.env.SUPABASE_DB_URL;
+  const candidates = connectionString ? [connectionString, ...CONNECTION_CANDIDATES] : CONNECTION_CANDIDATES;
 
   // Split the migration into individual statements so a failure on one CREATE
   // TABLE (e.g. a pre-existing partial schema) does not roll back the others.
@@ -43,21 +59,38 @@ async function ensureGovernanceSchema() {
   // safe. We execute each in its own implicit transaction.
   const statements = splitSqlStatements(sql);
 
+  let client = null;
+  let connectedWith = null;
+  for (const cs of candidates) {
+    const c = new Client({ connectionString: cs, ssl: { rejectUnauthorized: false }, connectionTimeoutMillis: 12000 });
+    try {
+      await c.connect();
+      client = c;
+      connectedWith = cs.replace(/:[^:@]+@/, ':***@'); // mask password in logs
+      break;
+    } catch (err) {
+      try { await c.end(); } catch (_) {}
+      logger.warn(`governance schema: connection candidate failed: ${err.message}`);
+    }
+  }
+  if (!client) {
+    logger.warn('governance schema bootstrap skipped: could not connect to the database via any connection string');
+    logger.warn('Admin governance endpoints may return errors until 012_super_admin_governance.sql is applied.');
+    return;
+  }
+
   let applied = 0;
   const failed = [];
   try {
-    await client.connect();
+    logger.info(`governance schema: connected via ${connectedWith}; applying ${statements.length} statements`);
     for (const stmt of statements) {
       try {
         await client.query(stmt);
         applied++;
       } catch (err) {
-        // Ignore "already exists" / "duplicate" errors — the statement is
-        // idempotent but PG can still surface them for objects created by
-        // concurrent runs. Anything else is logged and we continue.
         const msg = String(err.message || '');
         if (/already exists|duplicate|conflict/i.test(msg)) { applied++; continue; }
-        failed.push(`${msg} [stmt: ${stmt.slice(0, 60)}...]`);
+        failed.push(`${msg} [stmt: ${stmt.replace(/\s+/g, ' ').slice(0, 60)}...]`);
       }
     }
     logger.info(`✅ governance schema applied: ${applied}/${statements.length} statements ok` +
@@ -66,8 +99,7 @@ async function ensureGovernanceSchema() {
       logger.warn(`governance schema skipped statements: ${failed.join(' | ').slice(0, 800)}`);
     }
   } catch (err) {
-    logger.warn(`governance schema bootstrap skipped (connect/query error): ${err.message}`);
-    logger.warn('Admin governance endpoints may return errors until 012_super_admin_governance.sql is applied.');
+    logger.warn(`governance schema bootstrap skipped (query error): ${err.message}`);
   } finally {
     try { await client.end(); } catch (_) {}
   }
