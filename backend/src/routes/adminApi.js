@@ -328,7 +328,7 @@ router.get('/members/:id', async (req, res) => {
       supabase.from('loans').select('*').eq('profile_id', profile.id).order('created_at', { ascending: false }),
       supabase.from('tickets').select('*').eq('profile_id', profile.id).order('created_at', { ascending: false }),
       supabase.from('bank_accounts').select('*').eq('profile_id', profile.id).order('created_at', { ascending: false }),
-      supabase.from('kyc_documents').select('*').eq('profile_id', profile.id).order('created_at', { ascending: false }),
+      supabase.from('kyc_documents').select('*').eq('profile_id', profile.id).order('uploaded_at', { ascending: false }),
     ]);
 
     const kycData = kyc.data || null;

@@ -107,14 +107,19 @@ router.post(
  */
 router.post('/document', async (req, res) => {
   try {
-    const { type, url, meta } = req.body || {};
+    const { type, url, side } = req.body || {};
     if (!type || !url) {
       return res.status(400).json({ success: false, error: 'type and url are required' });
     }
-    await getOrCreateKyc(req.user.id);
+    const kyc = await getOrCreateKyc(req.user.id);
+    // The mobile app uploads a single ID photo; store it on front_image_url
+    // (or back_image_url when an explicit `side: 'back'` is sent). The table
+    // has no `url`/`meta` columns — using them caused "could not find the
+    // 'meta' column" errors.
+    const sideKey = side === 'back' ? 'back_image_url' : 'front_image_url';
     const { data, error } = await supabase
       .from('kyc_documents')
-      .insert({ profile_id: req.user.id, type, url, meta: meta || {} })
+      .insert({ kyc_id: kyc.id, profile_id: req.user.id, type, [sideKey]: url })
       .select('*')
       .single();
     if (error) throw error;
@@ -155,7 +160,7 @@ router.get('/documents', async (req, res) => {
       .from('kyc_documents')
       .select('*')
       .eq('profile_id', req.user.id)
-      .order('created_at', { ascending: false });
+      .order('uploaded_at', { ascending: false });
     if (error) throw error;
     res.json({ success: true, documents: data || [] });
   } catch (err) {
