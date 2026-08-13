@@ -56,9 +56,8 @@ const contributionRoutes = require('./routes/contributions');
 const documentRoutes = require('./routes/documents');
 const terminationRoutes = require('./routes/termination');
 const featuresRoutes = require('./routes/features');
-const { ensureGovernanceSchema } = require('./config/governanceSchema');
+const { ensureGovernanceSchema, runGovernanceDiagnostics } = require('./config/governanceSchema');
 const securityRoutes = require('./routes/security');
-
 // Import middleware
 const errorHandler = require('./middleware/errorHandler');
 const { enforceHTTPS, securityHeaders, securityLogger } = require('./middleware/httpsEnforcement');
@@ -370,6 +369,25 @@ app.post('/api/admin/login-history/log', async (req, res) => {
 // Security & Access page routes (consumed by /pages/security-access). Mounted
 // at /api/security so the frontend's relative calls resolve.
 app.use('/api/security', securityRoutes);
+
+// ───────────────────────────────────────────────────────────────────────────
+// Governance schema bootstrap diagnostic (Super Admin only).
+// Returns which DB connection candidate worked and which migration statements
+// applied/failed, so schema-bootstrap issues are diagnosable without Render
+// log access. Also re-runs the (idempotent) migration, so it doubles as a
+// self-heal endpoint.
+// ───────────────────────────────────────────────────────────────────────────
+app.get('/api/admin/governance-bootstrap-debug', require('./middleware/auth').requireAdmin, async (req, res) => {
+  if (!['super_admin', 'superadmin'].includes(req.user?.role)) {
+    return res.status(403).json({ success: false, error: 'Super Admin access required' });
+  }
+  try {
+    const result = await runGovernanceDiagnostics();
+    res.json({ success: true, data: result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 // Root-level alias in case Dio resolves absolute paths from host root
 app.use('/guarantor', guarantorRoutes);
 
