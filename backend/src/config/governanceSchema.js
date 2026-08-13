@@ -19,22 +19,26 @@ const logger = require('../utils/logger');
 let ran = false;
 
 // Connection candidates, tried in order. The first that connects wins.
-// 1. An explicit SUPABASE_DB_URL if provided.
-// 2. The Supabase session pooler (port 5432 on the pooler host) — same host the
-//    dashboard recommends for serverless/short-lived connections.
-// 3. The transaction pooler (port 6543) — used by backend/pg_migrate.js.
-// 4. The direct connection (db.<ref>.supabase.co:5432) — used by
-//    backend/run-governance-migration.js. The service role key is used as the
-//    password for the `postgres.<ref>` pooler users and for the bare
-//    `postgres` direct user.
-const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im55b2F1enFlenB4ZW9ubXJ4eGdpIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NDI4MjczNSwiZXhwIjoyMDg5ODU4NzM1fQ.zCX5ZMW42kwjszRmT6HREZOCjTs5z7ZlXidK4BM-coM';
+//
+// Supabase transaction/session pooler connection format (the working one, per
+// backend/run_migration_now.js): the username is `postgres.<DB_PASSWORD>` and
+// there is no separate password field — the DB password is embedded in the
+// username. The DB password is `Temiloluwa@1963` (URL-encoded `Temiloluwa%401963`).
+//
+// 1. An explicit SUPABASE_DB_URL if provided (highest priority — lets the
+//    operator override with any working connection string).
+// 2. transaction pooler (port 6543) — `postgres.<password>` username.
+// 3. session pooler (port 5432 on the pooler host) — same username format.
+// 4. direct connection (db.<ref>.supabase.co:5432) — bare `postgres` user with
+//    the DB password as the password.
+const DB_PASSWORD = process.env.SUPABASE_DB_PASSWORD || 'Temiloluwa@1963';
 const REF = 'nyoauzqezpxeonmrxxgi';
 const POOLER_HOST = 'aws-0-us-east-1-975937489815.pooler.supabase.com';
+const POOLER_USER = `postgres.${DB_PASSWORD}`; // Supabase pooler convention
 const CONNECTION_CANDIDATES = [
-  `postgresql://postgres.${REF}:${encodeURIComponent(SERVICE_ROLE)}@${POOLER_HOST}:5432/postgres`,
-  `postgresql://postgres.${REF}:${encodeURIComponent(SERVICE_ROLE)}@${POOLER_HOST}:6543/postgres`,
-  `postgresql://postgres:${encodeURIComponent(SERVICE_ROLE)}@db.${REF}.supabase.co:5432/postgres`,
+  `postgresql://${encodeURIComponent(POOLER_USER)}@${POOLER_HOST}:6543/postgres`,
+  `postgresql://${encodeURIComponent(POOLER_USER)}@${POOLER_HOST}:5432/postgres`,
+  `postgresql://postgres:${encodeURIComponent(DB_PASSWORD)}@db.${REF}.supabase.co:5432/postgres`,
 ];
 
 async function ensureGovernanceSchema() {
