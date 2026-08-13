@@ -43,8 +43,12 @@ async function loadFeatures() {
   return data || [];
 }
 
-// GET /api/features - Get all features
-router.get('/', async (req, res) => {
+// Shared handlers. The same logic is exposed under several URL prefixes because
+// the admin dashboard calls /api/mobile-features while the Flutter app calls
+// /api/features/platform/mobile; the router is mounted once at /api in server.js,
+// so we register explicit paths for each client and keep the generic ones too.
+
+async function listHandler(req, res) {
   try {
     const rows = await loadFeatures();
     const features = rows.map((r) => ({
@@ -60,10 +64,9 @@ router.get('/', async (req, res) => {
     logger.error('Get features error:', err);
     res.status(500).json({ success: false, error: 'Failed to get features' });
   }
-});
+}
 
-// GET /api/features/platform/mobile - Get mobile features (for mobile app)
-router.get('/platform/mobile', async (req, res) => {
+async function mobileHandler(req, res) {
   try {
     const rows = await loadFeatures();
     const features = rows.map((r) => ({
@@ -85,7 +88,45 @@ router.get('/platform/mobile', async (req, res) => {
     logger.error('Get mobile features error:', err);
     res.status(500).json({ success: false, error: 'Failed to get features' });
   }
-});
+}
+
+async function toggleHandler(req, res) {
+  try {
+    const { featureId, enabled } = req.body;
+    if (!featureId || typeof enabled !== 'boolean') {
+      return res.status(400).json({ success: false, error: 'Invalid request' });
+    }
+
+    const updatedBy = (req.user && (req.user.email || req.user.id)) || 'Admin';
+
+    const { data, error } = await supabase
+      .from(TABLE)
+      .update({ enabled, updated_by: updatedBy })
+      .eq('id', featureId)
+      .select('id, enabled')
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) {
+      return res.status(404).json({ success: false, error: 'Feature not found' });
+    }
+    res.json({ success: true, message: 'Feature updated', data: { id: data.id, enabled: data.enabled } });
+  } catch (err) {
+    logger.error('Update feature error:', err);
+    res.status(500).json({ success: false, error: 'Failed to update feature' });
+  }
+}
+
+// Explicit client paths — registered BEFORE the /:id catch-all so they win.
+// Admin dashboard: GET/PUT /api/mobile-features
+router.get('/mobile-features', listHandler);
+router.put('/mobile-features', toggleHandler);
+// Flutter app: GET /api/features/platform/mobile
+router.get('/features/platform/mobile', mobileHandler);
+
+// Generic paths kept for backward compatibility.
+router.get('/', listHandler);
+router.get('/platform/mobile', mobileHandler);
 
 // GET /api/features/:id - Get single feature
 router.get('/:id', async (req, res) => {
@@ -117,32 +158,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// PUT /api/mobile-features - Update feature (for admin dashboard)
-router.put('/', async (req, res) => {
-  try {
-    const { featureId, enabled } = req.body;
-    if (!featureId || typeof enabled !== 'boolean') {
-      return res.status(400).json({ success: false, error: 'Invalid request' });
-    }
-
-    const updatedBy = (req.user && (req.user.email || req.user.id)) || 'Admin';
-
-    const { data, error } = await supabase
-      .from(TABLE)
-      .update({ enabled, updated_by: updatedBy })
-      .eq('id', featureId)
-      .select('id, enabled')
-      .maybeSingle();
-
-    if (error) throw error;
-    if (!data) {
-      return res.status(404).json({ success: false, error: 'Feature not found' });
-    }
-    res.json({ success: true, message: 'Feature updated', data: { id: data.id, enabled: data.enabled } });
-  } catch (err) {
-    logger.error('Update feature error:', err);
-    res.status(500).json({ success: false, error: 'Failed to update feature' });
-  }
-});
+// Generic toggle path (kept for backward compatibility).
+router.put('/', toggleHandler);
 
 module.exports = router;
