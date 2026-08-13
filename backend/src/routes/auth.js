@@ -35,6 +35,7 @@ const buildUserPayload = (authUser, profile) => ({
   kycStatus: profile?.kyc_verified ? 'approved' : 'pending',
   membershipStatus: profile?.is_active === false ? 'inactive' : 'active',
   emailVerified: authUser.email_confirmed_at ? true : false,
+  registration_completed: profile?.registration_completed === true,
   created_at: profile?.created_at || authUser.created_at,
   updated_at: profile?.updated_at || authUser.updated_at || authUser.created_at,
 });
@@ -60,7 +61,7 @@ const ensureProfile = async (authUser, extra = {}) => {
   const userId = extra.userId || `USR-${Date.now().toString(36).toUpperCase()}`;
   const { data: existing } = await supabase
     .from('profiles')
-    .select('id, user_id, email, name, phone, role, kyc_verified, is_active, created_at, updated_at')
+    .select('id, user_id, email, name, phone, role, kyc_verified, is_active, registration_completed, completed_at, created_at, updated_at')
     .eq('id', authUser.id)
     .maybeSingle();
 
@@ -77,7 +78,7 @@ const ensureProfile = async (authUser, extra = {}) => {
       role: 'member',
       is_active: true,
     })
-    .select('id, user_id, email, name, phone, role, kyc_verified, is_active, created_at, updated_at')
+    .select('id, user_id, email, name, phone, role, kyc_verified, is_active, registration_completed, completed_at, created_at, updated_at')
     .single();
 
   if (error) {
@@ -434,12 +435,19 @@ router.post('/complete-registration', authenticate, async (req, res) => {
       }
     }
 
-    // 1. Update the profiles row with employer/dept info
+    // 1. Update the profiles row with employer/dept info. When this isn't a
+    //    partial save, the member has completed onboarding — set the
+    //    registration_completed flag so the mobile app no longer re-prompts
+    //    the registration flow on every launch.
+    const now = new Date().toISOString();
     const { error: profileError } = await supabase
       .from('profiles')
       .update({
         department: employer_name || null,
-        updated_at: new Date().toISOString(),
+        updated_at: now,
+        ...(partial
+          ? {}
+          : { registration_completed: true, completed_at: now }),
       })
       .eq('id', req.user.id);
 
@@ -634,6 +642,10 @@ router.get(['/me', '/profile'], authenticate, async (req, res) => {
         membershipStatus: profile.is_active === false ? 'inactive' : 'active',
         created_at: profile.created_at,
         updated_at: profile.updated_at,
+        // Mobile AuthGate gates registration on this flag; expose it so
+        // returning users who completed onboarding aren't re-prompted.
+        registration_completed: profile.registration_completed === true,
+        completed_at: profile.completed_at || null,
       });
     }
 

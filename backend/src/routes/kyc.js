@@ -94,6 +94,20 @@ router.post(
         .select('*')
         .single();
       if (error) throw error;
+
+      // A KYC submission completes registration — flip the profile flag so the
+      // mobile app's AuthGuard stops re-prompting the onboarding/registration
+      // flow on every launch for members who have already submitted.
+      const now = new Date().toISOString();
+      const { error: profileErr } = await supabase
+        .from('profiles')
+        .update({ registration_completed: true, completed_at: now, updated_at: now })
+        .eq('id', req.user.id);
+      if (profileErr) {
+        // Non-fatal: KYC was saved, just the gate flag failed. Log and continue.
+        logger.error('kyc submit: registration_completed flag update failed:', profileErr.message);
+      }
+
       res.json({ success: true, kyc: data });
     } catch (err) {
       logger.error('kyc submit error:', err);

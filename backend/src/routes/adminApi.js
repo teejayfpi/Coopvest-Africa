@@ -41,6 +41,57 @@ async function logAdminAction(action, target, metadata = {}) {
 }
 
 /**
+ * POST /api/v1/admin/backfill-registration-completed
+ * One-time maintenance endpoint: mark members who have already submitted KYC
+ * (kyc.status in a submitted lifecycle state) or are kyc_verified as having
+ * completed registration, so the mobile app stops re-prompting onboarding for
+ * them. Uses the service role client (bypasses RLS). Idempotent.
+ */
+router.post('/backfill-registration-completed', async (req, res) => {
+  try {
+    // Find profiles that completed KYC but still have the flag unset.
+    const { data: kycRows, error: kycErr } = await supabase
+      .from('kyc')
+      .select('profile_id, status')
+      .in('status', ['submitted', 'in_review', 'verified', 'approved', 'rejected']);
+    if (kycErr) throw kycErr;
+
+    const submittedIds = (kycRows || []).map((k) => k.profile_id).filter(Boolean);
+
+    // Also include kyc_verified profiles that never touched KYC status.
+    const { data: verifiedRows, error: vErr } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('kyc_verified', true)
+      .eq('registration_completed', false);
+    if (vErr) throw vErr;
+
+    const verifiedIds = (verifiedRows || []).map((p) => p.id);
+
+    // Deduplicate target ids.
+    const targetIds = Array.from(new Set([...submittedIds, ...verifiedIds]));
+    if (targetIds.length === 0) {
+      return res.json({ success: true, updated: 0, message: 'No profiles needed backfill.' });
+    }
+
+    const now = new Date().toISOString();
+    const { error: updErr } = await supabase
+      .from('profiles')
+      .update({ registration_completed: true, completed_at: now, updated_at: now })
+      .in('id', targetIds)
+      .eq('registration_completed', false);
+    if (updErr) throw updErr;
+
+    await logAdminAction('backfill-registration-completed', null, { count: targetIds.length });
+
+    return res.json({ success: true, updated: targetIds.length, profileIds: targetIds });
+  } catch (err) {
+    logger.error('backfill-registration-completed error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * GET /api/v1/admin/members
  */
 router.get('/members', async (req, res) => {
