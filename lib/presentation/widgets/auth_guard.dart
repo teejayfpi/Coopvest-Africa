@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../data/models/kyc_models.dart';
 import '../providers/auth_provider.dart';
 import '../providers/kyc_provider.dart';
 import '../screens/auth/registration_onboarding_screen.dart';
