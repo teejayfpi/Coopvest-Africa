@@ -40,7 +40,7 @@ CREATE INDEX IF NOT EXISTS idx_login_history_ip ON public.login_history(ip_addre
 CREATE TABLE IF NOT EXISTS public.admin_approvals (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   request_type TEXT NOT NULL,
-  -- human-readable summary (e.g. "Approve loan LN-123 for ₦500,000")
+  -- human-readable summary (e.g. "Approve loan LN-123 for NGN 500,000")
   title TEXT,
   -- JSON payload capturing the full proposed action + previous/new values
   payload JSONB DEFAULT '{}'::jsonb,
@@ -140,11 +140,12 @@ INSERT INTO public.security_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING
 -- ─────────────────────────────────────────────────────────────────────────────
 -- RLS: allow service role (backend) full access. The dashboard reads via the
 -- backend, so table-level access is mediated by the admin API, not RLS.
+-- Use IF EXISTS so a missing table (e.g. partial apply) does not abort the run.
 -- ─────────────────────────────────────────────────────────────────────────────
-ALTER TABLE public.admin_approvals ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.security_alerts ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.admin_activity ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.security_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.admin_approvals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.security_alerts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.admin_activity ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.security_settings ENABLE ROW LEVEL SECURITY;
 
 -- Grant service role full access implicitly (service role bypasses RLS).
 -- No additional GRANT needed for the service role.
