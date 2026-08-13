@@ -10,6 +10,20 @@
 -- Seed values mirror the prior in-memory defaults so behaviour is unchanged
 -- on first deploy.
 
+-- An earlier abandoned scaffold of this table used an incompatible shape
+-- (uuid id, key/label columns, no description/updated_by). It was empty and
+-- unreferenced, so drop it first to let CREATE TABLE establish the real schema.
+-- Safe to re-run: only drops if the legacy columns are present.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'mobile_features' AND column_name = 'key'
+  ) THEN
+    DROP TABLE mobile_features CASCADE;
+  END IF;
+END $$;
+
 CREATE TABLE IF NOT EXISTS mobile_features (
   id            text PRIMARY KEY,
   name          text NOT NULL,
