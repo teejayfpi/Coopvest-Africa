@@ -256,7 +256,9 @@ router.post('/activity', async (req, res) => {
     const m = clientMeta(req);
     // security_sessions has no per-page columns; stash current page/module in
     // `location` (free text) and keep is_current + login_time fresh as a heartbeat.
-    const { error } = await supabase.from('security_sessions').upsert({
+    // The table has no unique constraint on user_id, so we select-then-update or
+    // insert (upsert with onConflict would fail without a unique constraint).
+    const payload = {
       user_id: req.user.id,
       user_name: req.user.email || req.user.name || null,
       role: req.user.role || null,
@@ -265,7 +267,15 @@ router.post('/activity', async (req, res) => {
       location: [page, mod, action].filter(Boolean).join(' | ') || m.userAgent || null,
       login_time: new Date().toISOString(),
       is_current: true,
-    }, { onConflict: 'user_id' });
+    };
+    const { data: existing } = await supabase.from('security_sessions')
+      .select('id').eq('user_id', req.user.id).limit(1).maybeSingle();
+    let error;
+    if (existing && existing.id) {
+      ({ error } = await supabase.from('security_sessions').update(payload).eq('id', existing.id));
+    } else {
+      ({ error } = await supabase.from('security_sessions').insert(payload));
+    }
     if (error) throw error;
     res.json({ success: true });
   } catch (err) {
