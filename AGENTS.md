@@ -1,0 +1,70 @@
+# Coopvest — Latest-Coopvest backend
+
+## Interest calculation (mobile-aligned)
+The backend interest logic in `src/services/referralService.js` MUST mirror the
+mobile app (`lib/presentation/screens/loan/loan_application_screen.dart`):
+
+- `BASE_RATES` per loan type: Quick Loan 7.5%, Flexi 7.0%, Stable (12m) 5.0%,
+  Stable (18m) 7.0%, Premium 14.0%, Maxi 19.0%. Legacy Micro/Business/Emergency
+  kept for old loans.
+- `MIN_FLOORS` = half of each base rate.
+- Referral tier bonus: 2% / 1% / 0.5% at 10 / 5 / 2 confirmed referrals.
+- Monthly repayment = EMI (reducing balance): `P * r * (1+r)^n / ((1+r)^n - 1)`,
+  `r = effectiveRate / 100 / 12`.
+- Total repayment = SIMPLE interest: `amount + (amount * effectiveRate / 100)`.
+  (NOT EMI * tenure — the mobile app uses simple interest for total.)
+
+`src/routes/loans.js` `LOAN_TYPES` accepts the mobile app's loan type names, and
+`total_repayment` stores the simple-interest value from the calc object.
+
+`src/routes/adminApi.js` GET `/loans` recomputes interest via
+`referralService.calculateInterestWithBonus(loanType, amount, tenure, bonus)`
+so legacy loans created under the old rate table display the same figures the
+member sees in the app.
+
+## Deploy
+- Backend deploys automatically on push to `main` (Render).
+- Admin dashboard is a separate Vite/React app in
+  `../Admin-Dashboard` deployed on Vercel.
+
+## Auth for live API
+- API base: `https://coopvest-api.onrender.com`
+- Admin login: POST `/api/auth/login` with the admin email/password.
+- Admin loans: GET `/api/admin/loans` with `Authorization: Bearer <token>`.
+
+## Admin Platform Extensions (financial-ops modules)
+`src/routes/adminPlatform.js` is mounted under `/api/admin` (via `router.use` in
+`adminApi.js`, so it inherits `requireAdmin`). Sensitive mutations require the
+Super Admin role (`requireSuperAdmin` from `middleware/auth.js`).
+
+Modules (all additive, no migration required for the core — config is stored in
+the `system_settings` key/value jsonb table):
+1. **Emergency Control Center** — `GET/PUT /api/admin/emergency-controls`,
+   `POST /api/admin/emergency-controls/disable-admin`. Toggles stored as
+   `emergency.*` keys. `middleware/systemStatus.js` reads the same keys (with a
+   15s cache) and blocks matching member-facing writes with HTTP 423. Admin
+   routes are bypassed so a freeze can be lifted.
+2. **Financial Ledger** — `GET /api/admin/ledger`, `/ledger/member/:id`
+   (computed running balance), `POST /api/admin/ledger/:id/reverse` (append-only
+   reversal). Prefers a `ledger_entries` table; falls back to a computed view
+   over `transactions` when absent. Migration:
+   `supabase/migrations/20260814000000_admin_platform.sql`.
+3. **System-Wide Search** — `GET /api/admin/search?q=`.
+4. **Super Admin Attention Required** — `GET /api/admin/attention` (aggregate
+   of pending approvals, payment proofs, fraud flags, overdue loans, KYC,
+   tickets).
+5. **Loan Approval Matrix** — `GET/PUT /api/admin/loan-approval-matrix`,
+   `GET /loan-approval-matrix/my-limit`. Stored as `loan_approval.thresholds`.
+6. **Notification Template Manager** — `GET /api/admin/notification-templates`,
+   `PUT /notification-templates/:key`. Stored as `notification_template.*`.
+7. **Document Vault** — `GET /api/admin/documents`, `POST /documents/:id/access`
+   (view/download audit-logged).
+8. **Payroll Reconciliation** — `GET /api/admin/payroll/:orgId/reconciliation`
+   (expected vs actual variance).
+
+The Approval Center (maker-checker) lives in `src/routes/governance.js` under
+`/api/admin/approvals` (uses `security_events` with the `APPROVAL_` prefix).
+
+## Role note
+The DB uses both `superadmin` and `super_admin` spellings; treat both as Super
+Admin everywhere.

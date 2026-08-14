@@ -18,6 +18,7 @@ const validate = require('../middleware/validate');
 const logger = require('../utils/logger');
 const governance = require('./governance');
 const referralService = require('../services/referralService');
+const adminPlatform = require('./adminPlatform');
 
 // Apply requireAdmin to ALL routes in this router since they all require authentication
 router.use(requireAdmin);
@@ -26,6 +27,11 @@ router.use(requireAdmin);
 // alerts, live monitoring, stats, permissions). Mounted under the same
 // requireAdmin guard so they are reachable at /api/admin/<governance path>.
 router.use(governance);
+
+// Financial-operations platform extensions (emergency controls, ledger,
+// system search, attention required, loan approval matrix, notification
+// templates, payroll reconciliation). Mounted under /api/admin/<path>.
+router.use(adminPlatform);
 
 // All admin roles (requireAdmin accepts 'super_admin' but historic queries
 // filtered 'superadmin' only — keep both spellings so the Super Admin always

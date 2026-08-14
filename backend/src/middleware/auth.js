@@ -185,9 +185,28 @@ const requireService = (req, res, next) => {
   return res.status(401).json({ success: false, error: 'Invalid or missing service token' });
 };
 
+// Require a specific role (or set of roles). Super Admin always passes.
+function requireRole(roles) {
+  const allowed = Array.isArray(roles) ? roles : [roles];
+  return (req, res, next) => {
+    return authenticate(req, res, () => {
+      if (!req.user) return res.status(401).json({ success: false, error: 'Not authenticated' });
+      if (['superadmin', 'super_admin'].includes(req.user.role)) return next();
+      if (allowed.includes(req.user.role)) return next();
+      res.status(403).json({ success: false, error: 'Insufficient role' });
+    });
+  };
+}
+
+// Super Admin only — used for sensitive operations (emergency controls,
+// approval decisions, policy changes).
+const requireSuperAdmin = requireRole(['superadmin', 'super_admin']);
+
 module.exports = {
   authenticate,
   optionalAuth,
   requireAdmin,
   requireService,
+  requireRole,
+  requireSuperAdmin,
 };
