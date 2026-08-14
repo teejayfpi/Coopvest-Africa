@@ -527,7 +527,7 @@ router.get('/loans', async (req, res) => {
     // (memberName, memberId, loanId, balance, interestRate, etc.). Raw columns
     // (profile_id, loan_id, base_interest_rate, remaining_balance) are kept too
     // for backward compatibility.
-    const toLoanDto = (l) => {
+    const loansArr = (data || []).map((l) => {
       const profile = l.profile || {};
       return {
         ...l,
@@ -542,7 +542,9 @@ router.get('/loans', async (req, res) => {
         memberPhone: profile.phone || null,
         amount: Number(l.amount || 0),
         balance: Number(l.remaining_balance ?? l.amount ?? 0),
+        baseInterestRate: l.base_interest_rate != null ? Number(l.base_interest_rate) : null,
         interestRate: Number(l.effective_interest_rate ?? l.base_interest_rate ?? 0),
+        referralBonusPercent: l.referral_bonus_percent != null ? Number(l.referral_bonus_percent) : null,
         tenure: l.tenure_months ?? null,
         tenureMonths: l.tenure_months ?? null,
         purpose: l.purpose ?? null,
@@ -556,11 +558,49 @@ router.get('/loans', async (req, res) => {
         remainingBalance: l.remaining_balance ?? null,
         rejectionReason: l.rejected_reason ?? null,
         createdAt: l.created_at,
-        guarantors: [],
+        approvedBy: null, // resolved below from approved_by
+        approvedAt: l.approved_at ?? null,
+        guarantors: [], // populated below
       };
-    };
+    });
 
-    const loansArr = (data || []).map(toLoanDto);
+    // Resolve guarantors for the current page of loans.
+    const loanIds = loansArr.map((l) => l.id).filter(Boolean);
+    if (loanIds.length > 0) {
+      const { data: guarantorRows } = await supabase
+        .from('loan_guarantors')
+        .select('id, loan_id, status, consented_at, created_at, guarantor_profile:profiles!loan_guarantors_guarantor_id_fkey(id, name, email, phone)')
+        .in('loan_id', loanIds);
+
+      const byLoan = {};
+      (guarantorRows || []).forEach((g) => {
+        const gp = g.guarantor_profile || {};
+        if (!byLoan[g.loan_id]) byLoan[g.loan_id] = [];
+        byLoan[g.loan_id].push({
+          id: g.id,
+          name: gp.name || gp.email || 'Unknown',
+          email: gp.email || null,
+          phone: gp.phone || null,
+          status: g.status,
+          consentedAt: g.consented_at ?? null,
+          createdAt: g.created_at,
+        });
+      });
+      loansArr.forEach((l) => { l.guarantors = byLoan[l.id] || []; });
+    }
+
+    // Resolve the admin who approved each loan (approved_by -> profiles.name).
+    const approverIds = [...new Set(loansArr.map((l) => l.approved_by).filter(Boolean))];
+    if (approverIds.length > 0) {
+      const { data: approvers } = await supabase
+        .from('profiles')
+        .select('id, name, email')
+        .in('id', approverIds);
+      const approverMap = {};
+      (approvers || []).forEach((a) => { approverMap[a.id] = a.name || a.email || 'Unknown Admin'; });
+      loansArr.forEach((l) => { if (l.approved_by) l.approvedBy = approverMap[l.approved_by] || 'Unknown Admin'; });
+    }
+
     res.json({ success: true, data: loansArr, loans: loansArr, total: count || 0, page, limit, pagination: { page, limit, total: count || 0 } });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
