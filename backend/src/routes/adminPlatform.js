@@ -394,7 +394,7 @@ router.post(
         reversal = inserted;
         // Mark the original as reversed (append-only spirit: we flag, never delete).
         const origTable = le ? 'ledger_entries' : 'transactions';
-        await supabase.from(origTable).update({ reversed: true, reversal_of: reversal.id }).eq('id', id).catch(() => {});
+        await Promise.resolve(supabase.from(origTable).update({ reversed: true, reversal_of: reversal.id }).eq('id', id)).catch(() => {});
       }
 
       await logAdminAction('LEDGER_REVERSAL', { model: 'LedgerEntry', id }, {
@@ -419,7 +419,7 @@ router.get('/search', [query('q').isString()], validate, async (req, res) => {
     if (q.length < 2) return res.json({ success: true, results: [] });
     const like = `%${q}%`;
 
-    const safe = (p) => p.catch(() => ({ data: [] }));
+    const safe = (p) => Promise.resolve(p).catch(() => ({ data: [] }));
 
     const [members, loans, txns, tickets, orgs, guarantors] = await Promise.all([
       safe(supabase.from('profiles').select('id, user_id, name, email, phone, is_active').or(`name.ilike.${like},email.ilike.${like},phone.ilike.${like},user_id.ilike.${like}`).limit(10)),
@@ -450,7 +450,7 @@ router.get('/search', [query('q').isString()], validate, async (req, res) => {
 
 router.get('/attention', async (_req, res) => {
   try {
-    const safe = (p) => p.catch(() => ({ data: [], count: 0, error: null }));
+    const safe = (p) => Promise.resolve(p).catch(() => ({ data: [], count: 0, error: null }));
 
     const oneMonthAgo = new Date(Date.now() - 30 * 86400000).toISOString();
     const now = new Date().toISOString();
@@ -657,7 +657,7 @@ router.get('/payroll/:orgId/reconciliation', async (req, res) => {
     // Expected = sum of deduction amounts scheduled for this org.
     const { data: schedules } = await supabase.from('payroll_schedules')
       .select('profile_id, amount, status').eq('organization_id', orgId);
-    const safe = (p) => p.catch(() => ({ data: [] }));
+    const safe = (p) => Promise.resolve(p).catch(() => ({ data: [] }));
 
     // Actual = sum of completed contribution/transfer_in transactions tagged
     // for this org (best-effort via reference/metadata). Falls back to 0.
