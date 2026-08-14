@@ -39,6 +39,11 @@ class KYCRepository {
 
       return KYCSubmission(
         dateOfBirth: str(row['date_of_birth'] ?? personal['date_of_birth']),
+        // Preserve the real lifecycle status from the backend so the AuthGuard
+        // can tell "genuinely not submitted" (pending) apart from a failed
+        // fetch. Defaulting to 'pending' here previously caused every network
+        // blip to re-trigger the KYC flow for members who had already
+        // submitted.
         gender: str(personal['gender']),
         employmentType: str(employment['employment_type'] ?? employment['employmentType']) ?? '',
         organizationId: str(employment['organization_id'] ?? employment['organizationId']),
@@ -80,16 +85,13 @@ class KYCRepository {
       );
     } catch (e) {
       logger.e('Get KYC status error: $e');
-      // Return a pending submission instead of throwing so the UI can still
-      // render and offer the user a chance to complete their KYC.
-      return const KYCSubmission(
-        employmentType: '',
-        jobTitle: '',
-        monthlyIncomeRange: '',
-        residentialAddress: '',
-        idType: '',
-        status: 'pending',
-      );
+      // Re-throw so the KYC provider can surface an error state. Previously
+      // this returned a fabricated KYCSubmission with status='pending', which
+      // made AuthGuard believe the member had never submitted KYC and forced
+      // them back into the KYC flow on every transient backend failure (e.g.
+      // Render cold starts). AuthGuard now treats an unknown/error state as
+      // "do not prompt" rather than "not submitted".
+      rethrow;
     }
   }
 

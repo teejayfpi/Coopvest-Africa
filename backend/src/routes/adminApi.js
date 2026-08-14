@@ -1694,71 +1694,15 @@ router.get('/login-history/log', async (req, res) => {
   }
 });
 
-/**
- * POST /api/admin/login-history/log
- * Records an admin login attempt (success or failure) into login_history. The
- * dashboard's login page calls this immediately after every Supabase auth
- * attempt. The body carries device/browser/os info from the client.
- */
-router.post('/login-history/log', async (req, res) => {
-  try {
-    const { email, success, failure_reason, device_type, browser, os, profile_id } = req.body || {};
-    const m = clientMeta(req);
-    const { recordLogin, raiseSecurityAlert } = governance;
+// NOTE: The public POST /api/admin/login-history/log handler lives in
+// server.js and is intentionally mounted WITHOUT requireAdmin so that FAILED
+// logins (where no session/JWT exists yet) can still be recorded. It used to
+// be duplicated here as well, but because router.use(requireAdmin) at the top
+// of this file gates every route, that duplicate intercepted the request and
+// returned 401 before the public handler could run — leaving login_history
+// empty and breaking the Sessions / Login History pages. The handler is now
+// defined ONLY in server.js.
 
-    // Resolve the profile id from the email if not supplied.
-    let pid = profile_id || null;
-    if (!pid && email) {
-      const { data: prof } = await supabase.from('profiles').select('id, role, is_active').ilike('email', email).maybeSingle();
-      pid = prof?.id || null;
-    }
-
-    await recordLogin({ profileId: pid, email, success: !!success, failureReason: failure_reason, req });
-
-    // Disabled-account login attempt → critical alert
-    if (success === false && pid) {
-      const { data: prof } = await supabase.from('profiles').select('is_active').eq('id', pid).maybeSingle();
-      if (prof && prof.is_active === false) {
-        await raiseSecurityAlert({
-          alertType: 'disabled_account_login', severity: 'critical',
-          title: 'Disabled account login attempt',
-          description: `Account ${email || pid} attempted to log in while disabled.`,
-          profileId: pid, email, ip: m.ip, device: device_type,
-        });
-      }
-    }
-
-    // Failed-login burst detection (≥3 failures from same IP in 10 min)
-    if (success === false && m.ip) {
-      const since = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-      const { count } = await supabase.from('login_history').select('id', { count: 'exact', head: true }).eq('ip_address', m.ip).eq('success', false).gte('created_at', since);
-      if ((count || 0) >= 3) {
-        await raiseSecurityAlert({
-          alertType: 'multiple_failed_logins', severity: 'high',
-          title: 'Multiple failed login attempts',
-          description: `${count} failed logins from ${m.ip} in the last 10 minutes.`,
-          profileId: pid, email, ip: m.ip, device: device_type,
-        });
-      }
-    }
-
-    // Also write a LOGIN audit entry (best-effort) for the audit trail.
-    try {
-      await supabase.from('audit_logs').insert({
-        actor_id: pid || null,
-        action: success ? 'LOGIN_SUCCESS' : 'LOGIN_FAILED',
-        target_model: 'auth',
-        metadata: { email, device_type, browser, os, failure_reason: failure_reason || null },
-        ip_address: m.ip,
-        user_agent: m.userAgent,
-      });
-    } catch (_) {}
-
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
 
 /**
  * POST /api/v1/admin/notifications/broadcast
