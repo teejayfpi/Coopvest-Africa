@@ -18,7 +18,19 @@ const referralService = require('../services/referralService');
 const qrCodeService = require('../services/qrCodeService');
 const logger = require('../utils/logger');
 
-const LOAN_TYPES = ['Quick Loan', 'Micro Loan', 'Business Loan', 'Emergency Loan'];
+const LOAN_TYPES = [
+  // Mobile app loan types
+  'Quick Loan',
+  'Flexi Loan',
+  'Stable Loan (12 months)',
+  'Stable Loan (18 months)',
+  'Premium Loan',
+  'Maxi Loan',
+  // Legacy types
+  'Micro Loan',
+  'Business Loan',
+  'Emergency Loan',
+];
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -100,7 +112,7 @@ router.post(
         referral_bonus_percent: calc.referralBonusPercent,
         effective_interest_rate: calc.effectiveInterestRate,
         monthly_repayment: calc.monthlyRepaymentAfterBonus,
-        total_repayment: calc.monthlyRepaymentAfterBonus * tenureMonths,
+        total_repayment: calc.totalRepayment,
         savings_from_bonus: calc.totalSavingsFromBonus,
         status: 'pending',
       };

@@ -17,6 +17,7 @@ const { requireAdmin } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const logger = require('../utils/logger');
 const governance = require('./governance');
+const referralService = require('../services/referralService');
 
 // Apply requireAdmin to ALL routes in this router since they all require authentication
 router.use(requireAdmin);
@@ -529,21 +530,31 @@ router.get('/loans', async (req, res) => {
     // for backward compatibility.
     const loansArr = (data || []).map((l) => {
       const profile = l.profile || {};
+      const amount = Number(l.amount || 0);
+      const tenureMonths = l.tenure_months ?? 0;
+      const loanType = l.loan_type ?? null;
+      const bonusPercent = l.referral_bonus_percent != null ? Number(l.referral_bonus_percent) : 0;
+      // Recompute interest with the mobile-aligned formula so every loan
+      // (including legacy ones created under the old rate table) displays the
+      // same figures the member sees in the app.
+      const calc = (loanType && tenureMonths > 0)
+        ? referralService.calculateInterestWithBonus(loanType, amount, tenureMonths, bonusPercent)
+        : null;
       return {
         ...l,
         profile: undefined,
         id: l.id,
         loanId: l.loan_id,
-        loanType: l.loan_type ?? null,
+        loanType,
         memberId: profile.user_id || l.profile_id,
         memberIdProfile: l.profile_id,
         memberName: profile.name || '',
         memberEmail: profile.email || null,
         memberPhone: profile.phone || null,
-        amount: Number(l.amount || 0),
+        amount,
         balance: Number(l.remaining_balance ?? l.amount ?? 0),
-        baseInterestRate: l.base_interest_rate != null ? Number(l.base_interest_rate) : null,
-        interestRate: Number(l.effective_interest_rate ?? l.base_interest_rate ?? 0),
+        baseInterestRate: calc ? calc.baseInterestRate : (l.base_interest_rate != null ? Number(l.base_interest_rate) : null),
+        interestRate: calc ? calc.effectiveInterestRate : Number(l.effective_interest_rate ?? l.base_interest_rate ?? 0),
         referralBonusPercent: l.referral_bonus_percent != null ? Number(l.referral_bonus_percent) : null,
         tenure: l.tenure_months ?? null,
         tenureMonths: l.tenure_months ?? null,
@@ -553,8 +564,8 @@ router.get('/loans', async (req, res) => {
         dueDate: l.next_due_date ?? null,
         nextPaymentDate: l.next_due_date ?? null,
         nextDueDate: l.next_due_date ?? null,
-        monthlyPayment: l.monthly_repayment ?? null,
-        totalRepayment: l.total_repayment ?? null,
+        monthlyPayment: calc ? calc.monthlyRepaymentAfterBonus : (l.monthly_repayment ?? null),
+        totalRepayment: calc ? calc.totalRepayment : (l.total_repayment ?? null),
         remainingBalance: l.remaining_balance ?? null,
         rejectionReason: l.rejected_reason ?? null,
         createdAt: l.created_at,
