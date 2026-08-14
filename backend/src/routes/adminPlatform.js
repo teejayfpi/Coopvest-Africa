@@ -619,7 +619,7 @@ router.get('/documents', async (req, res) => {
     if (req.query.type) q = q.eq('document_type', req.query.type);
     if (req.query.status) q = q.eq('status', req.query.status);
     const { data, error, count } = await q.order('uploaded_at', { ascending: false }).range((p - 1) * l, p * l - 1);
-    if (error && /relation .* does not exist|PGRST/i.test(error.message)) {
+    if (error && /relation .* does not exist|Could not find|PGRST/i.test(error.message || '') || (error && /^42/i.test(error.code || ''))) {
       return res.json({ success: true, documents: [], pagination: { page: p, limit: l, total: 0 }, fallback: true });
     }
     if (error) throw error;
