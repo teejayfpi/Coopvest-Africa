@@ -298,16 +298,14 @@ app.use('/api/payment-proofs', paymentProofRoutes);
 app.use('/api/kyc', kycAdminRoutes);
 app.use('/api', featuresRoutes);
 app.use('/api/mobile-features', featuresRoutes);
-// Admin API routes mounted at /api/admin AFTER other routes to avoid conflicts
-// Provides /api/admin/dashboard/*, /api/admin/contributions/monthly, /api/admin/loans/status-breakdown
-app.use('/api/admin', adminApiRoutes);
-
 // ─────────────────────────────────────────────────────────────────────────────
-// PUBLIC login-event recorder (no JWT) — the dashboard login page calls this
-// immediately after every Supabase auth attempt, including FAILED attempts
-// where no session token exists yet. Mounted AFTER the guarded /api/admin
-// router, but as a POST it does not shadow the guarded GET /login-history/log.
-// It is intentionally unauthenticated so failed logins can be recorded.
+// PUBLIC login-event recorder (no JWT) — MUST be registered BEFORE the guarded
+// /api/admin router below. The adminApi router applies router.use(requireAdmin)
+// to every request that enters it, so if this route were registered after the
+// mount (or inside the router), failed logins — where no session token exists
+// yet — would be rejected with 401 and login_history would stay empty, breaking
+// the Sessions / Login History pages. Registering it first lets Express match
+// the POST here before the guarded router ever runs.
 // ─────────────────────────────────────────────────────────────────────────────
 app.post('/api/admin/login-history/log', async (req, res) => {
   try {
@@ -366,6 +364,11 @@ app.post('/api/admin/login-history/log', async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
+
+// Admin API routes mounted at /api/admin AFTER other routes to avoid conflicts
+// Provides /api/admin/dashboard/*, /api/admin/contributions/monthly, /api/admin/loans/status-breakdown
+app.use('/api/admin', adminApiRoutes);
+
 // Security & Access page routes (consumed by /pages/security-access). Mounted
 // at /api/security so the frontend's relative calls resolve.
 app.use('/api/security', securityRoutes);
