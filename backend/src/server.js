@@ -323,6 +323,14 @@ app.post('/api/admin/login-history/log', async (req, res) => {
 
     await recordLogin({ profileId: pid, email, success: !!success, failureReason: failure_reason, req });
 
+    // TEMP DIAGNOSTIC: surface the login_history insert result so we can see
+    // why records aren't appearing. Returns only when ?debug=1 is present.
+    let debugInfo = null;
+    if (req.query.debug === '1') {
+      const probe = await supabase.from('login_history').select('id').limit(1);
+      debugInfo = { probeError: probe.error ? probe.error.message : null, rowCount: probe.data ? probe.data.length : null };
+    }
+
     if (success === false && pid) {
       const { data: prof } = await supabase.from('profiles').select('is_active').eq('id', pid).maybeSingle();
       if (prof && prof.is_active === false) {
@@ -359,7 +367,7 @@ app.post('/api/admin/login-history/log', async (req, res) => {
       });
     } catch (_) {}
 
-    res.json({ success: true });
+    res.json({ success: true, debug: debugInfo });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
