@@ -114,26 +114,27 @@ async function raiseSecurityAlert({ alertType, severity = 'medium', title, descr
 }
 
 // Record a login event to login_history (best-effort, never throws).
+//
+// NOTE: the production login_history table currently exposes only these
+// columns: id, profile_id, success, failure_reason, ip_address, user_agent,
+// device_type, location, created_at (migration 012's ADD COLUMNs for email,
+// device_name, os, browser, app_version, login_method, mfa_used, session_id
+// were never applied to prod). Inserting any of those missing columns makes
+// PostgREST reject the whole insert with PGRST204, which silently empties the
+// sessions / login-history pages. Only insert columns that exist; the extra
+// device detail is still recoverable from user_agent on read.
 async function recordLogin({ profileId, email, success, failureReason, req, mfaUsed = false, loginMethod = 'password', sessionId = null }) {
   try {
     const m = clientMeta(req);
     const now = new Date();
     const { error } = await supabase.from('login_history').insert({
       profile_id: profileId || null,
-      email: email || null,
       success: !!success,
       failure_reason: success ? null : failureReason || null,
       ip_address: m.ip || null,
       user_agent: m.userAgent || null,
       device_type: m.device,
-      device_name: m.device,
-      os: m.os,
-      browser: m.browser,
-      app_version: req.headers['app-version'] || null,
       location: approxLocation(m.ip),
-      login_method: loginMethod,
-      mfa_used: !!mfaUsed,
-      session_id: sessionId,
       created_at: now.toISOString(),
     });
     if (error) logger.warn('login_history insert failed:', error.message);

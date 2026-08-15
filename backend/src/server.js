@@ -323,22 +323,6 @@ app.post('/api/admin/login-history/log', async (req, res) => {
 
     await recordLogin({ profileId: pid, email, success: !!success, failureReason: failure_reason, req });
 
-    // TEMP DIAGNOSTIC: probe which login_history columns actually exist in the
-    // PostgREST schema cache, so we can make recordLogin insert only valid
-    // columns. Returns only when ?debug=1 is present.
-    let debugInfo = null;
-    if (req.query.debug === '1') {
-      const cols = ['id', 'user_id', 'email', 'profile_id', 'success', 'failure_reason',
-        'ip_address', 'user_agent', 'device_type', 'device_name', 'os', 'browser',
-        'app_version', 'location', 'login_method', 'mfa_used', 'session_id', 'created_at'];
-      const present = [];
-      for (const c of cols) {
-        const r = await supabase.from('login_history').select(c).limit(1);
-        if (!r.error) present.push(c);
-      }
-      debugInfo = { presentColumns: present };
-    }
-
     if (success === false && pid) {
       const { data: prof } = await supabase.from('profiles').select('is_active').eq('id', pid).maybeSingle();
       if (prof && prof.is_active === false) {
@@ -375,7 +359,7 @@ app.post('/api/admin/login-history/log', async (req, res) => {
       });
     } catch (_) {}
 
-    res.json({ success: true, debug: debugInfo });
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
