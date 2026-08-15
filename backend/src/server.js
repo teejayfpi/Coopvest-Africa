@@ -323,27 +323,20 @@ app.post('/api/admin/login-history/log', async (req, res) => {
 
     await recordLogin({ profileId: pid, email, success: !!success, failureReason: failure_reason, req });
 
-    // TEMP DIAGNOSTIC: perform a direct insert into login_history and surface
-    // the exact PostgREST error so we can see why recordLogin's insert is
-    // silently failing. Returns only when ?debug=1 is present.
+    // TEMP DIAGNOSTIC: probe which login_history columns actually exist in the
+    // PostgREST schema cache, so we can make recordLogin insert only valid
+    // columns. Returns only when ?debug=1 is present.
     let debugInfo = null;
     if (req.query.debug === '1') {
-      const ins = await supabase.from('login_history').insert({
-        profile_id: pid || null,
-        email: email || null,
-        success: !!success,
-        ip_address: ip || null,
-        user_agent: ua || null,
-        created_at: new Date().toISOString(),
-      }).select('id');
-      const probe = await supabase.from('login_history').select('id').limit(1);
-      debugInfo = {
-        insertError: ins.error ? ins.error.message : null,
-        insertCode: ins.error ? ins.error.code : null,
-        insertData: ins.data,
-        probeError: probe.error ? probe.error.message : null,
-        rowCount: probe.data ? probe.data.length : null,
-      };
+      const cols = ['id', 'user_id', 'email', 'profile_id', 'success', 'failure_reason',
+        'ip_address', 'user_agent', 'device_type', 'device_name', 'os', 'browser',
+        'app_version', 'location', 'login_method', 'mfa_used', 'session_id', 'created_at'];
+      const present = [];
+      for (const c of cols) {
+        const r = await supabase.from('login_history').select(c).limit(1);
+        if (!r.error) present.push(c);
+      }
+      debugInfo = { presentColumns: present };
     }
 
     if (success === false && pid) {
