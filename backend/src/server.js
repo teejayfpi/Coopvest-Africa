@@ -323,12 +323,27 @@ app.post('/api/admin/login-history/log', async (req, res) => {
 
     await recordLogin({ profileId: pid, email, success: !!success, failureReason: failure_reason, req });
 
-    // TEMP DIAGNOSTIC: surface the login_history insert result so we can see
-    // why records aren't appearing. Returns only when ?debug=1 is present.
+    // TEMP DIAGNOSTIC: perform a direct insert into login_history and surface
+    // the exact PostgREST error so we can see why recordLogin's insert is
+    // silently failing. Returns only when ?debug=1 is present.
     let debugInfo = null;
     if (req.query.debug === '1') {
+      const ins = await supabase.from('login_history').insert({
+        profile_id: pid || null,
+        email: email || null,
+        success: !!success,
+        ip_address: ip || null,
+        user_agent: ua || null,
+        created_at: new Date().toISOString(),
+      }).select('id');
       const probe = await supabase.from('login_history').select('id').limit(1);
-      debugInfo = { probeError: probe.error ? probe.error.message : null, rowCount: probe.data ? probe.data.length : null };
+      debugInfo = {
+        insertError: ins.error ? ins.error.message : null,
+        insertCode: ins.error ? ins.error.code : null,
+        insertData: ins.data,
+        probeError: probe.error ? probe.error.message : null,
+        rowCount: probe.data ? probe.data.length : null,
+      };
     }
 
     if (success === false && pid) {
