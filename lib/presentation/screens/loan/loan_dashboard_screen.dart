@@ -269,6 +269,8 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
           Text(
             value,
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: context.textPrimary),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 2),
           Text(
@@ -277,6 +279,8 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
               color: context.textSecondary,
               fontSize: 12,
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
@@ -309,6 +313,8 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
                       Text(
                         loanType,
                         style: TextStyle(fontWeight: FontWeight.bold, color: context.textPrimary),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                       Text(
                         'Loan ID: ${loan.id}',
@@ -316,6 +322,8 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
                           color: context.textSecondary,
                           fontSize: 12,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),

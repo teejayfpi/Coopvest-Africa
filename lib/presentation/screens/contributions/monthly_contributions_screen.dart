@@ -533,7 +533,7 @@ class _MonthlyContributionsScreenState
                         ),
                       ),
                       Text(
-                        'N${contribution.amount.formatNumber()}',
+                        '₦${contribution.amount.formatNumber()}',
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
