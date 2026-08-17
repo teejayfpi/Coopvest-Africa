@@ -158,6 +158,8 @@ class LoanData {
   final String status;
   final String purpose;
   final String? qrCode;
+  final int guarantorsAccepted;
+  final int guarantorsRequired;
   final DateTime createdAt;
 
   LoanData({
@@ -171,6 +173,8 @@ class LoanData {
     required this.status,
     required this.purpose,
     this.qrCode,
+    this.guarantorsAccepted = 0,
+    this.guarantorsRequired = 3,
     required this.createdAt,
   });
 
@@ -186,6 +190,8 @@ class LoanData {
       status: json['status'] as String? ?? '',
       purpose: json['purpose'] as String? ?? '',
       qrCode: json['qr_code'] as String?,
+      guarantorsAccepted: json['guarantors_accepted'] as int? ?? 0,
+      guarantorsRequired: json['guarantors_required'] as int? ?? 3,
       createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt'] as String) : DateTime.now(),
     );
   }

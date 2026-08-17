@@ -227,7 +227,44 @@ router.get('/', authenticate, async (req, res) => {
       .eq('profile_id', req.user.id)
       .order('created_at', { ascending: false });
     if (error) throw error;
-    res.json({ success: true, loans: data || [], total: (data || []).length });
+
+    const loans = data || [];
+
+    // Attach live guarantor progress to each loan so the borrower's app can
+    // show "X of 3 guarantors approved" and keep the session visible until all
+    // 3 consent (or the borrower cancels). Batch-fetched to avoid N+1 queries.
+    if (loans.length) {
+      const loanIds = loans.map((l) => l.id);
+
+      // Count consented guarantors per loan.
+      const { data: guarantorRows } = await supabase
+        .from('loan_guarantors')
+        .select('loan_id, status')
+        .in('loan_id', loanIds);
+      const consentedByLoan = {};
+      (guarantorRows || []).forEach((g) => {
+        if (g.status === 'consented') {
+          consentedByLoan[g.loan_id] = (consentedByLoan[g.loan_id] || 0) + 1;
+        }
+      });
+
+      // Required count lives on loan_qrs (defaults to 3).
+      const { data: qrRows } = await supabase
+        .from('loan_qrs')
+        .select('loan_id, guarantors_required')
+        .in('loan_id', loanIds);
+      const requiredByLoan = {};
+      (qrRows || []).forEach((q) => {
+        requiredByLoan[q.loan_id] = q.guarantors_required || 3;
+      });
+
+      loans.forEach((l) => {
+        l.guarantors_accepted = consentedByLoan[l.id] || 0;
+        l.guarantors_required = requiredByLoan[l.id] || 3;
+      });
+    }
+
+    res.json({ success: true, loans, total: loans.length });
   } catch (err) {
     logger.error('Error getting loans:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -410,7 +447,24 @@ router.get(
   validate,
   verifyLoanOwnership,
   async (req, res) => {
-    res.json({ success: true, loan: req.loan });
+    const loan = req.loan;
+    // Attach live guarantor progress (consented count + required) so the
+    // borrower's app can render "X of 3 guarantors approved".
+    try {
+      const { count: accepted } = await supabase
+        .from('loan_guarantors')
+        .select('id', { count: 'exact', head: true })
+        .eq('loan_id', loan.id)
+        .eq('status', 'consented');
+      const { data: qrRow } = await supabase
+        .from('loan_qrs')
+        .select('guarantors_required')
+        .eq('loan_id', loan.id)
+        .maybeSingle();
+      loan.guarantors_accepted = accepted || 0;
+      loan.guarantors_required = (qrRow && qrRow.guarantors_required) || 3;
+    } catch (_) { /* leave defaults if lookup fails */ }
+    res.json({ success: true, loan });
   }
 );
 
