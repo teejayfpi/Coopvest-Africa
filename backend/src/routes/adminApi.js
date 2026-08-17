@@ -558,6 +558,14 @@ router.get('/loans', async (req, res) => {
       .order('created_at', { ascending: false })
       .range(from, to);
     if (req.query.status) q = q.eq('status', req.query.status);
+    else {
+      // By default, hide 'pending' loans — they are still gathering guarantor
+      // consents and are not ready for admin review. A loan only becomes
+      // admin-visible once all guarantors have consented and its status is
+      // promoted to 'under_review' (see guarantor.js -> promoteLoanIfReady).
+      // Admins can still query ?status=pending explicitly to inspect them.
+      q = q.neq('status', 'pending');
+    }
     if (req.query.loanType) q = q.eq('loan_type', req.query.loanType);
     if (req.query.profileId) q = q.eq('profile_id', req.query.profileId);
     else if (req.query.memberId) q = q.eq('profile_id', req.query.memberId);
@@ -1001,7 +1009,7 @@ router.get('/loans/portfolio-summary', async (req, res) => {
       defaultedCount: loansData.filter(l =>
         ['active', 'disbursed'].includes(l.status) && l.next_due_date && new Date(l.next_due_date) < now
       ).length,
-      pendingCount: loansData.filter(l => l.status === 'pending').length,
+      pendingCount: loansData.filter(l => l.status === 'under_review' || l.status === 'pending').length,
     };
 
     res.json({ success: true, data: summary });
@@ -2296,6 +2304,7 @@ router.get('/loans/status-breakdown', async (req, res) => {
 
     const breakdown = {
       pending: { count: 0, amount: 0 },
+      under_review: { count: 0, amount: 0 },
       approved: { count: 0, amount: 0 },
       disbursed: { count: 0, amount: 0 },
       active: { count: 0, amount: 0 },

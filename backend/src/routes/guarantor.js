@@ -23,6 +23,48 @@ const logger = require('../utils/logger');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+const GUARANTORS_REQUIRED = 3;
+
+/**
+ * Promote a loan from 'pending' to 'under_review' once all required guarantors
+ * have consented. The Admin Dashboard only surfaces 'under_review' (and later)
+ * loans for final approval, so a loan stays invisible to admins while it is
+ * still gathering guarantor consents.
+ *
+ * Safe to call after every consent: it only flips 'pending' loans and only
+ * when the consented count meets the required threshold.
+ */
+async function promoteLoanIfReady(loanId, now = new Date().toISOString()) {
+  if (!loanId) return;
+  try {
+    const { count: consentedCount } = await supabase
+      .from('loan_guarantors')
+      .select('id', { count: 'exact', head: true })
+      .eq('loan_id', loanId)
+      .eq('status', 'consented');
+
+    const required = GUARANTORS_REQUIRED; // loan_qrs.guarantors_required defaults to 3
+    if ((consentedCount || 0) >= required) {
+      // Only flip loans still gathering guarantors; leave later statuses alone.
+      const { data: loan } = await supabase
+        .from('loans')
+        .select('status')
+        .eq('id', loanId)
+        .maybeSingle();
+      if (loan && loan.status === 'pending') {
+        await supabase
+          .from('loans')
+          .update({ status: 'under_review', updated_at: now })
+          .eq('id', loanId)
+          .neq('status', 'under_review');
+        logger.info(`[guarantor] loan ${loanId} promoted to under_review (${consentedCount}/${required} guarantors consented)`);
+      }
+    }
+  } catch (err) {
+    logger.warn(`[guarantor] promoteLoanIfReady failed for ${loanId}:`, err.message);
+  }
+}
+
 /**
  * Resolve a loanId param to the canonical UUID (loans.id).
  * Accepts:
@@ -367,6 +409,10 @@ router.post(
         metadata: { loanId: row.loan_id },
       }).then(() => {}, () => {});
 
+      // If this consent completes the guarantor set, promote the loan so the
+      // Admin Dashboard can surface it for final approval.
+      await promoteLoanIfReady(row.loan_id, now);
+
       res.json({ success: true, message: 'Guarantee accepted successfully' });
     } catch (err) {
       logger.error('Error accepting guarantor request:', err);
@@ -660,6 +706,10 @@ router.post(
         target_id: loanId,
         metadata: { loanId, guarantorName: guarantor_name },
       }).then(() => {}, () => {});
+
+      // If this consent completes the guarantor set, promote the loan so the
+      // Admin Dashboard can surface it for final approval.
+      await promoteLoanIfReady(loanId, now);
 
       res.json({
         success: true,
