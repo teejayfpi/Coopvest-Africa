@@ -1219,7 +1219,8 @@ router.get('/contributions', async (req, res) => {
       .order('created_at', { ascending: false })
       .range(from, to);
     if (req.query.status) q = q.eq('status', req.query.status);
-    if (req.query.memberId) q = q.eq('profile_id', req.query.memberId);
+    if (req.query.profileId) q = q.eq('profile_id', req.query.profileId);
+    else if (req.query.memberId) q = q.eq('profile_id', req.query.memberId);
     const { data, error, count } = await q;
     if (error) throw error;
 
