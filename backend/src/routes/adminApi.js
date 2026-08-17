@@ -513,6 +513,40 @@ router.patch(
 );
 
 /**
+ * POST /api/v1/admin/members/:id/reset-password
+ * Admin triggers a password-reset email for a member. The member receives a
+ * Supabase recovery email and sets a new password themselves. The acting
+ * admin is logged. Uses the service-role client (same as /auth/request-
+ * password-reset) so it works without an anon-key client.
+ */
+router.post('/members/:id/reset-password', async (req, res) => {
+  try {
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, email, name')
+      .eq('id', req.params.id)
+      .maybeSingle();
+    if (profileError) throw profileError;
+    if (!profile) return res.status(404).json({ success: false, error: 'Member not found' });
+    if (!profile.email) return res.status(400).json({ success: false, error: 'Member has no email on file' });
+
+    const redirectTo = process.env.PASSWORD_RESET_REDIRECT_URL || 'https://admin-dashboard-api-server.vercel.app/reset-password';
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(profile.email.toLowerCase(), { redirectTo });
+
+    if (resetError) {
+      logger.warn('Admin-initiated password reset email failed:', resetError.message);
+      return res.status(502).json({ success: false, error: 'Could not send reset email. Please try again.' });
+    }
+
+    await logAdminAction('MEMBER_PASSWORD_RESET', { model: 'Profile', id: profile.id }, { email: profile.email });
+    res.json({ success: true, message: 'Password reset email sent to member.' });
+  } catch (err) {
+    logger.error('admin reset-password error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * GET /api/v1/admin/loans
  */
 router.get('/loans', async (req, res) => {
