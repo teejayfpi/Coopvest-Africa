@@ -15,7 +15,9 @@ Loan _convertLoanDataToLoan(LoanData data) {
     tenure: data.tenure,
     interestRate: data.interestRate,
     monthlyRepayment: data.monthlyRepayment,
-    totalRepayment: data.monthlyRepayment * data.tenure,
+    totalRepayment: data.totalRepayment > 0
+        ? data.totalRepayment
+        : data.monthlyRepayment * data.tenure,
     status: data.status,
     purpose: data.purpose,
     guarantorsAccepted: 0,
@@ -24,6 +26,7 @@ Loan _convertLoanDataToLoan(LoanData data) {
     updatedAt: data.createdAt,
     approvedAt: null,
     disbursedAt: null,
+    remainingBalance: data.remainingBalance,
   );
 }
 
