@@ -248,19 +248,31 @@ router.get('/', authenticate, async (req, res) => {
         }
       });
 
-      // Required count lives on loan_qrs (defaults to 3).
+      // Required count + the persisted QR image/data live on loan_qrs. Fetch the
+      // latest QR row per loan so the app can re-share the same QR with the
+      // remaining guarantors after being closed.
       const { data: qrRows } = await supabase
         .from('loan_qrs')
-        .select('loan_id, guarantors_required')
-        .in('loan_id', loanIds);
+        .select('loan_id, qr_id, qr_code, qr_data, guarantors_required, expires_at, status')
+        .in('loan_id', loanIds)
+        .order('created_at', { ascending: false });
       const requiredByLoan = {};
+      const latestQrByLoan = {};
       (qrRows || []).forEach((q) => {
         requiredByLoan[q.loan_id] = q.guarantors_required || 3;
+        // Keep only the most recent QR row per loan.
+        if (!latestQrByLoan[q.loan_id]) latestQrByLoan[q.loan_id] = q;
       });
 
       loans.forEach((l) => {
+        const qr = latestQrByLoan[l.id];
         l.guarantors_accepted = consentedByLoan[l.id] || 0;
         l.guarantors_required = requiredByLoan[l.id] || 3;
+        l.qr_id = qr ? qr.qr_id : null;
+        l.qr_code = qr ? qr.qr_code : null;
+        l.qr_data = qr ? qr.qr_data : null;
+        l.qr_expires_at = qr ? qr.expires_at : null;
+        l.qr_status = qr ? qr.status : null;
       });
     }
 
