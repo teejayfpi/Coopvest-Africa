@@ -173,6 +173,25 @@ router.post(
       if (existingQrError) throw existingQrError;
 
       if (existingQr) {
+        // Self-heal QRs minted before the compact-payload fix: their images
+        // encode the full signed loan record and are too dense to scan.
+        // Re-render from just the lookup keys and persist the fixed image.
+        // Already-compact QRs re-render byte-identically, so no DB write.
+        let qrImage = existingQr.qr_code;
+        try {
+          const rendered = await qrCodeService.renderLoanQrImage(existingQr.qr_id, loan.id);
+          if (rendered && rendered !== existingQr.qr_code) {
+            const { error: healErr } = await supabase
+              .from('loan_qrs')
+              .update({ qr_code: rendered })
+              .eq('qr_id', existingQr.qr_id);
+            if (healErr) throw healErr;
+            qrImage = rendered;
+          }
+        } catch (healErr) {
+          logger.warn('QR self-heal render failed, serving stored image:', healErr.message || healErr);
+        }
+
         const found = existingQr.guarantors_found || 0;
         const required = existingQr.guarantors_required || 3;
         return res.json({
@@ -182,7 +201,7 @@ router.post(
             id: existingQr.qr_id,
             loanId,
             expiresAt: existingQr.expires_at,
-            qrCode: existingQr.qr_code,
+            qrCode: qrImage,
             data: existingQr.qr_data,
           },
           progress: {
