@@ -8,6 +8,7 @@ import '../../../presentation/widgets/common/cards.dart';
 import '../kyc/kyc_employment_details_screen.dart';
 import '../kyc/kyc_bank_info_screen.dart';
 import '../support/support_home_screen.dart';
+import '../support/live_chat_screen.dart';
 import '../security/security_settings_screen.dart';
 import '../membership/membership_screen.dart';
 import '../announcements/announcements_screen.dart';
@@ -110,11 +111,6 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
           'icon': Icons.people_outline,
           'label': 'Guarantors',
           'subtitle': 'Track pending guarantor requests',
-        },
-        {
-          'icon': Icons.upload_file_outlined,
-          'label': 'Complete KYC',
-          'subtitle': 'Verify your identity and bank details',
         },
       ],
     },
@@ -590,6 +586,11 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
       case 'Help Center':
         Navigator.of(context).push(
           MaterialPageRoute(builder: (context) => const SupportHomeScreen()),
+        );
+        break;
+      case 'Live Chat':
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (context) => const LiveChatScreen()),
         );
         break;
       case 'Share App':

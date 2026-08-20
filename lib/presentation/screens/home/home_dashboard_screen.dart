@@ -349,23 +349,26 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
                     ),
 
                     const SizedBox(height: 24),
-                    
-                    // Insights & Loan Status
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          flex: 3,
-                          child: _buildInsightsCard(context, walletState, contributionState),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          flex: 2,
-                          child: _buildLoanStatusCard(context, loansState),
-                        ),
-                      ],
-                    ),
-                    
+
+                    // Insights & Loan Status — replaced by the full-width
+                    // Contribution Summary card below. Kept commented for easy
+                    // re-enable.
+                    // Row(
+                    //   crossAxisAlignment: CrossAxisAlignment.start,
+                    //   children: [
+                    //     Expanded(
+                    //       flex: 3,
+                    //       child: _buildInsightsCard(context, walletState, contributionState),
+                    //     ),
+                    //     const SizedBox(width: 12),
+                    //     Expanded(
+                    //       flex: 2,
+                    //       child: _buildLoanStatusCard(context, loansState),
+                    //     ),
+                    //   ],
+                    // ),
+                    _buildContributionSummaryCard(context, user),
+
                     const SizedBox(height: 28),
                     
                     // Notifications Section - Real-time from provider
@@ -1098,6 +1101,96 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
     }
   }
 
+  /// Full-width summary of the member's contribution history — replaces the
+  /// old side-by-side "Insights" + "Loan Status" cards with something that is
+  /// actually informative: member-since, lifetime total, average, best month
+  /// and contribution count, pulled from GET /insights/contributions.
+  Widget _buildContributionSummaryCard(BuildContext context, User? user) {
+    return FutureBuilder<InsightsData>(
+      future: ref.read(insightsRepositoryProvider).getInsights(months: 6),
+      builder: (context, snapshot) {
+        final data = snapshot.data;
+        final memberSince = user?.createdAt;
+
+        Widget summaryRow(String label, String value, {Color? color}) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(label, style: TextStyle(color: context.textSecondary, fontSize: 13)),
+                Text(
+                  value,
+                  style: TextStyle(fontWeight: FontWeight.bold, color: color ?? context.textPrimary, fontSize: 13),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: context.cardBackground,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: CoopvestColors.primary.withOpacity(0.06),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
+              BoxShadow(
+                color: Colors.black.withOpacity(0.03),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+            border: Border.all(
+              color: CoopvestColors.primary.withOpacity(0.06),
+              width: 1,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Contribution Summary',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: context.textPrimary, letterSpacing: -0.3),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: CoopvestColors.primary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(Icons.trending_up, color: CoopvestColors.primary, size: 18),
+                  ),
+                ],
+              ),
+              if (snapshot.connectionState != ConnectionState.done) ...[
+                const SizedBox(height: 16),
+                const Center(child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))),
+              ] else ...[
+                const SizedBox(height: 14),
+                if (memberSince != null)
+                  summaryRow('Member since', '${memberSince.day}/${memberSince.month}/${memberSince.year}'),
+                summaryRow('Lifetime contributions', '₦${(data?.totalContributions ?? 0).formatNumber()}'),
+                summaryRow('Average contribution', '₦${(data?.averageContribution ?? 0).formatNumber()}'),
+                summaryRow('Best month', '₦${(data?.highestContribution ?? 0).formatNumber()}'),
+                summaryRow('Contributions made', '${data?.contributionCount ?? 0}'),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // ignore: unused_element
   Widget _buildInsightsCard(BuildContext context, WalletState walletState, ContributionState contributionState) {
     final summary = contributionState.summary;
     final totalThisMonth = summary?.totalThisMonth ?? 0.0;
