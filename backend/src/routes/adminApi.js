@@ -824,7 +824,7 @@ router.get('/tickets', async (req, res) => {
     const { page, limit, from, to } = paging(req);
     let q = supabase
       .from('tickets')
-      .select('*, profile:profiles(id, user_id, name, email)', { count: 'exact' })
+      .select('*, profile:profiles!profile_id(id, user_id, name, email)', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(from, to);
     if (req.query.status) q = q.eq('status', req.query.status);
@@ -844,7 +844,7 @@ router.get('/tickets/:id', [param('id').isUUID()], validate, async (req, res) =>
   try {
     const { data: ticket, error } = await supabase
       .from('tickets')
-      .select('*, profile:profiles(id, user_id, name, email)')
+      .select('*, profile:profiles!profile_id(id, user_id, name, email)')
       .eq('id', req.params.id)
       .maybeSingle();
     if (error) throw error;
@@ -1503,7 +1503,9 @@ router.get('/support', async (req, res) => {
     
     let query = supabase
       .from('tickets')
-      .select('*, profile:profiles(id, user_id, name, email)', { count: 'exact' })
+      // Hint the member FK: tickets has 3 FKs to profiles (profile_id,
+      // assigned_staff_id, resolved_by), so an unhinted embed fails (PGRST201).
+      .select('*, profile:profiles!profile_id(id, user_id, name, email)', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(from, to);
     
@@ -1546,7 +1548,7 @@ router.get('/support/:id', [param('id').isUUID()], validate, async (req, res) =>
   try {
     const { data: ticket, error } = await supabase
       .from('tickets')
-      .select('*, profile:profiles(id, user_id, name, email)')
+      .select('*, profile:profiles!profile_id(id, user_id, name, email)')
       .eq('id', req.params.id)
       .maybeSingle();
     if (error) throw error;
