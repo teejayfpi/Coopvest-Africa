@@ -251,7 +251,14 @@ class _LiveChatScreenState extends ConsumerState<LiveChatScreen> {
   }
 
   Widget _buildBubble(Map<String, dynamic> message) {
-    final isMine = message['senderType'] == 'user';
+    // Own messages (member-authored) sit on the right; support team replies on
+    // the left. Prefer authorRole — senderType is 'user' for any message whose
+    // authorId equals the viewer's own id, which mislabels admin replies sent
+    // by a member account that also has staff privileges.
+    final role = (message['authorRole'] ?? '').toString().toLowerCase();
+    final isMine = role.isEmpty
+        ? message['senderType'] == 'user'
+        : !(role == 'staff' || role == 'admin' || role == 'system');
     final content = (message['content'] ?? message['body'] ?? '').toString();
     final createdAt = DateTime.tryParse((message['createdAt'] ?? '').toString());
 
