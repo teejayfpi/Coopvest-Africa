@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/services/kyc_submitted_cache.dart';
 import '../../data/models/kyc_models.dart';
 import '../providers/auth_provider.dart';
 import '../providers/kyc_provider.dart';
@@ -31,6 +32,22 @@ class _AuthGuardState extends ConsumerState<AuthGuard> {
   int _silentRetryCount = 0;
   static const int _maxSilentRetries = 3;
 
+  /// Whether this member's "KYC submitted" flag is stored locally. Loaded
+  /// once per session; a `true` short-circuits every backend recheck so a
+  /// flaky /kyc/status response can never throw the member back into the KYC
+  /// flow after they already completed it.
+  bool _cacheChecked = false;
+  bool _cachedSubmitted = false;
+
+  Future<void> _loadCachedSubmitted(String userId) async {
+    final submitted = await KycSubmittedCache.isSubmitted(userId);
+    if (!mounted) return;
+    setState(() {
+      _cachedSubmitted = submitted;
+      _cacheChecked = true;
+    });
+  }
+
   /// Retry the KYC fetch quietly after a delay (gives a cold-starting backend
   /// time to wake). Silent retries never toggle the provider's loading status,
   /// so the dashboard stays on screen instead of flashing a spinner.
@@ -58,6 +75,32 @@ class _AuthGuardState extends ConsumerState<AuthGuard> {
     // Check if registration is complete
     if (user != null && !user.registrationCompleted) {
       return const RegistrationOnboardingScreen(registrationData: {});
+    }
+
+    // Check the local "KYC submitted" record before touching the network.
+    // Once this member has submitted KYC on this device, the dashboard is
+    // unconditional — no /kyc/status response (error or mis-mapped payload)
+    // may demote them back into the KYC flow.
+    if (!_cacheChecked) {
+      final userId = user?.id ?? '';
+      Future.microtask(() => _loadCachedSubmitted(userId));
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_cachedSubmitted) {
+      // Keep the provider warm for the rest of the app, but the gate is
+      // already decided.
+      if (!_kycInitialized) {
+        _kycInitialized = true;
+        Future.microtask(() {
+          if (mounted) {
+            ref.read(kycProvider.notifier).initializeKYC(silent: true);
+          }
+        });
+      }
+      return widget.child;
     }
 
     // Registration complete — ensure we know the member's KYC submission
@@ -102,6 +145,10 @@ class _AuthGuardState extends ConsumerState<AuthGuard> {
         // provider to loading (spinner) then back to error (dashboard),
         // trapping the app in a white-screen ↔ dashboard flicker loop after
         // every cold start while the backend was unreachable.
+        // Also seed the local cache from the profile so the next cold start
+        // skips the network entirely for this member.
+        final userId = user?.id ?? '';
+        KycSubmittedCache.markSubmitted(userId);
         _scheduleSilentKycRetry();
         return widget.child;
       }
