@@ -19,6 +19,36 @@ const logger = require('../utils/logger');
 const governance = require('./governance');
 const referralService = require('../services/referralService');
 const adminPlatform = require('./adminPlatform');
+const notifyService = require('../services/notifyService');
+
+/** Notify the loan's borrower of an approve/reject decision. Never throws. */
+async function notifyBorrowerOfDecision(loan, approve, reason) {
+  try {
+    const borrowerId = loan.borrower_id || loan.profile_id || loan.user_id;
+    if (!borrowerId) return;
+    const amount = Number(loan.amount || 0);
+    const fmt = amount ? `₦${amount.toLocaleString()}` : '';
+    if (approve) {
+      await notifyService.sendInApp({
+        profileId: borrowerId,
+        title: '🎉 Loan Approved',
+        body: `Your loan${fmt ? ` of ${fmt}` : ''} has been approved and will be disbursed shortly.`,
+        type: 'loan',
+        category: 'success',
+      });
+    } else {
+      await notifyService.sendInApp({
+        profileId: borrowerId,
+        title: 'Loan Application Update',
+        body: `Your loan application was not approved.${reason ? ` Reason: ${reason}` : ''}`,
+        type: 'loan',
+        category: 'warning',
+      });
+    }
+  } catch (e) {
+    logger.warn('notifyBorrowerOfDecision failed:', e.message);
+  }
+}
 
 // Apply requireAdmin to ALL routes in this router since they all require authentication
 router.use(requireAdmin);
@@ -701,6 +731,7 @@ router.post(
       if (error) throw error;
       if (!data) return res.status(404).json({ success: false, error: 'Loan not found' });
       await logAdminAction(`LOAN_${approve ? 'APPROVED' : 'REJECTED'}`, { model: 'Loan', id: data.id }, { reason, adminId });
+      await notifyBorrowerOfDecision(data, approve, reason);
       res.json({ success: true, loan: data, data });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
@@ -728,6 +759,7 @@ router.post('/loans/:id/approve', async (req, res) => {
     if (error) throw error;
     if (!data) return res.status(404).json({ success: false, error: 'Loan not found' });
     await logAdminAction('LOAN_APPROVED', { model: 'Loan', id: data.id }, { adminId });
+    await notifyBorrowerOfDecision(data, true, null);
     res.json({ success: true, loan: data, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -752,6 +784,7 @@ router.post('/loans/:id/reject', async (req, res) => {
     if (error) throw error;
     if (!data) return res.status(404).json({ success: false, error: 'Loan not found' });
     await logAdminAction('LOAN_REJECTED', { model: 'Loan', id: data.id }, { reason, adminId });
+    await notifyBorrowerOfDecision(data, false, reason);
     res.json({ success: true, loan: data, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -1913,7 +1946,9 @@ router.post(
       // The dashboard sends UI severities (info/warning/success/error) which
       // are not valid DB types, so store the severity in `category` and pick a
       // safe DB type here.
-      const ALLOWED_TYPES = ['announcement', 'transaction', 'loan', 'system', 'reminder', 'savings', 'kyc', 'withdrawal', 'payment', 'contribution'];
+      // Must exactly match the notifications_type_check constraint in the DB,
+      // otherwise the insert throws 23514 and the broadcast silently fails.
+      const ALLOWED_TYPES = ['transaction', 'savings', 'investment', 'loan', 'referral', 'kyc', 'system', 'promotion', 'security', 'reminder'];
       const uiType = String(type || '').toLowerCase();
       const dbType = ALLOWED_TYPES.includes(uiType) ? uiType : 'system';
       const dbCategory = category || uiType || 'info';

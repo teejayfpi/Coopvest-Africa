@@ -304,6 +304,31 @@ router.post(
         logger.warn('deposit_requests table error (non-fatal):', drErr.message);
       }
 
+      // Mirror the attached proof into payment_proofs so the member can see it
+      // under "My Proofs". Non-fatal: the deposit itself must never be blocked.
+      if (proof_url) {
+        try {
+          await supabase.from('payment_proofs').insert({
+            profile_id: req.user.id,
+            payment_type: 'monthly_contribution',
+            amount: Number(amount),
+            currency: 'NGN',
+            payment_date: payment_date || new Date().toISOString(),
+            payment_method: 'bank_transfer',
+            transaction_reference: payment_reference || null,
+            receiving_bank: bank_name || null,
+            bank_account_name: sender_account_name || null,
+            bank_account_number: sender_account_number || null,
+            proof_url,
+            proof_type: 'image',
+            member_note: description || 'Deposit with attached proof',
+            status: 'pending',
+          });
+        } catch (ppErr) {
+          logger.warn('payment_proofs mirror insert failed (non-fatal):', ppErr.message);
+        }
+      }
+
       logger.info(`Deposit request submitted for user ${req.user.id}: ₦${amount}`);
 
       // Notify admins — fire-and-forget, never blocks the response

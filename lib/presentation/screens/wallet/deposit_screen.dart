@@ -213,6 +213,7 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
       String? proofUrl = _proofUrl;
       if (_proofFile != null && proofUrl == null) {
         setState(() { _isUploadingProof = true; });
+        bool uploadFailed = false;
         try {
           final apiClient = ref.read(apiClientProvider);
           final formData = FormData.fromMap({
@@ -221,11 +222,22 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
           final uploadResp = await apiClient.dio.post('/wallet/upload-proof', data: formData);
           if (uploadResp.data['success'] == true) {
             proofUrl = uploadResp.data['url'] as String?;
+          } else {
+            uploadFailed = true;
           }
         } catch (uploadErr) {
-          // Non-fatal: continue deposit without proof
+          uploadFailed = true;
         } finally {
           setState(() { _isUploadingProof = false; });
+        }
+        if (uploadFailed && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Proof image could not be uploaded — your deposit was submitted without it. You can submit the proof again anytime from "My Proofs".'),
+              backgroundColor: CoopvestColors.warning,
+              duration: Duration(seconds: 5),
+            ),
+          );
         }
       }
 
