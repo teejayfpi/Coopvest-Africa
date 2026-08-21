@@ -367,7 +367,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
                     //     ),
                     //   ],
                     // ),
-                    _buildContributionSummaryCard(context, user),
+                    _buildContributionSummaryCard(context, user?.createdAt),
 
                     const SizedBox(height: 28),
                     
@@ -1105,12 +1105,11 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
   /// old side-by-side "Insights" + "Loan Status" cards with something that is
   /// actually informative: member-since, lifetime total, average, best month
   /// and contribution count, pulled from GET /insights/contributions.
-  Widget _buildContributionSummaryCard(BuildContext context, User? user) {
+  Widget _buildContributionSummaryCard(BuildContext context, DateTime? memberSince) {
     return FutureBuilder<InsightsData>(
       future: ref.read(insightsRepositoryProvider).getInsights(months: 6),
       builder: (context, snapshot) {
         final data = snapshot.data;
-        final memberSince = user?.createdAt;
 
         Widget summaryRow(String label, String value, {Color? color}) {
           return Padding(
