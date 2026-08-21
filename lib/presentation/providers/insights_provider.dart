@@ -2,6 +2,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/network/api_client.dart';
 import '../../core/utils/utils.dart';
 
+/// The home dashboard's "Insights" card was commented out; this provider is
+/// retained for other consumers (if any) and for re-enabling the card later.
+/// The replacement full-width summary card on the dashboard uses
+/// [insightsRepositoryProvider] directly.
+
+
 /// Insights Data Model
 class InsightsData {
   final List<double> monthlyContributions;

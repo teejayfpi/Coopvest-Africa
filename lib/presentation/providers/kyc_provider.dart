@@ -1,19 +1,33 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/services/kyc_submitted_cache.dart';
 import '../../core/utils/utils.dart';
 import '../../data/models/kyc_models.dart';
 import '../../data/repositories/kyc_repository.dart';
+import 'auth_provider.dart';
 
 /// KYC Provider
 final kycProvider = StateNotifierProvider<KYCCubit, KYCState>((ref) {
   final kycRepository = ref.watch(kycRepositoryProvider);
-  return KYCCubit(kycRepository);
+  return KYCCubit(kycRepository, ref);
 });
 
 /// KYC Cubit
 class KYCCubit extends StateNotifier<KYCState> {
   final KYCRepository _repository;
+  final Ref _ref;
 
-  KYCCubit(this._repository) : super(const KYCState());
+  KYCCubit(this._repository, this._ref) : super(const KYCState());
+
+  String get _userId => _ref.read(authProvider).user?.id ?? '';
+
+  /// Persist "this member submitted KYC" so AuthGuard never has to re-derive
+  /// it from the network on the next app start.
+  Future<void> _persistSubmitted(String? status) async {
+    if (status != null &&
+        KycSubmittedCache.submittedStatuses.contains(status.toLowerCase())) {
+      await KycSubmittedCache.markSubmitted(_userId);
+    }
+  }
 
   /// Initialize KYC.
   ///
@@ -61,6 +75,8 @@ class KYCCubit extends StateNotifier<KYCState> {
       submission: submission,
       organizations: organizations,
     );
+
+    await _persistSubmitted(submission.status);
   }
 
   /// Update personal details
@@ -274,6 +290,8 @@ class KYCCubit extends StateNotifier<KYCState> {
           submittedAt: DateTime.now(),
         ),
       );
+
+      await KycSubmittedCache.markSubmitted(_userId);
     } catch (e) {
       logger.e('Submit KYC error: $e');
       state = state.copyWith(
