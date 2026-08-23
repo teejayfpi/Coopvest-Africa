@@ -36,6 +36,7 @@ const router = express.Router();
 
 const supabase = require('../config/supabase');
 const logger = require('../utils/logger');
+const approvalRequests = require('../lib/approvalRequests');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -469,6 +470,22 @@ async function decideApproval(req, res, decision) {
     }).eq('id', id).select('*').single();
     if (error) throw error;
 
+    // Executable requests: a decided loan_approval applies to the loans table.
+    let execution = null;
+    if (d.requestType === 'loan_approval') {
+      try {
+        execution = await approvalRequests.executeLoanApprovalDecision(
+          d.payload,
+          decision === 'approved' ? 'approve' : 'reject',
+          req.user,
+          reason || null,
+        );
+      } catch (execErr) {
+        logger.error('loan_approval execution failed:', execErr.message);
+        execution = { executed: false, error: execErr.message };
+      }
+    }
+
     // Audit record
     try {
       await supabase.from('audit_logs').insert({
@@ -477,11 +494,11 @@ async function decideApproval(req, res, decision) {
         action: `approval.${decision}`,
         target_model: 'admin_approval',
         target_id: id,
-        metadata: { requestType: d.requestType, title: d.title, reason: reason || null, decidedBy: req.user.email },
+        metadata: { requestType: d.requestType, title: d.title, reason: reason || null, decidedBy: req.user.email, execution },
       });
     } catch (_) {}
 
-    res.json({ success: true, data });
+    res.json({ success: true, data, execution });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
