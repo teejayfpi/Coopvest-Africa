@@ -810,8 +810,8 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
     
     // Calculate min and max based on savings multiplier
     final minAmount = 1000.0; // Minimum loan of ₦1,000
-    // TEMP: use 10,000,000 test cap when savings is 0 (restore to memberSavings * multiplier)
-    final maxAmount = memberSavings > 0 ? memberSavings * multiplier : 10000000.0;
+    // Loan limit = savings × product multiplier (Premium 4x, Maxi 5x, others 3x)
+    final maxAmount = memberSavings * multiplier;
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
