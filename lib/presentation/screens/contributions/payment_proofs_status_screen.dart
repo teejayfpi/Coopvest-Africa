@@ -6,7 +6,6 @@ import '../../../config/theme_extension.dart';
 import '../../../core/network/api_client.dart';
 import '../../../data/api/payment_proof_api_service.dart';
 import '../../../data/models/payment_proof_model.dart';
-import 'payment_proof_upload_screen.dart';
 import '../../widgets/common/buttons.dart';
 
 /// My Payment Proofs
@@ -231,16 +230,6 @@ class _PaymentProofsStatusScreenState
         onRefresh: _loadInitial,
         child: _buildBody(),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => PaymentProofUploadScreen(),
-          ),
-        ).then((_) => _loadInitial()),
-        icon: const Icon(Icons.add),
-        label: const Text('New proof'),
-      ),
     );
   }
 
@@ -259,12 +248,9 @@ class _PaymentProofsStatusScreenState
     }
     if (_proofs.isEmpty && _summary == null) {
       return ListView(
-        children: [
-          const SizedBox(height: 120),
-          _EmptyState(onSubmit: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => PaymentProofUploadScreen()),
-          ).then((_) => _loadInitial())),
+        children: const [
+          SizedBox(height: 120),
+          _EmptyState(),
         ],
       );
     }
@@ -813,8 +799,7 @@ class _ProofImageViewer extends StatelessWidget {
 }
 
 class _EmptyState extends StatelessWidget {
-  final VoidCallback onSubmit;
-  const _EmptyState({required this.onSubmit});
+  const _EmptyState();
 
   @override
   Widget build(BuildContext context) {
@@ -837,12 +822,6 @@ class _EmptyState extends StatelessWidget {
           'verification status and digital receipt.',
           textAlign: TextAlign.center,
           style: TextStyle(color: CoopvestColors.textSecondary),
-        ),
-        const SizedBox(height: 24),
-        PrimaryButton(
-          label: 'Submit a proof',
-          icon: const Icon(Icons.add),
-          onPressed: onSubmit,
         ),
       ],
     );

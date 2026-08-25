@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
@@ -102,16 +103,20 @@ class LoanDetailsScreen extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               AppCard(
-                backgroundColor: statusColor.withOpacity(0.1),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          loan.type,
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: context.textPrimary),
+                        Expanded(
+                          child: Text(
+                            loan.type,
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: context.textPrimary),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
+                        const SizedBox(width: 12),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                           decoration: BoxDecoration(
@@ -125,13 +130,21 @@ class LoanDetailsScreen extends ConsumerWidget {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 20),
+                    Text('Amount', style: TextStyle(fontSize: 12, color: context.textSecondary)),
+                    const SizedBox(height: 4),
+                    Text(
+                      '\u20a6${loan.amount.formatNumber()}',
+                      style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: context.textPrimary),
+                    ),
                     const SizedBox(height: 16),
+                    Divider(height: 1, color: context.dividerColor),
+                    const SizedBox(height: 12),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        _buildDetailItem(context, 'Loan ID', loan.id),
-                        _buildDetailItem(context, 'Amount', '\u20a6${loan.amount.formatNumber()}'),
                         _buildDetailItem(context, 'Tenure', '${loan.tenure} months'),
+                        _buildLoanIdItem(context, loan.id),
                       ],
                     ),
                   ],
@@ -326,6 +339,44 @@ class LoanDetailsScreen extends ConsumerWidget {
         Text(label, style: TextStyle(fontSize: 12, color: context.textSecondary)),
         const SizedBox(height: 4),
         Text(value, style: TextStyle(fontWeight: FontWeight.bold, color: context.textPrimary)),
+      ],
+    );
+  }
+
+  Widget _buildLoanIdItem(BuildContext context, String loanId) {
+    final shortId = loanId.length > 6 ? '…${loanId.substring(loanId.length - 6)}' : loanId;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Text('Loan ID', style: TextStyle(fontSize: 12, color: context.textSecondary)),
+        const SizedBox(height: 4),
+        InkWell(
+          borderRadius: BorderRadius.circular(4),
+          onTap: () {
+            Clipboard.setData(ClipboardData(text: loanId));
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text('Loan ID copied to clipboard'),
+                backgroundColor: CoopvestColors.success,
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  shortId,
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.textSecondary),
+                ),
+                const SizedBox(width: 4),
+                Icon(Icons.copy_rounded, size: 14, color: context.textSecondary),
+              ],
+            ),
+          ),
+        ),
       ],
     );
   }

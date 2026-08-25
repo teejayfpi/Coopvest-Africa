@@ -13,6 +13,8 @@ import '../../../presentation/providers/payment_settings_provider.dart';
 import '../../../presentation/widgets/common/buttons.dart';
 import '../../../presentation/widgets/common/cards.dart';
 import '../../../presentation/widgets/common/inputs.dart';
+import '../../../data/api/payment_proof_api_service.dart';
+import '../../../data/models/payment_proof_model.dart';
 
 /// Deposit Screen
 class DepositScreen extends ConsumerStatefulWidget {
@@ -246,7 +248,34 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
         description: 'Wallet deposit via ${_selectedPaymentMethod.replaceAll('_', ' ')}',
         proofUrl: proofUrl,
       );
-      
+
+      // If a proof was attached, also register it as a payment proof so it
+      // shows up in "My Proofs" (read-only list). The old "Submit Proof" entry
+      // points were removed, so this is the only way proofs get recorded.
+      if (proofUrl != null) {
+        try {
+          final apiClient = ref.read(apiClientProvider);
+          final proofService = PaymentProofApiService(apiClient.dio);
+          await proofService.submitPaymentProof(
+            paymentType: _selectedDepositType == 'loan_repayment'
+                ? PaymentProofType.loanRepayment
+                : PaymentProofType.monthlyContribution,
+            amount: amount,
+            paymentDate: DateTime.now(),
+            paymentMethod: _selectedPaymentMethod == 'card'
+                ? PaymentMethod.card
+                : (_selectedPaymentMethod == 'ussd'
+                    ? PaymentMethod.ussd
+                    : PaymentMethod.bankTransfer),
+            proofUrl: proofUrl,
+            memberNote: '$_selectedDepositTypeLabel via ${_selectedPaymentMethod.replaceAll('_', ' ')}',
+          );
+        } catch (_) {
+          // Non-fatal: the deposit itself already succeeded; the proof list
+          // will just be missing this entry.
+        }
+      }
+
       // Safely extract the message from the result
       String message = 'Your deposit is pending verification.';
       if (result != null && result['message'] != null) {
