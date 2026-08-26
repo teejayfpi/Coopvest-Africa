@@ -1109,4 +1109,170 @@ router.get(
   }
 );
 
+/**
+ * POST /api/v1/loans/:loanId/repay
+ *
+ * Records a loan repayment.
+ *
+ * - paymentMethod: 'wallet'          → instantly deduct the member's wallet
+ *   and mark the repayment paid (no admin verification needed).
+ *   For any other method (e.g. 'bank_transfer') + optional proof_url → create
+ *   a pending loan_repayment + deposit_request with allocation_type =
+ *   'loan_repayment'. Admin verification of that deposit then marks the
+ *   repayment paid and reduces loans.remaining_balance.
+ *
+ * Members can also repay via the generic POST /wallet/contribute endpoint by
+ * sending allocation_type='loan_repayment' (handled in wallet.js); this
+ * endpoint is the loan-explicit helper the app's LoanApiService calls.
+ */
+router.post(
+  '/:loanId/repay',
+  authenticate,
+  [
+    param('loanId').notEmpty(),
+    body('amount').isFloat({ min: 0.01 }),
+    body('paymentMethod').optional().isString(),
+  ],
+  validate,
+  verifyLoanOwnership,
+  async (req, res) => {
+    try {
+      const loan = req.loan;
+      const amount = Number(req.body.amount);
+      const paymentMethod = (req.body.paymentMethod || 'bank_transfer').toString();
+      const proofUrl = req.body.proof_url || null;
+
+      if (!['active', 'repaying', 'overdue'].includes(loan.status)) {
+        return res.status(400).json({
+          success: false,
+          error: `Repayment is only accepted for active, repaying or overdue loans. Current status: ${loan.status}`,
+        });
+      }
+
+      const now = new Date().toISOString();
+
+      // ── Instant wallet repayment ──
+      if (paymentMethod === 'wallet') {
+        const { ensureWallet } = require('./wallet');
+        const wallet = await ensureWallet(loan.profile_id);
+        const balance = Number(wallet.balance || 0);
+        if (balance < amount) {
+          return res.status(400).json({ success: false, error: 'Insufficient wallet balance for this repayment.' });
+        }
+        const newBalance = balance - amount;
+        const { error: wErr } = await supabase
+          .from('wallets')
+          .update({ balance: newBalance, last_updated: now })
+          .eq('id', wallet.id);
+        if (wErr) throw wErr;
+
+        const { data: txn } = await supabase
+          .from('transactions')
+          .insert({
+            profile_id: loan.profile_id,
+            type: 'loan_repayment',
+            category: 'debit',
+            amount,
+            status: 'completed',
+            description: `Loan repayment for ${loan.loan_id || loan.id}`,
+            payment_method: 'wallet',
+            balance_before: balance,
+            balance_after: newBalance,
+            completed_at: now,
+          })
+          .select('*')
+          .maybeSingle();
+
+        const remainingBefore = Number(loan.remaining_balance ?? loan.total_repayment ?? 0);
+        const remaining = Math.max(0, remainingBefore - amount);
+        await supabase
+          .from('loans')
+          .update({ remaining_balance: remaining, updated_at: now })
+          .eq('id', loan.id);
+
+        const { data: repayment, error: rErr } = await supabase
+          .from('loan_repayments')
+          .insert({
+            loan_id: loan.id,
+            profile_id: loan.profile_id,
+            amount,
+            status: 'paid',
+            paid_at: now,
+            reference: txn ? txn.id : null,
+          })
+          .select('*')
+          .maybeSingle();
+        if (rErr) throw rErr;
+
+        return res.status(201).json({
+          success: true,
+          message: `Repayment of ₦${amount.toLocaleString()} applied. New loan balance: ₦${remaining.toLocaleString()}.`,
+          repayment,
+          remaining_balance: remaining,
+        });
+      }
+
+      // ── Proof-based repayment (admin verifies) ──
+      const { data: txn } = await supabase
+        .from('transactions')
+        .insert({
+          profile_id: loan.profile_id,
+          type: 'loan_repayment',
+          category: 'debit',
+          amount,
+          status: 'pending',
+          description: `Loan repayment for ${loan.loan_id || loan.id}`,
+          payment_method: paymentMethod,
+        })
+        .select('*')
+        .maybeSingle();
+
+      let depositRequest = null;
+      try {
+        const { data: dr } = await supabase
+          .from('deposit_requests')
+          .insert({
+            profile_id: loan.profile_id,
+            transaction_id: txn ? txn.id : null,
+            amount,
+            currency: 'NGN',
+            status: 'pending',
+            allocation_type: 'loan_repayment',
+            loan_id: loan.id,
+            loan_amount: amount,
+            payment_proof_url: proofUrl,
+          })
+          .select('*')
+          .maybeSingle();
+        depositRequest = dr;
+      } catch (drErr) {
+        logger.warn('loan repayment deposit_request insert failed (migration 020 pending?):', drErr.message);
+      }
+
+      const { data: repayment } = await supabase
+        .from('loan_repayments')
+        .insert({
+          loan_id: loan.id,
+          profile_id: loan.profile_id,
+          amount,
+          status: 'pending',
+          reference: txn ? txn.id : null,
+          deposit_request_id: depositRequest ? depositRequest.id : null,
+        })
+        .select('*')
+        .maybeSingle();
+
+      return res.status(202).json({
+        success: true,
+        message: 'Repayment submitted for verification. Your loan balance will be updated once an admin confirms your payment.',
+        repayment,
+        deposit_request: depositRequest,
+      });
+    } catch (err) {
+      logger.error('Loan repay error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+);
+
 module.exports = router;
