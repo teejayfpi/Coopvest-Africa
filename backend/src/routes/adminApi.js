@@ -4520,7 +4520,7 @@ router.post(
         .select('*')
         .single();
       if (error) throw error;
-      await auditLog(req.user.id, 'FEE_TYPE_CREATED', data.id, { name, category, amount });
+      await logAdminAction('FEE_TYPE_CREATED', { model: 'fee_types', id: data.id }, { name, category, amount }, req);
       res.status(201).json({ success: true, fee_type: data });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
@@ -4556,7 +4556,7 @@ router.patch(
         .select('*')
         .single();
       if (error) throw error;
-      await auditLog(req.user.id, 'FEE_TYPE_UPDATED', req.params.id, updates);
+      await logAdminAction('FEE_TYPE_UPDATED', { model: 'fee_types', id: req.params.id }, updates, req);
       res.json({ success: true, fee_type: data });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
@@ -4594,11 +4594,11 @@ router.post(
         .select('*')
         .single();
       if (insErr) throw insErr;
-      await auditLog(req.user.id, 'FEE_ASSIGNED', fee.id, {
+      await logAdminAction('FEE_ASSIGNED', { model: 'member_fees', id: fee.id }, {
         profile_id: req.body.profile_id,
         fee_type: ft.name,
         amount,
-      });
+      }, req);
       res.status(201).json({ success: true, member_fee: fee });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
@@ -4640,7 +4640,7 @@ router.patch('/member-fees/:id', async (req, res) => {
       .select('*')
       .single();
     if (error) throw error;
-    await auditLog(req.user.id, 'MEMBER_FEE_UPDATED', req.params.id, { status });
+    await logAdminAction('MEMBER_FEE_UPDATED', { model: 'member_fees', id: req.params.id }, { status }, req);
     res.json({ success: true, member_fee: data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
