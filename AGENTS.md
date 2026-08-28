@@ -44,9 +44,19 @@ the `system_settings` key/value jsonb table):
    `emergency.*` keys. `middleware/systemStatus.js` reads the same keys (with a
    15s cache) and blocks matching member-facing writes with HTTP 423. Admin
    routes are bypassed so a freeze can be lifted.
-2. **Financial Ledger** — `GET /api/admin/ledger`, `/ledger/member/:id`
-   (computed running balance), `POST /api/admin/ledger/:id/reverse` (append-only
-   reversal). Prefers a `ledger_entries` table; falls back to a computed view
+2. **Financial Ledger** (source of truth) — `GET /api/admin/ledger` (filters:
+   `id`=txn_no, `profileId`, `reference`, `memberName`, `paymentMethod`,
+   `status`, `from`/`to`), `/ledger/member/:id` (running balance),
+   `POST /api/admin/ledger/:id/reverse` (append-only reversal). Migration 023
+   adds serialized `txn_no` (CV-YYYY-NNNNNN via `next_ledger_txn_no()`),
+   enrichment columns (member/organization/payment-method/bank, `approved_by`,
+   `loan_id`, `payment_proof_id`, `allocation`), `bank_transactions` +
+   `bank_reconciliation` tables, and auto-posts an inflow ledger credit from
+   `handle_payment_proof_approval()` on every verified payment proof. Section 2b
+   of `adminPlatform.js` exposes `/ledger/dashboard` totals + reconciliation
+   status, audited `/ledger/adjust`, `/ledger/export.csv`, and the bank
+   statement import/reconciliation endpoints. Prefers a `ledger_entries`
+   table; falls back to a computed view
    over `transactions` when absent. Migration:
    `supabase/migrations/20260814000000_admin_platform.sql`.
 3. **System-Wide Search** — `GET /api/admin/search?q=`.
