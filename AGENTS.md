@@ -55,9 +55,12 @@ the `system_settings` key/value jsonb table):
    `handle_payment_proof_approval()` on every verified payment proof. Section 2b
    of `adminPlatform.js` exposes `/ledger/dashboard` totals + reconciliation
    status, audited `/ledger/adjust`, `/ledger/export.csv`, and the bank
-   statement import/reconciliation endpoints. Prefers a `ledger_entries`
-   table; falls back to a computed view
-   over `transactions` when absent. Migration:
+   statement import/reconciliation endpoints. The ledger responses UNION
+   stored `ledger_entries` rows (admin-posted: reversals, adjustments,
+   payment-proof auto-posts) with a computed view over `transactions`
+   (`services/ledgerMerge.js`), deduped by `reference`. Union is required:
+   `ledger_entries` exists in production but holds no mirrored activity, so
+   querying it alone renders the ledger empty. Migration:
    `supabase/migrations/20260814000000_admin_platform.sql`.
 3. **System-Wide Search** — `GET /api/admin/search?q=`.
 4. **Super Admin Attention Required** — `GET /api/admin/attention` (aggregate
