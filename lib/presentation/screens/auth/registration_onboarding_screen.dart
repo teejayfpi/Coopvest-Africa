@@ -497,11 +497,14 @@ class _RegistrationOnboardingScreenState
       try {
         await apiClient.post('/auth/complete-registration', data: combined);
       } catch (e) {
-        logger.e('Registration data submission error: \$e');
+        logger.e('Registration data submission error: $e');
         if (mounted) {
-          final errorDetail = e.toString().replaceFirst('Exception: ', '').replaceFirst('AuthException: ', '');
+          final errorDetail = e
+              .toString()
+              .replaceFirst('Exception: ', '')
+              .replaceFirst('AuthException: ', '');
           await _showRetryDialog(
-            'Could not save your registration details: \$errorDetail. '
+            'Could not save your registration details: $errorDetail. '
             'Please check your connection and try again.',
           );
         }
