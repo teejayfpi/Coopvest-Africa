@@ -13,6 +13,7 @@ const supabase = require('../config/supabase');
 const { authenticate, decodeSessionId } = require('../middleware/auth');
 const logger = require('../utils/logger');
 const {
+  hasValue,
   buildRegistrationCandidates,
   mergeStoredPersonalInfo,
 } = require('../services/registrationMerge');
