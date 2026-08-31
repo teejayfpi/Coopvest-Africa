@@ -426,24 +426,17 @@ router.post('/complete-registration', authenticate, async (req, res) => {
       partial,
     } = req.body;
 
-    // Build the same shape checkCompletion() expects, merging the body over
-    // the existing KYC row: when the app re-submits an earlier-saved payload
-    // it may not repeat every field, and the body alone would falsely report
-    // completed data (e.g. the top-level date_of_birth column) as missing.
-    let personal_info_candidate;
-    let employment_info_candidate;
-    if (partial) {
-      ({ personal_info: personal_info_candidate, employment_info: employment_info_candidate } =
-        buildRegistrationCandidates(req.body, null));
-    } else {
-      const { data: existingKyc } = await supabase
-        .from('kyc')
-        .select('date_of_birth, personal_info, employment_info')
-        .eq('profile_id', req.user.id)
-        .maybeSingle();
-      ({ personal_info: personal_info_candidate, employment_info: employment_info_candidate } =
-        buildRegistrationCandidates(req.body, existingKyc));
-    }
+    // Fetch the existing KYC row once. The body is merged over it for both
+    // validation and the write, so a member resuming an earlier save never
+    // has already-completed fields reported missing nor wiped by the upsert.
+    const { data: existingKyc } = await supabase
+      .from('kyc')
+      .select('national_id, date_of_birth, address, personal_info, employment_info')
+      .eq('profile_id', req.user.id)
+      .maybeSingle();
+
+    const { personal_info: personal_info_candidate, employment_info: employment_info_candidate } =
+      buildRegistrationCandidates(req.body, existingKyc);
 
     if (!partial) {
       const { isComplete, missingRequiredFields } = checkCompletion(
@@ -482,43 +475,50 @@ router.post('/complete-registration', authenticate, async (req, res) => {
       return res.status(500).json({ success: false, error: profileError.message });
     }
 
-    // 2. Upsert KYC row — merges personal, employment, NOK, and contribution data.
-    //    personal_info holds everything that doesn't have its own top-level column.
+    // 2. Upsert KYC row — merged over the existing row so a partial resubmit
+    //    never wipes fields the member already completed. personal_info holds
+    //    everything that doesn't have its own top-level column; bank fields
+    //    merge from the existing row when absent from the body.
+    const existingPersonal = existingKyc?.personal_info || {};
+    const bankFields = {
+      bank_name, bank_code, account_number, account_name, account_type,
+    };
+    const mergedBank = Object.fromEntries(
+      Object.entries(bankFields).map(([k, v]) => [k, hasValue(v) ? v : existingPersonal[k]])
+    );
+
     const { error: kycError } = await supabase
       .from('kyc')
       .upsert(
         {
           profile_id: req.user.id,
-          national_id: id_number || null,
-          date_of_birth: date_of_birth || null,
-          address: address || null,
+          national_id: hasValue(id_number) ? id_number : (existingKyc?.national_id || null),
+          date_of_birth: personal_info_candidate.date_of_birth || null,
+          address: hasValue(address) ? address : (existingKyc?.address || null),
           personal_info: {
-            gender,
-            state,
-            lga,
-            staff_id,
-            id_type,
-            nok_name,
-            nok_relationship,
-            nok_phone,
-            nok_address,
-            monthly_amount,
-            contribution_method,
-            preferred_payment_day,
-            // Bank info
-            bank_name,
-            bank_code,
-            account_number,
-            account_name,
-            account_type,
+            ...existingPersonal,
+            gender: personal_info_candidate.gender,
+            state: personal_info_candidate.state,
+            lga: personal_info_candidate.lga,
+            staff_id: personal_info_candidate.staff_id,
+            id_type: personal_info_candidate.id_type,
+            nok_name: personal_info_candidate.nok_name,
+            nok_relationship: personal_info_candidate.nok_relationship,
+            nok_phone: personal_info_candidate.nok_phone,
+            nok_address: personal_info_candidate.nok_address,
+            monthly_amount: personal_info_candidate.monthly_amount,
+            contribution_method: personal_info_candidate.contribution_method,
+            preferred_payment_day: personal_info_candidate.preferred_payment_day,
+            ...mergedBank,
           },
           employment_info: {
-            occupation,
-            employer_name,
-            employment_type,
-            employer_staff_id,
-            work_address,
-            years_of_employment,
+            ...(existingKyc?.employment_info || {}),
+            occupation: employment_info_candidate.occupation,
+            employer_name: employment_info_candidate.employer_name,
+            employment_type: employment_info_candidate.employment_type,
+            employer_staff_id: employment_info_candidate.employer_staff_id,
+            work_address: employment_info_candidate.work_address,
+            years_of_employment: employment_info_candidate.years_of_employment,
           },
           updated_at: new Date().toISOString(),
         },
