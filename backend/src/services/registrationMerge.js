@@ -80,4 +80,36 @@ function mergeStoredPersonalInfo(kycRow) {
   };
 }
 
-module.exports = { hasValue, buildRegistrationCandidates, mergeStoredPersonalInfo };
+
+const MIN_AGE_YEARS = 18;
+
+/**
+ * Exact age in full years (calendar-aware, handles leap years and birthdays
+ * later in the year). Accepts YYYY-MM-DD or DD/MM/YYYY; returns null when the
+ * date cannot be parsed, so callers can reject unparseable input explicitly.
+ */
+function ageInYears(dob, now = new Date()) {
+  if (!hasValue(dob)) return null;
+  let d;
+  const s = String(dob).trim();
+  let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (m) {
+    d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  } else {
+    m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(s);
+    if (!m) return null;
+    d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+  }
+  if (Number.isNaN(d.getTime())) return null;
+  let age = now.getFullYear() - d.getFullYear();
+  const monthDiff = now.getMonth() - d.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < d.getDate())) age -= 1;
+  return age;
+}
+
+function isAdult(dob, now = new Date()) {
+  const age = ageInYears(dob, now);
+  return age !== null && age >= MIN_AGE_YEARS;
+}
+
+module.exports = { hasValue, buildRegistrationCandidates, mergeStoredPersonalInfo, ageInYears, isAdult, MIN_AGE_YEARS };

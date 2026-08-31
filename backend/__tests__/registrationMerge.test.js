@@ -2,6 +2,8 @@ const {
   hasValue,
   buildRegistrationCandidates,
   mergeStoredPersonalInfo,
+  ageInYears,
+  isAdult,
 } = require('../src/services/registrationMerge');
 
 const fullBody = {
@@ -117,5 +119,42 @@ describe('mergeStoredPersonalInfo', () => {
 
   test('returns empty object for a missing KYC row', () => {
     expect(mergeStoredPersonalInfo(null)).toEqual({});
+  });
+});
+
+describe('ageInYears / isAdult', () => {
+  // Fixed "today" so the tests never drift with the calendar.
+  const now = new Date(2026, 7, 30); // 2026-08-30
+
+  test('parses YYYY-MM-DD and DD/MM/YYYY', () => {
+    expect(ageInYears('1990-01-15', now)).toBe(36);
+    expect(ageInYears('15/01/1990', now)).toBe(36);
+  });
+
+  test('exact 18th birthday counts as an adult', () => {
+    expect(ageInYears('2008-08-30', now)).toBe(18);
+    expect(isAdult('2008-08-30', now)).toBe(true);
+  });
+
+  test('birthday tomorrow is still 17', () => {
+    expect(ageInYears('2008-08-31', now)).toBe(17);
+    expect(isAdult('2008-08-31', now)).toBe(false);
+  });
+
+  test('clear minors and clear adults', () => {
+    expect(isAdult('2015-06-01', now)).toBe(false);
+    expect(isAdult('1985-03-10', now)).toBe(true);
+  });
+
+  test('leap-day birthdays age correctly', () => {
+    expect(ageInYears('2000-02-29', now)).toBe(26);
+    expect(isAdult('2000-02-29', now)).toBe(true);
+  });
+
+  test('unparseable or missing dates return null', () => {
+    expect(ageInYears('not-a-date', now)).toBeNull();
+    expect(ageInYears('', now)).toBeNull();
+    expect(ageInYears(null, now)).toBeNull();
+    expect(isAdult('not-a-date', now)).toBe(false);
   });
 });

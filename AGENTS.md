@@ -41,6 +41,10 @@ member sees in the app.
 - Required-field rules are in `REGISTRATION_FIELDS` (`routes/auth.js`); the
   same `checkCompletion()` drives the POST endpoint, `GET
   /complete-registration/status`, and `GET /profile-completeness`.
+- Age gate: members must be 18+. `POST /complete-registration` and
+  `POST /api/v1/kyc/submit` both reject an under-18 `date_of_birth` with 422
+  (`ageInYears`/`MIN_AGE_YEARS` in `services/registrationMerge.js`, exact
+  calendar math). The app's DOB picker caps selection at the 18th birthday.
 
 ## Auth for live API
 - API base: `https://coopvest-api.onrender.com`

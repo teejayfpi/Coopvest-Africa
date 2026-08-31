@@ -16,6 +16,8 @@ const {
   hasValue,
   buildRegistrationCandidates,
   mergeStoredPersonalInfo,
+  ageInYears,
+  MIN_AGE_YEARS,
 } = require('../services/registrationMerge');
 
 const validate = (req, res, next) => {
@@ -437,6 +439,19 @@ router.post('/complete-registration', authenticate, async (req, res) => {
 
     const { personal_info: personal_info_candidate, employment_info: employment_info_candidate } =
       buildRegistrationCandidates(req.body, existingKyc);
+
+    // Age gate: Coopvest membership is adults only. Runs on every save
+    // (partial included) and uses the merged DOB so a resume is checked too.
+    // An unparseable or missing DOB is left to the completeness check below.
+    if (hasValue(personal_info_candidate.date_of_birth)) {
+      const age = ageInYears(personal_info_candidate.date_of_birth);
+      if (age !== null && age < MIN_AGE_YEARS) {
+        return res.status(422).json({
+          success: false,
+          message: `You must be at least ${MIN_AGE_YEARS} years old to register on Coopvest.`,
+        });
+      }
+    }
 
     if (!partial) {
       const { isComplete, missingRequiredFields } = checkCompletion(
