@@ -48,11 +48,15 @@ function buildRegistrationCandidates(body, existingKyc) {
   const personal_info = {
     ...(existingKyc?.personal_info || {}),
     ...pickPresent(personalBody),
-    // date_of_birth is both a top-level kyc column and (historically) inside
-    // personal_info; accept either persisted location when the body omits it.
+    // date_of_birth and address are both top-level kyc columns and
+    // (historically) inside personal_info; accept either persisted location
+    // when the body omits them.
     date_of_birth: hasValue(body.date_of_birth)
       ? body.date_of_birth
       : (existingKyc?.date_of_birth || existingKyc?.personal_info?.date_of_birth),
+    address: hasValue(body.address)
+      ? body.address
+      : (existingKyc?.address || existingKyc?.personal_info?.address),
   };
 
   const employment_info = {
@@ -72,6 +76,7 @@ function mergeStoredPersonalInfo(kycRow) {
   return {
     ...(kycRow.personal_info || {}),
     date_of_birth: kycRow.personal_info?.date_of_birth || kycRow.date_of_birth,
+    address: kycRow.personal_info?.address || kycRow.address,
   };
 }
 

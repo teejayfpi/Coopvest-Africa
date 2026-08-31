@@ -378,7 +378,7 @@ router.get('/complete-registration/status', authenticate, async (req, res) => {
   try {
     const { data: kycRow, error } = await supabase
       .from('kyc')
-      .select('national_id, date_of_birth, personal_info, employment_info')
+      .select('national_id, date_of_birth, address, personal_info, employment_info')
       .eq('profile_id', req.user.id)
       .maybeSingle();
 
@@ -563,7 +563,7 @@ router.get('/profile-completeness', authenticate, async (req, res) => {
   try {
     const { data: kycRow, error } = await supabase
       .from('kyc')
-      .select('date_of_birth, personal_info, employment_info')
+      .select('date_of_birth, address, personal_info, employment_info')
       .eq('profile_id', req.user.id)
       .maybeSingle();
 
