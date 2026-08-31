@@ -27,6 +27,21 @@ member sees in the app.
 - Admin dashboard is a separate Vite/React app in
   `../Admin-Dashboard` deployed on Vercel.
 
+## Registration / onboarding (mobile)
+- `POST /api/auth/complete-registration` (auth) saves onboarding data to the
+  `kyc` table. `date_of_birth` and `address` are top-level columns; everything
+  else lives in `personal_info` / `employment_info` JSONB (bank fields inside
+  `personal_info`).
+- Validation and the write both merge the request body over the existing KYC
+  row via `services/registrationMerge.js` (`buildRegistrationCandidates`,
+  `mergeStoredPersonalInfo`): body values win when present, stored values fill
+  gaps. This lets a member resume an interrupted registration without losing
+  already-saved fields, and prevents the earlier bug where a partial resubmit
+  wiped `personal_info`/`employment_info`.
+- Required-field rules are in `REGISTRATION_FIELDS` (`routes/auth.js`); the
+  same `checkCompletion()` drives the POST endpoint, `GET
+  /complete-registration/status`, and `GET /profile-completeness`.
+
 ## Auth for live API
 - API base: `https://coopvest-api.onrender.com`
 - Admin login: POST `/api/auth/login` with the admin email/password.
