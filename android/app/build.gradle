@@ -100,6 +100,24 @@ android {
         }
     }
 
+    // The app only ships English strings; strip the translations bundled by
+    // third-party libraries from the APK.
+    defaultConfig {
+        resConfigs "en"
+    }
+
+    // Ship one APK per ABI so a device downloads only its own native
+    // libraries (~3x smaller than the fat APK). The Play Store AAB does this
+    // automatically; splits matter for direct APK distribution.
+    splits {
+        abi {
+            enable true
+            reset()
+            include 'armeabi-v7a', 'arm64-v8a'
+            universalApk false
+        }
+    }
+
     packaging {
         resources {
             excludes += '/META-INF/{AL2.0,LGPL2.1}'
