@@ -57,4 +57,21 @@ class PaymentDateUtils {
     if (day > max) return max;
     return day;
   }
+
+  /// Resolves the actual payment due date for a recurring preferred [day]
+  /// in [month] of [year].
+  ///
+  /// A preferred day of 29–31 does not exist in every month, so the due
+  /// date falls back to the last day of that month: the 31st becomes the
+  /// 30th in April and the 28th/29th in February. The payment therefore
+  /// always lands within the intended month instead of silently rolling
+  /// into the next one.
+  static DateTime resolveDueDate(int year, int month, int day) {
+    return DateTime(year, month, clampDayToMonth(year, month, day));
+  }
+
+  /// Member-facing explanation shown when a preferred day of 29–31 is
+  /// selected, so the last-day-of-month fallback is never a surprise.
+  static const String endOfMonthFallbackHint =
+      'If a month does not have this day, your payment will be made on the last day of that month.';
 }
