@@ -1261,8 +1261,8 @@ class _IdentificationStepState extends State<_IdentificationStep> {
   final _picker = ImagePicker();
   final _idTypes = ['NIN', 'Voters Card', 'International Passport', 'Drivers License'];
 
-  Future<void> _pickImage(bool isSelfie) async {
-    final source = isSelfie ? ImageSource.camera : ImageSource.gallery;
+  Future<void> _pickImage(
+      {required bool isSelfie, required ImageSource source}) async {
     final file = await _picker.pickImage(
         source: source, maxWidth: 800, imageQuality: 85);
     if (file != null) {
@@ -1295,15 +1295,10 @@ class _IdentificationStepState extends State<_IdentificationStep> {
             subtitle: 'Take a clear selfie or upload a passport photo',
             icon: Icons.face,
             file: widget.data.selfiePhoto,
-            onTap: () => _pickImage(true),
-            onGalleryTap: () async {
-              final file = await _picker.pickImage(
-                  source: ImageSource.gallery, maxWidth: 800);
-              if (file != null) {
-                setState(() =>
-                    widget.data.selfiePhoto = File(file.path));
-              }
-            },
+            onCameraTap: () =>
+                _pickImage(isSelfie: true, source: ImageSource.camera),
+            onGalleryTap: () =>
+                _pickImage(isSelfie: true, source: ImageSource.gallery),
           ),
           const SizedBox(height: 20),
 
@@ -1329,10 +1324,13 @@ class _IdentificationStepState extends State<_IdentificationStep> {
           // ID document photo
           _PhotoUploadCard(
             title: 'ID Document Photo *',
-            subtitle: 'Upload a clear photo of your ${widget.data.idType}',
+            subtitle: 'Take a photo of your ${widget.data.idType} or upload it from your gallery',
             icon: Icons.credit_card,
             file: widget.data.idDocumentPhoto,
-            onTap: () => _pickImage(false),
+            onCameraTap: () =>
+                _pickImage(isSelfie: false, source: ImageSource.camera),
+            onGalleryTap: () =>
+                _pickImage(isSelfie: false, source: ImageSource.gallery),
           ),
           const SizedBox(height: 8),
           Container(
@@ -2405,17 +2403,73 @@ class _PhotoUploadCard extends StatelessWidget {
   final String subtitle;
   final IconData icon;
   final File? file;
-  final VoidCallback onTap;
-  final VoidCallback? onGalleryTap;
+  final VoidCallback onCameraTap;
+  final VoidCallback onGalleryTap;
 
   const _PhotoUploadCard({
     required this.title,
     required this.subtitle,
     required this.icon,
     required this.file,
-    required this.onTap,
-    this.onGalleryTap,
+    required this.onCameraTap,
+    required this.onGalleryTap,
   });
+
+  void _showSourceSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Theme.of(sheetContext).scaffoldBackgroundColor,
+          borderRadius:
+              const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Choose Image Source',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color:
+                    Theme.of(sheetContext).textTheme.bodyLarge?.color,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: _SourceOption(
+                    icon: Icons.camera_alt,
+                    label: 'Camera',
+                    onTap: () {
+                      Navigator.pop(sheetContext);
+                      onCameraTap();
+                    },
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _SourceOption(
+                    icon: Icons.photo_library,
+                    label: 'Gallery',
+                    onTap: () {
+                      Navigator.pop(sheetContext);
+                      onGalleryTap();
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2425,7 +2479,7 @@ class _PhotoUploadCard extends StatelessWidget {
         _FieldLabel(label: title),
         const SizedBox(height: 8),
         GestureDetector(
-          onTap: onTap,
+          onTap: () => _showSourceSheet(context),
           child: Container(
             height: 140,
             width: double.infinity,
@@ -2439,9 +2493,7 @@ class _PhotoUploadCard extends StatelessWidget {
                     ? CoopvestColors.success
                     : context.dividerColor,
                 width: file != null ? 2 : 1,
-                style: file != null
-                    ? BorderStyle.solid
-                    : BorderStyle.solid,
+                style: BorderStyle.solid,
               ),
             ),
             child: file != null
@@ -2456,7 +2508,7 @@ class _PhotoUploadCard extends StatelessWidget {
                           size: 36,
                           color: CoopvestColors.primary.withOpacity(0.6)),
                       const SizedBox(height: 8),
-                      Text('Tap to capture',
+                      Text('Tap to add photo',
                           style: TextStyle(
                               color: context.textSecondary,
                               fontSize: 13)),
@@ -2470,21 +2522,10 @@ class _PhotoUploadCard extends StatelessWidget {
                   ),
           ),
         ),
-        if (onGalleryTap != null) ...[
-          const SizedBox(height: 6),
-          GestureDetector(
-            onTap: onGalleryTap,
-            child: const Text('Or upload from gallery',
-                style: TextStyle(
-                    color: CoopvestColors.primary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500)),
-          ),
-        ],
         if (file != null) ...[
           const SizedBox(height: 6),
           GestureDetector(
-            onTap: onTap,
+            onTap: () => _showSourceSheet(context),
             child: const Text('Retake / Change photo',
                 style: TextStyle(
                     color: CoopvestColors.primary,
@@ -2493,6 +2534,41 @@ class _PhotoUploadCard extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+class _SourceOption extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _SourceOption(
+      {required this.icon, required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        decoration: BoxDecoration(
+          color: CoopvestColors.primary.withOpacity(0.06),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+              color: CoopvestColors.primary.withOpacity(0.2)),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, size: 32, color: CoopvestColors.primary),
+            const SizedBox(height: 8),
+            Text(label,
+                style: const TextStyle(
+                    color: CoopvestColors.primary,
+                    fontWeight: FontWeight.w600)),
+          ],
+        ),
+      ),
     );
   }
 }
