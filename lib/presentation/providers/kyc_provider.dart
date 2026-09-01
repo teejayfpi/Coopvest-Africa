@@ -68,8 +68,7 @@ class KYCCubit extends StateNotifier<KYCState> {
     String? dateOfBirth,
     String? gender,
   }) {
-    final current = state.submission;
-    if (current == null) return;
+    final current = state.submission ?? const KYCSubmission();
     
     state = state.copyWith(
       submission: current.copyWith(
@@ -91,8 +90,7 @@ class KYCCubit extends StateNotifier<KYCState> {
     String? workAddress,
     String? yearsOfEmployment,
   }) {
-    final current = state.submission;
-    if (current == null) return;
+    final current = state.submission ?? const KYCSubmission();
 
     state = state.copyWith(
       submission: current.copyWith(
@@ -117,8 +115,7 @@ class KYCCubit extends StateNotifier<KYCState> {
     String? country,
     String? lga,
   }) {
-    final current = state.submission;
-    if (current == null) return;
+    final current = state.submission ?? const KYCSubmission();
 
     state = state.copyWith(
       submission: current.copyWith(
@@ -138,8 +135,7 @@ class KYCCubit extends StateNotifier<KYCState> {
     String? idPhotoPath,
     String? staffId,
   }) {
-    final current = state.submission;
-    if (current == null) return;
+    final current = state.submission ?? const KYCSubmission();
 
     state = state.copyWith(
       submission: current.copyWith(
@@ -158,8 +154,7 @@ class KYCCubit extends StateNotifier<KYCState> {
     String? nokPhone,
     String? nokAddress,
   }) {
-    final current = state.submission;
-    if (current == null) return;
+    final current = state.submission ?? const KYCSubmission();
 
     state = state.copyWith(
       submission: current.copyWith(
@@ -173,8 +168,7 @@ class KYCCubit extends StateNotifier<KYCState> {
 
   /// Update selfie
   void updateSelfie(String selfiePath) {
-    final current = state.submission;
-    if (current == null) return;
+    final current = state.submission ?? const KYCSubmission();
     
     state = state.copyWith(
       submission: current.copyWith(selfiePhotoPath: selfiePath),
@@ -190,8 +184,7 @@ class KYCCubit extends StateNotifier<KYCState> {
     String? accountType,
     String? bvn,
   }) {
-    final current = state.submission;
-    if (current == null) return;
+    final current = state.submission ?? const KYCSubmission();
     
     state = state.copyWith(
       submission: current.copyWith(
