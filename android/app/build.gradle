@@ -102,20 +102,15 @@ android {
 
     // The app only ships English strings; strip the translations bundled by
     // third-party libraries from the APK.
+    //
+    // NOTE: do NOT add a splits.abi block here — the Flutter Gradle plugin
+    // injects ndk.abiFilters programmatically when the 'split-per-abi'
+    // project property is unset, and the two configurations conflict
+    // ("Conflicting configuration ... cannot be present when splits abi
+    // filters are set"). Build per-ABI APKs with:
+    //   flutter build apk --release --split-per-abi
     defaultConfig {
         resConfigs "en"
-    }
-
-    // Ship one APK per ABI so a device downloads only its own native
-    // libraries (~3x smaller than the fat APK). The Play Store AAB does this
-    // automatically; splits matter for direct APK distribution.
-    splits {
-        abi {
-            enable true
-            reset()
-            include 'armeabi-v7a', 'arm64-v8a'
-            universalApk false
-        }
     }
 
     packaging {

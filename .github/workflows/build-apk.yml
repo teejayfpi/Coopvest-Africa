@@ -154,7 +154,7 @@ jobs:
 
       - name: Build release APK
         if: ${{ github.event.inputs.build_type != 'debug' }}
-        run: flutter build apk --release --dart-define=ENV=prod --no-tree-shake-icons --android-skip-build-dependency-validation
+        run: flutter build apk --release --split-per-abi --dart-define=ENV=prod --no-tree-shake-icons --android-skip-build-dependency-validation
 
       - name: Locate built APK
         id: locate_apk
@@ -164,7 +164,9 @@ jobs:
           if [ "${{ github.event.inputs.build_type }}" = "debug" ]; then
             APK_FILE="$BUILD_DIR/app-debug.apk"
           else
-            APK_FILE="$BUILD_DIR/app-release.apk"
+            # --split-per-abi produces one APK per ABI; the arm64 build
+            # covers all modern devices (2017+).
+            APK_FILE="$BUILD_DIR/app-arm64-v8a-release.apk"
           fi
           if [ -f "$APK_FILE" ]; then
             echo "apk_path=$APK_FILE" >> $GITHUB_OUTPUT
