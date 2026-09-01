@@ -44,6 +44,14 @@
     <key>UIApplicationSupportsIndirectInputEvents</key>
     <true/>
 
+    <!-- Camera / photo library access for KYC selfie + ID document capture.
+         Missing these keys crashes the app on iOS the moment the user taps
+         Camera or Gallery in the image source picker. -->
+    <key>NSCameraUsageDescription</key>
+    <string>Coopvest needs camera access to capture your selfie and ID document for KYC verification.</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Coopvest needs photo library access so you can upload your ID and selfie.</string>
+
     <!-- Google Sign-In Configuration -->
     <key>CFBundleURLTypes</key>
     <array>
