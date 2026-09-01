@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/utils/payment_date_utils.dart';
 import '../../../presentation/widgets/common/buttons.dart';
+import '../../../presentation/widgets/common/preferred_payment_date_picker.dart';
 
 /// Contribution method options
 enum ContributionMethodOption { manual, payroll }
@@ -31,6 +33,7 @@ class _ContributionMethodScreenState
     extends ConsumerState<ContributionMethodScreen> {
   ContributionMethodOption? _selectedMethod;
   double _contributionAmount = 5000;
+  int _contributionMonth = DateTime.now().month;
   int _contributionDay = 5;
   final _amountController = TextEditingController();
   bool _isSaving = false;
@@ -46,6 +49,20 @@ class _ContributionMethodScreenState
   void dispose() {
     _amountController.dispose();
     super.dispose();
+  }
+
+  static String _ordinalSuffix(int day) {
+    if (day >= 11 && day <= 13) return 'th';
+    switch (day % 10) {
+      case 1:
+        return 'st';
+      case 2:
+        return 'nd';
+      case 3:
+        return 'rd';
+      default:
+        return 'th';
+    }
   }
 
   Future<void> _saveMethod() async {
@@ -71,6 +88,7 @@ class _ContributionMethodScreenState
           'method': _selectedMethod == ContributionMethodOption.manual ? 'manual' : 'payroll',
           'monthlyAmount': _selectedMethod == ContributionMethodOption.manual ? _contributionAmount : null,
           'preferredDay': _selectedMethod == ContributionMethodOption.manual ? _contributionDay : null,
+          'preferredMonth': _selectedMethod == ContributionMethodOption.manual ? _contributionMonth : null,
         },
       );
 
@@ -411,42 +429,18 @@ class _ContributionMethodScreenState
             },
           ),
           const SizedBox(height: 16),
-          Text('Preferred Payment Day (1–28)',
+          Text('Preferred Payment Date',
               style: TextStyle(color: context.textSecondary, fontSize: 13)),
           const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [1, 5, 10, 15, 20, 25, 28].map((day) {
-              final isSelected = _contributionDay == day;
-              return GestureDetector(
-                onTap: () => setState(() => _contributionDay = day),
-                child: Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? CoopvestColors.primary
-                        : context.cardBackground,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                        color: isSelected
-                            ? CoopvestColors.primary
-                            : context.dividerColor),
-                  ),
-                  child: Center(
-                    child: Text(
-                      '$day',
-                      style: TextStyle(
-                        color: isSelected ? Colors.white : context.textPrimary,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
+          PreferredPaymentDatePicker(
+            selectedMonth: _contributionMonth,
+            selectedDay: _contributionDay,
+            onMonthChanged: (month) => setState(() {
+              _contributionMonth = month;
+              _contributionDay = PaymentDateUtils.clampDayToMonth(
+                  DateTime.now().year, month, _contributionDay);
+            }),
+            onDayChanged: (day) => setState(() => _contributionDay = day),
           ),
           const SizedBox(height: 12),
           Container(
@@ -462,7 +456,7 @@ class _ContributionMethodScreenState
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'You will receive a reminder on the ${_contributionDay}th of each month to make your contribution of ₦${_contributionAmount.toStringAsFixed(0)}.',
+                    'You will receive a reminder on the ${_contributionDay}${_ordinalSuffix(_contributionDay)} of ${PaymentDateUtils.monthNames[_contributionMonth - 1]} to make your contribution of ₦${_contributionAmount.toStringAsFixed(0)}.',
                     style:
                         const TextStyle(color: CoopvestColors.info, fontSize: 11),
                   ),

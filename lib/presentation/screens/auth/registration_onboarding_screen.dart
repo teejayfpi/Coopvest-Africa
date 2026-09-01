@@ -5,11 +5,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
+import '../../../core/utils/payment_date_utils.dart';
 import '../../../core/utils/utils.dart';
 import '../../widgets/common/buttons.dart';
 import '../../widgets/common/inputs.dart';
+import '../../widgets/common/preferred_payment_date_picker.dart';
 import '../../../core/network/api_client.dart';
+import '../../../data/models/bank_directory.dart';
 import '../../../data/models/kyc_models.dart';
+import '../../../data/models/terms_content.dart';
+import '../../../data/services/bank_verification_service.dart';
+import '../../providers/terms_provider.dart';
+import '../../widgets/common/bank_selector_field.dart';
 
 // ---------------------------------------------------------------------------
 // Contribution type enum
@@ -48,6 +55,7 @@ class _OnboardingData {
   // Step 5 – Contribution Setup
   double monthlyAmount = 5000;
   String contributionMethod = 'manual';
+  int preferredPaymentMonth = DateTime.now().month;
   int preferredPaymentDay = 5;
 
   // Step 6 – Next of Kin
@@ -72,6 +80,13 @@ class _OnboardingData {
   bool acceptedRegistrationFeePolicy = false;
   bool acceptedPrivacyPolicy = false;
 
+  /// Ids of terms sections the member has opened and read.
+  final Set<String> viewedTerms = {};
+
+  /// Version of the Terms document the member accepted, and when.
+  String termsVersion = TermsContent.version;
+  DateTime? termsAcceptedAt;
+
   bool get allTermsAccepted =>
       acceptedTerms &&
       acceptedContributionPolicy &&
@@ -80,6 +95,64 @@ class _OnboardingData {
       acceptedDefaultPolicy &&
       acceptedRegistrationFeePolicy &&
       acceptedPrivacyPolicy;
+
+  bool isTermAccepted(String sectionId) {
+    switch (sectionId) {
+      case 'terms_and_conditions':
+        return acceptedTerms;
+      case 'contribution_policy':
+        return acceptedContributionPolicy;
+      case 'loan_policy':
+        return acceptedLoanPolicy;
+      case 'guarantor_requirement':
+        return acceptedGuarantorRequirement;
+      case 'default_recovery_policy':
+        return acceptedDefaultPolicy;
+      case 'registration_fee_policy':
+        return acceptedRegistrationFeePolicy;
+      case 'privacy_policy':
+        return acceptedPrivacyPolicy;
+      default:
+        return false;
+    }
+  }
+
+  void setTermAccepted(String sectionId, bool accepted) {
+    switch (sectionId) {
+      case 'terms_and_conditions':
+        acceptedTerms = accepted;
+        break;
+      case 'contribution_policy':
+        acceptedContributionPolicy = accepted;
+        break;
+      case 'loan_policy':
+        acceptedLoanPolicy = accepted;
+        break;
+      case 'guarantor_requirement':
+        acceptedGuarantorRequirement = accepted;
+        break;
+      case 'default_recovery_policy':
+        acceptedDefaultPolicy = accepted;
+        break;
+      case 'registration_fee_policy':
+        acceptedRegistrationFeePolicy = accepted;
+        break;
+      case 'privacy_policy':
+        acceptedPrivacyPolicy = accepted;
+        break;
+    }
+  }
+
+  /// Stamps the acceptance record with the document version and the current
+  /// time. Called whenever the accepted set changes.
+  void recordTermsAcceptance(String version) {
+    if (allTermsAccepted) {
+      termsVersion = version;
+      termsAcceptedAt = DateTime.now();
+    } else {
+      termsAcceptedAt = null;
+    }
+  }
 
   /// Returns true if employer info is required (salary deduction selected)
   bool get requiresEmployerInfo => contributionType == _ContributionType.salaryDeduction;
@@ -149,8 +222,10 @@ class _RegistrationOnboardingScreenState
   final _bankNameCtrl = TextEditingController();
   final _accountNumberCtrl = TextEditingController();
   final _accountNameCtrl = TextEditingController();
-  String? _selectedBank;
+  BankOption? _selectedBank;
   String? _selectedAccountType;
+  bool _accountNameVerified = false;
+  bool _isVerifyingAccountName = false;
 
   @override
   void initState() {
@@ -352,7 +427,7 @@ class _RegistrationOnboardingScreenState
   }
 
   bool _validateStep7() {
-    if (_selectedBank == null || _selectedBank!.isEmpty) {
+    if (_selectedBank == null) {
       _showError('Please select your bank.');
       return false;
     }
@@ -360,24 +435,20 @@ class _RegistrationOnboardingScreenState
       _showError('Account number must be 10 digits.');
       return false;
     }
-    if (_accountNameCtrl.text.trim().isEmpty) {
-      _showError('Please verify your account name.');
+    if (!_accountNameVerified || _accountNameCtrl.text.trim().isEmpty) {
+      _showError('Please verify your account name before continuing.');
       return false;
     }
     if (_selectedAccountType == null || _selectedAccountType!.isEmpty) {
       _showError('Please select your account type.');
       return false;
     }
-    _data.bankName = _selectedBank!;
-    _data.bankCode = _getBankCode(_selectedBank!);
+    _data.bankName = _selectedBank!.name;
+    _data.bankCode = _selectedBank!.code;
     _data.accountNumber = _accountNumberCtrl.text.trim();
     _data.accountName = _accountNameCtrl.text.trim();
     _data.accountType = _selectedAccountType!;
     return true;
-  }
-
-  String _getBankCode(String bankName) {
-    return BankTypes.getBankCode(bankName);
   }
 
   void _showError(String message) {
@@ -388,20 +459,107 @@ class _RegistrationOnboardingScreenState
     ));
   }
 
-  void _verifyAccountName() async {
-    if (_selectedBank == null || _accountNumberCtrl.text.length != 10) {
-      _showError('Please select a bank and enter 10-digit account number');
+  Future<void> _verifyAccountName() async {
+    if (_selectedBank == null) {
+      _showError('Please select your bank');
       return;
     }
-    // In production, call your API to verify account name
-    // For now, simulate verification
-    setState(() {
-      _accountNameCtrl.text = 'Verified Account Name';
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Account verified successfully'),
-        backgroundColor: CoopvestColors.success,
+    if (_accountNumberCtrl.text.trim().isEmpty) {
+      _showError('Please enter your account number');
+      return;
+    }
+
+    setState(() => _isVerifyingAccountName = true);
+
+    try {
+      // Resolve the account holder name via the backend verification
+      // service (Paystack bank-resolve, credentials stay server-side).
+      final result =
+          await ref.read(bankVerificationServiceProvider).verifyAccount(
+                bankCode: _selectedBank!.code,
+                accountNumber: _accountNumberCtrl.text,
+              );
+
+      if (!mounted) return;
+      setState(() => _isVerifyingAccountName = false);
+
+      // The member must review and confirm the resolved account name.
+      final confirmed = await _confirmAccountName(result.accountName);
+      if (!mounted) return;
+      if (confirmed == true) {
+        setState(() {
+          _accountNameVerified = true;
+          _accountNameCtrl.text = result.accountName;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Account verified successfully'),
+            backgroundColor: CoopvestColors.success,
+          ),
+        );
+      } else {
+        setState(() {
+          _accountNameVerified = false;
+          _accountNameCtrl.clear();
+        });
+        _showError(
+            'The account name does not match the information provided. Please check the bank and account number.');
+      }
+    } on AccountVerificationException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isVerifyingAccountName = false;
+        _accountNameVerified = false;
+      });
+      _showError(e.message);
+    }
+  }
+
+  Future<bool?> _confirmAccountName(String accountName) {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm Account Name'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('This account is registered to:'),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: CoopvestColors.success.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: CoopvestColors.success),
+              ),
+              child: Text(
+                accountName,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text('Is this your account?'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('No, go back'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: CoopvestColors.primary,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Yes, this is mine'),
+          ),
+        ],
       ),
     );
   }
@@ -475,6 +633,9 @@ class _RegistrationOnboardingScreenState
         'monthly_amount': _data.monthlyAmount.toStringAsFixed(0),
         'contribution_method': _data.contributionMethod,
         'preferred_payment_day': _data.preferredPaymentDay.toString(),
+        'preferred_payment_month': _data.preferredPaymentMonth.toString(),
+        'terms_version': _data.termsVersion,
+        'terms_accepted_at': _data.termsAcceptedAt?.toIso8601String(),
         'nok_name': _data.nokName,
         'nok_relationship': _data.nokRelationship,
         'nok_phone': _data.nokPhone,
@@ -628,9 +789,21 @@ class _RegistrationOnboardingScreenState
                     selectedAccountType: _selectedAccountType,
                     accountNumberCtrl: _accountNumberCtrl,
                     accountNameCtrl: _accountNameCtrl,
-                    onBankChanged: (bank) => setState(() => _selectedBank = bank),
+                    isVerifying: _isVerifyingAccountName,
+                    accountNameVerified: _accountNameVerified,
+                    onBankChanged: (bank) => setState(() {
+                          _selectedBank = bank;
+                          _accountNameVerified = false;
+                          _accountNameCtrl.clear();
+                        }),
+                    onAccountNumberChanged: () => setState(() {
+                          if (_accountNameVerified) {
+                            _accountNameVerified = false;
+                            _accountNameCtrl.clear();
+                          }
+                        }),
                     onAccountTypeChanged: (type) => setState(() => _selectedAccountType = type),
-                    onVerifyAccount: _verifyAccountName,
+                    onVerifyAccount: _isVerifyingAccountName ? null : _verifyAccountName,
                 ),
                 _TermsStep(
                     data: _data,
@@ -1405,7 +1578,6 @@ class _ContributionStepState extends State<_ContributionStep> {
   bool _showCustom = false;
 
   final _presetAmounts = [5000.0, 10000.0, 20000.0, 50000.0];
-  final _paymentDays = [1, 5, 10, 15, 20, 25, 28];
 
   String _fmt(double v) => v
       .toStringAsFixed(0)
@@ -1530,45 +1702,20 @@ class _ContributionStepState extends State<_ContributionStep> {
           ),
           const SizedBox(height: 24),
 
-          // Preferred payment day
-          _FieldLabel(label: 'Preferred Payment Day (1–28)'),
+          // Preferred payment date
+          _FieldLabel(label: 'Preferred Payment Date'),
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: _paymentDays.map((day) {
-              final isSelected = widget.data.preferredPaymentDay == day;
-              return GestureDetector(
-                onTap: () =>
-                    setState(() => widget.data.preferredPaymentDay = day),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? CoopvestColors.primary
-                        : context.cardBackground,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: isSelected
-                          ? CoopvestColors.primary
-                          : context.dividerColor,
-                    ),
-                  ),
-                  child: Center(
-                    child: Text(
-                      '$day',
-                      style: TextStyle(
-                        color: isSelected ? Colors.white : context.textPrimary,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
+          PreferredPaymentDatePicker(
+            selectedMonth: widget.data.preferredPaymentMonth,
+            selectedDay: widget.data.preferredPaymentDay,
+            onMonthChanged: (month) => setState(() {
+              widget.data.preferredPaymentMonth = month;
+              widget.data.preferredPaymentDay =
+                  PaymentDateUtils.clampDayToMonth(DateTime.now().year, month,
+                      widget.data.preferredPaymentDay);
+            }),
+            onDayChanged: (day) =>
+                setState(() => widget.data.preferredPaymentDay = day),
           ),
         ],
       ),
@@ -1707,13 +1854,16 @@ class _NextOfKinStepState extends State<_NextOfKinStep> {
 // ---------------------------------------------------------------------------
 class _BankInfoStep extends StatelessWidget {
   final _OnboardingData data;
-  final String? selectedBank;
+  final BankOption? selectedBank;
   final String? selectedAccountType;
   final TextEditingController accountNumberCtrl;
   final TextEditingController accountNameCtrl;
-  final Function(String?) onBankChanged;
+  final bool isVerifying;
+  final bool accountNameVerified;
+  final ValueChanged<BankOption> onBankChanged;
+  final VoidCallback onAccountNumberChanged;
   final Function(String?) onAccountTypeChanged;
-  final VoidCallback onVerifyAccount;
+  final VoidCallback? onVerifyAccount;
 
   const _BankInfoStep({
     required this.data,
@@ -1721,7 +1871,10 @@ class _BankInfoStep extends StatelessWidget {
     required this.selectedAccountType,
     required this.accountNumberCtrl,
     required this.accountNameCtrl,
+    required this.isVerifying,
+    required this.accountNameVerified,
     required this.onBankChanged,
+    required this.onAccountNumberChanged,
     required this.onAccountTypeChanged,
     required this.onVerifyAccount,
   });
@@ -1747,35 +1900,10 @@ class _BankInfoStep extends StatelessWidget {
             style: TextStyle(color: context.textSecondary),
           ),
           const SizedBox(height: 24),
-          // Bank Dropdown
-          Text(
-            'Select Bank *',
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              color: context.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            decoration: BoxDecoration(
-              border: Border.all(color: context.dividerColor),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: selectedBank,
-                hint: const Text('Select your bank'),
-                isExpanded: true,
-                items: BankTypes.banks.map((bank) {
-                  return DropdownMenuItem<String>(
-                    value: bank['label'] as String,
-                    child: Text(bank['label'] as String),
-                  );
-                }).toList(),
-                onChanged: onBankChanged,
-              ),
-            ),
+          // Bank selector (searchable, commercial + digital/fintech)
+          BankSelectorField(
+            value: selectedBank,
+            onChanged: onBankChanged,
           ),
           const SizedBox(height: 20),
           // Account Number
@@ -1791,6 +1919,7 @@ class _BankInfoStep extends StatelessWidget {
             controller: accountNumberCtrl,
             keyboardType: TextInputType.number,
             maxLength: 10,
+            onChanged: (_) => onAccountNumberChanged(),
             decoration: InputDecoration(
               hintText: 'Enter 10-digit account number',
               border: OutlineInputBorder(
@@ -1809,7 +1938,20 @@ class _BankInfoStep extends StatelessWidget {
                 foregroundColor: CoopvestColors.primary,
                 side: const BorderSide(color: CoopvestColors.primary),
               ),
-              child: const Text('Verify Account'),
+              child: isVerifying
+                  ? const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                            width: 18,
+                            height: 18,
+                            child:
+                                CircularProgressIndicator(strokeWidth: 2)),
+                        SizedBox(width: 10),
+                        Text('Verifying account details…'),
+                      ],
+                    )
+                  : const Text('Verify Account'),
             ),
           ),
           const SizedBox(height: 20),
@@ -1876,14 +2018,51 @@ class _BankInfoStep extends StatelessWidget {
   }
 }
 
-class _TermsStep extends StatelessWidget {
+class _TermsStep extends ConsumerStatefulWidget {
   final _OnboardingData data;
   final VoidCallback onAcceptAll;
 
   const _TermsStep({required this.data, required this.onAcceptAll});
 
   @override
+  ConsumerState<_TermsStep> createState() => _TermsStepState();
+}
+
+class _TermsStepState extends ConsumerState<_TermsStep> {
+  _OnboardingData get data => widget.data;
+
+  void _markViewed(String sectionId, bool expanded) {
+    if (expanded && !data.viewedTerms.contains(sectionId)) {
+      setState(() => data.viewedTerms.add(sectionId));
+      widget.onAcceptAll();
+    }
+  }
+
+  void _setAccepted(TermsDocument doc, String sectionId, bool? value) {
+    setState(() {
+      data.setTermAccepted(sectionId, value ?? false);
+      data.recordTermsAcceptance(doc.version);
+    });
+    widget.onAcceptAll();
+  }
+
+  void _acceptAll(TermsDocument doc) {
+    setState(() {
+      for (final section in doc.sections) {
+        data.setTermAccepted(section.id, true);
+      }
+      data.recordTermsAcceptance(doc.version);
+    });
+    widget.onAcceptAll();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final termsAsync = ref.watch(termsDocumentProvider);
+    final doc = termsAsync.valueOrNull ?? TermsContent.bundled();
+    final allViewed =
+        doc.sections.every((s) => data.viewedTerms.contains(s.id));
+
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
       child: Column(
@@ -1893,7 +2072,7 @@ class _TermsStep extends StatelessWidget {
               icon: Icons.policy_outlined,
               title: 'Terms & Agreement',
               subtitle:
-                  'Please read and accept all policies before activating your account.'),
+                  'Tap each policy to read it in full, then accept it. All policies must be opened and accepted before activating your account.'),
           const SizedBox(height: 8),
 
           Container(
@@ -1918,120 +2097,170 @@ class _TermsStep extends StatelessWidget {
           ),
           const SizedBox(height: 20),
 
-          _TermsCheckbox(
-            title: 'Terms & Conditions',
-            subtitle:
-                'I have read and accept the Coopvest Africa Terms and Conditions governing membership.',
-            value: data.acceptedTerms,
-            onChanged: (v) {
-              data.acceptedTerms = v ?? false;
-              onAcceptAll();
-            },
-          ),
-          _TermsCheckbox(
-            title: 'Contribution Policy',
-            subtitle:
-                'I understand the monthly contribution rules: minimum ₦5,000, increases allowed anytime, reductions require 3-month notice.',
-            value: data.acceptedContributionPolicy,
-            onChanged: (v) {
-              data.acceptedContributionPolicy = v ?? false;
-              onAcceptAll();
-            },
-          ),
-          _TermsCheckbox(
-            title: 'Loan Policy',
-            subtitle:
-                'I understand the loan eligibility criteria, guarantor requirements, and repayment obligations.',
-            value: data.acceptedLoanPolicy,
-            onChanged: (v) {
-              data.acceptedLoanPolicy = v ?? false;
-              onAcceptAll();
-            },
-          ),
-          _TermsCheckbox(
-            title: 'Guarantor Requirement',
-            subtitle:
-                'I understand that loans under the direct contribution model require three guarantors.',
-            value: data.acceptedGuarantorRequirement,
-            onChanged: (v) {
-              data.acceptedGuarantorRequirement = v ?? false;
-              onAcceptAll();
-            },
-          ),
-          _TermsCheckbox(
-            title: 'Default & Recovery Policy',
-            subtitle:
-                'I understand that guarantors may be contacted in the event of prolonged loan default.',
-            value: data.acceptedDefaultPolicy,
-            onChanged: (v) {
-              data.acceptedDefaultPolicy = v ?? false;
-              onAcceptAll();
-            },
-          ),
-          _TermsCheckbox(
-            title: 'Registration Fee Policy',
-            subtitle:
-                'I understand that the ₦5,000 registration fee is non-refundable and will be added to my first contribution.',
-            value: data.acceptedRegistrationFeePolicy,
-            onChanged: (v) {
-              data.acceptedRegistrationFeePolicy = v ?? false;
-              onAcceptAll();
-            },
-          ),
-          _TermsCheckbox(
-            title: 'Privacy Policy',
-            subtitle:
-                'I consent to the collection, storage, and use of my personal and financial data as described in the Privacy Policy.',
-            value: data.acceptedPrivacyPolicy,
-            onChanged: (v) {
-              data.acceptedPrivacyPolicy = v ?? false;
-              onAcceptAll();
-            },
-          ),
+          for (final section in doc.sections)
+            _ExpandableTerm(
+              section: section,
+              viewed: data.viewedTerms.contains(section.id),
+              accepted: data.isTermAccepted(section.id),
+              onExpanded: (expanded) => _markViewed(section.id, expanded),
+              onAccepted: (v) => _setAccepted(doc, section.id, v),
+            ),
 
           const SizedBox(height: 12),
 
-          // Accept all shortcut
+          // Accept all shortcut — enabled only once every policy has been read.
           GestureDetector(
-            onTap: () {
-              data.acceptedTerms = true;
-              data.acceptedContributionPolicy = true;
-              data.acceptedLoanPolicy = true;
-              data.acceptedGuarantorRequirement = true;
-              data.acceptedDefaultPolicy = true;
-              data.acceptedRegistrationFeePolicy = true;
-              data.acceptedPrivacyPolicy = true;
-              onAcceptAll();
-            },
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: CoopvestColors.primary.withOpacity(0.06),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                    color: CoopvestColors.primary.withOpacity(0.3)),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    data.allTermsAccepted
-                        ? Icons.check_circle
-                        : Icons.check_circle_outline,
-                    color: CoopvestColors.primary,
-                    size: 22,
-                  ),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Text(
-                      'Accept all policies at once',
-                      style: TextStyle(
-                          color: CoopvestColors.primary,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14),
+            onTap: allViewed ? () => _acceptAll(doc) : null,
+            child: Opacity(
+              opacity: allViewed ? 1 : 0.5,
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: CoopvestColors.primary.withOpacity(0.06),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color: CoopvestColors.primary.withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      data.allTermsAccepted
+                          ? Icons.check_circle
+                          : Icons.check_circle_outline,
+                      color: CoopvestColors.primary,
+                      size: 22,
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        allViewed
+                            ? 'Accept all policies at once'
+                            : 'Open all policies above to enable accepting them',
+                        style: const TextStyle(
+                            color: CoopvestColors.primary,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14),
+                      ),
+                    ),
+                  ],
+                ),
               ),
+            ),
+          ),
+
+          const SizedBox(height: 16),
+          Center(
+            child: Text(
+              data.termsAcceptedAt != null
+                  ? 'Version ${data.termsVersion} • accepted ${data.termsAcceptedAt}'
+                  : 'Terms version ${doc.version}',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: context.textSecondary, fontSize: 11),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A single expandable policy: tap the heading to read the full text, then
+/// tick its checkbox to accept. The checkbox stays disabled until the policy
+/// has been opened.
+class _ExpandableTerm extends StatelessWidget {
+  final TermsSection section;
+  final bool viewed;
+  final bool accepted;
+  final ValueChanged<bool> onExpanded;
+  final ValueChanged<bool?> onAccepted;
+
+  const _ExpandableTerm({
+    required this.section,
+    required this.viewed,
+    required this.accepted,
+    required this.onExpanded,
+    required this.onAccepted,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: accepted
+            ? CoopvestColors.success.withOpacity(0.06)
+            : context.cardBackground,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: accepted
+              ? CoopvestColors.success.withOpacity(0.4)
+              : context.dividerColor,
+        ),
+      ),
+      child: Column(
+        children: [
+          Theme(
+            data: Theme.of(context)
+                .copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              tilePadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+              childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              onExpansionChanged: onExpanded,
+              leading: Icon(
+                viewed ? Icons.mark_email_read_outlined : Icons.article_outlined,
+                color: viewed ? CoopvestColors.success : context.textSecondary,
+                size: 20,
+              ),
+              title: Text(
+                section.title,
+                style: TextStyle(
+                    color: context.textPrimary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13),
+              ),
+              subtitle: Text(
+                viewed ? section.summary : 'Tap to read this policy',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    color: context.textSecondary, fontSize: 11, height: 1.4),
+              ),
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    section.body,
+                    style: TextStyle(
+                        color: context.textPrimary, fontSize: 12, height: 1.6),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 0, 12, 8),
+            child: Row(
+              children: [
+                Checkbox(
+                  value: accepted,
+                  onChanged: viewed ? onAccepted : null,
+                  activeColor: CoopvestColors.success,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                Expanded(
+                  child: Text(
+                    viewed
+                        ? 'I have read and accept this policy'
+                        : 'Open this policy to accept it',
+                    style: TextStyle(
+                        color: viewed
+                            ? context.textPrimary
+                            : context.textSecondary,
+                        fontSize: 12),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -2377,67 +2606,3 @@ class _MethodCard extends StatelessWidget {
   }
 }
 
-class _TermsCheckbox extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final bool value;
-  final ValueChanged<bool?> onChanged;
-
-  const _TermsCheckbox({
-    required this.title,
-    required this.subtitle,
-    required this.value,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: value
-            ? CoopvestColors.success.withOpacity(0.06)
-            : context.cardBackground,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: value
-              ? CoopvestColors.success.withOpacity(0.4)
-              : context.dividerColor,
-        ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Checkbox(
-            value: value,
-            onChanged: onChanged,
-            activeColor: CoopvestColors.success,
-            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title,
-                      style: TextStyle(
-                          color: context.textPrimary,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13)),
-                  const SizedBox(height: 3),
-                  Text(subtitle,
-                      style: TextStyle(
-                          color: context.textSecondary,
-                          fontSize: 11,
-                          height: 1.4)),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}

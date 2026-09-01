@@ -35,6 +35,9 @@ function buildRegistrationCandidates(body, existingKyc) {
     monthly_amount: body.monthly_amount,
     contribution_method: body.contribution_method,
     preferred_payment_day: body.preferred_payment_day,
+    preferred_payment_month: body.preferred_payment_month,
+    terms_version: body.terms_version,
+    terms_accepted_at: body.terms_accepted_at,
   };
   const employmentBody = {
     occupation: body.occupation,

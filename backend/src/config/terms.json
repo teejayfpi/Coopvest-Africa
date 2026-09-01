@@ -1,0 +1,47 @@
+{
+ "version": "2026-09-01",
+ "sections": [
+  {
+   "id": "terms_and_conditions",
+   "title": "Terms & Conditions",
+   "summary": "The membership terms governing your Coopvest Africa account.",
+   "body": "These Terms and Conditions govern your membership of Coopvest Africa and your use of the Coopvest mobile application and related services. By creating an account you agree to be bound by these terms.\n\n1. Membership is open to individuals who are at least 18 years old and who complete the required identity verification (KYC) process.\n\n2. You are responsible for the accuracy of the information you provide and for keeping your login credentials confidential.\n\n3. Coopvest Africa provides cooperative savings, contribution, and credit services to registered members. Services may be updated, suspended, or withdrawn with reasonable notice.\n\n4. You must not use the platform for any unlawful purpose, including fraud, money laundering, or the financing of prohibited activities.\n\n5. Coopvest Africa may suspend or terminate accounts that breach these terms, subject to applicable law and the cooperative's bylaws.\n\n6. These terms are governed by the laws of the Federal Republic of Nigeria."
+  },
+  {
+   "id": "contribution_policy",
+   "title": "Contribution Policy",
+   "summary": "Monthly contribution rules: minimum \u20a65,000, increases anytime, reductions require 3-month notice.",
+   "body": "1. Every member must make a minimum monthly contribution of \u20a65,000. A one-time, non-refundable registration fee of \u20a65,000 applies to all new members and is added to the first contribution.\n\n2. Members may increase their monthly contribution at any time through the app, and the new amount takes effect from the next contribution cycle.\n\n3. Requests to reduce a monthly contribution require a minimum of three (3) months' written notice to the cooperative.\n\n4. Contributions may be made by manual monthly self-contribution or by salary deduction (payroll) through your employer.\n\n5. Consistent contributions improve eligibility for future financial support services. Contribution history and account records are tracked digitally for transparency."
+  },
+  {
+   "id": "loan_policy",
+   "title": "Loan Policy",
+   "summary": "Loan eligibility criteria, guarantor requirements, and repayment obligations.",
+   "body": "1. Loan eligibility is based on membership duration, contribution history, and the cooperative's prevailing credit policy.\n\n2. Loan amounts, interest rates, and tenures are determined by the loan product selected and are displayed in the app before you apply.\n\n3. Approved loans are disbursed to the bank account verified during registration.\n\n4. Repayment is made in line with the repayment schedule shown at the time of application. Early repayment is allowed without penalty.\n\n5. Failure to repay as scheduled may affect your credit standing within the cooperative, your eligibility for future loans, and may trigger the Default & Recovery Policy."
+  },
+  {
+   "id": "guarantor_requirement",
+   "title": "Guarantor Requirement",
+   "summary": "Loans under the direct contribution model require three guarantors.",
+   "body": "1. Loans accessed under the direct contribution model require three (3) guarantors who are themselves registered and contributing members of the cooperative.\n\n2. Each guarantor must confirm their consent within the app before the loan application can proceed.\n\n3. By standing as guarantor, a member accepts joint responsibility for the repayment of the guaranteed loan in the event of default.\n\n4. Guarantor obligations end when the guaranteed loan is fully repaid."
+  },
+  {
+   "id": "default_recovery_policy",
+   "title": "Default & Recovery Policy",
+   "summary": "Guarantors may be contacted in the event of prolonged loan default.",
+   "body": "1. A loan is in default when a scheduled repayment remains unpaid beyond the grace period communicated at disbursement.\n\n2. In the event of prolonged default, the cooperative may contact the borrower's guarantors to recover the outstanding balance.\n\n3. Outstanding balances may be recovered from the member's contributions, savings, or dividends held with the cooperative, in line with the cooperative's bylaws.\n\n4. Defaulting members may be reported to relevant credit bureaus as permitted by law."
+  },
+  {
+   "id": "registration_fee_policy",
+   "title": "Registration Fee Policy",
+   "summary": "The \u20a65,000 registration fee is non-refundable and is added to your first contribution.",
+   "body": "1. A one-time registration fee of \u20a65,000 applies to all new members.\n\n2. The registration fee is non-refundable under any circumstances, including voluntary withdrawal or termination of membership.\n\n3. The fee is added to, and collected together with, your first monthly contribution."
+  },
+  {
+   "id": "privacy_policy",
+   "title": "Privacy Policy",
+   "summary": "How we collect, store, and use your personal and financial data.",
+   "body": "1. We collect the personal and financial information you provide during registration and KYC \u2014 including your name, contact details, identification documents, BVN, and bank account details \u2014 solely to provide cooperative financial services to you.\n\n2. Your data is stored securely and processed in accordance with the Nigeria Data Protection Act (NDPA) and other applicable data protection regulations.\n\n3. Bank account verification is performed through licensed, secure third-party providers; verification credentials are never stored on your device.\n\n4. We do not sell your personal data. Data is shared only with service providers who need it to deliver the services you use, or where required by law or regulation.\n\n5. You may request access to, correction of, or deletion of your personal data, subject to legal and regulatory retention requirements, by contacting support."
+  }
+ ]
+}

@@ -561,23 +561,56 @@ class KYCState extends Equatable {
 }
 
 /// Nigerian Banks
+///
+/// Bundled fallback list of supported banks (commercial + digital/fintech),
+/// used when the remote bank directory (`GET /api/v1/banks`) is unavailable.
+/// Codes are Paystack NUBAN bank codes so server-side account verification
+/// works for every entry.
 class BankTypes {
   static const List<Map<String, dynamic>> banks = [
-    {'label': 'Access Bank', 'code': '044'},
-    {'label': 'Ecobank Nigeria', 'code': '050'},
-    {'label': 'Fidelity Bank', 'code': '070'},
-    {'label': 'First Bank of Nigeria', 'code': '011'},
-    {'label': 'First City Monument Bank (FCMB)', 'code': '214'},
-    {'label': 'Guaranty Trust Bank', 'code': '058'},
-    {'label': 'Heritage Bank', 'code': '030'},
-    {'label': 'Keystone Bank', 'code': '082'},
-    {'label': 'Polaris Bank', 'code': '076'},
-    {'label': 'Stanbic IBTC Bank', 'code': '221'},
-    {'label': 'Standard Chartered Bank', 'code': '068'},
-    {'label': 'Sterling Bank', 'code': '232'},
-    {'label': 'Union Bank of Nigeria', 'code': '032'},
-    {'label': 'United Bank for Africa (UBA)', 'code': '033'},
-    {'label': 'Zenith Bank', 'code': '057'},
+    // ── Commercial banks ────────────────────────────────────────────────
+    {'label': 'Access Bank', 'code': '044', 'category': 'commercial'},
+    {'label': 'Citibank Nigeria', 'code': '023', 'category': 'commercial'},
+    {'label': 'Ecobank Nigeria', 'code': '050', 'category': 'commercial'},
+    {'label': 'Fidelity Bank', 'code': '070', 'category': 'commercial'},
+    {'label': 'First Bank of Nigeria', 'code': '011', 'category': 'commercial'},
+    {'label': 'First City Monument Bank (FCMB)', 'code': '214', 'category': 'commercial'},
+    {'label': 'Globus Bank', 'code': '00103', 'category': 'commercial'},
+    {'label': 'Guaranty Trust Bank', 'code': '058', 'category': 'commercial'},
+    {'label': 'Jaiz Bank', 'code': '301', 'category': 'commercial'},
+    {'label': 'Keystone Bank', 'code': '082', 'category': 'commercial'},
+    {'label': 'Lotus Bank', 'code': '303', 'category': 'commercial'},
+    {'label': 'Optimus Bank', 'code': '107', 'category': 'commercial'},
+    {'label': 'Parallex Bank', 'code': '104', 'category': 'commercial'},
+    {'label': 'Polaris Bank', 'code': '076', 'category': 'commercial'},
+    {'label': 'PremiumTrust Bank', 'code': '105', 'category': 'commercial'},
+    {'label': 'Providus Bank', 'code': '101', 'category': 'commercial'},
+    {'label': 'Signature Bank', 'code': '106', 'category': 'commercial'},
+    {'label': 'Stanbic IBTC Bank', 'code': '221', 'category': 'commercial'},
+    {'label': 'Standard Chartered Bank', 'code': '068', 'category': 'commercial'},
+    {'label': 'Sterling Bank', 'code': '232', 'category': 'commercial'},
+    {'label': 'SunTrust Bank', 'code': '100', 'category': 'commercial'},
+    {'label': 'TAJ Bank', 'code': '302', 'category': 'commercial'},
+    {'label': 'Titan Bank', 'code': '102', 'category': 'commercial'},
+    {'label': 'Union Bank of Nigeria', 'code': '032', 'category': 'commercial'},
+    {'label': 'United Bank for Africa (UBA)', 'code': '033', 'category': 'commercial'},
+    {'label': 'Unity Bank', 'code': '215', 'category': 'commercial'},
+    {'label': 'Wema Bank', 'code': '035', 'category': 'commercial'},
+    {'label': 'Zenith Bank', 'code': '057', 'category': 'commercial'},
+    // ── Digital banks & fintechs ────────────────────────────────────────
+    {'label': 'ALAT by WEMA', 'code': '035A', 'category': 'digital'},
+    {'label': 'Carbon', 'code': '565', 'category': 'digital'},
+    {'label': 'FairMoney', 'code': '51318', 'category': 'digital'},
+    {'label': 'GoMoney', 'code': '100022', 'category': 'digital'},
+    {'label': 'Kuda Bank', 'code': '50211', 'category': 'digital'},
+    {'label': 'Mint MFB', 'code': '50304', 'category': 'digital'},
+    {'label': 'Moniepoint MFB', 'code': '50515', 'category': 'digital'},
+    {'label': 'OPay', 'code': '999992', 'category': 'digital'},
+    {'label': 'PalmPay', 'code': '999991', 'category': 'digital'},
+    {'label': 'Rubies Bank', 'code': '125', 'category': 'digital'},
+    {'label': 'Safe Haven MFB', 'code': '51113', 'category': 'digital'},
+    {'label': 'Sparkle Microfinance Bank', 'code': '51310', 'category': 'digital'},
+    {'label': 'VBank (VFD Microfinance Bank)', 'code': '566', 'category': 'digital'},
   ];
 
   static String getBankCode(String bankName) {

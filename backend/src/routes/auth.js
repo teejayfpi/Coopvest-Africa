@@ -317,7 +317,7 @@ router.post('/salary-consent', [
 const REGISTRATION_FIELDS = {
   personal: {
     required: ['gender', 'date_of_birth', 'address', 'state', 'monthly_amount'],
-    optional: ['lga', 'contribution_method', 'preferred_payment_day'],
+    optional: ['lga', 'contribution_method', 'preferred_payment_day', 'preferred_payment_month', 'terms_version', 'terms_accepted_at'],
   },
   employment: {
     required: ['occupation', 'employer_name', 'employment_type'],
@@ -421,6 +421,7 @@ router.post('/complete-registration', authenticate, async (req, res) => {
       occupation, employer_name, employment_type,
       employer_staff_id, work_address, years_of_employment,
       monthly_amount, contribution_method, preferred_payment_day,
+      preferred_payment_month, terms_version, terms_accepted_at,
       nok_name, nok_relationship, nok_phone, nok_address,
       id_type, id_number, staff_id,
       // Bank info fields
@@ -524,6 +525,9 @@ router.post('/complete-registration', authenticate, async (req, res) => {
             monthly_amount: personal_info_candidate.monthly_amount,
             contribution_method: personal_info_candidate.contribution_method,
             preferred_payment_day: personal_info_candidate.preferred_payment_day,
+            preferred_payment_month: personal_info_candidate.preferred_payment_month,
+            terms_version: personal_info_candidate.terms_version,
+            terms_accepted_at: personal_info_candidate.terms_accepted_at,
             ...mergedBank,
           },
           employment_info: {
