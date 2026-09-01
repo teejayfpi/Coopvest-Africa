@@ -1717,6 +1717,24 @@ class _ContributionStepState extends State<_ContributionStep> {
             onDayChanged: (day) =>
                 setState(() => widget.data.preferredPaymentDay = day),
           ),
+          if (widget.data.preferredPaymentDay >= 29) ...[
+            const SizedBox(height: 12),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.info_outline,
+                    color: CoopvestColors.info, size: 15),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    PaymentDateUtils.endOfMonthFallbackHint,
+                    style: const TextStyle(
+                        color: CoopvestColors.info, fontSize: 11),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );

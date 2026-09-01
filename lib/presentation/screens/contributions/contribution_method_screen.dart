@@ -456,7 +456,8 @@ class _ContributionMethodScreenState
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'You will receive a reminder on the ${_contributionDay}${_ordinalSuffix(_contributionDay)} of ${PaymentDateUtils.monthNames[_contributionMonth - 1]} to make your contribution of ₦${_contributionAmount.toStringAsFixed(0)}.',
+                    'You will receive a reminder on the ${_contributionDay}${_ordinalSuffix(_contributionDay)} of ${PaymentDateUtils.monthNames[_contributionMonth - 1]} to make your contribution of ₦${_contributionAmount.toStringAsFixed(0)}.'
+                    '${_contributionDay >= 29 ? ' ${PaymentDateUtils.endOfMonthFallbackHint}' : ''}',
                     style:
                         const TextStyle(color: CoopvestColors.info, fontSize: 11),
                   ),

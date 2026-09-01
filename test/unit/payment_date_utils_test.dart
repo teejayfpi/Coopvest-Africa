@@ -106,4 +106,39 @@ void main() {
       expect(PaymentDateUtils.clampDayToMonth(2025, 12, 31), 31);
     });
   });
+
+  group('PaymentDateUtils.resolveDueDate', () {
+    test('keeps the preferred day when it exists in the month', () {
+      expect(PaymentDateUtils.resolveDueDate(2025, 1, 31),
+          DateTime(2025, 1, 31));
+      expect(PaymentDateUtils.resolveDueDate(2025, 6, 15),
+          DateTime(2025, 6, 15));
+    });
+
+    test('falls back to the 30th in 30-day months when the 31st is chosen',
+        () {
+      expect(PaymentDateUtils.resolveDueDate(2025, 4, 31),
+          DateTime(2025, 4, 30));
+      expect(PaymentDateUtils.resolveDueDate(2025, 9, 31),
+          DateTime(2025, 9, 30));
+    });
+
+    test('falls back to the last day of February when day 29–31 is chosen',
+        () {
+      expect(PaymentDateUtils.resolveDueDate(2025, 2, 31),
+          DateTime(2025, 2, 28));
+      expect(PaymentDateUtils.resolveDueDate(2025, 2, 29),
+          DateTime(2025, 2, 28));
+      expect(PaymentDateUtils.resolveDueDate(2024, 2, 31),
+          DateTime(2024, 2, 29)); // leap year
+    });
+
+    test('never rolls over into the following month', () {
+      for (final month in [2, 4, 6, 9, 11]) {
+        final due = PaymentDateUtils.resolveDueDate(2025, month, 31);
+        expect(due.month, month, reason: 'month $month');
+        expect(due.day, PaymentDateUtils.daysInMonth(2025, month));
+      }
+    });
+  });
 }

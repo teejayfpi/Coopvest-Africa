@@ -2,6 +2,7 @@ import 'notification_service.dart';
 import '../../data/models/contributions/monthly_contribution.dart';
 import '../../config/app_config.dart';
 import '../network/api_client.dart';
+import '../utils/payment_date_utils.dart';
 import 'logger_service.dart';
 
 /// Contribution Reminder Service - Singleton Pattern
@@ -129,7 +130,9 @@ class ContributionReminderService {
           'preferredDay': preferredDay,
           'monthlyAmount': monthlyAmount,
           'lastContributionDate': thisMonthContribution?.createdAt?.toIso8601String(),
-          'dueDate': DateTime(now.year, now.month, preferredDay).toIso8601String(),
+          'dueDate': PaymentDateUtils.resolveDueDate(
+                  now.year, now.month, preferredDay)
+              .toIso8601String(),
         },
       );
       logger.debug('Contribution status synced with backend');
@@ -199,7 +202,8 @@ class ContributionReminderService {
   }
 
   int _getDaysSincePreferredDay(int preferredDay, DateTime now) {
-    final dueDate = DateTime(now.year, now.month, preferredDay);
+    final dueDate =
+        PaymentDateUtils.resolveDueDate(now.year, now.month, preferredDay);
     return now.difference(dueDate).inDays;
   }
 
