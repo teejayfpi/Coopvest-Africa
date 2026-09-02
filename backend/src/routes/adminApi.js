@@ -545,6 +545,200 @@ router.patch(
   }
 );
 
+// ─── Member deletion (super_admin only, two-step confirmation) ───────────────
+// The admin web app calls POST .../members/:id/confirm-delete to generate a
+// code, then DELETE .../members/:id with the code + admin password + the
+// phrase "DELETE". These endpoints previously did not exist, so the UI's
+// delete flow always failed with an endpoint error.
+
+const crypto = require('crypto');
+const pendingMemberDeletions = new Map(); // memberId -> { code, expiresAt, requestedBy }
+const MEMBER_DELETE_CODE_TTL_MS = 30 * 60 * 1000;
+
+function checkSuperAdmin(req, res) {
+  if (!['superadmin', 'super_admin'].includes(req.user?.role || '')) {
+    res.status(403).json({ success: false, error: 'Only the Super Admin can delete members' });
+    return false;
+  }
+  return true;
+}
+
+// Tables that reference profiles and must be cleaned before the profile row
+// (and auth user) can be removed. Ordered children-first. Column names match
+// the current schema; per-table errors are collected and reported.
+const MEMBER_DATA_TABLES = [
+  ['ticket_messages', 'profile_id'],
+  ['tickets', 'profile_id'],
+  ['loan_qrs', 'profile_id'],
+  ['loan_guarantors', 'guarantor_id'],
+  ['loan_guarantors', 'profile_id'],
+  ['loan_repayments', 'profile_id'],
+  ['loans', 'profile_id'],
+  ['transactions', 'profile_id'],
+  ['deposit_requests', 'profile_id'],
+  ['payment_proofs', 'profile_id'],
+  ['wallets', 'profile_id'],
+  ['savings', 'profile_id'],
+  ['contributions', 'profile_id'],
+  ['contribution_plan_reductions', 'profile_id'],
+  ['contribution_plans', 'profile_id'],
+  ['kyc_documents', 'profile_id'],
+  ['kyc', 'profile_id'],
+  ['notifications', 'profile_id'],
+  ['login_history', 'profile_id'],
+  ['security_sessions', 'profile_id'],
+  ['user_settings', 'profile_id'],
+  ['user_devices', 'profile_id'],
+  ['referrals', 'referrer_id'],
+  ['referrals', 'referred_id'],
+  ['investments', 'profile_id'],
+  ['withdrawal_requests', 'profile_id'],
+  ['bank_accounts', 'profile_id'],
+  ['audit_logs', 'actor_id'],
+  ['audit_logs', 'target_profile_id'],
+];
+
+/**
+ * POST /api/admin/members/:id/confirm-delete
+ * Step 1: validate the target and issue a one-time confirmation code.
+ */
+router.post('/members/:id/confirm-delete', async (req, res) => {
+  try {
+    if (!checkSuperAdmin(req, res)) return;
+    const { id } = req.params;
+
+    if (id === req.user.id) {
+      return res.status(400).json({ success: false, error: 'You cannot delete your own account' });
+    }
+
+    const { data: member, error } = await supabase
+      .from('profiles')
+      .select('id, email, name, role')
+      .eq('id', id)
+      .maybeSingle();
+    if (error) throw error;
+    if (!member) return res.status(404).json({ success: false, error: 'Member not found' });
+    if (['superadmin', 'super_admin'].includes(member.role)) {
+      return res.status(400).json({ success: false, error: 'Super Admin accounts cannot be deleted' });
+    }
+
+    const code = crypto.randomBytes(3).toString('hex').toUpperCase(); // e.g. "A1B2C3"
+    const expiresAt = new Date(Date.now() + MEMBER_DELETE_CODE_TTL_MS);
+    pendingMemberDeletions.set(id, { code, expiresAt, requestedBy: req.user.id });
+
+    await logAdminAction('MEMBER_DELETE_INITIATED', { model: 'Profile', id }, {
+      memberEmail: member.email,
+    }, req);
+
+    res.json({
+      success: true,
+      confirmationCode: code,
+      memberName: member.name || member.email,
+      memberEmail: member.email,
+      expiresAt: expiresAt.toISOString(),
+      message: 'Confirmation code generated. It expires in 30 minutes.',
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * DELETE /api/admin/members/:id
+ * Step 2: verify code + admin password + "DELETE" phrase, then remove the
+ * member's data rows, profile, and Supabase auth user.
+ */
+router.delete('/members/:id', async (req, res) => {
+  try {
+    if (!checkSuperAdmin(req, res)) return;
+    const { id } = req.params;
+    const { confirmationCode, password, confirmPhrase } = req.body || {};
+
+    if ((confirmPhrase || '').toUpperCase() !== 'DELETE') {
+      return res.status(400).json({ success: false, error: 'Type DELETE to confirm' });
+    }
+    if (!password) {
+      return res.status(400).json({ success: false, error: 'Password is required' });
+    }
+
+    const pending = pendingMemberDeletions.get(id);
+    if (!pending || pending.expiresAt < new Date()) {
+      pendingMemberDeletions.delete(id);
+      return res.status(400).json({ success: false, error: 'Confirmation code expired or not requested. Start again.' });
+    }
+    if ((confirmationCode || '').toUpperCase() !== pending.code) {
+      return res.status(400).json({ success: false, error: 'Invalid confirmation code' });
+    }
+
+    // Verify the acting admin's password against Supabase auth.
+    const { error: authError } = await supabase.auth.signInWithPassword({
+      email: req.user.email,
+      password,
+    });
+    if (authError) {
+      return res.status(401).json({ success: false, error: 'Password verification failed' });
+    }
+
+    const { data: member, error: memberErr } = await supabase
+      .from('profiles')
+      .select('id, email, name, role')
+      .eq('id', id)
+      .maybeSingle();
+    if (memberErr) throw memberErr;
+    if (!member) return res.status(404).json({ success: false, error: 'Member not found' });
+    if (['superadmin', 'super_admin'].includes(member.role)) {
+      return res.status(400).json({ success: false, error: 'Super Admin accounts cannot be deleted' });
+    }
+
+    // Null out non-blocking references that would FK-fail the profile delete.
+    await supabase.from('loans').update({ approved_by: null }).eq('approved_by', id);
+
+    // Delete dependent rows. audit_logs is immutable by trigger; if a delete
+    // is blocked, collect it and continue with the rest.
+    const failures = [];
+    for (const [table, column] of MEMBER_DATA_TABLES) {
+      const { error } = await supabase.from(table).delete().eq(column, id);
+      if (error) {
+        if (/immutable|not permitted/i.test(error.message)) {
+          failures.push(`${table}: ${error.message}`);
+        } else if (!/does not exist|Could not find/i.test(error.message)) {
+          failures.push(`${table}: ${error.message}`);
+        }
+      }
+    }
+
+    const { error: profileErr } = await supabase.from('profiles').delete().eq('id', id);
+    if (profileErr) {
+      return res.status(500).json({
+        success: false,
+        error: `Failed to delete profile: ${profileErr.message}`,
+        cleanupFailures: failures,
+      });
+    }
+
+    const { error: authDelErr } = await supabase.auth.admin.deleteUser(id, false);
+    if (authDelErr) {
+      logger.warn(`auth user delete failed for ${id}:`, authDelErr.message);
+    }
+
+    pendingMemberDeletions.delete(id);
+    await logAdminAction('MEMBER_DELETED', { model: 'Profile', id }, {
+      memberEmail: member.email,
+      memberName: member.name,
+      cleanupFailures: failures.length ? failures : undefined,
+    }, req);
+
+    res.json({
+      success: true,
+      message: `${member.name || member.email} has been permanently deleted.`,
+      deletedAt: new Date().toISOString(),
+      warnings: failures.length ? failures : undefined,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 /**
  * POST /api/v1/admin/members/:id/reset-password
  * Admin triggers a password-reset email for a member. The member receives a
