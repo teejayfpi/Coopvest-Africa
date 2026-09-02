@@ -144,6 +144,26 @@ router.post(
       const payload = await response.json();
 
       if (!response.ok || !payload.status || !payload.data?.account_name) {
+        const paystackMsg = payload?.message || `HTTP ${response.status}`;
+        logger.error(`bank verify: Paystack resolve failed: ${paystackMsg}`);
+
+        // Invalid/test keys, daily test-mode resolve limits and provider
+        // outages are availability problems, not a wrong account number —
+        // tell the client to retry later instead of blaming the member.
+        const msg = paystackMsg.toLowerCase();
+        const providerIssue =
+          response.status === 401 ||
+          response.status === 403 ||
+          msg.includes('limit') ||
+          msg.includes('test mode') ||
+          msg.includes('invalid key');
+        if (providerIssue) {
+          return res.status(503).json({
+            success: false,
+            error: 'Account verification is temporarily unavailable. Please try again later.',
+          });
+        }
+
         return res.status(422).json({
           success: false,
           error: 'Could not verify this account. Check the bank and account number, then try again.',
