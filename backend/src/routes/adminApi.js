@@ -517,7 +517,7 @@ router.patch(
   [
     body('isActive').optional().isBoolean(),
     body('isFlagged').optional().isBoolean(),
-    body('role').optional().isIn(['member', 'admin']),
+    body('role').optional().isIn(['member', 'admin', 'super_admin']),
   ],
   validate,
   async (req, res) => {
@@ -529,6 +529,28 @@ router.patch(
       if (Object.keys(update).length === 0) {
         return res.status(400).json({ success: false, error: 'No fields to update' });
       }
+
+      const actorIsSuper = ['superadmin', 'super_admin'].includes(req.user?.role || '');
+
+      // Granting or revoking super_admin is itself a super-admin-only action.
+      if (update.role !== undefined) {
+        const { data: target } = await supabase
+          .from('profiles')
+          .select('id, email, role')
+          .eq('id', req.params.id)
+          .maybeSingle();
+        if (!target) return res.status(404).json({ success: false, error: 'Member not found' });
+
+        const targetIsSuper = ['superadmin', 'super_admin'].includes(target.role);
+        const touchesSuper = update.role === 'super_admin' || targetIsSuper;
+        if (touchesSuper && !actorIsSuper) {
+          return res.status(403).json({ success: false, error: 'Only a Super Admin can grant or revoke Super Admin access' });
+        }
+        if (targetIsSuper && req.params.id === req.user.id && update.role !== 'super_admin') {
+          return res.status(400).json({ success: false, error: 'You cannot remove your own Super Admin role' });
+        }
+      }
+
       const { data, error } = await supabase
         .from('profiles')
         .update(update)
@@ -537,7 +559,12 @@ router.patch(
         .maybeSingle();
       if (error) throw error;
       if (!data) return res.status(404).json({ success: false, error: 'Member not found' });
-      await logAdminAction('MEMBER_UPDATED', { model: 'Profile', id: data.id }, update);
+      await logAdminAction(
+        update.role === 'super_admin' ? 'SUPER_ADMIN_GRANTED' : 'MEMBER_UPDATED',
+        { model: 'Profile', id: data.id },
+        { ...update, actorEmail: req.user.email },
+        req,
+      );
       res.json({ success: true, member: data });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
