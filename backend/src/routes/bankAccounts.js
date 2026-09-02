@@ -10,16 +10,21 @@ const { body, param } = require('express-validator');
 const router = express.Router();
 
 const supabase = require('../config/supabase');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, requireActivated } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const logger = require('../utils/logger');
 
 router.use(authenticate);
 
+// Every route except POST /verify requires an activated account (KYC approved
+// + registration fee paid). /verify is part of KYC onboarding, so it must stay
+// reachable before activation. Do not gate this whole router in server.js.
+const gated = requireActivated;
+
 /**
  * GET /api/v1/bank-accounts
  */
-router.get('/', async (req, res) => {
+router.get('/', gated, async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('bank_accounts')
@@ -39,6 +44,7 @@ router.get('/', async (req, res) => {
  */
 router.post(
   '/',
+  gated,
   [
     body('bankName').isString().isLength({ min: 1, max: 120 }),
     body('accountNumber').isString().isLength({ min: 6, max: 20 }),
@@ -78,7 +84,7 @@ router.post(
 /**
  * PATCH /api/v1/bank-accounts/:id
  */
-router.patch('/:id', [param('id').isUUID()], validate, async (req, res) => {
+router.patch('/:id', gated, [param('id').isUUID()], validate, async (req, res) => {
   try {
     const update = {};
     if (req.body.bankName !== undefined) update.bank_name = req.body.bankName;
@@ -160,7 +166,7 @@ router.post(
 /**
  * PATCH /api/v1/bank-accounts/:id/default
  */
-router.patch('/:id/default', [param('id').isUUID()], validate, async (req, res) => {
+router.patch('/:id/default', gated, [param('id').isUUID()], validate, async (req, res) => {
   try {
     const { error: clearErr } = await supabase
       .from('bank_accounts')
@@ -185,7 +191,7 @@ router.patch('/:id/default', [param('id').isUUID()], validate, async (req, res) 
 /**
  * DELETE /api/v1/bank-accounts/:id
  */
-router.delete('/:id', [param('id').isUUID()], validate, async (req, res) => {
+router.delete('/:id', gated, [param('id').isUUID()], validate, async (req, res) => {
   try {
     const { error } = await supabase
       .from('bank_accounts')
