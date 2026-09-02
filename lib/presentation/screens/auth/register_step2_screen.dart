@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
+import '../../../core/utils/error_handler.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/common/buttons.dart';
 
@@ -84,9 +85,10 @@ class _RegisterStep2ScreenState extends ConsumerState<RegisterStep2Screen> {
       }
     } catch (e) {
       if (mounted) {
+        final networkMsg = ErrorHandler.networkErrorMessage(e);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content:
-              Text('Failed to send verification email: ${e.toString()}'),
+          content: Text(networkMsg ??
+              'Failed to send verification email. Please try again.'),
           backgroundColor: CoopvestColors.error,
         ));
       }
@@ -141,9 +143,10 @@ class _RegisterStep2ScreenState extends ConsumerState<RegisterStep2Screen> {
       }
     } catch (e) {
       if (mounted) {
+        final networkMsg = ErrorHandler.networkErrorMessage(e);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content:
-              Text('Failed to check verification status: ${e.toString()}'),
+          content: Text(networkMsg ??
+              'Failed to check verification status. Please try again.'),
           backgroundColor: CoopvestColors.error,
         ));
       }

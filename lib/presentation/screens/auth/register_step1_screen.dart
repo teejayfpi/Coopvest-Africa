@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
+import '../../../core/utils/error_handler.dart';
 import '../../../core/utils/utils.dart';
 import '../../../data/models/auth_models.dart';
 import '../../providers/auth_provider.dart';
@@ -122,10 +123,12 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
       }
     } catch (e) {
       if (mounted) {
-        final msg = e
-            .toString()
-            .replaceFirst('Exception: ', '')
-            .replaceFirst('AuthException: ', '');
+        final networkMsg = ErrorHandler.networkErrorMessage(e);
+        final msg = networkMsg ??
+            e
+                .toString()
+                .replaceFirst('Exception: ', '')
+                .replaceFirst('AuthException: ', '');
 
         if (msg.contains('already exists') ||
             msg.contains('email-already-in-use') ||

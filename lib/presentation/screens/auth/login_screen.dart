@@ -5,6 +5,7 @@ import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
+import '../../../core/utils/error_handler.dart';
 import '../../../core/utils/utils.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../providers/auth_provider.dart';
@@ -155,9 +156,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       
     } catch (e) {
       if (mounted) {
-        final msg = e.toString()
-            .replaceFirst('Exception: ', '')
-            .replaceFirst('AuthException: ', '');
+        final msg = ErrorHandler.networkErrorMessage(e) ??
+            e.toString()
+                .replaceFirst('Exception: ', '')
+                .replaceFirst('AuthException: ', '');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(msg), backgroundColor: CoopvestColors.error),
         );

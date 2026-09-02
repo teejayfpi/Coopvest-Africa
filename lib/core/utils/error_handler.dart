@@ -295,6 +295,21 @@ class ErrorHandler {
            error is TokenRefreshException;
   }
 
+  /// Map low-level network failures (DNS lookup failures, no connectivity)
+  /// to a friendly message. Returns null when the error is not
+  /// network-related, so callers can fall back to their normal handling.
+  static String? networkErrorMessage(dynamic error) {
+    final str = error.toString().toLowerCase();
+    if (str.contains('socketexception') ||
+        str.contains('failed host lookup') ||
+        str.contains('no address associated with hostname') ||
+        str.contains('network is unreachable') ||
+        str.contains('clientexception')) {
+      return 'No internet connection. Please check your network settings and try again.';
+    }
+    return null;
+  }
+
   /// Check if error is network-related
   static bool isNetworkError(dynamic error) {
     return error is NetworkException ||

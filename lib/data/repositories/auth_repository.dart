@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/network/api_client.dart';
+import '../../core/utils/error_handler.dart';
 import '../../core/utils/utils.dart';
 import '../models/auth_models.dart';
 import '../models/kyc_models.dart';
@@ -121,6 +122,8 @@ class AuthRepository {
       throw AuthException(_mapSupabaseError(e));
     } catch (e) {
       logger.e('Login error: $e');
+      final networkMsg = ErrorHandler.networkErrorMessage(e);
+      if (networkMsg != null) throw AuthException(networkMsg);
       rethrow;
     }
   }
@@ -171,6 +174,8 @@ class AuthRepository {
       throw AuthException(_mapSupabaseError(e));
     } catch (e) {
       logger.e('Register error: $e');
+      final networkMsg = ErrorHandler.networkErrorMessage(e);
+      if (networkMsg != null) throw AuthException(networkMsg);
       rethrow;
     }
   }
