@@ -257,6 +257,10 @@ app.use('/api/v1/savings', requireFeatureFlag('savingsModule'), requireActivated
 app.use('/api/v1/rollover', requireActivated, rolloverRoutes);
 app.use('/api/v1/investments', requireFeatureFlag('investmentModule'), requireActivated, investmentsRoutes);
 app.use('/api/v1/notifications', requireFeatureFlag('notifications'), notificationRoutes);
+// Account-name resolution is part of KYC onboarding, so it must be reachable
+// BEFORE the member is activated (KYC approved + registration fee paid).
+// Mount /verify with plain auth first; the rest of bank-accounts stays gated.
+app.use('/api/v1/bank-accounts/verify', bankAccountRoutes);
 app.use('/api/v1/bank-accounts', requireActivated, bankAccountRoutes);
 app.use('/api/v1/banks', banksRoutes);
 app.use('/api/v1/terms', termsRoutes);
@@ -292,6 +296,7 @@ app.use('/api/savings', requireFeatureFlag('savingsModule'), requireActivated, s
 app.use('/api/rollover', requireActivated, rolloverRoutes);
 app.use('/api/investments', requireFeatureFlag('investmentModule'), requireActivated, investmentsRoutes);
 app.use('/api/notifications', requireFeatureFlag('notifications'), notificationRoutes);
+app.use('/api/bank-accounts/verify', bankAccountRoutes);
 app.use('/api/bank-accounts', requireActivated, bankAccountRoutes);
 app.use('/api/transactions', requireActivated, transactionRoutes);
 app.use('/api/settings', settingsRoutes);
