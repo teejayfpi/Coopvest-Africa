@@ -100,3 +100,16 @@ The Approval Center (maker-checker) lives in `src/routes/governance.js` under
 ## Role note
 The DB uses both `superadmin` and `super_admin` spellings; treat both as Super
 Admin everywhere.
+
+## Gotcha: Express sub-mounts strip the prefix
+Never mount a whole router at a deep path to "expose one route early" (e.g.
+`app.use('/api/v1/bank-accounts/verify', bankAccountRoutes)`): Express strips
+the mount prefix, so `POST .../verify` hits the router's `/` route instead.
+Gate per-route inside the router (see `src/routes/bankAccounts.js`: `gated =
+requireActivated` on every route except POST `/verify`, fixed in ee41ba17).
+
+## Bank verification
+`POST /api/v1/bank-accounts/verify` (and legacy `/api/bank-accounts/verify`)
+resolves account holder names via Paystack (`PAYSTACK_SECRET_KEY`, 503 when
+unconfigured, 422 when Paystack can't resolve). Reachable pre-activation
+because members use it during KYC onboarding.
