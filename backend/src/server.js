@@ -437,6 +437,11 @@ app.use('/api/v2/admin/members', memberDetailRoutes);
 app.use('/api/v2/admin/payment-proofs', paymentProofAdminRoutes);
 
 // In-app admin console endpoints (member JWT + IP whitelist)
+// The Admin Dashboard frontend calls /api/v1/admin/<path> directly with the
+// logged-in admin's JWT, so the full adminApi router (member deletion,
+// notifications, dashboard stats, ...) must be reachable here too — the
+// narrower adminRoutes only covers payment settings/organizations/deposits.
+app.use('/api/v1/admin', adminIPWhitelist, adminApiRoutes);
 app.use('/api/v1/admin', adminIPWhitelist, adminRoutes);
 app.use('/api/v1/admin-tickets', adminIPWhitelist, adminTicketRoutes);
 
