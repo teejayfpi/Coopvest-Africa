@@ -15,7 +15,7 @@ const supabase = require('../config/supabase');
 const { authenticate } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const logger = require('../utils/logger');
-const { ageInYears, MIN_AGE_YEARS } = require('../services/registrationMerge');
+const { ageInYears, normalizeDateOfBirth, MIN_AGE_YEARS } = require('../services/registrationMerge');
 
 // In-memory file upload (10 MB max) — the file is streamed straight into
 // Supabase Storage, never touching the disk.
@@ -79,6 +79,11 @@ router.post(
         ...(kyc.personal_info || {}),
         ...(personalInfo || {}),
       };
+      // Normalize the DOB (YYYY-MM-DD or DD/MM/YYYY) so downstream date-column
+      // writes never receive a format Postgres rejects.
+      mergedPersonal.date_of_birth =
+        normalizeDateOfBirth(mergedPersonal.date_of_birth) ||
+        mergedPersonal.date_of_birth;
       const mergedEmployment = {
         ...(kyc.employment_info || {}),
         ...(employmentInfo || {}),

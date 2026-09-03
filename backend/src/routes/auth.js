@@ -17,6 +17,7 @@ const {
   buildRegistrationCandidates,
   mergeStoredPersonalInfo,
   ageInYears,
+  normalizeDateOfBirth,
   MIN_AGE_YEARS,
 } = require('../services/registrationMerge');
 
@@ -509,7 +510,7 @@ router.post('/complete-registration', authenticate, async (req, res) => {
         {
           profile_id: req.user.id,
           national_id: hasValue(id_number) ? id_number : (existingKyc?.national_id || null),
-          date_of_birth: personal_info_candidate.date_of_birth || null,
+          date_of_birth: normalizeDateOfBirth(personal_info_candidate.date_of_birth),
           address: hasValue(address) ? address : (existingKyc?.address || null),
           personal_info: {
             ...existingPersonal,
