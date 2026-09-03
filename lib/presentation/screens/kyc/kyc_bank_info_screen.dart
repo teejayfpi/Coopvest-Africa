@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../data/models/bank_directory.dart';
@@ -25,13 +26,13 @@ class _KYCBankInfoScreenState extends ConsumerState<KYCBankInfoScreen> {
   late TextEditingController _accountNameController;
   late TextEditingController _bvnController;
 
-
   BankOption? _selectedBank;
   String? _selectedAccountType;
 
   final List<Map<String, dynamic>> _accountTypes = BankAccountTypes.types;
 
   bool _accountNameVerified = false;
+  bool _manualEntry = false;
   bool _isVerifyingAccountName = false;
 
   @override
@@ -112,7 +113,9 @@ class _KYCBankInfoScreenState extends ConsumerState<KYCBankInfoScreen> {
     try {
       // Resolve the account holder name via the backend verification
       // service (Paystack bank-resolve, credentials stay server-side).
-      final result = await ref.read(bankVerificationServiceProvider).verifyAccount(
+      final result = await ref
+          .read(bankVerificationServiceProvider)
+          .verifyAccount(
             bankCode: _selectedBank!.code,
             accountNumber: _accountNumberController.text,
           );
@@ -141,7 +144,8 @@ class _KYCBankInfoScreenState extends ConsumerState<KYCBankInfoScreen> {
           _accountNameController.clear();
         });
         _showError(
-            'The account name does not match the information provided. Please check the bank and account number.');
+          'The account name does not match the information provided. Please check the bank and account number.',
+        );
       }
     } on AccountVerificationException catch (e) {
       if (!mounted) return;
@@ -149,8 +153,48 @@ class _KYCBankInfoScreenState extends ConsumerState<KYCBankInfoScreen> {
         _isVerifyingAccountName = false;
         _accountNameVerified = false;
       });
+      // When verification itself is down (or the network is), members would
+      // otherwise be hard-blocked from completing registration — offer manual
+      // entry instead. Genuine "account not found" errors still block.
+      if (e.reason == AccountVerificationError.unavailable ||
+          e.reason == AccountVerificationError.network) {
+        final manual = await _offerManualEntry();
+        if (!mounted) return;
+        if (manual == true) {
+          setState(() => _manualEntry = true);
+          return;
+        }
+      }
       _showError(e.message);
     }
+  }
+
+  Future<bool?> _offerManualEntry() {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Verification Unavailable'),
+        content: const Text(
+          'We could not verify this account right now. You can enter the '
+          'account name manually and continue. Make sure the name matches '
+          'the bank account holder.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Try again'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: CoopvestColors.primary,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Enter manually'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<bool?> _confirmAccountName(String accountName) {
@@ -211,8 +255,12 @@ class _KYCBankInfoScreenState extends ConsumerState<KYCBankInfoScreen> {
       _showError('Account number must be 10 digits');
       return;
     }
-    if (!_accountNameVerified) {
+    if (!_accountNameVerified && !_manualEntry) {
       _showError('Please verify your account name');
+      return;
+    }
+    if (_manualEntry && _accountNameController.text.trim().isEmpty) {
+      _showError('Please enter the account name');
       return;
     }
     if (_selectedAccountType == null) {
@@ -273,7 +321,10 @@ class _KYCBankInfoScreenState extends ConsumerState<KYCBankInfoScreen> {
         ),
         title: Text(
           'Bank Information',
-          style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: context.textPrimary,
+            fontWeight: FontWeight.bold,
+          ),
         ),
       ),
       body: SafeArea(
@@ -298,7 +349,11 @@ class _KYCBankInfoScreenState extends ConsumerState<KYCBankInfoScreen> {
 
               Text(
                 'Add Your Bank Details',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: context.textPrimary),
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: context.textPrimary,
+                ),
               ),
               const SizedBox(height: 8),
               Text(
@@ -313,6 +368,7 @@ class _KYCBankInfoScreenState extends ConsumerState<KYCBankInfoScreen> {
                   setState(() {
                     _selectedBank = bank;
                     _accountNameVerified = false;
+                    _manualEntry = false;
                     _accountNameController.clear();
                   });
                 },
@@ -326,9 +382,10 @@ class _KYCBankInfoScreenState extends ConsumerState<KYCBankInfoScreen> {
                 keyboardType: TextInputType.number,
                 maxLength: 10,
                 onChanged: (val) {
-                  if (_accountNameVerified) {
+                  if (_accountNameVerified || _manualEntry) {
                     setState(() {
                       _accountNameVerified = false;
+                      _manualEntry = false;
                       _accountNameController.clear();
                     });
                   }
@@ -336,11 +393,13 @@ class _KYCBankInfoScreenState extends ConsumerState<KYCBankInfoScreen> {
               ),
               const SizedBox(height: 12),
 
-              if (!_accountNameVerified)
+              if (!_accountNameVerified && !_manualEntry)
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton(
-                    onPressed: _isVerifyingAccountName ? null : _verifyAccountName,
+                    onPressed: _isVerifyingAccountName
+                        ? null
+                        : _verifyAccountName,
                     style: OutlinedButton.styleFrom(
                       foregroundColor: CoopvestColors.primary,
                       side: const BorderSide(color: CoopvestColors.primary),
@@ -350,10 +409,12 @@ class _KYCBankInfoScreenState extends ConsumerState<KYCBankInfoScreen> {
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                      strokeWidth: 2)),
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              ),
                               SizedBox(width: 10),
                               Text('Verifying account details…'),
                             ],
@@ -362,11 +423,14 @@ class _KYCBankInfoScreenState extends ConsumerState<KYCBankInfoScreen> {
                   ),
                 ),
 
-              if (_accountNameVerified)
+              if (_accountNameVerified || _manualEntry)
                 AppTextField(
-                  label: 'Account Name',
+                  label: _manualEntry ? 'Account Name *' : 'Account Name',
+                  hint: _manualEntry
+                      ? 'Enter the name on the bank account'
+                      : null,
                   controller: _accountNameController,
-                  readOnly: true,
+                  readOnly: !_manualEntry,
                   filled: true,
                 ),
               const SizedBox(height: 20),
@@ -420,25 +484,20 @@ class _KYCBankInfoScreenState extends ConsumerState<KYCBankInfoScreen> {
         shape: BoxShape.circle,
       ),
       child: Center(
-        child: isCompleted 
-          ? const Icon(Icons.check, color: Colors.white, size: 16)
-          : Text(
-              '$step',
-              style: TextStyle(
-                color: context.textSecondary,
-                fontWeight: FontWeight.bold,
+        child: isCompleted
+            ? const Icon(Icons.check, color: Colors.white, size: 16)
+            : Text(
+                '$step',
+                style: TextStyle(
+                  color: context.textSecondary,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
       ),
     );
   }
 
   Widget _buildProgressLine(int step) {
-    return Expanded(
-      child: Container(
-        height: 2,
-        color: context.dividerColor,
-      ),
-    );
+    return Expanded(child: Container(height: 2, color: context.dividerColor));
   }
 }
