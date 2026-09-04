@@ -33,9 +33,12 @@ async function computeRiskScores(profileIds) {
       .from('profiles')
       .select('id, user_id, name, email, is_active, is_flagged, kyc_status, kyc_verified, created_at')
       .in('id', ids),
+    // NOTE: penalty_applied and missed_months are not selected — those columns
+    // do not exist in the production loans table and referencing them made the
+    // endpoint 500 ("column does not exist").
     supabase
       .from('loans')
-      .select('id, profile_id, amount, status, remaining_balance, total_repayment, penalty_applied, missed_months')
+      .select('id, profile_id, amount, status, remaining_balance, total_repayment')
       .in('profile_id', ids),
     supabase
       .from('contributions')
@@ -93,7 +96,6 @@ async function computeRiskScores(profileIds) {
     const problemLoans = pLoans.filter((l) => PROBLEM_LOAN_STATUSES.includes(l.status));
     const defaultedLoans = pLoans.filter((l) => l.status === 'defaulted');
     const completedLoans = pLoans.filter((l) => l.status === 'completed');
-    const penalizedLoans = pLoans.filter((l) => l.penalty_applied === true);
     const outstandingBalance = pLoans
       .filter((l) => ['active', 'approved', 'disbursed', 'repaying', 'overdue', 'in_recovery'].includes(l.status))
       .reduce((s, l) => s + Number(l.remaining_balance ?? l.total_repayment ?? l.amount ?? 0), 0);
@@ -112,7 +114,6 @@ async function computeRiskScores(profileIds) {
     score -= activeLoans.length * 5;
     score -= problemLoans.length * 15;
     score -= defaultedLoans.length * 25;
-    score -= penalizedLoans.length * 5;
     score -= guaranteedProblemLoans * 10;
     if (!kycVerified) score -= 15;
     if (isFlagged) score -= 20;
@@ -127,7 +128,6 @@ async function computeRiskScores(profileIds) {
         overdueLoans: problemLoans.length,
         defaultedLoans: defaultedLoans.length,
         completedLoans: completedLoans.length,
-        penalizedLoans: penalizedLoans.length,
         outstandingBalance,
         guaranteedProblemLoans,
         contributionConsistency: Math.round(consistency * 100),
