@@ -86,9 +86,9 @@ class KYCSuccessScreen extends ConsumerWidget {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    _buildNextStep(context, '1', 'Check back later for approval status'),
-                    _buildNextStep(context, '2', 'Once approved, you can apply for loans'),
-                    _buildNextStep(context, '3', 'Start saving to build your credit history'),
+                    _buildNextStep(context, '1', 'Pay your one-time ₦5,000 registration fee'),
+                    _buildNextStep(context, '2', 'An admin verifies your KYC and payment together'),
+                    _buildNextStep(context, '3', 'Your member dashboard unlocks'),
                   ],
                 ),
               ),
@@ -100,7 +100,9 @@ class KYCSuccessScreen extends ConsumerWidget {
                 height: 56,
                 child: ElevatedButton(
                   onPressed: () {
-                    Navigator.of(context).pushReplacementNamed('/home');
+                    // Registration fee comes before dashboard access — send the
+                    // member to the activation screen, not the dashboard.
+                    Navigator.of(context).pushReplacementNamed('/account-activation');
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: CoopvestColors.primary,
@@ -110,7 +112,7 @@ class KYCSuccessScreen extends ConsumerWidget {
                     ),
                   ),
                   child: const Text(
-                    'Go to Dashboard',
+                    'Continue to Activation',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
