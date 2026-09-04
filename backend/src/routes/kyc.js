@@ -252,6 +252,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
     // violate the constraint, so map it to 'national_id' (a generic national ID).
     const side = (req.body.side || 'front').toString() === 'back' ? 'back' : 'front';
 
+    req._uploadStep = 'pre-storage';
     const ext = (req.file.originalname.split('.').pop() || 'jpg').toLowerCase();
     if (!['jpg', 'jpeg', 'png', 'webp', 'heic'].includes(ext)) {
       return res.status(400).json({ success: false, error: 'Only JPG, PNG, WEBP or HEIC images are allowed.' });
@@ -265,6 +266,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
         upsert: false,
       });
     if (uploadError) throw uploadError;
+    req._uploadStep = 'after-storage';
 
     // Signed URL (10 years) so the private object is viewable by the app/admin.
     let url;
@@ -282,6 +284,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
 
     const kyc = await getOrCreateKyc(req.user.id);
 
+    req._uploadStep = 'db-write';
     if (type === 'selfie') {
       // The `selfie` column is JSONB. Persist the URL + metadata there. The old
       // code wrote to a non-existent `selfie_url` column, which silently failed
@@ -318,8 +321,15 @@ router.post('/upload', upload.single('file'), async (req, res) => {
     logger.info(`KYC ${type} uploaded for user ${req.user.id}: ${storagePath}`);
     res.status(201).json({ success: true, url, path: storagePath, type });
   } catch (err) {
-    logger.error('kyc upload error:', err);
-    res.status(500).json({ success: false, error: err.message || 'Upload failed.' });
+    // Include the failing step + key fingerprint so production RLS/auth
+    // failures can be diagnosed without shell access.
+    const keyHint = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').slice(0, 18);
+    logger.error(`kyc upload error [step=${req._uploadStep || '?'} key=${keyHint}…]:`, err);
+    res.status(500).json({
+      success: false,
+      error: err.message || 'Upload failed.',
+      step: req._uploadStep || 'unknown',
+    });
   }
 });
 
