@@ -321,14 +321,19 @@ router.post('/upload', upload.single('file'), async (req, res) => {
     logger.info(`KYC ${type} uploaded for user ${req.user.id}: ${storagePath}`);
     res.status(201).json({ success: true, url, path: storagePath, type });
   } catch (err) {
-    // Include the failing step + key fingerprint so production RLS/auth
-    // failures can be diagnosed without shell access.
-    const keyHint = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').slice(0, 18);
-    logger.error(`kyc upload error [step=${req._uploadStep || '?'} key=${keyHint}…]:`, err);
+    // Include the failing step + the role claim of the configured key so
+    // production RLS/auth failures can be diagnosed without shell access.
+    let keyRole = 'unknown';
+    try {
+      const payload = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').split('.')[1];
+      keyRole = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')).role || 'none';
+    } catch (_) { /* leave as unknown */ }
+    logger.error(`kyc upload error [step=${req._uploadStep || '?'} keyRole=${keyRole}]:`, err);
     res.status(500).json({
       success: false,
       error: err.message || 'Upload failed.',
       step: req._uploadStep || 'unknown',
+      keyRole,
     });
   }
 });
