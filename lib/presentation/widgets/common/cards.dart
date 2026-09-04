@@ -310,10 +310,15 @@ class LoanCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Loan #$loanId',
-                style: CoopvestTypography.headlineSmall.copyWith(color: context.textPrimary),
+              Expanded(
+                child: Text(
+                  'Loan #$loanId',
+                  style: CoopvestTypography.headlineSmall.copyWith(color: context.textPrimary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 decoration: BoxDecoration(
@@ -325,6 +330,7 @@ class LoanCard extends StatelessWidget {
                   style: CoopvestTypography.labelSmall.copyWith(
                     color: statusColor,
                   ),
+                  maxLines: 1,
                 ),
               ),
             ],

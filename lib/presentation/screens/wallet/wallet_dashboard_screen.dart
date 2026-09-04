@@ -463,6 +463,8 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
                           fontSize: 16,
                           color: context.textPrimary,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                       const Spacer(),
                       Row(

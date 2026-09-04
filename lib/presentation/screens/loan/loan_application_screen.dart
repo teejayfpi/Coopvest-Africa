@@ -892,15 +892,19 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
                             return DropdownMenuItem(
                               value: key,
                               child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Text(
-                                    key,
-                                    style: CoopvestTypography.bodyMedium.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 14,
+                                  Flexible(
+                                    child: Text(
+                                      key,
+                                      style: CoopvestTypography.bodyMedium.copyWith(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 14,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
+                                  const SizedBox(width: 8),
                                   Text(
                                     '${value['duration']}m @ ${value['interest']}%',
                                     style: CoopvestTypography.bodySmall.copyWith(
