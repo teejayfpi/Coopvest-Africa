@@ -26,9 +26,12 @@ async function computeRiskScores(profileIds) {
   if (ids.length === 0) return {};
 
   const [profilesRes, loansRes, contributionsRes, guaranteesRes] = await Promise.all([
+    // NOTE: employment_status is intentionally not selected — that column does
+    // not exist in production, and referencing it here made the whole
+    // risk-scoring endpoint fail with a 500 ("column does not exist").
     supabase
       .from('profiles')
-      .select('id, user_id, name, email, is_active, is_flagged, kyc_status, kyc_verified, employment_status, created_at')
+      .select('id, user_id, name, email, is_active, is_flagged, kyc_status, kyc_verified, created_at')
       .in('id', ids),
     supabase
       .from('loans')
@@ -113,7 +116,6 @@ async function computeRiskScores(profileIds) {
     score -= guaranteedProblemLoans * 10;
     if (!kycVerified) score -= 15;
     if (isFlagged) score -= 20;
-    if (p.employment_status === 'unemployed') score -= 5;
     score -= Math.round((1 - consistency) * 10);
     score = Math.max(0, Math.min(100, score));
 
@@ -130,7 +132,6 @@ async function computeRiskScores(profileIds) {
         guaranteedProblemLoans,
         contributionConsistency: Math.round(consistency * 100),
         monthsContributedLast6: monthsContributed,
-        employmentStatus: p.employment_status || null,
         kycVerified,
         isFlagged,
       },
