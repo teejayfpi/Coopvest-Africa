@@ -826,8 +826,15 @@ router.delete('/members/:id', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Invalid confirmation code' });
     }
 
-    // Verify the acting admin's password against Supabase auth.
-    const { error: authError } = await supabase.auth.signInWithPassword({
+    // Verify the acting admin's password against Supabase auth. Must use a
+    // throwaway client — signInWithPassword on the shared client would
+    // attach the user session and downgrade all later service-role calls.
+    const { createClient } = require('@supabase/supabase-js');
+    const { error: authError } = await createClient(
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY,
+      { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } }
+    ).auth.signInWithPassword({
       email: req.user.email,
       password,
     });
