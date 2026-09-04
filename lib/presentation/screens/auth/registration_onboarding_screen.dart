@@ -14,6 +14,7 @@ import '../../../core/network/api_client.dart';
 import '../../../data/models/bank_directory.dart';
 import '../../../data/models/kyc_models.dart';
 import '../../../data/models/terms_content.dart';
+import '../../../data/repositories/kyc_repository.dart';
 import '../../../data/services/bank_verification_service.dart';
 import '../../providers/terms_provider.dart';
 import '../../widgets/common/bank_selector_field.dart';
@@ -696,6 +697,30 @@ class _RegistrationOnboardingScreenState
             ? 'salary_deduction'
             : 'direct_deposit',
       };
+
+      // Upload the ID + selfie photos captured in the Identification step
+      // BEFORE completing registration. The backend marks the KYC record
+      // submitted during complete-registration, so the photos must already be
+      // stored — otherwise the member reaches the dashboard with a
+      // documentless KYC record and no way back to this screen.
+      final kycRepository = ref.read(kycRepositoryProvider);
+      try {
+        if (_data.idDocumentPhoto != null) {
+          await kycRepository.uploadIDDocument(_data.idDocumentPhoto!.path);
+        }
+        if (_data.selfiePhoto != null) {
+          await kycRepository.uploadSelfie(_data.selfiePhoto!.path);
+        }
+      } catch (e) {
+        logger.e('Registration photo upload error: $e');
+        if (mounted) {
+          await _showRetryDialog(
+            'Could not upload your ID/selfie photos. '
+            'Please check your connection and try again.',
+          );
+        }
+        return;
+      }
 
       // Submit registration data to backend — failure is a hard stop;
       // an incomplete backend record must not silently enter the salary flow.

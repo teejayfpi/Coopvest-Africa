@@ -434,7 +434,7 @@ router.post('/complete-registration', authenticate, async (req, res) => {
     // has already-completed fields reported missing nor wiped by the upsert.
     const { data: existingKyc } = await supabase
       .from('kyc')
-      .select('national_id, date_of_birth, address, personal_info, employment_info')
+      .select('national_id, date_of_birth, address, personal_info, employment_info, status')
       .eq('profile_id', req.user.id)
       .maybeSingle();
 
@@ -503,6 +503,17 @@ router.post('/complete-registration', authenticate, async (req, res) => {
       Object.entries(bankFields).map(([k, v]) => [k, hasValue(v) ? v : existingPersonal[k]])
     );
 
+    // A completed (non-partial) registration collects everything the KYC flow
+    // does — employment, ID, selfie, next of kin, bank info — so it counts as
+    // the member's KYC submission. Without this the kyc row stays 'pending'
+    // and the app routes the member through the whole KYC flow a second time.
+    // Only ever upgrade into 'submitted': never clobber a record already in
+    // review/approved/rejected (e.g. an admin actioned it between saves).
+    const lifecycleStatuses = ['submitted', 'in_review', 'verified', 'approved', 'rejected'];
+    const alreadySubmitted = lifecycleStatuses.includes(
+      (existingKyc?.status || '').toLowerCase()
+    );
+
     const { error: kycError } = await supabase
       .from('kyc')
       .upsert(
@@ -539,6 +550,9 @@ router.post('/complete-registration', authenticate, async (req, res) => {
             work_address: employment_info_candidate.work_address,
             years_of_employment: employment_info_candidate.years_of_employment,
           },
+          ...(!partial && !alreadySubmitted
+            ? { status: 'submitted', submitted_at: now }
+            : {}),
           updated_at: new Date().toISOString(),
         },
         { onConflict: 'profile_id' }
