@@ -180,6 +180,17 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  /// Refresh the signed-in user from the backend (e.g. after a payment
+  /// flips the activation flags) so AuthGuard re-evaluates the gate.
+  Future<void> refreshCurrentUser() async {
+    try {
+      final user = await _authRepository.getCurrentUser(forceRefresh: true);
+      state = state.copyWith(status: AuthStatus.authenticated, user: user);
+    } catch (e) {
+      logger.e('Refresh current user error: $e');
+    }
+  }
+
   /// Logout — Firebase sign-out + backend token revocation
   Future<void> logout() async {
     state = state.copyWith(status: AuthStatus.loading);
