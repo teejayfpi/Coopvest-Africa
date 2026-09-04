@@ -114,10 +114,10 @@ class _AuthGuardState extends ConsumerState<AuthGuard> {
       // dashboard. The server-side gate is authoritative; this mirrors it so
       // the mobile UI shows the correct onboarding step.
       final activation = _activationGate(user);
-      if (activation == _ActivationStage.kycApprovedFeePending) {
+      if (activation == _ActivationStage.feePending) {
         return const AccountActivationScreen();
       }
-      // Everything satisfied (or KYC awaiting admin approval) → dashboard.
+      // Fee settled → dashboard (KYC approval follows via admin review).
       return widget.child;
     }
 
@@ -131,7 +131,7 @@ class _AuthGuardState extends ConsumerState<AuthGuard> {
       // KYC is approved but the registration fee isn't settled yet, route to
       // Account Activation rather than the dashboard.
       final activation = _activationGate(user);
-      if (activation == _ActivationStage.kycApprovedFeePending) {
+      if (activation == _ActivationStage.feePending) {
         return const AccountActivationScreen();
       }
       return widget.child;
@@ -181,14 +181,13 @@ class _AuthGuardState extends ConsumerState<AuthGuard> {
   /// block an existing member behind a stale/ambiguous flag.
   _ActivationStage _activationGate(User? user) {
     if (user == null) return _ActivationStage.active;
-    final kycStatus = (user.kycStatus ?? '').toLowerCase();
-    final kycApproved = kycStatus == 'approved' || kycStatus == 'verified';
-    if (!kycApproved) {
-      // KYC not (yet) confirmed approved — not the activation screen's job.
-      return _ActivationStage.awaitingKyc;
-    }
+    // Callers reach this gate only once the member has SUBMITTED KYC. The
+    // registration fee gates dashboard access — members pay it right after
+    // KYC, and the admin then verifies KYC + payment together. Gating on
+    // admin approval here would let unpaid members onto the dashboard while
+    // their KYC awaits review.
     if (!user.registrationFeePaid) {
-      return _ActivationStage.kycApprovedFeePending;
+      return _ActivationStage.feePending;
     }
     return _ActivationStage.active;
   }
@@ -209,11 +208,11 @@ class _AuthGuardState extends ConsumerState<AuthGuard> {
 /// Membership-activation stages used by AuthGuard to decide between the
 /// dashboard, the KYC flow, and the Account Activation (registration fee) screen.
 enum _ActivationStage {
-  /// KYC not yet confirmed approved — handled by the KYC flow.
-  awaitingKyc,
-  /// KYC approved but registration fee not settled → Account Activation screen.
-  kycApprovedFeePending,
-  /// Fully activated (or KYC awaiting admin approval / unflagged) → dashboard.
+  /// KYC submitted but the registration fee isn't settled → Account
+  /// Activation screen.
+  feePending,
+  /// Fee settled (KYC approval is verified together with the fee by the
+  /// admin) → dashboard.
   active,
 }
 
