@@ -190,6 +190,16 @@ router.post('/login', [
     });
 
     if (error) {
+      // Supabase returns "Email not confirmed" when the member never
+      // verified — surface that distinctly so the app can send them to the
+      // verification screen instead of a generic "invalid credentials".
+      if (/email not confirmed/i.test(error.message || '')) {
+        return res.status(403).json({
+          success: false,
+          code: 'EMAIL_NOT_VERIFIED',
+          error: 'Please verify your email address before signing in. Check your inbox for the verification link.',
+        });
+      }
       return res.status(401).json({ success: false, error: 'Invalid email or password' });
     }
 

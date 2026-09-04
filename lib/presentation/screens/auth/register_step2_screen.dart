@@ -39,6 +39,13 @@ class _RegisterStep2ScreenState extends ConsumerState<RegisterStep2Screen> {
   void initState() {
     super.initState();
     _startTimer();
+    // When reached from the login screen (unverified account), no email is
+    // in flight yet — send one immediately. From registration the sign-up
+    // email already went out; a second send is rate-limited by Supabase
+    // anyway, so this stays harmless.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _resendVerificationEmail();
+    });
   }
 
   @override

@@ -508,6 +508,11 @@ class AuthRepository {
 
   String _mapSupabaseError(sb.AuthException e) {
     final msg = e.message.toLowerCase();
+    if (msg.contains('email not confirmed')) {
+      // Distinct marker the login screen uses to route to the verification
+      // screen instead of showing a generic credentials error.
+      return 'EMAIL_NOT_VERIFIED';
+    }
     if (msg.contains('invalid login') ||
         msg.contains('invalid email or password') ||
         msg.contains('user not found')) {
