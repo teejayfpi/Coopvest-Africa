@@ -154,14 +154,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       // Biometric authentication will work on next login using the persisted session
       
     } catch (e) {
-      if (mounted) {
-        final msg = e.toString()
-            .replaceFirst('Exception: ', '')
-            .replaceFirst('AuthException: ', '');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg), backgroundColor: CoopvestColors.error),
-        );
+      if (!mounted) return;
+      final msg = e.toString()
+          .replaceFirst('Exception: ', '')
+          .replaceFirst('AuthException: ', '');
+      if (msg == 'EMAIL_NOT_VERIFIED') {
+        // Registered but never verified — send them to the verification
+        // screen (it resends the link and waits for confirmation).
+        Navigator.of(context).pushNamed('/register-step2', arguments: {
+          'email': _emailController.text.trim().toLowerCase(),
+        });
+        return;
       }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg), backgroundColor: CoopvestColors.error),
+      );
     }
   }
 
