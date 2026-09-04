@@ -1305,6 +1305,10 @@ router.get('/transactions', async (req, res) => {
     if (req.query.type) q = q.eq('type', req.query.type);
     if (req.query.profileId) q = q.eq('profile_id', req.query.profileId);
     if (req.query.status) q = q.eq('status', req.query.status);
+    // Optional date range (YYYY-MM-DD) used by the Accounting Spreadsheet
+    // report generator.
+    if (req.query.dateFrom) q = q.gte('created_at', req.query.dateFrom);
+    if (req.query.dateTo) q = q.lte('created_at', `${req.query.dateTo}T23:59:59.999Z`);
     const { data, error, count } = await q;
     if (error) throw error;
     res.json({ success: true, transactions: data || [], pagination: { page, limit, total: count || 0 } });
