@@ -197,6 +197,21 @@ router.post('/upload', upload.single('file'), async (req, res) => {
         .update({ selfie: { url, path: storagePath, uploaded_at: new Date().toISOString() } })
         .eq('id', kyc.id);
       if (updErr) throw updErr;
+
+      // The KYC selfie doubles as the member's profile picture (app dashboard
+      // avatar + admin website) unless they've explicitly set their own.
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('profile_picture')
+        .eq('id', req.user.id)
+        .maybeSingle();
+      if (!profile?.profile_picture) {
+        const { error: picErr } = await supabase
+          .from('profiles')
+          .update({ profile_picture: url, updated_at: new Date().toISOString() })
+          .eq('id', req.user.id);
+        if (picErr) logger.warn('kyc upload: profile_picture sync failed:', picErr.message);
+      }
     } else {
       // id_document → kyc_documents row on the correct side column. The table
       // has no `url`/`meta` columns — using them caused "could not find the

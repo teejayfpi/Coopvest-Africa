@@ -200,6 +200,22 @@ router.get('/members', async (req, res) => {
     const { data, error, count } = await q;
     if (error) throw error;
 
+    // Avatars: profile_picture first, KYC selfie as the fallback. One batched
+    // query for the page's members instead of a per-row lookup.
+    const selfieByProfile = {};
+    const ids = (data || []).map((p) => p.id);
+    if (ids.length) {
+      const { data: kycRows } = await supabase
+        .from('kyc')
+        .select('profile_id, selfie')
+        .in('profile_id', ids);
+      for (const row of kycRows || []) {
+        const selfieUrl =
+          typeof row.selfie === 'string' ? row.selfie : row.selfie?.url || null;
+        if (selfieUrl) selfieByProfile[row.profile_id] = selfieUrl;
+      }
+    }
+
     // Map raw profiles to Member interface expected by Admin Dashboard frontend
     const members = (data || []).map((p) => {
       const nameParts = (p.name || '').split(' ').filter(Boolean);
@@ -210,6 +226,7 @@ router.get('/members', async (req, res) => {
         : p.is_active
           ? (p.kyc_verified ? 'active' : 'pending')
           : 'inactive';
+      const avatarUrl = p.profile_picture || selfieByProfile[p.id] || null;
       return {
         ...p,
         memberId: p.user_id || p.id,
@@ -221,6 +238,8 @@ router.get('/members', async (req, res) => {
         activeLoan: 0,
         riskScore: 0,
         avatarInitials: (firstName[0] || '') + (lastName[0] || ''),
+        profilePicture: avatarUrl,
+        avatar_url: avatarUrl,
       };
     });
 
@@ -473,11 +492,15 @@ router.get('/members/:id', async (req, res) => {
     ]);
 
     const kycData = kyc.data || null;
+    const selfieUrl =
+      typeof kycData?.selfie === 'string' ? kycData.selfie : kycData?.selfie?.url || null;
 
     res.json({
       success: true,
       member: {
         ...profile,
+        // Avatar: explicit profile picture, else the KYC selfie.
+        profilePicture: profile.profile_picture || selfieUrl,
         // Flatten KYC identity fields to top-level for easy access in the frontend
         bvn: profile.bvn || kycData?.bvn || null,
         nin: profile.nin || kycData?.nin || null,
@@ -505,6 +528,109 @@ router.get('/members/:id', async (req, res) => {
     });
   } catch (err) {
     logger.error('admin member detail error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/v1/admin/members/:id/verify
+ *
+ * One-step member verification: approves KYC and (when a pending/under-review
+ * registration-fee payment proof exists) confirms the payment too, so the
+ * member's activation gate (kyc_verified AND registration_fee_paid) flips in
+ * a single admin action. Mirrors the dedicated KYC-verify and payment-approve
+ * handlers; the payment_proofs DB trigger still fires on the proof update.
+ */
+router.post('/members/:id/verify', async (req, res) => {
+  try {
+    const profileId = req.params.id;
+    const now = new Date().toISOString();
+
+    const { data: profile, error: profileErr } = await supabase
+      .from('profiles')
+      .select('id, name, email')
+      .eq('id', profileId)
+      .maybeSingle();
+    if (profileErr) throw profileErr;
+    if (!profile) return res.status(404).json({ success: false, error: 'Member not found' });
+
+    // 1. KYC → verified
+    const { error: kycErr } = await supabase
+      .from('kyc')
+      .update({
+        status: 'verified',
+        verified: true,
+        verified_at: now,
+        reviewed_at: now,
+      })
+      .eq('profile_id', profileId);
+    if (kycErr) throw kycErr;
+
+    // 2. Registration-fee payment proof → approved (if one is awaiting review)
+    let feeProof = null;
+    const { data: pendingProof, error: proofLookupErr } = await supabase
+      .from('payment_proofs')
+      .select('*')
+      .eq('profile_id', profileId)
+      .eq('payment_type', 'registration_fee')
+      .in('status', ['pending', 'under_review'])
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (proofLookupErr) throw proofLookupErr;
+
+    if (pendingProof) {
+      const { data: approved, error: proofErr } = await supabase
+        .from('payment_proofs')
+        .update({
+          status: 'approved',
+          approved_at: now,
+          approved_by: req.user.id,
+          updated_at: now,
+        })
+        .eq('id', pendingProof.id)
+        .select('*')
+        .single();
+      if (proofErr) throw proofErr;
+      feeProof = approved;
+    }
+
+    // 3. Profile flags — the activation gate reads these two columns.
+    const { error: updateErr } = await supabase
+      .from('profiles')
+      .update({
+        kyc_verified: true,
+        kyc_verified_at: now,
+        ...(feeProof
+          ? { registration_fee_paid: true, registration_fee_paid_at: now }
+          : {}),
+        updated_at: now,
+      })
+      .eq('id', profileId);
+    if (updateErr) throw updateErr;
+
+    const { data: updatedProfile } = await supabase
+      .from('profiles')
+      .select('id, kyc_verified, registration_fee_paid, membership_status')
+      .eq('id', profileId)
+      .maybeSingle();
+
+    logger.info(
+      `admin verify: ${req.user.id} verified member ${profileId} ` +
+      `(kyc=true, feeProof=${feeProof ? feeProof.id : 'none'})`
+    );
+
+    res.json({
+      success: true,
+      member: updatedProfile,
+      fee_proof_approved: !!feeProof,
+      message: feeProof
+        ? 'Member verified — KYC approved and registration fee confirmed. Membership is now active.'
+        : 'KYC approved. No pending registration-fee proof found — the member still needs to pay the registration fee before activation.',
+    });
+  } catch (err) {
+    logger.error('admin member verify error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
