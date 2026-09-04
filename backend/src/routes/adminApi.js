@@ -509,6 +509,9 @@ router.get('/members/:id', async (req, res) => {
         selfie_url: profile.selfie_url || kycData?.selfie_url || kycData?.selfie || kycData?.personal_info?.selfie_url || kycData?.personal_info?.selfie || null,
         id_document_url: profile.id_document_url || kycData?.id_document_url || kycData?.personal_info?.id_document_url || null,
         kyc_status: profile.kyc_status || kycData?.status || null,
+        // Contribution channel + when it was last switched (null = never)
+        contribution_type: kycData?.personal_info?.contribution_type || null,
+        contribution_type_updated_at: kycData?.personal_info?.contribution_type_updated_at || null,
         // Employment / registration fields from KYC
         employer_name: profile.employer || profile.employer_name || kycData?.employer_name || null,
         employment_type: profile.employment_type || kycData?.employment_type || null,

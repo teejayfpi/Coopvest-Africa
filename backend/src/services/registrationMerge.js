@@ -34,6 +34,9 @@ function buildRegistrationCandidates(body, existingKyc) {
     nok_address: body.nok_address,
     monthly_amount: body.monthly_amount,
     contribution_method: body.contribution_method,
+    // 'direct_deposit' | 'salary_deduction' — the member's chosen channel,
+    // drives whether employment details are required.
+    contribution_type: body.contribution_type,
     preferred_payment_day: body.preferred_payment_day,
     preferred_payment_month: body.preferred_payment_month,
     terms_version: body.terms_version,

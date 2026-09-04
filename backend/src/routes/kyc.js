@@ -58,6 +58,81 @@ router.get('/status', async (req, res) => {
 });
 
 /**
+ * POST /api/v1/kyc/contribution-type
+ *
+ * Set or switch the member's contribution channel:
+ *   'direct_deposit'   — member pays manually; no employment details needed
+ *   'salary_deduction' — employer deducts; employment details REQUIRED
+ *
+ * A switch INTO salary_deduction collects the employment details here and
+ * re-flags the KYC as 'submitted' so an admin re-reviews the new employment
+ * information. The choice is stored in kyc.personal_info.contribution_type
+ * (JSONB — no schema change needed).
+ */
+router.post(
+  '/contribution-type',
+  [
+    body('contribution_type').isIn(['direct_deposit', 'salary_deduction']),
+  ],
+  validate,
+  async (req, res) => {
+    try {
+      const { contribution_type, employmentInfo } = req.body;
+      const kyc = await getOrCreateKyc(req.user.id);
+
+      const mergedEmployment = {
+        ...(kyc.employment_info || {}),
+        ...(employmentInfo || {}),
+      };
+
+      if (contribution_type === 'salary_deduction') {
+        const missing = [];
+        if (!mergedEmployment.employer_name) missing.push('employer_name');
+        if (!mergedEmployment.employment_type) missing.push('employment_type');
+        if (missing.length) {
+          return res.status(422).json({
+            success: false,
+            error: 'Employment details are required for salary deduction.',
+            missing,
+          });
+        }
+      }
+
+      const now = new Date().toISOString();
+      const mergedPersonal = {
+        ...(kyc.personal_info || {}),
+        contribution_type,
+        contribution_type_updated_at: now,
+      };
+
+      const { data, error } = await supabase
+        .from('kyc')
+        .update({
+          personal_info: mergedPersonal,
+          employment_info: mergedEmployment,
+          // Re-submit for admin review when switching to salary deduction so
+          // the new employment details get verified. Direct-deposit switches
+          // keep the current status (nothing new to verify).
+          ...(contribution_type === 'salary_deduction'
+            ? { status: 'submitted', submitted_at: now }
+            : {}),
+          updated_at: now,
+        })
+        .eq('id', kyc.id)
+        .select('*')
+        .single();
+      if (error) throw error;
+
+      logger.info(`contribution type set to ${contribution_type} for ${req.user.id}`);
+      res.json({ success: true, kyc: data, contribution_type });
+    } catch (err) {
+      logger.error('contribution-type switch error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+);
+
+/**
  * POST /api/v1/kyc/submit
  */
 router.post(

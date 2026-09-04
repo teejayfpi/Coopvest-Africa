@@ -37,6 +37,7 @@ import 'presentation/screens/support/ticket_list_screen.dart';
 import 'presentation/screens/support/ticket_detail_screen.dart';
 import 'presentation/screens/home/home_dashboard_screen.dart';
 import 'presentation/screens/main_container.dart';
+import 'presentation/screens/kyc/kyc_deduction_type_screen.dart';
 import 'presentation/screens/kyc/kyc_employment_details_screen.dart';
 import 'presentation/screens/kyc/kyc_id_upload_screen.dart';
 import 'presentation/screens/kyc/kyc_selfie_screen.dart';
@@ -392,6 +393,7 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
           );
         },
 
+        '/kyc-deduction-type': (context) => const KYCDeductionTypeScreen(),
         '/kyc-employment-details': (context) =>
             const KYCEmploymentDetailsScreen(),
         '/kyc-id-upload': (context) => const KYCIDUploadScreen(),

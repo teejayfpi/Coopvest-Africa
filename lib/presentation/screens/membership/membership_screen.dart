@@ -5,8 +5,10 @@ import '../../../config/theme_extension.dart';
 import '../../../data/models/termination_models.dart';
 import '../../../data/models/auth_models.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/kyc_provider.dart';
 import '../../providers/termination_provider.dart';
 import '../../widgets/common/buttons.dart';
+import 'contribution_method_screen.dart';
 import 'termination_info_screen.dart';
 import 'package:intl/intl.dart';
 
@@ -45,6 +47,12 @@ class MembershipScreen extends ConsumerWidget {
             _buildMembershipInfoSection(user, context),
             const SizedBox(height: 24),
 
+            // Contribution Method — switch between direct deposit and
+            // salary deduction (employment details asked when switching to
+            // payroll deduction).
+            _buildContributionMethodCard(context),
+            const SizedBox(height: 24),
+
             // Termination Section - Always show for active members
             if (membershipStatus == 'active') ...[
               _buildTerminationSection(context, ref, terminationState),
@@ -62,6 +70,69 @@ class MembershipScreen extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildContributionMethodCard(BuildContext context) {
+    return Consumer(
+      builder: (context, ref, _) {
+        final type = ref.watch(kycProvider).submission?.contributionType ??
+            'direct_deposit';
+        final isSalary = type == 'salary_deduction';
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: context.secondaryCardBackground,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: CoopvestColors.lightGray),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: CoopvestColors.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  isSalary
+                      ? Icons.business_center_outlined
+                      : Icons.account_balance_wallet_outlined,
+                  color: CoopvestColors.primary,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Contribution Method',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      isSalary ? 'Salary Deduction' : 'Direct Deposit',
+                      style: const TextStyle(
+                        color: CoopvestColors.textSecondary,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const ContributionMethodScreen(),
+                  ),
+                ),
+                child: const Text('Change'),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 

@@ -6,7 +6,7 @@ import '../../data/models/kyc_models.dart';
 import '../providers/auth_provider.dart';
 import '../providers/kyc_provider.dart';
 import '../screens/auth/registration_onboarding_screen.dart';
-import '../screens/kyc/kyc_employment_details_screen.dart';
+import '../screens/kyc/kyc_deduction_type_screen.dart';
 import '../screens/membership/account_activation_screen.dart';
 
 /// AuthGuard determines where to send the user based on their auth state:
@@ -104,8 +104,9 @@ class _AuthGuardState extends ConsumerState<AuthGuard> {
     if (kycState.status == KYCStatus.loaded ||
         kycState.status == KYCStatus.submitted) {
       if (!_hasSubmittedKyc(kycState)) {
-        // Member hasn't submitted KYC yet — guide them through it.
-        return const KYCEmploymentDetailsScreen(isFromRegistration: false);
+        // Member hasn't submitted KYC yet — guide them through it, starting
+        // with the contribution-method choice.
+        return const KYCDeductionTypeScreen();
       }
       // KYC submitted — now enforce the membership activation gate:
       // if the member's KYC is approved but the registration fee hasn't been

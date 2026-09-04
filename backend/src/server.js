@@ -182,7 +182,12 @@ const authLimiter = rateLimit({
 // ==============================================================================
 // BODY PARSER
 // ==============================================================================
-app.use(express.json({ limit: '10mb' }));
+// Keep the raw body alongside the parsed JSON — the Paystack webhook needs
+// it to verify the HMAC-SHA512 signature.
+app.use(express.json({
+  limit: '10mb',
+  verify: (req, _res, buf) => { req.rawBody = buf; },
+}));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // NoSQL injection protection removed - project now uses SQL (Supabase)
@@ -272,6 +277,7 @@ app.use('/api/v1/admin-termination', adminTerminationRoutes);
 app.use('/api/admin/termination', adminTerminationRoutes);
 app.use('/api/v1/termination', requireActivated, terminationRoutes);
 app.use('/api/v1/payment-proofs', paymentProofRoutes);
+app.use('/api/v1/payments', require('./routes/payments'));
 
 // ==============================================================================
 // FLUTTER APP COMPATIBILITY — /api/<path> mirrors /api/v1/<path>
@@ -302,6 +308,7 @@ app.use('/api/contributions', requireActivated, contributionRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/termination', requireActivated, terminationRoutes);
 app.use('/api/payment-proofs', paymentProofRoutes);
+app.use('/api/payments', require('./routes/payments'));
 app.use('/api/kyc', kycAdminRoutes);
 app.use('/api', featuresRoutes);
 app.use('/api/mobile-features', featuresRoutes);

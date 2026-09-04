@@ -82,6 +82,7 @@ class KYCRepository {
         accountName: str(bank['account_name'] ?? bank['accountName']),
         accountType: str(bank['account_type'] ?? bank['accountType']),
         bvn: str(bank['bvn'] ?? row['bvn']),
+        contributionType: str(personal['contribution_type'] ?? personal['contributionType']) ?? 'direct_deposit',
         status: str(row['status']) ?? 'pending',
         submittedAt: row['submitted_at'] != null
             ? DateTime.tryParse(row['submitted_at'].toString())
@@ -129,6 +130,7 @@ class KYCRepository {
             'nok_relationship': submission.nokRelationship,
             'nok_phone': submission.nokPhone,
             'nok_address': submission.nokAddress,
+            'contribution_type': submission.contributionType,
           },
           'address': {
             'residential_address': submission.residentialAddress,
@@ -165,6 +167,30 @@ class KYCRepository {
       );
     } catch (e) {
       logger.e('Submit KYC error: $e');
+      rethrow;
+    }
+  }
+
+  /// Set or switch the member's contribution channel
+  /// ('direct_deposit' | 'salary_deduction'). Switching to salary deduction
+  /// requires employment details and re-submits the KYC for admin review.
+  Future<KYCSubmission> setContributionType(
+    String contributionType, {
+    Map<String, dynamic>? employmentInfo,
+  }) async {
+    try {
+      await _apiClient.post(
+        '/kyc/contribution-type',
+        data: {
+          'contribution_type': contributionType,
+          if (employmentInfo != null) 'employmentInfo': employmentInfo,
+        },
+      );
+      // Refresh from the authoritative status endpoint so the caller gets
+      // the fully-mapped submission (same shape as getKYCStatus).
+      return getKYCStatus();
+    } catch (e) {
+      logger.e('Set contribution type error: $e');
       rethrow;
     }
   }

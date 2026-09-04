@@ -49,6 +49,11 @@ class KYCSubmission extends Equatable {
   final String? accountType;
   final String? bvn;
 
+  // Contribution channel — 'direct_deposit' or 'salary_deduction'. Chosen at
+  // the start of KYC; salary deduction additionally requires the employment
+  // section, direct deposit skips it.
+  final String contributionType;
+
   // Status
   final String status; // pending, submitted, approved, rejected
   final DateTime? submittedAt;
@@ -87,11 +92,16 @@ class KYCSubmission extends Equatable {
     this.accountName,
     this.accountType,
     this.bvn,
+    this.contributionType = 'direct_deposit',
     this.status = 'draft',
     this.submittedAt,
     this.approvedAt,
     this.rejectionReason,
   });
+
+  /// True when the member contributes via employer payroll deduction — the
+  /// employment section is required for them and skipped otherwise.
+  bool get isSalaryDeduction => contributionType == 'salary_deduction';
 
   Map<String, dynamic> toJson() {
     return {
@@ -126,6 +136,7 @@ class KYCSubmission extends Equatable {
       'account_name': accountName,
       'account_type': accountType,
       'bvn': bvn,
+      'contribution_type': contributionType,
       'status': status,
     };
   }
@@ -163,6 +174,7 @@ class KYCSubmission extends Equatable {
       accountName: json['account_name'] as String?,
       accountType: json['account_type'] as String?,
       bvn: json['bvn'] as String?,
+      contributionType: json['contribution_type'] as String? ?? 'direct_deposit',
       status: json['status'] as String? ?? 'draft',
       submittedAt: json['submitted_at'] != null
           ? DateTime.parse(json['submitted_at'] as String)
@@ -206,6 +218,7 @@ class KYCSubmission extends Equatable {
     String? accountName,
     String? accountType,
     String? bvn,
+    String? contributionType,
     String? status,
     DateTime? submittedAt,
     DateTime? approvedAt,
@@ -243,6 +256,7 @@ class KYCSubmission extends Equatable {
       accountName: accountName ?? this.accountName,
       accountType: accountType ?? this.accountType,
       bvn: bvn ?? this.bvn,
+      contributionType: contributionType ?? this.contributionType,
       status: status ?? this.status,
       submittedAt: submittedAt ?? this.submittedAt,
       approvedAt: approvedAt ?? this.approvedAt,
@@ -250,15 +264,25 @@ class KYCSubmission extends Equatable {
     );
   }
 
-  bool get isComplete {
+  /// Personal basics everyone needs, regardless of contribution channel.
+  bool get _personalBasicsComplete {
     return dateOfBirth != null &&
         gender != null &&
-        employmentType.isNotEmpty &&
+        residentialAddress.isNotEmpty &&
+        state != null;
+  }
+
+  /// Employment section — only required for salary-deduction members.
+  bool get _employmentComplete {
+    return employmentType.isNotEmpty &&
         organizationName != null &&
         jobTitle.isNotEmpty &&
-        monthlyIncomeRange.isNotEmpty &&
-        residentialAddress.isNotEmpty &&
-        state != null &&
+        monthlyIncomeRange.isNotEmpty;
+  }
+
+  bool get isComplete {
+    return _personalBasicsComplete &&
+        (!isSalaryDeduction || _employmentComplete) &&
         idType.isNotEmpty &&
         idNumber != null &&
         idPhotoPath != null &&
@@ -280,14 +304,12 @@ class KYCSubmission extends Equatable {
   /// asked for).
   List<String> get missingSections {
     final missing = <String>[];
-    if (dateOfBirth == null ||
-        gender == null ||
-        residentialAddress.isEmpty ||
-        state == null ||
-        employmentType.isEmpty ||
-        organizationName == null ||
-        jobTitle.isEmpty ||
-        monthlyIncomeRange.isEmpty) {
+    // Personal basics are always required; the employment fields only for
+    // salary-deduction members. Both route to the employment screen, which
+    // collects the basics for direct-deposit members without the payroll
+    // fields.
+    if (!_personalBasicsComplete ||
+        (isSalaryDeduction && !_employmentComplete)) {
       missing.add('employment');
     }
     if (idType.isEmpty ||
@@ -342,6 +364,7 @@ class KYCSubmission extends Equatable {
     accountName,
     accountType,
     bvn,
+    contributionType,
     status,
     submittedAt,
     approvedAt,

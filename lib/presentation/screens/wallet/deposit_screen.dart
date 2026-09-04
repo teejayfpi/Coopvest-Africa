@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/utils/utils.dart';
@@ -243,6 +244,113 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
       prefixText: '₦ ',
       hint: '0',
     );
+  }
+
+  /// Instant deposit via Paystack: initialize on the backend, open the
+  /// checkout in the browser, then confirm on return. On success the
+  /// backend credits the wallet automatically — no proof upload, no admin
+  /// verification wait.
+  Future<void> _payWithPaystack() async {
+    if (!_formKey.currentState!.validate()) return;
+    final amount = double.tryParse(_amountController.text.replaceAll(',', ''));
+    if (amount == null || amount < 100) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Enter an amount of at least ₦100 to pay online.'),
+          backgroundColor: CoopvestColors.error,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isProcessing = true);
+    try {
+      final apiClient = ref.read(apiClientProvider);
+      final resp = await apiClient.dio.post('/payments/initialize', data: {
+        'amount': amount,
+        'payment_type': 'monthly_contribution',
+      });
+      final data = resp.data as Map<String, dynamic>;
+      final url = data['authorization_url'] as String?;
+      final reference = data['reference'] as String?;
+      if (url == null || reference == null) {
+        throw Exception('Could not start the online payment. Please try again.');
+      }
+
+      final launched = await launchUrl(
+        Uri.parse(url),
+        mode: LaunchMode.externalApplication,
+      );
+      if (!launched) throw Exception('Could not open the payment page.');
+      if (!mounted) return;
+
+      // Wait for the member to finish in the browser, then confirm.
+      final confirmed = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Complete Your Payment'),
+          content: const Text(
+            'A secure Paystack page has opened in your browser. '
+            'Finish the payment there, then come back and tap "I\'ve Paid".',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text("I've Paid"),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+
+      // Poll the backend for confirmation (the webhook usually beats us to
+      // it — either path credits the wallet exactly once).
+      String status = 'pending';
+      for (var attempt = 0; attempt < 5 && status != 'success'; attempt++) {
+        if (attempt > 0) await Future.delayed(const Duration(seconds: 2));
+        try {
+          final verify =
+              await apiClient.dio.get('/payments/verify/$reference');
+          status = (verify.data as Map<String, dynamic>)['status'] as String? ?? 'pending';
+        } catch (_) {/* keep polling */}
+      }
+
+      if (!mounted) return;
+      if (status == 'success') {
+        await ref.read(walletProvider.notifier).loadWallet();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Payment confirmed — your wallet has been credited. 🎉'),
+            backgroundColor: CoopvestColors.success,
+          ),
+        );
+        Navigator.of(context).pop();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'Payment not confirmed yet. If you were debited, it will reflect shortly — check your transactions in a few minutes.'),
+            backgroundColor: CoopvestColors.warning,
+            duration: Duration(seconds: 6),
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Online payment failed: ${e is DioException ? (e.response?.data?['error'] ?? e.message) : e}'),
+          backgroundColor: CoopvestColors.error,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
+    }
   }
 
   Future<void> _processDeposit() async {
@@ -754,10 +862,34 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
                           Text('Uploading proof...', style: TextStyle(fontSize: 12, color: context.textSecondary)),
                         ],
                       ])
-                    : PrimaryButton(
-                        label: 'Deposit ₦${_amountController.text.isEmpty ? '0' : _amountController.text}',
-                        onPressed: _processDeposit,
-                        width: double.infinity,
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // Instant online payment — wallet is credited
+                          // automatically once Paystack confirms. Only for
+                          // straight savings deposits; split/loan payments
+                          // still go through manual proof verification.
+                          if (_allocationType == 'monthly_contribution') ...[
+                            PrimaryButton(
+                              label: 'Pay Instantly (Card / Transfer)',
+                              onPressed: _payWithPaystack,
+                              width: double.infinity,
+                              icon: const Icon(Icons.bolt, color: Colors.white),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Instant — your wallet is credited automatically.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontSize: 11, color: context.textSecondary),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                          PrimaryButton(
+                            label: 'Deposit ₦${_amountController.text.isEmpty ? '0' : _amountController.text} Manually',
+                            onPressed: _processDeposit,
+                            width: double.infinity,
+                          ),
+                        ],
                       ),
 
                 const SizedBox(height: 16),

@@ -106,6 +106,29 @@ class KYCCubit extends StateNotifier<KYCState> {
     );
   }
 
+  /// Update the contribution channel choice ('direct_deposit' |
+  /// 'salary_deduction') — picked at the start of the standalone KYC flow.
+  void updateContributionType(String contributionType) {
+    final current = state.submission ?? const KYCSubmission();
+    state = state.copyWith(
+      submission: current.copyWith(contributionType: contributionType),
+    );
+  }
+
+  /// Persist a contribution-type switch for an already-registered member.
+  /// Switching to salary deduction re-submits the KYC for admin review.
+  Future<KYCSubmission> switchContributionType(
+    String contributionType, {
+    Map<String, dynamic>? employmentInfo,
+  }) async {
+    final updated = await _repository.setContributionType(
+      contributionType,
+      employmentInfo: employmentInfo,
+    );
+    state = state.copyWith(status: KYCStatus.loaded, submission: updated);
+    return updated;
+  }
+
   /// Update personal details
   void updatePersonalDetails({
     String? dateOfBirth,
