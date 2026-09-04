@@ -1,8 +1,12 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../config/app_config.dart';
 import '../../../config/theme_config.dart';
+import '../../../core/network/api_client.dart';
 import '../../../data/models/payment_proof_model.dart';
+import '../../providers/auth_provider.dart';
 import '../../widgets/common/buttons.dart';
 import '../contributions/payment_proof_upload_screen.dart';
 
@@ -17,13 +21,118 @@ import '../contributions/payment_proof_upload_screen.dart';
 /// This screen is purely informational + a pointer to the payment-proof
 /// upload flow. The real enforcement lives on the backend; AuthGuard simply
 /// routes here when the profile gate isn't satisfied.
-class AccountActivationScreen extends ConsumerWidget {
+class AccountActivationScreen extends ConsumerStatefulWidget {
   final String? paymentPendingNote;
 
   const AccountActivationScreen({super.key, this.paymentPendingNote});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AccountActivationScreen> createState() =>
+      _AccountActivationScreenState();
+}
+
+class _AccountActivationScreenState
+    extends ConsumerState<AccountActivationScreen> {
+  bool _paying = false;
+
+  /// Instant ₦5,000 activation via Paystack — on success the backend flips
+  /// the registration-fee flag automatically, no proof upload needed.
+  Future<void> _payWithPaystack() async {
+    setState(() => _paying = true);
+    try {
+      final apiClient = ref.read(apiClientProvider);
+      final resp = await apiClient.dio.post('/payments/initialize', data: {
+        'amount': AppConfig.entranceFee,
+        'payment_type': 'registration_fee',
+      });
+      final data = resp.data as Map<String, dynamic>;
+      final url = data['authorization_url'] as String?;
+      final reference = data['reference'] as String?;
+      if (url == null || reference == null) {
+        throw Exception('Could not start the online payment. Please try again.');
+      }
+
+      final launched = await launchUrl(
+        Uri.parse(url),
+        mode: LaunchMode.externalApplication,
+      );
+      if (!launched) throw Exception('Could not open the payment page.');
+      if (!mounted) return;
+
+      final confirmed = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Complete Your Payment'),
+          content: const Text(
+            "A secure Paystack page has opened in your browser. "
+            "Finish the ₦5,000 payment there, then come back and tap 'I have Paid'.",
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('I have Paid'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+
+      String status = 'pending';
+      for (var attempt = 0; attempt < 5 && status != 'success'; attempt++) {
+        if (attempt > 0) await Future.delayed(const Duration(seconds: 2));
+        try {
+          final verify = await apiClient.dio.get('/payments/verify/\$reference');
+          status =
+              (verify.data as Map<String, dynamic>)['status'] as String? ?? 'pending';
+        } catch (_) {/* keep polling */}
+      }
+
+      if (!mounted) return;
+      if (status == 'success') {
+        // Refresh the user so the activation gate flips, then head to the
+        // dashboard (AuthGuard also lets them through on next launch).
+        await ref.read(authProvider.notifier).refreshCurrentUser();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Payment confirmed — welcome to Coopvest Africa! 🎉'),
+            backgroundColor: CoopvestColors.success,
+          ),
+        );
+        Navigator.of(context).pushReplacementNamed('/home');
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'Payment not confirmed yet. If you were debited, your membership will activate automatically within a few minutes.'),
+            backgroundColor: CoopvestColors.warning,
+            duration: Duration(seconds: 6),
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      final detail = e is DioException
+          ? (e.response?.data?['error'] ?? e.message)
+          : e;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Online payment failed: \$detail'),
+          backgroundColor: CoopvestColors.error,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _paying = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -156,10 +265,53 @@ class AccountActivationScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 24),
 
-              // Primary action
+              // Primary action — instant online payment
+              _paying
+                  ? const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(12),
+                        child: CircularProgressIndicator(
+                          color: CoopvestColors.primary,
+                        ),
+                      ),
+                    )
+                  : PrimaryButton(
+                      label: 'Pay ₦5,000 Instantly (Card / Transfer)',
+                      icon: const Icon(Icons.bolt, color: Colors.white),
+                      onPressed: _payWithPaystack,
+                    ),
+              const SizedBox(height: 8),
+              Text(
+                'Instant — your membership activates automatically once the payment confirms.',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: CoopvestColors.textSecondary,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  const Expanded(child: Divider()),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Text(
+                      'OR',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: CoopvestColors.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const Expanded(child: Divider()),
+                ],
+              ),
+              const SizedBox(height: 20),
+              // Manual path — bank transfer + proof upload (admin verifies
+              // KYC and the payment together).
               PrimaryButton(
-                label: 'Pay ₦5,000 to Activate',
-                icon: const Icon(Icons.payment, color: Colors.white),
+                label: 'Pay by Transfer & Upload Proof',
+                icon: const Icon(Icons.upload_file, color: Colors.white),
                 onPressed: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
@@ -173,9 +325,8 @@ class AccountActivationScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 12),
               Text(
-                'Pay via bank transfer, card, or any approved method, then submit your '
-                'proof of payment for verification. Once verified, your membership is '
-                'activated and your dashboard unlocks.',
+                'Manual transfer: submit your proof of payment and an admin '
+                'will verify it with your KYC — your dashboard then unlocks.',
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: CoopvestColors.textSecondary,
