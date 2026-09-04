@@ -10,7 +10,20 @@ const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const supabase = require('../config/supabase');
+const { createClient } = require('@supabase/supabase-js');
 const { authenticate, decodeSessionId } = require('../middleware/auth');
+
+// Sign-in calls MUST NOT run on the shared service client: supabase-js
+// attaches the resulting user session to the client, and every later request
+// (PostgREST + Storage) then goes out under that user's JWT instead of the
+// service-role key — silently downgrading privileged writes (this is what
+// broke KYC photo uploads with storage RLS violations). Use a throwaway
+// client per sign-in instead.
+const newAuthClient = () => createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
+  { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } }
+);
 const logger = require('../utils/logger');
 const {
   hasValue,
@@ -124,7 +137,8 @@ router.post('/register', [
     const { email, phone, name, password, referralCode } = req.body;
     const userId = `USR-${Date.now().toString(36).toUpperCase()}`;
 
-    const { data, error } = await supabase.auth.signUp({
+    // Throwaway client — see newAuthClient note above.
+    const { data, error } = await newAuthClient().auth.signUp({
       email: email.toLowerCase(),
       password,
       options: {
@@ -170,7 +184,7 @@ router.post('/login', [
   try {
     const { email, password } = req.body;
 
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await newAuthClient().auth.signInWithPassword({
       email: email.toLowerCase(),
       password,
     });
@@ -203,7 +217,8 @@ router.post('/refresh', [
   try {
     const { refresh_token } = req.body;
 
-    const { data, error } = await supabase.auth.refreshSession({ refresh_token });
+    // Throwaway client — see newAuthClient note above.
+    const { data, error } = await newAuthClient().auth.refreshSession({ refresh_token });
     if (error || !data.session) {
       return res.status(401).json({ success: false, error: 'Invalid or expired refresh token' });
     }
@@ -231,7 +246,7 @@ router.post('/google', [
   try {
     const { idToken } = req.body;
 
-    const { data, error } = await supabase.auth.signInWithIdToken({
+    const { data, error } = await newAuthClient().auth.signInWithIdToken({
       provider: 'google',
       token: idToken,
     });
@@ -875,7 +890,7 @@ router.post('/change-password', authenticate, [
       .eq('id', req.user.id)
       .single();
 
-    const { error: verifyError } = await supabase.auth.signInWithPassword({
+    const { error: verifyError } = await newAuthClient().auth.signInWithPassword({
       email: userData.email,
       password: current_password,
     });
