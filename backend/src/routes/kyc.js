@@ -329,11 +329,14 @@ router.post('/upload', upload.single('file'), async (req, res) => {
       keyRole = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')).role || 'none';
     } catch (_) { /* leave as unknown */ }
     logger.error(`kyc upload error [step=${req._uploadStep || '?'} keyRole=${keyRole}]:`, err);
+    let raw;
+    try { raw = JSON.stringify(err).slice(0, 800); } catch (_) { raw = String(err); }
     res.status(500).json({
       success: false,
       error: err.message || 'Upload failed.',
       step: req._uploadStep || 'unknown',
       keyRole,
+      raw,
     });
   }
 });
