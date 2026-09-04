@@ -186,13 +186,17 @@ class _KYCEmploymentDetailsScreenState
   }
 
   bool _isStepComplete(KYCSubmission sub) {
-    return sub.employmentType.isNotEmpty &&
-        sub.organizationName != null &&
-        sub.jobTitle.isNotEmpty &&
-        sub.monthlyIncomeRange.isNotEmpty &&
-        sub.dateOfBirth != null &&
+    // Employment fields only matter for salary-deduction members; everyone
+    // needs the personal basics.
+    final basics = sub.dateOfBirth != null &&
         sub.residentialAddress.isNotEmpty &&
         sub.state != null;
+    if (!sub.isSalaryDeduction) return basics;
+    return basics &&
+        sub.employmentType.isNotEmpty &&
+        sub.organizationName != null &&
+        sub.jobTitle.isNotEmpty &&
+        sub.monthlyIncomeRange.isNotEmpty;
   }
 
   /// Navigate to the first KYC section that still has missing data, in flow
@@ -275,18 +279,25 @@ class _KYCEmploymentDetailsScreenState
 
   void _validateAndContinue() {
     final errors = <String>[];
-    
-    if (_selectedEmploymentType == null) {
-      errors.add('Employment Type is required');
-    }
-    if (_selectedOrganization == null) {
-      errors.add('Organization is required');
-    }
-    if (_jobTitleController.text.isEmpty) {
-      errors.add('Job title is required');
-    }
-    if (_selectedIncomeRange == null) {
-      errors.add('Monthly income range is required');
+
+    // Payroll details are only mandatory for salary-deduction members;
+    // direct-deposit members fill just the personal basics on this screen.
+    final needsEmployment =
+        ref.read(kycProvider).submission?.isSalaryDeduction ?? true;
+
+    if (needsEmployment) {
+      if (_selectedEmploymentType == null) {
+        errors.add('Employment Type is required');
+      }
+      if (_selectedOrganization == null) {
+        errors.add('Organization is required');
+      }
+      if (_jobTitleController.text.isEmpty) {
+        errors.add('Job title is required');
+      }
+      if (_selectedIncomeRange == null) {
+        errors.add('Monthly income range is required');
+      }
     }
     if (_dateOfBirthController.text.isEmpty) {
       errors.add('Date of birth is required');
