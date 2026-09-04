@@ -2043,14 +2043,29 @@ router.get('/compliance/summary', async (req, res) => {
       supabase.from('kyc_documents').select('id', { count: 'exact', head: true }).eq('status', 'rejected')
     ]);
 
+    // The admin dashboard reads the flat alias keys (pending/approved/...);
+    // the kyc* keys are kept for any other consumers. Both derive from the
+    // same counts so the KPI cards and table always agree.
+    const verified = kycVerified.count || 0;
+    const pending = kycPending.count || 0;
+    const rejected = kycRejected.count || 0;
     const summary = {
       totalMembers: totalMembers.count || 0,
-      kycVerified: kycVerified.count || 0,
-      kycPending: kycPending.count || 0,
-      kycRejected: kycRejected.count || 0,
-      complianceRate: totalMembers.count > 0 
-        ? Math.round((kycVerified.count / totalMembers.count) * 10000) / 100 
-        : 0
+      kycVerified: verified,
+      kycPending: pending,
+      kycRejected: rejected,
+      complianceRate: totalMembers.count > 0
+        ? Math.round((verified / totalMembers.count) * 10000) / 100
+        : 0,
+      // Aliases consumed by the dashboard's ComplianceSummary type
+      pending,
+      approved: verified,
+      rejected,
+      flagged: 0,
+      totalThisMonth: 0,
+      approvalRate: totalMembers.count > 0
+        ? Math.round((verified / totalMembers.count) * 10000) / 100
+        : 0,
     };
 
     res.json({ success: true, data: summary });
