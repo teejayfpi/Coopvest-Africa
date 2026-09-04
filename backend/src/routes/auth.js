@@ -353,6 +353,9 @@ const REGISTRATION_FIELDS = {
 function checkCompletion(personal_info, employment_info) {
   const p = personal_info || {};
   const e = employment_info || {};
+  // Employment details only apply to salary-deduction members; direct-deposit
+  // members skip that step entirely (the app doesn't even show it).
+  const employmentRequired = p.contribution_type === 'salary_deduction';
 
   const sections = {
     personal: {
@@ -360,11 +363,13 @@ function checkCompletion(personal_info, employment_info) {
       filled: REGISTRATION_FIELDS.personal.required.filter((f) => hasValue(p[f])).length,
       total: REGISTRATION_FIELDS.personal.required.length,
     },
-    employment: {
-      missing: REGISTRATION_FIELDS.employment.required.filter((f) => !hasValue(e[f])),
-      filled: REGISTRATION_FIELDS.employment.required.filter((f) => hasValue(e[f])).length,
-      total: REGISTRATION_FIELDS.employment.required.length,
-    },
+    employment: employmentRequired
+      ? {
+          missing: REGISTRATION_FIELDS.employment.required.filter((f) => !hasValue(e[f])),
+          filled: REGISTRATION_FIELDS.employment.required.filter((f) => hasValue(e[f])).length,
+          total: REGISTRATION_FIELDS.employment.required.length,
+        }
+      : { missing: [], filled: 0, total: 0 },
     nextOfKin: {
       missing: REGISTRATION_FIELDS.nextOfKin.required.filter((f) => !hasValue(p[f])),
       filled: REGISTRATION_FIELDS.nextOfKin.required.filter((f) => hasValue(p[f])).length,
