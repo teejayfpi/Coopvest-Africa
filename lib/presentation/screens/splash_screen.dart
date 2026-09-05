@@ -120,7 +120,6 @@ class _SplashScreenState extends State<SplashScreen> {
     final logoSize = calculatedLogoSize > screenSize.width * 0.86
         ? screenSize.width * 0.86
         : calculatedLogoSize;
-    final verticalGap = compactLayout ? 20.0 : 40.0;
 
     return Container(
       decoration: const BoxDecoration(
@@ -153,37 +152,8 @@ class _SplashScreenState extends State<SplashScreen> {
                 },
               ),
             ),
-            SizedBox(height: verticalGap),
-            // The timer updates once per second but has no visual animation.
-            Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 10,
-              ),
-              decoration: BoxDecoration(
-                color: const Color(0xFF0D3B66).withOpacity(0.08),
-                borderRadius: BorderRadius.circular(30),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.timer_outlined,
-                    color: const Color(0xFF0D3B66).withOpacity(0.82),
-                    size: 20,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '${_elapsedSeconds}s / ${splashDurationSeconds}s',
-                    style: TextStyle(
-                      color: const Color(0xFF0D3B66).withOpacity(0.82),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            // (Timer removed — it rendered an empty-looking rounded chip and
+            // added no value to the user.)
             ],
           ),
         ),

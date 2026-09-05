@@ -225,7 +225,9 @@ class _KycLoadingScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      // Match the splash's mint gradient so the hand-off never flashes a
+      // gray background / empty card.
+      backgroundColor: const Color(0xFFC6DFC9),
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,

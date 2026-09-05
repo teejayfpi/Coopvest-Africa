@@ -5,8 +5,10 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:app_links/app_links.dart';
 import 'firebase_options.dart';
 import 'core/services/logger_service.dart';
+import 'core/services/deep_link_service.dart';
 import 'config/app_config.dart';
 import 'config/theme_config.dart';
 import 'config/theme_enhanced.dart';
@@ -184,11 +186,58 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
   bool _biometricUnlocked = false;
   bool _biometricEnabled = false;
 
+  final _appLinks = AppLinks();
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _restoreSession();
+    _setupDeepLinks();
+  }
+
+  /// Catch app links (coopvest://verify-email?token=...) so tapping the
+  /// Supabase confirmation email opens the app's verification screen instead
+  /// of a web page / the admin site.
+  Future<void> _setupDeepLinks() async {
+    try {
+      // Cold start — a link brought the app up.
+      final initial = await _appLinks.getInitialAppLink();
+      if (initial != null) _handleDeepLink(initial);
+
+      // Warm start — app is running and a link arrives.
+      _appLinks.uriLinkStream.listen(_handleDeepLink);
+    } catch (e) {
+      debugPrint('[CoopvestApp] App links setup error: $e');
+    }
+  }
+
+  void _handleDeepLink(Uri uri) {
+    debugPrint('[CoopvestApp] Deep link received: $uri');
+    if (uri.scheme == 'coopvest' && uri.host == 'verify-email') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        navigatorKey.currentState?.pushNamed('/register-step2', arguments: {
+          'email': uri.queryParameters['email'] ?? '',
+        });
+      });
+    } else if (uri.scheme == 'https' &&
+        uri.host == 'coopvest.africa' &&
+        uri.path.startsWith('/verify-email')) {
+      // https://coopvest.africa/verify-email?token=... — App-Link fallback
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        navigatorKey.currentState?.pushNamed('/register-step2', arguments: {
+          'email': uri.queryParameters['email'] ?? '',
+        });
+      });
+    } else {
+      final deepLinkData = DeepLinkService.parseDeepLink(uri.toString());
+      if (deepLinkData != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final ctx = navigatorKey.currentContext;
+          if (ctx != null) DeepLinkNavigator.navigateToScreen(ctx, deepLinkData);
+        });
+      }
+    }
   }
 
   @override

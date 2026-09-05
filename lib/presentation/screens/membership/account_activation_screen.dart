@@ -54,7 +54,11 @@ class _AccountActivationScreenState
 
       final launched = await launchUrl(
         Uri.parse(url),
-        mode: LaunchMode.externalApplication,
+        // Custom Tab / SFSafariViewController keeps Paystack inside the app's
+        // own browser — launching the external OPay app (which externalApplication
+        // tries to do) fails with a SecurityException when that activity isn't
+        // exported on the user's device.
+        mode: LaunchMode.inAppBrowserView,
       );
       if (!launched) throw Exception('Could not open the payment page.');
       if (!mounted) return;

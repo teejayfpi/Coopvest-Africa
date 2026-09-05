@@ -83,6 +83,7 @@ class _RegisterStep2ScreenState extends ConsumerState<RegisterStep2Screen> {
       await sb.Supabase.instance.client.auth.resend(
         type: sb.OtpType.signup,
         email: widget.email,
+        emailRedirectTo: 'coopvest://verify-email',
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
