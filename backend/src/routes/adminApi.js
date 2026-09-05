@@ -615,7 +615,7 @@ router.post('/members/:id/verify', async (req, res) => {
 
     const { data: updatedProfile } = await supabase
       .from('profiles')
-      .select('id, kyc_verified, registration_fee_paid, membership_status')
+      .select('id, kyc_verified, registration_fee_paid')
       .eq('id', profileId)
       .maybeSingle();
 

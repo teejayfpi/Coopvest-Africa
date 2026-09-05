@@ -28,7 +28,7 @@ router.get('/', async (req, res) => {
 
     let q = supabase
       .from('termination_requests')
-      .select('*, profile:profiles(id, user_id, name, email, phone, membership_status)', { count: 'exact' })
+      .select('*, profile:profiles(id, user_id, name, email, phone, is_active)', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range((page - 1) * limit, page * limit - 1);
     if (req.query.status) q = q.eq('status', req.query.status);
@@ -112,7 +112,7 @@ router.post(
       if (membershipStatus) {
         await supabase
           .from('profiles')
-          .update({ membership_status: membershipStatus })
+          .update({ is_active: membershipStatus === 'active', is_flagged: false })
           .eq('id', request.profile_id);
       }
 
