@@ -53,7 +53,9 @@ android {
 
     defaultConfig {
         applicationId "com.coopvestafrica.app"
-        minSdk 24
+        // 23 = Android 6.0 (Marshmallow) — floor Firebase requires; the
+        // universal APK carries all ABIs so old AND new devices install it.
+        minSdk 23
         targetSdk 36
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName

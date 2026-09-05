@@ -154,7 +154,11 @@ jobs:
 
       - name: Build release APK
         if: ${{ github.event.inputs.build_type != 'debug' }}
-        run: flutter build apk --release --split-per-abi --dart-define=ENV=prod --no-tree-shake-icons --android-skip-build-dependency-validation
+        # Universal (fat) APK — bundles arm64-v8a + armeabi-v7a + x86 so the
+        # same file installs on both old 32-bit Androids and modern 64-bit
+        # ones. Slightly larger than a single-ABI split, but the only way to
+        # guarantee "install anywhere".
+        run: flutter build apk --release --dart-define=ENV=prod --no-tree-shake-icons --android-skip-build-dependency-validation
 
       - name: Locate built APK
         id: locate_apk
@@ -164,9 +168,8 @@ jobs:
           if [ "${{ github.event.inputs.build_type }}" = "debug" ]; then
             APK_FILE="$BUILD_DIR/app-debug.apk"
           else
-            # --split-per-abi produces one APK per ABI; the arm64 build
-            # covers all modern devices (2017+).
-            APK_FILE="$BUILD_DIR/app-arm64-v8a-release.apk"
+            # Universal release APK (all ABIs — old + new devices).
+            APK_FILE="$BUILD_DIR/app-release.apk"
           fi
           if [ -f "$APK_FILE" ]; then
             echo "apk_path=$APK_FILE" >> $GITHUB_OUTPUT
@@ -191,7 +194,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: ${{ steps.locate_apk.outputs.apk_found == 'true' && github.event.inputs.build_type != 'debug' }}
         with:
-          name: coopvest-release-apk-${{ github.run_number }}
+          name: coopvest-release-universal-apk-${{ github.run_number }}
           path: ${{ steps.locate_apk.outputs.apk_path }}
           retention-days: 7
           if-no-files-found: error
@@ -241,7 +244,7 @@ jobs:
               echo ""
               echo "**[Click here → go to this run and scroll to Artifacts at the bottom](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})**"
               echo ""
-              echo "The file is named: \`coopvest-${{ github.event.inputs.build_type || 'release' }}-apk-${{ github.run_number }}\`"
+              echo "The file is named: \`coopvest-${{ github.event.inputs.build_type || 'release' }}-universal-apk-${{ github.run_number }}\`"
               echo ""
               echo "> Artifacts are kept for ${{ github.event.inputs.build_type == 'debug' && '30' || '90' }} days. If the link shows 404, trigger a new build."
             else
