@@ -146,7 +146,7 @@ class AuthRepository {
           'phone': phone,
           'referralCode': referralCode,
         },
-        emailRedirectTo: 'coopvest://verify-email',
+        emailRedirectTo: 'https://admin-dashboard-api-server.vercel.app/verify-email',
       );
 
       if (response.user == null) {
