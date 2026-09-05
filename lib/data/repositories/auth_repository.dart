@@ -143,6 +143,7 @@ class AuthRepository {
           'phone': phone,
           'referralCode': referralCode,
         },
+        emailRedirectTo: 'coopvest://verify-email',
       );
 
       if (response.user == null) {
