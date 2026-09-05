@@ -193,7 +193,7 @@ router.post(
       // mobile app and the admin portal can see it.
       await supabase
         .from('profiles')
-        .update({ membership_status: 'pending_termination' })
+        .update({ is_active: false })
         .eq('id', profileId);
 
       res.status(201).json({
@@ -236,7 +236,7 @@ router.post('/:id/cancel', [param('id').notEmpty()], validate, async (req, res) 
 
     await supabase
       .from('profiles')
-      .update({ membership_status: 'active' })
+      .update({ is_active: true, is_flagged: false })
       .eq('id', data.profile_id);
 
     res.json({ success: true, message: 'Termination request cancelled.' });
@@ -279,7 +279,7 @@ router.post('/:id/confirm', [param('id').notEmpty()], validate, async (req, res)
 
     await supabase
       .from('profiles')
-      .update({ membership_status: 'terminated' })
+      .update({ is_active: false })
       .eq('id', data.profile_id);
 
     res.json({

@@ -255,7 +255,10 @@ const ACTIVATION_BLOCKED = 'ACTIVATION_BLOCKED';
 async function loadGateProfile(profileId) {
   const { data } = await supabase
     .from('profiles')
-    .select('id, kyc_verified, registration_fee_paid, membership_status, is_active')
+    // NOTE: profiles table has NO membership_status column (termination state
+    // lives in termination_requests). Selecting it made this query fail and
+    // the gate treated every member as inactive.
+    .select('id, kyc_verified, registration_fee_paid, is_active, is_flagged')
     .eq('id', profileId)
     .maybeSingle();
   return data;
@@ -285,8 +288,7 @@ async function attachGateStatus(req, res, next) {
 function gateStatusFor(profile) {
   const kycApproved = profile?.kyc_verified === true;
   const feePaid = profile?.registration_fee_paid === true;
-  const blocked = profile?.is_active === false ||
-    profile?.membership_status === 'terminated';
+  const blocked = profile?.is_active === false || profile?.is_flagged === true;
   return {
     activated: kycApproved && feePaid && !blocked,
     kyc_approved: kycApproved,

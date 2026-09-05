@@ -63,7 +63,7 @@ router.get('/profile', authenticate, async (req, res) => {
         phone: profile.phone,
         address: profile.address || null,
         profilePicture: profile.profile_picture || null,
-        membershipStatus: profile.membership_status || 'active',
+        membershipStatus: profile.is_active === false ? 'inactive' : 'active',
         referralCode: referralRes.data?.my_referral_code || null,
         referralCount: referralRes.data?.referral_count || 0,
         kycVerified: kycRes.data?.verified || false,

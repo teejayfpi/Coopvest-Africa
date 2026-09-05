@@ -48,8 +48,7 @@ const validate = (req, res, next) => {
 const buildUserPayload = (authUser, profile) => {
   const kycApproved = profile?.kyc_verified === true;
   const feePaid = profile?.registration_fee_paid === true;
-  const blocked = profile?.is_active === false ||
-    profile?.membership_status === 'terminated';
+  const blocked = profile?.is_active === false || profile?.is_flagged === true;
   return {
     userId: profile?.user_id || authUser.user_metadata?.userId || authUser.id,
     id: authUser.id,
@@ -98,7 +97,7 @@ const ensureProfile = async (authUser, extra = {}) => {
   const userId = extra.userId || `USR-${Date.now().toString(36).toUpperCase()}`;
   const { data: existing } = await supabase
     .from('profiles')
-    .select('id, user_id, email, name, phone, role, kyc_verified, is_active, membership_status, registration_fee_paid, registration_completed, completed_at, profile_picture, created_at, updated_at')
+    .select('id, user_id, email, name, phone, role, kyc_verified, is_active, registration_fee_paid, registration_completed, completed_at, profile_picture, created_at, updated_at')
     .eq('id', authUser.id)
     .maybeSingle();
 
@@ -115,7 +114,7 @@ const ensureProfile = async (authUser, extra = {}) => {
       role: 'member',
       is_active: true,
     })
-    .select('id, user_id, email, name, phone, role, kyc_verified, is_active, membership_status, registration_fee_paid, registration_completed, completed_at, profile_picture, created_at, updated_at')
+    .select('id, user_id, email, name, phone, role, kyc_verified, is_active, registration_fee_paid, registration_completed, completed_at, profile_picture, created_at, updated_at')
     .single();
 
   if (error) {
@@ -236,7 +235,7 @@ router.post('/refresh', [
     const authUser = data.user;
     const { data: profile } = await supabase
       .from('profiles')
-      .select('id, user_id, email, name, phone, role, kyc_verified, is_active, membership_status, registration_fee_paid, profile_picture, created_at, updated_at')
+      .select('id, user_id, email, name, phone, role, kyc_verified, is_active, registration_fee_paid, profile_picture, created_at, updated_at')
       .eq('id', authUser.id)
       .maybeSingle();
 
@@ -671,7 +670,7 @@ router.post('/sync', (req, res, next) => { req.skipSingleSessionCheck = true; ne
       .from('profiles')
       .update(updateData)
       .eq('id', profileId)
-      .select('id, user_id, email, name, phone, role, kyc_verified, is_active, membership_status, registration_fee_paid, profile_picture, created_at, updated_at')
+      .select('id, user_id, email, name, phone, role, kyc_verified, is_active, registration_fee_paid, profile_picture, created_at, updated_at')
       .maybeSingle();
 
     if (error) {
@@ -737,8 +736,7 @@ router.get(['/me', '/profile'], authenticate, async (req, res) => {
     if (profile) {
       const kycApproved = profile.kyc_verified === true;
       const feePaid = profile.registration_fee_paid === true;
-      const blocked = profile.is_active === false ||
-        profile.membership_status === 'terminated';
+      const blocked = profile.is_active === false || profile.is_flagged === true;
       Object.assign(user, {
         phone: profile.phone,
         profilePicture: profile.profile_picture || null,
