@@ -112,10 +112,16 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
           'email': _emailController.text.trim().toLowerCase(),
         };
 
-        // If email is already confirmed (autoconfirm enabled), skip
-        // the verification screen and go straight to onboarding.
+        // Email verification: with Supabase "Confirm email" ON, a fresh signup
+        // returns no session and the user must verify first. Route them to the
+        // verification screen (step2) — it resends the link and waits for
+        // confirmation. Only skip straight to onboarding when the email is
+        // already confirmed.
+        final registeredUser = ref.read(authProvider).user;
         final sbUser = sb.Supabase.instance.client.auth.currentUser;
-        if (sbUser?.emailConfirmedAt != null) {
+        final emailConfirmed = (sbUser?.emailConfirmedAt != null) ||
+            (registeredUser?.isEmailVerified ?? false);
+        if (emailConfirmed) {
           Navigator.of(context).pushNamed('/register-step3', arguments: regArgs);
         } else {
           Navigator.of(context).pushNamed('/register-step2', arguments: regArgs);
