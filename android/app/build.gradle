@@ -33,12 +33,11 @@ if (keystorePropertiesFile.exists()) {
 
 def projectDir = project.rootProject.projectDir
 
-// The Flutter Gradle plugin exposes its default SDK versions via the
-// `flutter` extension (default minSdk is 24 in Flutter 3.44). Override the
-// extension property BEFORE the android block so the plugin's injected
-// value — which otherwise wins the merge — is 23 instead.
-flutter {
-    minSdkVersion = 23
+// The Flutter Gradle plugin / some Firebase libraries can raise the merged
+// app minSdk above what defaultConfig declares. Force it back to 23
+// (Android 6.0) AFTER evaluation so no dependency can push it higher.
+afterEvaluate {
+    android.defaultConfig.minSdk = 23
 }
 
 android {
