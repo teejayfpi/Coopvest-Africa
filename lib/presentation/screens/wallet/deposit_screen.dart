@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
+import '../../widgets/paystack_checkout_dialog.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/utils/utils.dart';
@@ -276,40 +276,14 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
       if (url == null || reference == null) {
         throw Exception('Could not start the online payment. Please try again.');
       }
+      // Full in-app WebView — the checkout never leaves the app, so Paystack's
+      // `opay://` hand-off can't reach Android's activity manager (the previous
+      // external-browser launch crashed with a SecurityException when the OPay
+      // activity wasn't exported on the device.
 
-      final launched = await launchUrl(
-        Uri.parse(url),
-        // Custom Tab / SFSafariViewController keeps Paystack inside the app's
-        // own browser — launching the external OPay app (which externalApplication
-        // tries to do) fails with a SecurityException when that activity isn't
-        // exported on the user's device.
-        mode: LaunchMode.inAppBrowserView,
-      );
-      if (!launched) throw Exception('Could not open the payment page.');
-      if (!mounted) return;
-
-      // Wait for the member to finish in the browser, then confirm.
-      final confirmed = await showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Complete Your Payment'),
-          content: const Text(
-            'A secure Paystack page has opened in your browser. '
-            'Finish the payment there, then come back and tap "I\'ve Paid".',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text("I've Paid"),
-            ),
-          ],
-        ),
-      );
+      // Complete the payment inside the in-app WebView dialog above, then
+      // return `true` so the backend-confirmation poll below runs.
+      final confirmed = await showPaystackCheckoutDialog(context, url: url);
       if (confirmed != true || !mounted) return;
 
       // Poll the backend for confirmation (the webhook usually beats us to
