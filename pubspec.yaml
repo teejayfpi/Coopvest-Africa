@@ -87,6 +87,10 @@ dependencies:
   # Deep Linking
   app_links: ^3.4.0
 
+  # In-app Paystack checkout (full WebView — never hands `opay://`
+  # to the external OPay activity, which crashes when it isn't exported)
+  webview_flutter: ^4.7.0
+
   # Utilities
   intl: ^0.19.0
   flutter_dotenv: ^5.1.0

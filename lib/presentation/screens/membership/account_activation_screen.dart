@@ -1,7 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
+import '../../widgets/paystack_checkout_dialog.dart';
 import '../../../config/app_config.dart';
 import '../../../config/theme_config.dart';
 import '../../../core/network/api_client.dart';
@@ -52,38 +52,9 @@ class _AccountActivationScreenState
         throw Exception('Could not start the online payment. Please try again.');
       }
 
-      final launched = await launchUrl(
-        Uri.parse(url),
-        // Custom Tab / SFSafariViewController keeps Paystack inside the app's
-        // own browser — launching the external OPay app (which externalApplication
-        // tries to do) fails with a SecurityException when that activity isn't
-        // exported on the user's device.
-        mode: LaunchMode.inAppBrowserView,
-      );
-      if (!launched) throw Exception('Could not open the payment page.');
-      if (!mounted) return;
-
-      final confirmed = await showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Complete Your Payment'),
-          content: const Text(
-            "A secure Paystack page has opened in your browser. "
-            "Finish the ₦5,000 payment there, then come back and tap 'I have Paid'.",
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('I have Paid'),
-            ),
-          ],
-        ),
-      );
+      // Full in-app WebView —the checkout stays inside the app so the `opay://`
+      // hand-off can't crash Android's activity manager (previous behavior..
+      final confirmed = await showPaystackCheckoutDialog(context, url: url;
       if (confirmed != true || !mounted) return;
 
       String status = 'pending';
