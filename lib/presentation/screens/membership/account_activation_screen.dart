@@ -54,7 +54,7 @@ class _AccountActivationScreenState
 
       // Full in-app WebView —the checkout stays inside the app so the `opay://`
       // hand-off can't crash Android's activity manager (previous behavior..
-      final confirmed = await showPaystackCheckoutDialog(context, url: url));
+      final confirmed = await showPaystackCheckoutDialog(context, url: url);
       if (confirmed != true || !mounted) return;
 
       String status = 'pending';

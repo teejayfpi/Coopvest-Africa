@@ -68,12 +68,13 @@ class _PaystackCheckoutDialogState extends State<PaystackCheckoutDialog> {
             final u = request.url;
             final isHttp = u.startsWith('https:') || u.startsWith('http:');
             final isPaystack = u.contains('checkout.paystack.com');
-            if (!(isHttp && (isPaystack || _allowExternalHttp)))) {
+            if (!(isHttp && (isPaystack || _allowExternalHttp))) {
               return NavigationDecision.prevent;
             }
             return NavigationDecision.navigate;
           },
         ),
+      )
       ..loadRequest(WebViewRequest(uri: Uri.parse(widget.url)));
   }
 
@@ -113,7 +114,7 @@ class _PaystackCheckoutDialogState extends State<PaystackCheckoutDialog> {
                         child: LinearProgressIndicator(
                           value: _progress/ 100,
                           minHeight: 2,
-                          backgroundColor: CoopvestColors.primary.withOpacity(alpha: 0.15),
+                          backgroundColor: CoopvestColors.primary.withOpacity(0.15),
                           color: CoopvestColors.primary,
                         ),
                       ),
