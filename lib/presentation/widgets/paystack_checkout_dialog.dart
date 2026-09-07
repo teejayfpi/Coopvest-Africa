@@ -19,7 +19,7 @@ Future<bool?> showPaystackCheckoutDialog(
   required String url,
 }) {
   return showDialog<bool>(
-    context context,
+    context: context,
     barrierDismissible: false,
     builder: (dialogContext) => PaystackCheckoutDialog(url: url),
   );
@@ -74,8 +74,7 @@ class _PaystackCheckoutDialogState extends State<PaystackCheckoutDialog> {
             return NavigationDecision.navigate;
           },
         ),
-      )
-      ..loadRequest(Request(widget.url);
+      ..loadRequest(WebViewRequest(uri: Uri.parse(widget.url)));
   }
 
   @override
@@ -144,7 +143,7 @@ class _PaystackCheckoutDialogState extends State<PaystackCheckoutDialog> {
                                     _loadFailed = false;
                                     _loading = true;
                                   });
-                                  _controller.loadRequest(Request(widget.url));
+                                  _controller.loadRequest(WebViewRequest(uri: Uri.parse(widget.url)));
                                 },
                                 icon: const Icon(Icons.refresh_rounded, size: 18),
                                 label: const Text('Retry'),
@@ -218,7 +217,7 @@ class _PaystackCheckoutDialogState extends State<PaystackCheckoutDialog> {
       builder: (ctx) => AlertDialog(
         title: const Text('Cancel payment?'),
         content: Text(
-          'If you cancel, the payment won't complete. Proceed anyway?',
+          'If you cancel, the payment won\'t complete. Proceed anyway?',
         ),
         actions: [
           TextButton(

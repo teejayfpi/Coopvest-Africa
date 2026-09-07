@@ -283,7 +283,7 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
 
       // Complete the payment inside the in-app WebView dialog above, then
       // return `true` so the backend-confirmation poll below runs.
-      final confirmed = await showPaystackCheckoutDialog(context, url: url);
+      final confirmed = await showPaystackCheckoutDialog(context, url: url));
       if (confirmed != true || !mounted) return;
 
       // Poll the backend for confirmation (the webhook usually beats us to
