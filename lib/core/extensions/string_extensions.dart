@@ -27,7 +27,7 @@ extension StringExtensions on String {
 
   /// Checks if string is a valid phone number
   bool isValidPhone() {
-    final phoneRegex = RegExp(r'^[0-9]{10,15}$');
-    return phoneRegex.hasMatch(removeWhitespace());
+    final phoneRegex = RegExp(r'^\d{10,15}$');
+    return phoneRegex.hasMatch(replaceAll(RegExp(r'^\D'),''));
   }
 }

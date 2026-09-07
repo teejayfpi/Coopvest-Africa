@@ -58,7 +58,7 @@ class _PaystackCheckoutDialogState extends State<PaystackCheckoutDialog> {
             if (!mounted) return;
             setState(() => _loadFailed = true);
           },
-          shouldOverrideUrlLoading:
+          onNavigationRequest:
               (NavigationRequest request) async {
             // Allow the Paystack page itself. Block every non-http(s)
             // scheme — `opay://`, `intent://`, `tel:`, `mailto:` etc. —
@@ -75,7 +75,7 @@ class _PaystackCheckoutDialogState extends State<PaystackCheckoutDialog> {
           },
         ),
       )
-      ..loadRequest(WebViewRequest(uri: Uri.parse(widget.url)));
+      ..loadRequest(Uri.parse(widget.url));
   }
 
   @override
@@ -144,7 +144,7 @@ class _PaystackCheckoutDialogState extends State<PaystackCheckoutDialog> {
                                     _loadFailed = false;
                                     _loading = true;
                                   });
-                                  _controller.loadRequest(WebViewRequest(uri: Uri.parse(widget.url)));
+                                  _controller.loadRequest(Uri.parse(widget.url));
                                 },
                                 icon: const Icon(Icons.refresh_rounded, size: 18),
                                 label: const Text('Retry'),
