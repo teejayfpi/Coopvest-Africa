@@ -24,7 +24,7 @@ async function lookupAuthUserByEmail(email) {
 }
 
 class EmailVerificationService {
-  async sendVerificationEmail(user, frontendUrl?) {
+  async sendVerificationEmail(user, frontendUrl) {
     try {
       const email = user.email;
       const baseUrl = frontendUrl || process.env.FRONTEND_URL || 'https://admin-dashboard-api-server.vercel.app';
