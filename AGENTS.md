@@ -113,3 +113,16 @@ requireActivated` on every route except POST `/verify`, fixed in ee41ba17).
 resolves account holder names via Paystack (`PAYSTACK_SECRET_KEY`, 503 when
 unconfigured, 422 when Paystack can't resolve). Reachable pre-activation
 because members use it during KYC onboarding.
+
+## Instant Paystack for all payment allocations (mobile)
+`POST /api/v1/payments/initialize` accepts `allocation_type` + `allocations`
+(values: monthly_contribution, loan_repayment, fine, fee, registration_fee,
+mixed). `payment_proofs.payment_type` CHECK only allows monthly_contribution/
+loan_repayment/registration_fee/investment/other, so `payments.js` maps
+fine/fee/mixed → stored `other` and parks the breakdown in proof
+`metadata.allocations/allocation_type`. On Paystack success, settle calls
+`applyAllocations`: savings→wallet credit (skipped when proof is monthly_contribution —
+DB trigger credits it), loan_repayment→loan reduction + `loan_repayments`
+row keyed by `reference = proof.id` (idempotent), fine/fee→member_fees paid. Mirrors admin deposit-verification loop in adminApi.js. Keep the
+`proof.status === 'approved'` early-return guard to avoid double settles.
+
