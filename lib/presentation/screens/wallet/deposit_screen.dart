@@ -266,10 +266,37 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
     setState(() => _isProcessing = true);
     try {
       final apiClient = ref.read(apiClientProvider);
-      final resp = await apiClient.dio.post('/payments/initialize', data: {
+      List<Map<String, dynamic>>? splitAllocations;
+      if (_allocationType == 'mixed') {
+        double parseSplit(TextEditingController c) =>
+            double.tryParse(c.text.replaceAll(',', '')) ?? 0;
+        splitAllocations = [
+          {'type': 'savings', 'amount': parseSplit(_splitSavingsController)},
+          {'type': 'loan_repayment', 'amount': parseSplit(_splitLoanController)},
+          {'type': 'fine', 'amount': parseSplit(_splitFineController)},
+          {'type': 'fee', 'amount': parseSplit(_splitFeeController)},
+        ].where((a) => (a['amount'] as double) > 0).toList();
+
+        final total = splitAllocations.fold<double>(0, (s, a) => s + (a['amount'] as double));
+        if ((total - amount.abs() > 0.01)) {
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Split amounts (₦${total.toStringAsFixed(0)}) must equal the total (₦${amount.toStringAsFixed(0)})'),
+              backgroundColor: CoopvestColors.error,
+            ),
+          );
+          setState(() => _isProcessing = false);
+
+          return;
+        }
+      }
+      final initData = <String, dynamic>{
         'amount': amount,
-        'payment_type': 'monthly_contribution',
-      });
+        'payment_type': _allocationType,
+      };
+      if (splitAllocations != null) initData['allocations'] = splitAllocations;
+      final resp = await apiClient.dio.post('/payments/initialize', data: initData);
       final data = resp.data as Map<String, dynamic>;
       final url = data['authorization_url'] as String?;
       final reference = data['reference'] as String?;
@@ -843,25 +870,22 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
                     : Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          // Instant online payment — wallet is credited
-                          // automatically once Paystack confirms. Only for
-                          // straight savings deposits; split/loan payments
-                          // still go through manual proof verification.
-                          if (_allocationType == 'monthly_contribution') ...[
-                            PrimaryButton(
-                              label: 'Pay Instantly (Card / Transfer)',
-                              onPressed: _payWithPaystack,
-                              width: double.infinity,
-                              icon: const Icon(Icons.bolt, color: Colors.white),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Instant — your wallet is credited automatically.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(fontSize: 11, color: context.textSecondary),
-                            ),
-                            const SizedBox(height: 16),
-                          ],
+                          // Instant online payment — the app charges via Paystack
+                          // and the backend auto-settles the chosen allocation
+                          // (savings wallet credit, loan repayment, fine/fee).
+                          PrimaryButton(
+                            label: 'Pay Instantly (Card / Transfer)',
+                            onPressed: _payWithPaystack,
+                            width: double.infinity,
+                            icon: const Icon(Icons.bolt, color: Colors.white),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Instant — your payment is applied automatically.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 11, color: context.textSecondary),
+                          ),
+                          const SizedBox(height: 16),
                           PrimaryButton(
                             label: 'Deposit ₦${_amountController.text.isEmpty ? '0' : _amountController.text} Manually',
                             onPressed: _processDeposit,
