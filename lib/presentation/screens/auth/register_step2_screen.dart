@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
+import '../../../config/app_config.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/utils/error_handler.dart';
@@ -15,11 +16,17 @@ import '../../widgets/common/buttons.dart';
 class RegisterStep2Screen extends ConsumerStatefulWidget {
   final String email;
   final Map<String, String> registrationData;
+  final String? autoVerifyToken;
+  final String? autoVerifyType;
+  final String? autoVerifyFragment;
 
   const RegisterStep2Screen({
     Key? key,
     required this.email,
     required this.registrationData,
+    this.autoVerifyToken,
+    this.autoVerifyType,
+    this.autoVerifyFragment,
   }) : super(key: key);
 
   @override
@@ -43,11 +50,71 @@ class _RegisterStep2ScreenState extends ConsumerState<RegisterStep2Screen> {
     // in flight yet — send one immediately. From registration the sign-up
     // email already went out; a second send is rate-limited by Supabase
     // anyway, so this stays harmless.
+    // When opened by the email deep link (coopvest://verify-email or
+    // https app link) we auto-verify instead (no resend / no manual tap).
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _resendVerificationEmail();
+      final hasLink = widget.autoVerifyFragment != null &&
+          widget.autoVerifyFragment!.isNotEmpty ||
+          widget.autoVerifyToken != null && widget.autoVerifyToken!.isNotEmpty;
+      if (hasLink) {
+        _verifyFromLink();
+      } else {
+        _resendVerificationEmail();
+      }
     });
   }
-
+Future<void> _verifyFromLink() async {
+    setState(() => _isChecking = true);
+    try {
+      final supabase = sb.Supabase.instance.client;
+      final fragment = widget.autoVerifyFragment;
+      final tokenParam = widget.autoVerifyToken;
+      if (fragment != null && fragment.isNotEmpty) {
+        final params = Uri.splitQueryString(fragment.replaceFirst('#', ''));
+        final accessT = params['access_token'] ?? '';
+        final refreshT = params['refresh_token'] ?? '';
+        if (accessT.isNotEmpty && refreshT.isNotEmpty) {
+          await supabase.auth.setSession(accessT, refreshT);
+          await supabase.auth.refreshSession();
+        }
+      } else if (tokenParam != null && tokenParam.isNotEmpty) {
+        await supabase.auth.verifyOtp(
+          email: widget.email,
+          token: tokenParam,
+          type: (widget.autoVerifyType ?? 'signup') as sb.OtpType,
+        );
+      }
+      if (mounted) {
+        final sbUser = supabase.auth.currentSession?.user;
+        if (sbUser != null && sbUser.emailConfirmedAt != null) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Email verified successfully!'),
+            backgroundColor: CoopvestColors.success,
+          ));
+          Navigator.of(context).pushReplacementNamed(
+            '/contribution-type-selection',
+            arguments: widget.registrationData,
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Email not yet verified. Please check your inbox.'),
+            backgroundColor: CoopvestColors.warning,
+          ));
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        final networkMsg = ErrorHandler.networkErrorMessage(e);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(networkMsg ?? 'Link verification failed. Please try again.'),
+          backgroundColor: CoopvestColors.error,
+        )));
+      }
+    } finally {
+      if (mounted) setState(() => _isChecking = false);
+    }
+  }
   @override
   void dispose() {
     _resendTimer?.cancel();
@@ -83,7 +150,7 @@ class _RegisterStep2ScreenState extends ConsumerState<RegisterStep2Screen> {
       await sb.Supabase.instance.client.auth.resend(
         type: sb.OtpType.signup,
         email: widget.email,
-        emailRedirectTo: 'https://admin-dashboard-api-server.vercel.app/verify-email',
+        emailRedirectTo: AppConfig.emailVerifyRedirect,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(

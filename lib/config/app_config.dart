@@ -12,6 +12,14 @@ class AppConfig {
   // API Configuration
   static String get apiBaseUrl => EnvironmentContext.config.apiBaseUrl;
   static const Duration apiTimeout = Duration(seconds: 60);
+
+  // Email verification redirect. The https URL is the App-Link bridge:
+  // on devices with the app the link opens in-app (coopvest.africa), on
+  // web touches the server's verify-email page (assumed same origin, so the
+  // Supabase auth callback keeps both flows working)。 The custom-scheme
+  // coopvest://verify-email is additionally wired for Android/iOS.
+
+  static const String emailVerifyRedirect = 'https://coopvest.africa/verify-email';
   // Fast timeout for the KYC status probe. AuthGuard gates navigation on this
   // call, so a slow or cold-starting backend must not leave the member staring
   // at a loading screen for the full 60s apiTimeout.

@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../config/app_config.dart';
 import '../../core/network/api_client.dart';
 import '../../core/utils/error_handler.dart';
 import '../../core/utils/utils.dart';
@@ -146,7 +147,7 @@ class AuthRepository {
           'phone': phone,
           'referralCode': referralCode,
         },
-        emailRedirectTo: 'https://admin-dashboard-api-server.vercel.app/verify-email',
+        emailRedirectTo: AppConfig.emailVerifyRedirect,
       );
 
       if (response.user == null) {

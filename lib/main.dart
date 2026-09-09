@@ -79,17 +79,22 @@ const _supabaseAnonKey =
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
+
 /// Top-level FCM background message handler.
 /// MUST be a top-level function — FCM runs it in a separate isolate.
 @pragma('vm:entry-point')
 Future<void> _fcmBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
   debugPrint('[FCM Background] Message received: ${message.messageId}');
+
   debugPrint('[FCM Background] Type: ${message.data['type']}');
+
 }
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
 
   // Set up global error handler for uncaught Flutter errors
   FlutterError.onError = (FlutterErrorDetails details) {
@@ -98,6 +103,7 @@ void main() async {
       details.exception,
       details.stack,
     );
+
     
     // Report to Crashlytics in production
     FirebaseCrashlytics.instance.recordError(
@@ -105,9 +111,11 @@ void main() async {
       details.stack,
       reason: 'Uncaught Flutter error in main isolate',
     );
+
     
     // Re-throw to let Flutter handle it
     FlutterError.presentError(details);
+
   };
 
   // Set up async error handler for unhandled promise rejections
@@ -117,22 +125,27 @@ void main() async {
       error,
       stack,
     );
+
     
     FirebaseCrashlytics.instance.recordError(
       error,
       stack,
       reason: 'Unhandled platform error',
     );
+
     
     return true;
   };
 
   const envString = String.fromEnvironment('ENV', defaultValue: 'prod');
+
   final env = Environment.values.firstWhere(
     (e) => e.toString().split('.').last == envString,
     orElse: () => Environment.prod,
   );
+
   EnvironmentContext.setEnvironment(env);
+
 
   // Initialize Supabase Auth
   await Supabase.initialize(
@@ -140,14 +153,20 @@ void main() async {
     anonKey: _supabaseAnonKey,
   );
 
+
   final securityService = SecurityService();
+
   await securityService.initialize();
 
+
   final featureService = FeatureService();
+
   try {
     await featureService.init().timeout(const Duration(seconds: 5));
+
   } catch (e) {
     debugPrint('Feature service initialization failed: $e');
+
   }
 
   // Firebase is kept for push notifications, analytics and crashlytics only.
@@ -155,10 +174,14 @@ void main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+
     FirebaseMessaging.onBackgroundMessage(_fcmBackgroundHandler);
+
     await NotificationService().init();
+
   } catch (e) {
     debugPrint('Firebase/Notification initialization failed: $e');
+
   }
 
   runApp(
@@ -166,13 +189,16 @@ void main() async {
       child: CoopvestApp(),
     ),
   );
+
 }
 
 class CoopvestApp extends ConsumerStatefulWidget {
   const CoopvestApp({Key? key}) : super(key: key);
 
+
   @override
   ConsumerState<CoopvestApp> createState() => _CoopvestAppState();
+
 }
 
 class _CoopvestAppState extends ConsumerState<CoopvestApp>
@@ -188,12 +214,17 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
 
   final _appLinks = AppLinks();
 
+
   @override
   void initState() {
     super.initState();
+
     WidgetsBinding.instance.addObserver(this);
+
     _restoreSession();
+
     _setupDeepLinks();
+
   }
 
   /// Catch app links (coopvest://verify-email?token=...) so tapping the
@@ -203,39 +234,66 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
     try {
       // Cold start — a link brought the app up.
       final initial = await _appLinks.getInitialAppLink();
+
       if (initial != null) _handleDeepLink(initial);
+
 
       // Warm start — app is running and a link arrives.
       _appLinks.uriLinkStream.listen(_handleDeepLink);
+
     } catch (e) {
       debugPrint('[CoopvestApp] App links setup error: $e');
+
     }
   }
 
   void _handleDeepLink(Uri uri) {
     debugPrint('[CoopvestApp] Deep link received: $uri');
-    if (uri.scheme == 'coopvest' && uri.host == 'verify-email') {
+
+if (uri.scheme == 'coopvest' && uri.host == 'verify-email') {
+      final email = uri.queryParameters['email'] ?? '';
+      final token = uri.queryParameters['token'] ?? '';
+      final type = uri.queryParameters['type'] ?? 'signup';
+      // Supabase new-style links carry `#access_token=...` in the fragment.
+      final fragment = uri.hasFragment ? uri.fragment : '';
       WidgetsBinding.instance.addPostFrameCallback((_) {
         navigatorKey.currentState?.pushNamed('/register-step2', arguments: {
-          'email': uri.queryParameters['email'] ?? '',
+          'email': email,
+          'token': token,
+          'type': type,
+          'fragment': fragment,
         });
+
       });
+
     } else if (uri.scheme == 'https' &&
         uri.host == 'coopvest.africa' &&
         uri.path.startsWith('/verify-email')) {
       // https://coopvest.africa/verify-email?token=... — App-Link fallback
+      final email = uri.queryParameters['email'] ?? '';
+      final token = uri.queryParameters['token'] ?? '';
+      final type = uri.queryParameters['type'] ?? 'signup';
+      final fragment = uri.hasFragment ? uri.fragment : '';
       WidgetsBinding.instance.addPostFrameCallback((_) {
         navigatorKey.currentState?.pushNamed('/register-step2', arguments: {
-          'email': uri.queryParameters['email'] ?? '',
+          'email': email,
+          'token': token,
+          'type': type,
+          'fragment': fragment,
         });
+
       });
+
     } else {
       final deepLinkData = DeepLinkService.parseDeepLink(uri.toString());
+
       if (deepLinkData != null) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           final ctx = navigatorKey.currentContext;
           if (ctx != null) DeepLinkNavigator.navigateToScreen(ctx, deepLinkData);
+
         });
+
       }
     }
   }
@@ -243,7 +301,9 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+
     super.dispose();
+
   }
 
   @override
@@ -254,10 +314,12 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
     if (state == AppLifecycleState.resumed && _wasPaused) {
       _wasPaused = false;
       _onResume();
+
       // Re-fetch admin-controlled feature flags so toggles made in the
       // admin dashboard while the app was backgrounded take effect right
       // away instead of waiting for the next periodic refresh.
       FeatureService().refreshOnResume();
+
     }
   }
 
@@ -265,39 +327,50 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
   /// session can't be accessed without re-authenticating.
   void _onResume() {
     final authStatus = ref.read(authStatusProvider);
+
     if (authStatus != AuthStatus.authenticated) return;
     if (!_biometricEnabled) return;
     _biometricUnlocked = false;
     if (mounted) setState(() {});
+
     _promptBiometric();
+
   }
 
   Future<void> _restoreSession() async {
     try {
       final success =
           await ref.read(authProvider.notifier).restoreSession();
+
       if (success) {
         debugPrint('[CoopvestApp] Session restored successfully');
+
         // After a cold-start restore, if biometrics are enabled the session
         // must be gated behind a biometric prompt. Previously the app went
         // straight to the dashboard, letting anyone with the unlocked phone
         // bypass fingerprint/face unlock entirely.
         final securityService = SecurityService();
+
         _biometricEnabled = await securityService.isBiometricEnabled();
+
         _biometricUnlocked = !_biometricEnabled;
         if (_biometricEnabled) {
           _promptBiometric();
+
         }
       } else {
         debugPrint('[CoopvestApp] No session to restore');
+
       }
     } catch (e) {
       debugPrint('[CoopvestApp] Session restore error: $e');
+
     } finally {
       if (mounted) {
         setState(() {
           _isSessionRestored = true;
         });
+
       }
     }
   }
@@ -311,14 +384,17 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
     _isCheckingBiometric = true;
     try {
       final authenticated = await SecurityService().authenticate();
+
       if (authenticated) {
         _biometricUnlocked = true;
         if (mounted) setState(() {});
+
       }
       // If not authenticated, stay locked — the BiometricLockScreen offers a
       // retry button and a password fallback.
     } catch (e) {
       debugPrint('[CoopvestApp] Biometric prompt error: $e');
+
     } finally {
       _isCheckingBiometric = false;
     }
@@ -328,18 +404,23 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
   Future<void> _biometricFallbackToPassword() async {
     try {
       await ref.read(authProvider.notifier).logout();
+
     } catch (e) {
       debugPrint('[CoopvestApp] Logout from biometric fallback error: $e');
+
     }
     _biometricUnlocked = true;
     _biometricEnabled = false;
     if (mounted) setState(() {});
+
   }
 
   @override
   Widget build(BuildContext context) {
     final themeMode = ref.watch(themeModeProvider);
+
     final authStatus = ref.watch(authStatusProvider);
+
 
     final app = MaterialApp(
       title: AppConfig.appName,
@@ -352,6 +433,7 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
         builder: (context, ref, _) {
           // Listen for connectivity changes
           final connectivity = ref.watch(connectivityProvider);
+
           
           return Column(
             children: [
@@ -370,6 +452,7 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
                         onUnlocked: () {
                           if (mounted) {
                             setState(() => _biometricUnlocked = true);
+
                           }
                         },
                         onUsePassword: _biometricFallbackToPassword,
@@ -382,6 +465,7 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
               ),
             ],
           );
+
         },
       ),
       routes: {
@@ -389,12 +473,15 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
         '/login': (context) => const LoginScreen(),
         '/register': (context) => const RegisterStep1Screen(),
         '/register-step2': (context) {
-          final args = ModalRoute.of(context)?.settings.arguments
-              as Map<String, String>?;
-          return RegisterStep2Screen(
-            email: args?['email'] ?? '',
-            registrationData: args ?? {},
-          );
+final args = ModalRoute.of(context)?.settings.arguments
+          as Map<String, String>?;
+        return RegisterStep2Screen(
+          email: args?['email'] ?? '',
+          registrationData: args ?? {},
+          autoVerifyToken: args?['token'],
+          autoVerifyType: args?['type'],
+          autoVerifyFragment: args?['fragment'],
+        );
         },
         '/contribution-type-selection': (context) {
           final args = ModalRoute.of(context)?.settings.arguments
@@ -402,6 +489,7 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
           return ContributionTypeSelectionScreen(
             registrationData: args ?? {},
           );
+
         },
         '/register-step3': (context) {
           final args = ModalRoute.of(context)?.settings.arguments
@@ -409,6 +497,7 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
           return RegistrationOnboardingScreen(
             registrationData: args ?? {},
           );
+
         },
         '/salary-deduction-consent': (context) {
           final args = ModalRoute.of(context)?.settings.arguments
@@ -416,6 +505,7 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
           return SalaryDeductionConsentScreen(
             registrationData: args ?? {},
           );
+
         },
         '/account-activation': (context) => const AccountActivationScreen(),
         '/forgot-password': (context) => const ForgotPasswordScreen(),
@@ -423,12 +513,14 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
           final args = ModalRoute.of(context)?.settings.arguments
               as Map<String, dynamic>?;
           return ResetPasswordOtpScreen(email: args?['email'] ?? '');
+
         },
         '/verify-email': (context) => const EmailVerificationScreen(),
         '/google-complete': (context) {
           final googleUser = ModalRoute.of(context)?.settings.arguments
               as GoogleSignInAccount?;
           return CompleteRegistrationScreen(googleUser: googleUser!);
+
         },
 
         '/support': (context) => const SupportHomeScreen(),
@@ -440,6 +532,7 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
           return TicketDetailScreen(
             ticketId: args?['ticketId'] ?? '',
           );
+
         },
 
         '/kyc-deduction-type': (context) => const KYCDeductionTypeScreen(),
@@ -462,6 +555,7 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
             userName: args?['userName'] ?? '',
             userPhone: args?['userPhone'] ?? '',
           );
+
         },
         '/loan-application': (context) {
           final args = ModalRoute.of(context)?.settings.arguments
@@ -471,6 +565,7 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
             userName: args?['userName'] ?? 'User',
             userPhone: args?['userPhone'] ?? '',
           );
+
         },
         '/loan-details': (context) {
           final args = ModalRoute.of(context)?.settings.arguments
@@ -478,6 +573,7 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
           return LoanDetailsScreen(
             loanId: args?['loanId'] ?? '',
           );
+
         },
         '/guarantor-verification': (context) {
           final args = ModalRoute.of(context)?.settings.arguments
@@ -491,6 +587,7 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
             loanType: args?['loanType'] ?? 'Quick Loan',
             loanTenor: args?['loanTenor'] ?? 4,
           );
+
         },
 
         '/profile': (context) => const ProfileSettingsScreen(),
@@ -502,6 +599,7 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
           return SavingsGoalsScreen(
             userId: args?['userId'] ?? '',
           );
+
         },
 
         '/search': (context) => const GlobalSearchScreen(),
@@ -510,21 +608,25 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
           final loan =
               ModalRoute.of(context)?.settings.arguments as Loan;
           return RolloverEligibilityScreen(loan: loan);
+
         },
         '/rollover/request': (context) {
           final loan =
               ModalRoute.of(context)?.settings.arguments as Loan;
           return RolloverRequestScreen(loan: loan);
+
         },
         '/rollover/consent': (context) {
           final rolloverId =
               ModalRoute.of(context)?.settings.arguments as String;
           return GuarantorConsentScreen(rolloverId: rolloverId);
+
         },
         '/rollover/status': (context) {
           final rolloverId =
               ModalRoute.of(context)?.settings.arguments as String;
           return RolloverStatusScreen(rolloverId: rolloverId);
+
         },
         '/rollover/guarantor-response': (context) {
           final args = ModalRoute.of(context)?.settings.arguments
@@ -533,6 +635,7 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
             rolloverId: args['rolloverId']!,
             guarantorId: args['guarantorId']!,
           );
+
         },
 
         '/deposit-status': (context) => const DepositStatusScreen(),
@@ -541,9 +644,11 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
       },
     );
 
+
     return SplashScreen(
       isReady: _isSessionRestored,
       child: app,
     );
+
   }
 }
