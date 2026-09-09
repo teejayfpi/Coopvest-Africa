@@ -72,17 +72,24 @@ Future<void> _verifyFromLink() async {
       final tokenParam = widget.autoVerifyToken;
       if (fragment != null && fragment.isNotEmpty) {
         final params = Uri.splitQueryString(fragment.replaceFirst('#', ''));
-        final accessT = params['access_token'] ?? '';
         final refreshT = params['refresh_token'] ?? '';
-        if (accessT.isNotEmpty && refreshT.isNotEmpty) {
-          await supabase.auth.setSession(accessT, refreshT);
-          await supabase.auth.refreshSession();
+        if (refreshT.isNotEmpty) {
+          await supabase.auth.setSession(refreshT);
+        } else {
+          final token = params['token'] ?? '';
+          if (token.isNotEmpty) {
+            await supabase.auth.verifyOTP(
+              email: widget.email,
+              token: token,
+              type: _otpTypeFor(widget.autoVerifyType),
+            );
+          }
         }
       } else if (tokenParam != null && tokenParam.isNotEmpty) {
-        await supabase.auth.verifyOtp(
+        await supabase.auth.verifyOTP(
           email: widget.email,
           token: tokenParam,
-          type: (widget.autoVerifyType ?? 'signup') as sb.OtpType,
+          type: _otpTypeFor(widget.autoVerifyType),
         );
       }
       if (mounted) {
@@ -109,12 +116,41 @@ Future<void> _verifyFromLink() async {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(networkMsg ?? 'Link verification failed. Please try again.'),
           backgroundColor: CoopvestColors.error,
-        )));
+        ));
       }
     } finally {
       if (mounted) setState(() => _isChecking = false);
     }
   }
+
+  sb.OtpType _otpTypeFor(String? type) {
+    switch (type ?? 'signup') {
+      case 'invite':
+        return sb.OtpType.invite;
+
+      case 'magiclink':
+        return sb.OtpType.magiclink;
+
+      case 'recovery':
+        return sb.OtpType.recovery;
+
+      case 'email':
+        return sb.OtpType.email;
+
+      case 'emailChange':
+        return sb.OtpType.emailChange;
+
+      case 'phoneChange':
+        return sb.OtpType.phoneChange;
+
+      case 'sms':
+        return sb.OtpType.sms;
+
+      default:
+        return sb.OtpType.signup;
+    }
+  }
+
   @override
   void dispose() {
     _resendTimer?.cancel();
