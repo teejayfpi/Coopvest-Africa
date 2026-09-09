@@ -27,7 +27,7 @@ router.post('/send-verification-email', [
 ], validate, async (req, res) => {
   try {
     const { email } = req.query;
-    const frontendUrl = req.body.frontendUrl || process.env.FRONTEND_URL || 'http://localhost:3000';
+    const frontendUrl = req.body.frontendUrl || process.env.FRONTEND_URL || 'https://admin-dashboard-api-server.vercel.app';
 
     // Create a mock user object for the service
     const mockUser = { email };
@@ -113,7 +113,7 @@ router.post('/resend-verification-email', [
 ], validate, async (req, res) => {
   try {
     const { email } = req.query;
-    const frontendUrl = req.body.frontendUrl || process.env.FRONTEND_URL || 'http://localhost:3000';
+    const frontendUrl = req.body.frontendUrl || process.env.FRONTEND_URL || 'https://admin-dashboard-api-server.vercel.app';
 
     const result = await emailVerificationService.resendVerificationEmail(email, frontendUrl);
 
@@ -264,7 +264,7 @@ router.post('/resend-otp', [
 ], validate, async (req, res) => {
   try {
     const { email } = req.body;
-    const frontendUrl = req.body.frontendUrl || process.env.FRONTEND_URL || 'http://localhost:3000';
+    const frontendUrl = req.body.frontendUrl || process.env.FRONTEND_URL || 'https://admin-dashboard-api-server.vercel.app';
 
     const result = await emailVerificationService.resendVerificationEmail(email, frontendUrl);
 
