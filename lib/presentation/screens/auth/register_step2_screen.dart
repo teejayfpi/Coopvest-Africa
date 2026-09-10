@@ -172,6 +172,7 @@ Future<void> _verifyFromLink() async {
   }
 
   Future<void> _verifyWithOtpCode() async {
+    if (_isVerifyingOtp) return;
     final code = _otpController.text.trim();
     if (code.length < 6) {
       if (mounted) {
@@ -542,7 +543,7 @@ Future<void> _verifyFromLink() async {
                     const SizedBox(height: 12),
                     PrimaryButton(
                       label: _isVerifyingOtp ? 'Verifying...' : 'Verify Email',
-                      onPressed: _isVerifyingOtp ? null : _verifyWithOtpCode,
+                      onPressed: _verifyWithOtpCode,
                       isLoading: _isVerifyingOtp,
                       width: double.infinity,
                     ),
