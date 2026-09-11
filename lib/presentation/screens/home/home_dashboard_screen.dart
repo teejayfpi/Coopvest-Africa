@@ -109,8 +109,11 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
         ref.read(notificationsProvider.notifier).addNotification(notification);
         // Refresh deposit history for wallet events so status screen stays current
         final type = row['type'] as String? ?? '';
-        if (type == 'wallet_credited' || type == 'deposit_rejected') {
+        if (type == 'wallet_credited' ||
+            type == 'deposit_rejected' ||
+            type == 'payment_proof_approved') {
           ref.read(depositHistoryProvider.notifier).load();
+          ref.read(walletProvider.notifier).loadWallet();
         }
       } catch (e) {
         // ignore parse errors

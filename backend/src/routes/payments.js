@@ -27,6 +27,7 @@ const supabase = require('../config/supabase');
 const { authenticate } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const logger = require('../utils/logger');
+const notifyService = require('../services/notifyService');
 
 const PAYSTACK_BASE = 'https://api.paystack.co';
 const MIN_AMOUNT_NGN = 100;
@@ -115,6 +116,30 @@ async function settleSuccessfulCharge(reference) {
       .eq('profile_id', proof.profile_id)
       .eq('fee_type', 'registration_fee')
       .eq('status', 'outstanding');
+  }
+
+  // Apply the allocation breakdown (savings/loan/fines/fees) for every
+  // instant type — straight monthly proofs reuse the DB trigger for savings,
+  // while loan/fine/fee/mixed need this loop (rare non-fatal failures are
+  // logged inside applyAllocations, never block the approval).
+  await applyAllocations(proof);
+
+
+  // Confirm the charge to the member in realtime — the app's in-app WebView
+  // poll usually sees the success, but this push/in-app notification covers
+  // weak-network handoffs where the poll fails or the app was backgrounded, so
+  // the member still gets an explicit auto-confirmation (and the wallet/status
+  // screens can refresh via the realtime notification listener).
+  try {
+    await notifyService.notifyPaymentProofApproved({
+      profileId: proof.profile_id,
+      amount: proof.amount,
+      paymentType: proof.payment_type,
+      transactionReference: proof.transaction_reference,
+    });
+    logger.info(`paystack settle: confirmation sent to ${proof.profile_id} (proof ${proof.id})`);
+  } catch (notifyErr) {
+    logger.warn(`paystack settle: confirmation notification failed (non-fatal): ${notifyErr.message}`);
   }
 
   logger.info(`paystack settle: proof ${proof.id} approved (reference ${reference})`);

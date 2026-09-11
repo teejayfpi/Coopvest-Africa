@@ -83,8 +83,9 @@ class _KYCBankInfoScreenState extends ConsumerState<KYCBankInfoScreen> {
         sub.accountName != null &&
         sub.accountType != null &&
         sub.bvn != null) {
-      // Bank step complete — go to success.
-      Navigator.of(context).pushReplacementNamed('/kyc-complete');
+      // Bank step complete — go straight to the registration-fee payment
+      // screen: KYC is done, the activation gate (fee) is the only step left.,
+      Navigator.of(context).pushReplacementNamed('/account-activation');
     }
   }
 
@@ -293,12 +294,16 @@ class _KYCBankInfoScreenState extends ConsumerState<KYCBankInfoScreen> {
       await ref.read(kycProvider.notifier).submitKYC();
       ref.read(authProvider.notifier).markKycSubmitted();
     } catch (_) {
-      // Non-fatal: the selfie step already submitted the KYC core; bank
-      // details are saved locally on the submission. Proceed to success.
+      // Non-fatal:the selfie step already submitted the KYC core; bank
+      // details are saved locally on the submission. Proceed to the activation
+      // screen below — KYC is done, the payment is the only step left.,
     }
-    if (mounted) Navigator.of(context).pushReplacementNamed('/kyc-complete');
+    // Registration fee comes before dashboard access — send the member straight
+    // to the Account Activation (payment) screen so it appears immediately
+    // after KYC completes, without requiring an app restart or a manual tap
+    // on a success screen. The success acknowledgement lives on that screen.
+    if (mounted) Navigator.of(context).pushReplacementNamed('/account-activation');
   }
-
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: CoopvestColors.error),
