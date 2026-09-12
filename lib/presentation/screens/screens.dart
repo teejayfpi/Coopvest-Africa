@@ -12,7 +12,7 @@ export 'auth/registration_onboarding_screen.dart';
 export 'auth/forgot_password_screen.dart';
 export 'auth/reset_password_otp_screen.dart';
 export 'auth/email_verification_screen.dart';
-export 'auth/account_activation_screen.dart';
+export 'membership/account_activation_screen.dart';
 export 'auth/google_complete_screen.dart';
 export 'auth/salary_deduction_consent_screen.dart';
 
