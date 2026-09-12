@@ -415,7 +415,7 @@ CREATE INDEX IF NOT EXISTS idx_investment_participations_pool ON public.investme
 CREATE TABLE IF NOT EXISTS public.notifications (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   profile_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
-  type TEXT NOT NULL CHECK (type IN ('transaction','savings','investment','loan','referral','kyc','system','promotion','security','reminder')),
+  type TEXT NOT NULL CHECK (type IN ('transaction','savings','investment','loan','referral','kyc','system','promotion','security','reminder','payment_proof_approved')),
   category TEXT DEFAULT 'info' CHECK (category IN ('credit','debit','milestone','expiry','status_change','info','warning','success','action_required')),
   title TEXT NOT NULL,
   message TEXT NOT NULL,
