@@ -4,11 +4,32 @@ import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 
 /// KYC Success Screen - Shown when KYC verification is complete
-class KYCSuccessScreen extends ConsumerWidget {
+///
+/// Auto-advances to the Account Activation (registration-fee payment) screen
+/// after a short celebration beat, so a member who just finished KYC lands on
+/// the payment step immediately — no app restart or manual tap required..
+class KYCSuccessScreen extends ConsumerStatefulWidget {
   const KYCSuccessScreen({Key? key}) : super(key: key);
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<KYCSuccessScreen> createState() => _KYCSuccessScreenState();
+}
+
+class _KYCSuccessScreenState extends ConsumerState<KYCSuccessScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Registration fee comes before dashboard access — auto-forward to the
+    // Account Activation (payment) screen so it appears immediately after
+    // KYC completes, without requiring an app restart or a manual tap..
+    Future.delayed(const Duration(seconds: 3), () {
+      if (!mounted) return;
+      Navigator.of(context).pushReplacementNamed('/account-activation');
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: context.scaffoldBackground,
       body: SafeArea(
