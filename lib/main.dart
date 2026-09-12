@@ -253,13 +253,20 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
 if (uri.scheme == 'coopvest' && uri.host == 'verify-email') {
       final email = uri.queryParameters['email'] ?? '';
       final token = uri.queryParameters['token'] ?? '';
+      final code = uri.queryParameters['code'] ?? '';
       final type = uri.queryParameters['type'] ?? 'signup';
       // Supabase new-style links carry `#access_token=...` in the fragment.
+
+      // `?code=` carries the raw OTP (same input verifyOTP expects, so we
+      // treat it like the token) — this lets the in-app flow auto-verify when the
+      // email template points the deep link with the code. Otherwise the user can
+      // type the code into the OTP box on this screen..
+      final verifyToken = token.isEmpty ? code : token;
       final fragment = uri.hasFragment ? uri.fragment : '';
       WidgetsBinding.instance.addPostFrameCallback((_) {
         navigatorKey.currentState?.pushNamed('/register-step2', arguments: {
           'email': email,
-          'token': token,
+          'token': verifyToken,
           'type': type,
           'fragment': fragment,
         });
@@ -269,15 +276,19 @@ if (uri.scheme == 'coopvest' && uri.host == 'verify-email') {
     } else if (uri.scheme == 'https' &&
         uri.host == 'coopvest.africa' &&
         uri.path.startsWith('/verify-email')) {
+
       // https://coopvest.africa/verify-email?token=... — App-Link fallback
+
       final email = uri.queryParameters['email'] ?? '';
       final token = uri.queryParameters['token'] ?? '';
+      final code = uri.queryParameters['code'] ?? '';
       final type = uri.queryParameters['type'] ?? 'signup';
+      final verifyToken = token.isEmpty ? code : token;
       final fragment = uri.hasFragment ? uri.fragment : '';
       WidgetsBinding.instance.addPostFrameCallback((_) {
         navigatorKey.currentState?.pushNamed('/register-step2', arguments: {
           'email': email,
-          'token': token,
+          'token': verifyToken,
           'type': type,
           'fragment': fragment,
         });
