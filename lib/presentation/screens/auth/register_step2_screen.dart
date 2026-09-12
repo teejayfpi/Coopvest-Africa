@@ -2,8 +2,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
+import '../../../config/app_config.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
+import '../../../core/utils/error_handler.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/common/buttons.dart';
 
@@ -14,11 +16,17 @@ import '../../widgets/common/buttons.dart';
 class RegisterStep2Screen extends ConsumerStatefulWidget {
   final String email;
   final Map<String, String> registrationData;
+  final String? autoVerifyToken;
+  final String? autoVerifyType;
+  final String? autoVerifyFragment;
 
   const RegisterStep2Screen({
     Key? key,
     required this.email,
     required this.registrationData,
+    this.autoVerifyToken,
+    this.autoVerifyType,
+    this.autoVerifyFragment,
   }) : super(key: key);
 
   @override
@@ -31,6 +39,8 @@ class _RegisterStep2ScreenState extends ConsumerState<RegisterStep2Screen> {
   bool _canResend = false;
   bool _isResending = false;
   bool _isChecking = false;
+  bool _isVerifyingOtp = false;
+  final TextEditingController _otpController = TextEditingController();
 
   Timer? _resendTimer;
 
@@ -42,15 +52,169 @@ class _RegisterStep2ScreenState extends ConsumerState<RegisterStep2Screen> {
     // in flight yet — send one immediately. From registration the sign-up
     // email already went out; a second send is rate-limited by Supabase
     // anyway, so this stays harmless.
+    // When opened by the email deep link (coopvest://verify-email or
+    // https app link) we auto-verify instead (no resend / no manual tap).
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _resendVerificationEmail();
+      final hasLink = widget.autoVerifyFragment != null &&
+          widget.autoVerifyFragment!.isNotEmpty ||
+          widget.autoVerifyToken != null && widget.autoVerifyToken!.isNotEmpty;
+      if (hasLink) {
+        // Prefill the code field from the link whenthe raw OTP came via ?code=. Only
+        // prefill when the token looks like a plain OTP (digits only, 6-12 chars) —
+        // a token_hash link param is not formatted like that, so leave the field blank
+        // for hashes (the user types the 6+ digit code shown in the email.)
+        final linkToken = widget.autoVerifyToken ?? '';
+        final looksLikeOtp = RegExp(r'^\d{6,12}$').hasMatch(linkToken);
+        if (looksLikeOtp) {
+
+          _otpController.text = linkToken;
+
+        }
+        _verifyFromLink();
+      } else {
+        _resendVerificationEmail();
+      }
     });
+  }
+Future<void> _verifyFromLink() async {
+    setState(() => _isChecking = true);
+    try {
+      final supabase = sb.Supabase.instance.client;
+      final fragment = widget.autoVerifyFragment;
+      final tokenParam = widget.autoVerifyToken;
+      if (fragment != null && fragment.isNotEmpty) {
+        final params = Uri.splitQueryString(fragment.replaceFirst('#', ''));
+        final refreshT = params['refresh_token'] ?? '';
+        if (refreshT.isNotEmpty) {
+          await supabase.auth.setSession(refreshT);
+        } else {
+          final token = params['token'] ?? '';
+          if (token.isNotEmpty) {
+            await supabase.auth.verifyOTP(
+              email: widget.email,
+              token: token,
+              type: _otpTypeFor(widget.autoVerifyType),
+            );
+          }
+        }
+      } else if (tokenParam != null && tokenParam.isNotEmpty) {
+        await supabase.auth.verifyOTP(
+          email: widget.email,
+          token: tokenParam,
+          type: _otpTypeFor(widget.autoVerifyType),
+        );
+      }
+      if (mounted) {
+        final sbUser = supabase.auth.currentSession?.user;
+        if (sbUser != null && sbUser.emailConfirmedAt != null) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Email verified successfully!'),
+            backgroundColor: CoopvestColors.success,
+          ));
+          Navigator.of(context).pushReplacementNamed(
+            '/contribution-type-selection',
+            arguments: widget.registrationData,
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Email not yet verified. Please check your inbox.'),
+            backgroundColor: CoopvestColors.warning,
+          ));
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        final networkMsg = ErrorHandler.networkErrorMessage(e);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(networkMsg ?? 'Link verification failed. Please try again.'),
+          backgroundColor: CoopvestColors.error,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _isChecking = false);
+    }
+  }
+
+  sb.OtpType _otpTypeFor(String? type) {
+    switch (type ?? 'signup') {
+      case 'invite':
+        return sb.OtpType.invite;
+
+      case 'magiclink':
+        return sb.OtpType.magiclink;
+
+      case 'recovery':
+        return sb.OtpType.recovery;
+
+      case 'email':
+        return sb.OtpType.email;
+
+      case 'emailChange':
+        return sb.OtpType.emailChange;
+
+      case 'phoneChange':
+        return sb.OtpType.phoneChange;
+
+      case 'sms':
+        return sb.OtpType.sms;
+
+      default:
+        return sb.OtpType.signup;
+    }
   }
 
   @override
   void dispose() {
     _resendTimer?.cancel();
+    _otpController.dispose();
     super.dispose();
+  }
+
+  Future<void> _verifyWithOtpCode() async {
+    if (_isVerifyingOtp) return;
+    final code = _otpController.text.trim();
+    if (code.length < 6) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Please enter the verification code from the email'),
+          backgroundColor: CoopvestColors.error,
+        ));
+      }
+      return;
+    }
+    setState(() => _isVerifyingOtp = true);
+    try {
+      final supabase = sb.Supabase.instance.client;
+      final sbUser = supabase.auth.currentSession?.user;
+      final otpEmail = widget.email.isNotEmpty ? widget.email : (sbUser?.email ?? '');
+      if (otpEmail.isEmpty) throw Exception('No email available for verification');
+      await supabase.auth.verifyOTP(
+        email: otpEmail,
+        token: code,
+        type: _otpTypeFor(widget.autoVerifyType),
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Email verified successfully!'),
+          backgroundColor: CoopvestColors.success,
+        ));
+        Navigator.of(context).pushReplacementNamed(
+          '/contribution-type-selection',
+          arguments: widget.registrationData,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        final networkMsg = ErrorHandler.networkErrorMessage(e);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(networkMsg ?? 'Invalid verification code. Please check the email and try again.'),
+          backgroundColor: CoopvestColors.error,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _isVerifyingOtp = false);
+    }
   }
 
   void _startTimer() {
@@ -82,7 +246,7 @@ class _RegisterStep2ScreenState extends ConsumerState<RegisterStep2Screen> {
       await sb.Supabase.instance.client.auth.resend(
         type: sb.OtpType.signup,
         email: widget.email,
-        emailRedirectTo: 'https://admin-dashboard-api-server.vercel.app/verify-email',
+        emailRedirectTo: AppConfig.emailVerifyRedirect,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -92,9 +256,10 @@ class _RegisterStep2ScreenState extends ConsumerState<RegisterStep2Screen> {
       }
     } catch (e) {
       if (mounted) {
+        final networkMsg = ErrorHandler.networkErrorMessage(e);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content:
-              Text('Failed to send verification email: ${e.toString()}'),
+          content: Text(networkMsg ??
+              'Failed to send verification email. Please try again.'),
           backgroundColor: CoopvestColors.error,
         ));
       }
@@ -149,9 +314,10 @@ class _RegisterStep2ScreenState extends ConsumerState<RegisterStep2Screen> {
       }
     } catch (e) {
       if (mounted) {
+        final networkMsg = ErrorHandler.networkErrorMessage(e);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content:
-              Text('Failed to check verification status: ${e.toString()}'),
+          content: Text(networkMsg ??
+              'Failed to check verification status. Please try again.'),
           backgroundColor: CoopvestColors.error,
         ));
       }
@@ -317,6 +483,72 @@ class _RegisterStep2ScreenState extends ConsumerState<RegisterStep2Screen> {
                 onPressed: _checkVerificationStatus,
                 isLoading: _isChecking,
                 width: double.infinity,
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: Container(height: 1, color: context.dividerColor),
+                  ),
+                  const SizedBox(width: 12),
+                  Text('OR', style: TextStyle(
+                      color: context.textSecondary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Container(height: 1, color: context.dividerColor),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: context.cardBackground,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: context.dividerColor),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.pin_outlined,
+                            color: CoopvestColors.primary, size: 20),
+                        const SizedBox(width: 8),
+                        Text('Enter the code from the email',
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: context.textPrimary)),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Can\'t tap the link? Type the verification code shown in the email below.',
+                      style: TextStyle(color: context.textSecondary, fontSize: 13),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _otpController,
+                      keyboardType: TextInputType.number,
+                      maxLength: 12,
+                      decoration: InputDecoration(
+                        labelText: 'Verification code (OTP)',
+                        hintText: 'e.g. 89818450',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        counterText: '',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    PrimaryButton(
+                      label: _isVerifyingOtp ? 'Verifying...' : 'Verify Email',
+                      onPressed: _verifyWithOtpCode,
+                      isLoading: _isVerifyingOtp,
+                      width: double.infinity,
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 16),
               OutlinedButton(
