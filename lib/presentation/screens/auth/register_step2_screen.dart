@@ -39,6 +39,8 @@ class _RegisterStep2ScreenState extends ConsumerState<RegisterStep2Screen> {
   bool _canResend = false;
   bool _isResending = false;
   bool _isChecking = false;
+  bool _isVerifyingOtp = false;
+  final TextEditingController _otpController = TextEditingController();
 
   Timer? _resendTimer;
 
@@ -58,6 +60,17 @@ class _RegisterStep2ScreenState extends ConsumerState<RegisterStep2Screen> {
           widget.autoVerifyFragment!.isNotEmpty ||
           widget.autoVerifyToken != null && widget.autoVerifyToken!.isNotEmpty;
       if (hasLink) {
+        // Prefill the code field from the link whenthe raw OTP came via ?code=. Only
+        // prefill when the token looks like a plain OTP (digits only, 6-12 chars) —
+        // a token_hash link param is not formatted like that, so leave the field blank
+        // for hashes (the user types the 6+ digit code shown in the email.)
+        final linkToken = widget.autoVerifyToken ?? '';
+        final looksLikeOtp = RegExp(r'^\d{6,12}$').hasMatch(linkToken);
+        if (looksLikeOtp) {
+
+          _otpController.text = linkToken;
+
+        }
         _verifyFromLink();
       } else {
         _resendVerificationEmail();
@@ -72,17 +85,24 @@ Future<void> _verifyFromLink() async {
       final tokenParam = widget.autoVerifyToken;
       if (fragment != null && fragment.isNotEmpty) {
         final params = Uri.splitQueryString(fragment.replaceFirst('#', ''));
-        final accessT = params['access_token'] ?? '';
         final refreshT = params['refresh_token'] ?? '';
-        if (accessT.isNotEmpty && refreshT.isNotEmpty) {
+        if (refreshT.isNotEmpty) {
           await supabase.auth.setSession(refreshT);
-          await supabase.auth.refreshSession();
+        } else {
+          final token = params['token'] ?? '';
+          if (token.isNotEmpty) {
+            await supabase.auth.verifyOTP(
+              email: widget.email,
+              token: token,
+              type: _otpTypeFor(widget.autoVerifyType),
+            );
+          }
         }
       } else if (tokenParam != null && tokenParam.isNotEmpty) {
         await supabase.auth.verifyOTP(
           email: widget.email,
           token: tokenParam,
-          type: (widget.autoVerifyType ?? 'signup') as sb.OtpType,
+          type: _otpTypeFor(widget.autoVerifyType),
         );
       }
       if (mounted) {
@@ -115,10 +135,86 @@ Future<void> _verifyFromLink() async {
       if (mounted) setState(() => _isChecking = false);
     }
   }
+
+  sb.OtpType _otpTypeFor(String? type) {
+    switch (type ?? 'signup') {
+      case 'invite':
+        return sb.OtpType.invite;
+
+      case 'magiclink':
+        return sb.OtpType.magiclink;
+
+      case 'recovery':
+        return sb.OtpType.recovery;
+
+      case 'email':
+        return sb.OtpType.email;
+
+      case 'emailChange':
+        return sb.OtpType.emailChange;
+
+      case 'phoneChange':
+        return sb.OtpType.phoneChange;
+
+      case 'sms':
+        return sb.OtpType.sms;
+
+      default:
+        return sb.OtpType.signup;
+    }
+  }
+
   @override
   void dispose() {
     _resendTimer?.cancel();
+    _otpController.dispose();
     super.dispose();
+  }
+
+  Future<void> _verifyWithOtpCode() async {
+    if (_isVerifyingOtp) return;
+    final code = _otpController.text.trim();
+    if (code.length < 6) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Please enter the verification code from the email'),
+          backgroundColor: CoopvestColors.error,
+        ));
+      }
+      return;
+    }
+    setState(() => _isVerifyingOtp = true);
+    try {
+      final supabase = sb.Supabase.instance.client;
+      final sbUser = supabase.auth.currentSession?.user;
+      final otpEmail = widget.email.isNotEmpty ? widget.email : (sbUser?.email ?? '');
+      if (otpEmail.isEmpty) throw Exception('No email available for verification');
+      await supabase.auth.verifyOTP(
+        email: otpEmail,
+        token: code,
+        type: _otpTypeFor(widget.autoVerifyType),
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Email verified successfully!'),
+          backgroundColor: CoopvestColors.success,
+        ));
+        Navigator.of(context).pushReplacementNamed(
+          '/contribution-type-selection',
+          arguments: widget.registrationData,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        final networkMsg = ErrorHandler.networkErrorMessage(e);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(networkMsg ?? 'Invalid verification code. Please check the email and try again.'),
+          backgroundColor: CoopvestColors.error,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _isVerifyingOtp = false);
+    }
   }
 
   void _startTimer() {
@@ -387,6 +483,72 @@ Future<void> _verifyFromLink() async {
                 onPressed: _checkVerificationStatus,
                 isLoading: _isChecking,
                 width: double.infinity,
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: Container(height: 1, color: context.dividerColor),
+                  ),
+                  const SizedBox(width: 12),
+                  Text('OR', style: TextStyle(
+                      color: context.textSecondary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Container(height: 1, color: context.dividerColor),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: context.cardBackground,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: context.dividerColor),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.pin_outlined,
+                            color: CoopvestColors.primary, size: 20),
+                        const SizedBox(width: 8),
+                        Text('Enter the code from the email',
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: context.textPrimary)),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Can\'t tap the link? Type the verification code shown in the email below.',
+                      style: TextStyle(color: context.textSecondary, fontSize: 13),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _otpController,
+                      keyboardType: TextInputType.number,
+                      maxLength: 12,
+                      decoration: InputDecoration(
+                        labelText: 'Verification code (OTP)',
+                        hintText: 'e.g. 89818450',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        counterText: '',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    PrimaryButton(
+                      label: _isVerifyingOtp ? 'Verifying...' : 'Verify Email',
+                      onPressed: _verifyWithOtpCode,
+                      isLoading: _isVerifyingOtp,
+                      width: double.infinity,
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 16),
               OutlinedButton(
