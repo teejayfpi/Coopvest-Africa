@@ -677,7 +677,9 @@ class _RegistrationOnboardingScreenState
         'work_address': _data.workAddress,
         'years_of_employment': _data.yearsOfEmployment,
         'monthly_amount': _data.monthlyAmount.toStringAsFixed(0),
-        'contribution_method': _data.contributionMethod,
+        'contribution_method': _data.contributionType == _ContributionType.salaryDeduction
+            ? 'payroll'
+            : 'manual',
         'preferred_payment_day': _data.preferredPaymentDay.toString(),
         'preferred_payment_month': _data.preferredPaymentMonth.toString(),
         'terms_version': _data.termsVersion,
@@ -1751,28 +1753,6 @@ class _ContributionStepState extends State<_ContributionStep> {
           ],
           const SizedBox(height: 24),
 
-          // Contribution Method
-          _FieldLabel(label: 'Contribution Method *'),
-          const SizedBox(height: 12),
-          _MethodCard(
-            icon: Icons.calendar_month_outlined,
-            title: 'Monthly Self Contribution',
-            subtitle: 'You make payments manually each month',
-            isSelected: widget.data.contributionMethod == 'manual',
-            onTap: () =>
-                setState(() => widget.data.contributionMethod = 'manual'),
-          ),
-          const SizedBox(height: 10),
-          _MethodCard(
-            icon: Icons.business_center_outlined,
-            title: 'Salary Deduction (Payroll)',
-            subtitle: 'Employer deducts from your salary monthly',
-            isSelected: widget.data.contributionMethod == 'payroll',
-            onTap: () =>
-                setState(() => widget.data.contributionMethod = 'payroll'),
-          ),
-          const SizedBox(height: 24),
-
           // Preferred payment date
           _FieldLabel(label: 'Preferred Payment Date'),
           const SizedBox(height: 12),
@@ -2685,99 +2665,6 @@ class _ContributionChip extends StatelessWidget {
           color: isSelected ? Colors.white : context.textPrimary,
           fontWeight: FontWeight.w600,
           fontSize: 14,
-        ),
-      ),
-    );
-  }
-}
-
-class _MethodCard extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  const _MethodCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? CoopvestColors.primary.withOpacity(0.07)
-              : context.cardBackground,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color:
-                isSelected ? CoopvestColors.primary : context.dividerColor,
-            width: isSelected ? 2 : 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: isSelected
-                    ? CoopvestColors.primary.withOpacity(0.15)
-                    : context.dividerColor.withOpacity(0.4),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(icon,
-                  color: isSelected
-                      ? CoopvestColors.primary
-                      : context.textSecondary,
-                  size: 20),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title,
-                      style: TextStyle(
-                          color: context.textPrimary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14)),
-                  const SizedBox(height: 2),
-                  Text(subtitle,
-                      style: TextStyle(
-                          color: context.textSecondary, fontSize: 11)),
-                ],
-              ),
-            ),
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              width: 20,
-              height: 20,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                    color: isSelected
-                        ? CoopvestColors.primary
-                        : context.dividerColor,
-                    width: 2),
-                color: isSelected
-                    ? CoopvestColors.primary
-                    : Colors.transparent,
-              ),
-              child: isSelected
-                  ? const Icon(Icons.check,
-                      color: Colors.white, size: 12)
-                  : null,
-            ),
-          ],
         ),
       ),
     );

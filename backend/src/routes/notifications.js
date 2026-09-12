@@ -154,12 +154,11 @@ router.get('/', async (req, res) => {
       .from('notifications')
       .select('*', { count: 'exact' })
       .or(`profile_id.eq.${req.user.id},profile_id.is.null`)
-      .eq('archived', false)
       .order('created_at', { ascending: false })
       .range((page - 1) * limit, page * limit - 1);
     if (req.query.type) q = q.eq('type', req.query.type);
-    if (req.query.read === 'true') q = q.eq('read', true);
-    if (req.query.read === 'false') q = q.eq('read', false);
+    if (req.query.read === 'true') q = q.eq('is_read', true);
+    if (req.query.read === 'false') q = q.eq('is_read', false);
     const { data, error, count } = await q;
     if (error) throw error;
     res.json({
@@ -182,8 +181,7 @@ router.get('/unread-count', async (req, res) => {
       .from('notifications')
       .select('id', { count: 'exact', head: true })
       .or(`profile_id.eq.${req.user.id},profile_id.is.null`)
-      .eq('read', false)
-      .eq('archived', false);
+      .eq('is_read', false);
     if (error) throw error;
     res.json({ success: true, count: count || 0 });
   } catch (err) {
@@ -200,8 +198,7 @@ router.get('/unread', async (req, res) => {
       .from('notifications')
       .select('*')
       .or(`profile_id.eq.${req.user.id},profile_id.is.null`)
-      .eq('read', false)
-      .eq('archived', false)
+      .eq('is_read', false)
       .order('created_at', { ascending: false });
     if (error) throw error;
     res.json({ success: true, data: (data || []).map(serializeNotification) });
@@ -236,7 +233,7 @@ router.patch('/:id/read', async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('notifications')
-      .update({ read: true, read_at: new Date().toISOString() })
+      .update({ is_read: true, read_at: new Date().toISOString() })
       .eq('id', req.params.id)
       .eq('profile_id', req.user.id)
       .select('*')
@@ -256,9 +253,9 @@ router.post('/mark-all-read', async (req, res) => {
   try {
     const { error } = await supabase
       .from('notifications')
-      .update({ read: true, read_at: new Date().toISOString() })
+      .update({ is_read: true, read_at: new Date().toISOString() })
       .eq('profile_id', req.user.id)
-      .eq('read', false);
+      .eq('is_read', false);
     if (error) throw error;
     res.json({ success: true });
   } catch (err) {
@@ -273,7 +270,7 @@ router.patch('/:id/archive', async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('notifications')
-      .update({ archived: true })
+      .update({ is_read: true })
       .eq('id', req.params.id)
       .eq('profile_id', req.user.id)
       .select('*')
@@ -293,7 +290,7 @@ router.post('/archive-all', async (req, res) => {
   try {
     const { error } = await supabase
       .from('notifications')
-      .update({ archived: true })
+      .update({ is_read: true })
       .eq('profile_id', req.user.id);
     if (error) throw error;
     res.json({ success: true });

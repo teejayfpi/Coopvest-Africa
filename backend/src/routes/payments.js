@@ -32,13 +32,32 @@ const notifyService = require('../services/notifyService');
 const PAYSTACK_BASE = 'https://api.paystack.co';
 const MIN_AMOUNT_NGN = 100;
 
-// Map app allocation choices onto payment_proofs.payment_type values.
+// UI allocation choices accepted by /initialize. The DB proof row uses the
+// legacy payment_proofs.payment_type CHECK set (see 007_payment_proofs.sql),
+// so fine/fee/mixed are stored as `other` with the full breakdown in metadata.
 const ALLOWED_PAYMENT_TYPES = new Set([
   'monthly_contribution',
+  'loan_repayment',
   'registration_fee',
   'investment',
   'other',
+  'fine',
+  'fee',
+  'mixed',
 ]);
+
+// payment_proofs.payment_type CHECK-compatible storage type for a UI choice.
+
+const DB_PAYMENT_TYPE = {
+  monthly_contribution: 'monthly_contribution',
+  loan_repayment: 'loan_repayment',
+  registration_fee: 'registration_fee',
+  investment: 'investment',
+  other: 'other',
+  fine: 'other',
+  fee: 'other',
+  mixed: 'other',
+};
 
 function secretKey() {
   return process.env.PAYSTACK_SECRET_KEY || null;
@@ -147,6 +166,169 @@ async function settleSuccessfulCharge(reference) {
 }
 
 /**
+ * Normalize the mobile app's allocation choice into the same breakdown the
+ * manual /wallet/contribute path produces (see wallet.js. This is what the
+ * instant Paystack settlement applies (savings→wallet credit, loan_repayment
+ * →loan reduction,and fine/fee/registration_fee→member_fees settlement).
+ */
+function normalizeAllocations(amount, allocationType, allocations) {
+  const type = allocationType || (Array.isArray(allocations) && allocations.length ? 'mixed' : 'monthly_contribution');
+  if (Array.isArray(allocations) && allocations.length > 0) {
+    return allocations.map((a) => ({
+      type: String(a.type || '').replace(/[^a-z_]/gi, '').toLowerCase(),
+      amount: Number(a.amount) || 0,
+      loan_id: a.loan_id || null,
+      fee_id: a.fee_id || null,
+    })).filter((a) => a.amount > 0);
+  }
+  if (type === 'monthly_contribution') {
+    return [{ type: 'savings', amount: Number(amount) }];
+  }
+  if (type === 'loan_repayment') {
+    return [{ type: 'loan_repayment', amount: Number(amount) }];
+  }
+  if (type === 'mixed') {
+    return [];
+  }
+  return [{ type, amount: Number(amount) }];
+}
+
+/**
+ * Apply the allocations of an auto-approved Paystack charge (mirrors the
+ * admin deposit-verification handler: PATCH /api/admin/deposits/:id/verify).
+ * Savings credits the wallet, loan_repayment reduces the member's loan,and
+ * fine/fee/registration_fee settle outstanding member_fees obligations.
+
+ * Idempotent: loan payments are keyed by `reference` (this proof id)and
+ * fee settlement flips member_fees.status → paid only once.
+
+ * The DB trigger already handles monthly_contribution proofs (contribution +
+ * savings credit), so we skip the savings leg for that stored type to avoid
+ * double-crediting. For `other`-stored proofs (fine/fee/mixed) the
+ * trigger creates only a receipt/transaction row — we apply everything here.
+
+
+ * NOTE: registration_fee is settled separately in settleSuccessfulCharge
+ * above (flips the activation flag + member_fees for the registration fee). This
+ * helper handles the remaining allocation types.
+
+ */
+async function applyAllocations(proof, { recordedBy = null } = {}) {
+  if (!proof || !proof.id) return;
+  try {
+    const metadata = (proof.metadata || {});
+    const allocationType = metadata.allocation_type || 'monthly_contribution';
+    const allocations = Array.isArray(metadata.allocations) && metadata.allocations.length
+      ? metadata.allocations
+      : normalizeAllocations(Number(proof.amount) || 0, allocationType, null);
+    const savingsAmt = allocations.reduce((s, a) => s + (a.type === 'savings' ? a.amount : 0), 0);
+    const loanAmt = allocations.reduce((s, a) => s + (a.type === 'loan_repayment' ? a.amount : 0), 0);
+    const feeAllocs = allocations.filter((a) => ['fine', 'fee', 'registration_fee'].includes(a.type));
+
+    // 1. Savings → credit the wallet (skip when the DB trigger already did
+    // it for straight monthly_contribution proofs).
+    if (savingsAmt > 0 && proof.payment_type !== 'monthly_contribution') {
+
+      const { ensureWallet } = require('./wallet');
+      const wallet = await ensureWallet(proof.profile_id);
+      if (wallet && wallet.id) {
+        await supabase
+          .from('wallets')
+          .update({ balance: Number(wallet.balance) + savingsAmt, last_updated: new Date().toISOString() })
+          .eq('id', wallet.id);
+        logger.info(`paystack settle: saved ₦${savingsAmt} wallet credit → ${wallet.id} (proof ${proof.id})`);
+      }
+    }
+
+    // 2. Loan repayment → reduce the active loan balance (same idempotent
+    // guard as the admin proof-approval handler: keyed by reference = proof.id).
+
+    if (loanAmt > 0) {
+      const { data: alreadyApplied } = await supabase
+        .from('loan_repayments')
+        .select('id')
+        .eq('reference', proof.id)
+        .maybeSingle();
+      if (!alreadyApplied) {
+        const { data: memberLoans } = await supabase
+          .from('loans')
+          .select('id, loan_id, remaining_balance, total_repayment, status')
+          .eq('profile_id', proof.profile_id)
+          .in('status', ['active', 'approved'])
+          .order('remaining_balance', { ascending: false, nullsFirst: false })
+          .limit(1);
+        const targetLoan = (memberLoans && memberLoans[0]) || null;
+        if (targetLoan) {
+          const now = new Date().toISOString();
+          const currentBal = parseFloat(targetLoan.remaining_balance ?? targetLoan.total_repayment ?? 0) || 0;
+          const newBalance = Math.max(0, currentBal - loanAmt);
+          const loanUpdate = {
+            remaining_balance: newBalance,
+            updated_at: now,
+          };
+          if (newBalance <= 0) {
+            loanUpdate.status = 'completed';
+            loanUpdate.remaining_months = 0;
+          }
+          await supabase.from('loans').update(loanUpdate).eq('id', targetLoan.id);
+          await supabase.from('loan_repayments').insert({
+            loan_id: targetLoan.id,
+            profile_id: proof.profile_id,
+            amount: loanAmt,
+            paid_at: now,
+            status: 'paid',
+            reference: proof.id,
+            recorded_by: recordedBy || null,
+          });
+          logger.info(`paystack settle: loan repayment ₦${loanAmt} → ${targetLoan.loan_id || targetLoan.id} (proof ${proof.id})`);
+        } else {
+          logger.warn(`paystack settle: loan repayment proof ${proof.id} but no active/approved loan to apply it to`);
+        }
+      }
+    }
+
+    // 3. Fines / fees → settle outstanding member_fees obligations.
+
+
+
+    for (const alloc of feeAllocs) {
+      const amt = Number(alloc.amount) || 0;
+      if (amt <= 0) continue;
+      let feeRow = null;
+      if (alloc.fee_id) {
+        const { data } = await supabase
+          .from('member_fees')
+          .select('*')
+          .eq('id', alloc.fee_id)
+          .maybeSingle();
+        if (data && data.status === 'outstanding') feeRow = data;
+      }
+      if (!feeRow) {
+        const { data } = await supabase
+          .from('member_fees')
+          .select('*')
+          .eq('profile_id', proof.profile_id)
+          .eq('status', 'outstanding')
+          .eq('fee_type', alloc.type === 'registration_fee' ? 'registration_fee' : alloc.type)
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        feeRow = data;
+      }
+      if (feeRow) {
+        await supabase
+          .from('member_fees')
+          .update({ status: 'paid', paid_at: new Date().toISOString(), deposit_id: proof.id, updated_at: new Date().toISOString() })
+          .eq('id', feeRow.id);
+        logger.info(`paystack settle: fee ${alloc.type} ₦${amt} settled (proof ${proof.id})`);
+      }
+    }
+  } catch (err) {
+    logger.warn(`paystack settle: applyAllocations error (non-fatal): ${err.message}`);
+  }
+}
+
+/**
  * POST /api/v1/payments/initialize
  * Body: { amount, payment_type } → { authorization_url, reference }
  */
@@ -156,6 +338,8 @@ router.post(
   [
     body('amount').isFloat({ min: MIN_AMOUNT_NGN }),
     body('payment_type').optional().isString(),
+    body('allocation_type').optional().isIn(['monthly_contribution', 'loan_repayment', 'fine', 'fee', 'registration_fee', 'mixed']),
+    body('allocations').optional().isArray(),
   ],
   validate,
   async (req, res) => {
@@ -164,6 +348,9 @@ router.post(
       const paymentType = ALLOWED_PAYMENT_TYPES.has(req.body.payment_type)
         ? req.body.payment_type
         : 'monthly_contribution';
+      const allocations = normalizeAllocations(amountNgn, req.body.allocation_type, req.body.allocations);
+      const allocationType = req.body.allocation_type || (Array.isArray(req.body.allocations) && req.body.allocations.length ? 'mixed' : paymentType);
+      const dbPaymentType = (DB_PAYMENT_TYPE[paymentType] || 'other');
 
       const reference = `CVP-${req.user.id.slice(0, 8)}-${Date.now()}`;
       const { ok, status, payload } = await paystackFetch('/transaction/initialize', {
@@ -176,6 +363,8 @@ router.post(
           metadata: {
             profile_id: req.user.id,
             payment_type: paymentType,
+            allocation_type: allocationType,
+            allocations,
             source: 'mobile_app',
           },
         }),
@@ -193,14 +382,19 @@ router.post(
       // 'paystack' (migration 025), fall back to 'card' on the CHECK constraint.
       const baseRow = {
         profile_id: req.user.id,
-        payment_type: paymentType,
+        payment_type: dbPaymentType,
         amount: amountNgn,
         currency: 'NGN',
         payment_date: new Date().toISOString().slice(0, 10),
         receiving_bank: 'Paystack',
         transaction_reference: reference,
         status: 'pending',
-        metadata: { gateway: 'paystack', source: 'mobile_app' },
+        metadata: {
+          gateway: 'paystack',
+          source: 'mobile_app',
+          allocation_type: allocationType,
+          allocations,
+        },
       };
       let { error: insertErr } = await supabase
         .from('payment_proofs')
