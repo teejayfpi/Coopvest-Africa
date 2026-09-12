@@ -75,11 +75,11 @@ Future<void> _verifyFromLink() async {
         final accessT = params['access_token'] ?? '';
         final refreshT = params['refresh_token'] ?? '';
         if (accessT.isNotEmpty && refreshT.isNotEmpty) {
-          await supabase.auth.setSession(accessT, refreshT);
+          await supabase.auth.setSession(refreshT);
           await supabase.auth.refreshSession();
         }
       } else if (tokenParam != null && tokenParam.isNotEmpty) {
-        await supabase.auth.verifyOtp(
+        await supabase.auth.verifyOTP(
           email: widget.email,
           token: tokenParam,
           type: (widget.autoVerifyType ?? 'signup') as sb.OtpType,
@@ -109,7 +109,7 @@ Future<void> _verifyFromLink() async {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(networkMsg ?? 'Link verification failed. Please try again.'),
           backgroundColor: CoopvestColors.error,
-        )));
+        ));
       }
     } finally {
       if (mounted) setState(() => _isChecking = false);
