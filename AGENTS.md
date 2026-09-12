@@ -97,6 +97,29 @@ the `system_settings` key/value jsonb table):
 The Approval Center (maker-checker) lives in `src/routes/governance.js` under
 `/api/admin/approvals` (uses `security_events` with the `APPROVAL_` prefix).
 
+## Auth — gotrue 2.15.0 API constraints
+The lockfile pins `gotrue 2.15.0` (`supabase_flutter ^2.3.0`). Its
+`GoTrueClient` differs from newer releases:
+- `setSession(String refreshToken)` — ONE positional arg. Do not pass the
+  2-arg `(accessToken, refreshToken)` form.
+- OTP verification is `verifyOTP({email?, token?, required OtpType type, ...})` —
+  capital OTP. Lowercase `verifyOtp(...)` does not exist here.
+- `_verifyFromLink` in `register_step2_screen.dart` uses
+  `setSession(refreshToken)` + `refreshSession()` for fragment links,
+  `verifyOTP` for bare token params.
+
+## Contribution method — no duplicate prompt
+`ContributionTypeSelectionScreen` (post-email-verification) asks
+direct_deposit vs salary_deduction once. The onboarding `_ContributionStep`
+no longer re-asks it — `contribution_method` is derived from `contributionType`
+(`salary_deduction`→`'payroll'`, else `'manual'`). Removed `_MethodCard`.
+
+## Notifications realtime
+`notifications` must be in the `supabase_realtime` publication + `REPLICA
+IDENTITY FULL` (see `backend/migrations/029_notifications_realtime.sql`),
+or the app's `postgres_changes` INSERT channel (filter profile_id =
+userId) never fires. Migration 029 handles it (applied via Mgmt API).
+
 ## Role note
 The DB uses both `superadmin` and `super_admin` spellings; treat both as Super
 Admin everywhere.
