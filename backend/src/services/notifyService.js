@@ -80,6 +80,10 @@ function _getFirebaseAdmin() {
 const ALLOWED_NOTIF_TYPES = new Set([
   'transaction', 'savings', 'investment', 'loan', 'referral',
   'kyc', 'system', 'promotion', 'security', 'reminder',
+  // Rich event type used by the instant Paystack settlement — must survive
+  // normalizeNotifType untouched so the mobile realtime listener can branch
+  // on it (dashboard refresh on payment_proof_approved).
+  'payment_proof_approved',
 ]);
 const ALLOWED_NOTIF_CATEGORIES = new Set([
   'credit', 'debit', 'milestone', 'expiry', 'status_change',

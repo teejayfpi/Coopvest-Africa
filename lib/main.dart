@@ -27,7 +27,8 @@ import 'presentation/screens/auth/registration_onboarding_screen.dart';
 import 'presentation/screens/auth/contribution_type_selection_screen.dart';
 import 'presentation/screens/auth/google_complete_screen.dart';
 import 'presentation/screens/auth/salary_deduction_consent_screen.dart';
-import 'presentation/screens/auth/account_activation_screen.dart';
+import 'presentation/screens/membership/account_activation_screen.dart'
+    as membership;
 import 'presentation/screens/auth/forgot_password_screen.dart';
 import 'presentation/screens/auth/reset_password_otp_screen.dart';
 import 'presentation/screens/auth/email_verification_screen.dart';
@@ -507,7 +508,8 @@ final args = ModalRoute.of(context)?.settings.arguments
           );
 
         },
-        '/account-activation': (context) => const AccountActivationScreen(),
+        '/account-activation': (context) =>
+            const membership.AccountActivationScreen(),
         '/forgot-password': (context) => const ForgotPasswordScreen(),
         '/reset-password-otp': (context) {
           final args = ModalRoute.of(context)?.settings.arguments
