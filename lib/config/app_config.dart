@@ -106,6 +106,11 @@ class AppConfig {
   static const String timeFormat = 'HH:mm';
   static const String dateTimeFormat = 'dd/MM/yyyy HH:mm';
 
+  // Auth / Email Verification
+  // Supabase email verification redirect — must match a URL the app can
+  // intercept via deep links (or the hosted verify-email page).
+  static const String emailVerifyRedirect = 'https://coopvest.africa/verify-email';
+
   // Notification Configuration
   static const Duration notificationTimeout = Duration(seconds: 5);
   static const int maxNotifications = 50;
