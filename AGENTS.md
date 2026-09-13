@@ -149,3 +149,16 @@ DB trigger credits it), loan_repayment→loan reduction + `loan_repayments`
 row keyed by `reference = proof.id` (idempotent), fine/fee→member_fees paid. Mirrors admin deposit-verification loop in adminApi.js. Keep the
 `proof.status === 'approved'` early-return guard to avoid double settles.
 
+## Paystack loan repayment — targeted loan (loan_id)
+- `/payments/initialize` accepts optional `loan_id`; when present it is carried
+  into the `loan_repayment` allocation and persisted in proof `metadata.loan_id`.
+- `applyAllocations()` prefers the targeted loan (`alloc.loan_id`, looked up in
+  statuses active/approved/repaying) and only falls back to the active loan
+  with the highest remaining balance otherwise.
+- Mobile (`deposit_screen.dart`): loan repayment now shows a loan picker
+  (`_selectedLoanId`), passes `loan_id` to both `/payments/initialize` and
+  `/wallet/contribute`, and the Paystack "Pay Instantly" button handles
+  loan_repayment (instant, no admin verification).
+- `loan_details_screen.dart` "Make Repayment" navigates to DepositScreen with
+  `initialAllocationType: 'loan_repayment'` + `initialLoanId`.
+
