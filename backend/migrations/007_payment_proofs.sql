@@ -263,9 +263,16 @@ DECLARE
 BEGIN
   year_part := to_char(NOW(), 'YY');
   
-  -- Get next sequence number for this year
+  -- Serialize concurrent approvals so the MAX(...)+1 lookup is race-free.
+  PERFORM pg_advisory_xact_lock(hashtext('receipt_number_generator'));
+
+  -- Get next sequence number for this year.
+  -- IMPORTANT: the sequence is the LAST 6 chars of the receipt number
+  -- (positions 6-11). Parsing from position 4 used to include the year and
+  -- caused a runaway sequence that collided into duplicate receipt numbers
+  -- (unique constraint digital_receipts_receipt_number_key).
   SELECT COALESCE(MAX(
-    CAST(SUBSTRING(receipt_number FROM 4 FOR 6) AS INTEGER)
+    CAST(SUBSTRING(receipt_number FROM 6 FOR 6) AS INTEGER)
   ), 0) + 1
   INTO seq_num
   FROM public.digital_receipts
