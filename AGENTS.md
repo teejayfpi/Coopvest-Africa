@@ -57,6 +57,19 @@ The lockfile pins `gotrue 2.15.0` (via `supabase_flutter ^2.3.0`). Its
   the loan (alloc.type === 'loan_repayment`) — both repos had it。
 - Admin Dashboard reads `loans.remaining_balance` live → reflects automatically.
 
+## Paystack loan repayment — targeted loan (loan_id)
+- `/payments/initialize` accepts optional `loan_id`; when present it is carried
+  into the `loan_repayment` allocation and persisted in proof `metadata.loan_id`.
+- `applyAllocations()` prefers the targeted loan (`alloc.loan_id`, looked up in
+  statuses active/approved/repaying) and only falls back to the active loan
+  with the highest remaining balance otherwise.
+- Mobile (`deposit_screen.dart`): loan repayment now shows a loan picker
+  (`_selectedLoanId`), passes `loan_id` to both `/payments/initialize` and
+  `/wallet/contribute`, and the Paystack "Pay Instantly" button handles
+  loan_repayment (instant, no admin verification).
+- `loan_details_screen.dart` "Make Repayment" navigates to DepositScreen with
+  `initialAllocationType: 'loan_repayment'` + `initialLoanId`.
+
 ## Notifications — live schema column correctness
 - The live `notifications` table uses `is_read`/`is_archived` — there is NO
   `read` or `archived` column. `notifications.js` must query
