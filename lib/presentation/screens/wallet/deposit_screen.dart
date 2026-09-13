@@ -10,6 +10,7 @@ import '../../../config/theme_extension.dart';
 import '../../../core/utils/utils.dart';
 import '../../../core/network/api_client.dart';
 import '../../../presentation/providers/wallet_provider.dart';
+import '../../../presentation/providers/loan_provider.dart';
 import '../../../presentation/providers/payment_settings_provider.dart';
 import '../../../presentation/widgets/common/buttons.dart';
 import '../../../presentation/widgets/common/cards.dart';
@@ -17,9 +18,21 @@ import '../../../presentation/widgets/common/inputs.dart';
 
 /// Deposit Screen
 class DepositScreen extends ConsumerStatefulWidget {
-  final String userId;
+  /// Kept for backward compatibility with existing navigations. The screen
+  /// uses the authenticated API client, so userId is not strictly required.
+  final String? userId;
 
-  const DepositScreen({super.key, required this.userId});
+  /// When coming from a loan screen, the deposit flow can be pre-configured
+  /// to repay a specific loan (allocation type + loan id).
+  final String? initialAllocationType;
+  final String? initialLoanId;
+
+  const DepositScreen({
+    super.key,
+    this.userId,
+    this.initialAllocationType,
+    this.initialLoanId,
+  });
 
   @override
   ConsumerState<DepositScreen> createState() => _DepositScreenState();
@@ -29,7 +42,8 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
   final _amountController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   String _selectedPaymentMethod = 'bank_transfer';
-  String _allocationType = 'monthly_contribution';
+  late String _allocationType;
+  String? _selectedLoanId;
   final _splitSavingsController = TextEditingController();
   final _splitLoanController = TextEditingController();
   final _splitFineController = TextEditingController();
@@ -43,8 +57,14 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
   @override
   void initState() {
     super.initState();
+    _allocationType = widget.initialAllocationType ?? 'monthly_contribution';
+    _selectedLoanId = widget.initialLoanId;
     Future.microtask(() {
       ref.read(paymentSettingsProvider.notifier).loadFromApi();
+      // Load the member's loans so the loan-repayment picker has options.
+      if (_allocationType == 'loan_repayment') {
+        ref.read(loanProvider.notifier).getLoans();
+      }
     });
   }
 
@@ -236,6 +256,63 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
     );
   }
 
+  /// Loan picker shown when "Loan Repayment" allocation is selected. Lets the
+  /// member choose WHICH loan they are repaying; defaults to the loan that
+  /// navigated here (initialLoanId) when present.
+  Widget _buildLoanPicker(BuildContext context) {
+    final loanState = ref.watch(loanProvider);
+    final activeLoans = loanState.loans.where((l) => l.isActive).toList();
+
+    if (loanState.isLoading && activeLoans.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 8),
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    }
+
+    if (activeLoans.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: CoopvestColors.warning.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: CoopvestColors.warning.withOpacity(0.4)),
+        ),
+        child: const Text(
+          'No active loans to repay. Loans you are currently repaying will appear here.',
+          style: TextStyle(fontSize: 12),
+        ),
+      );
+    }
+
+    return DropdownButtonFormField<String>(
+      value: activeLoans.any((l) => l.id == _selectedLoanId) ? _selectedLoanId : null,
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: 'Select Loan',
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      ),
+      items: activeLoans.map((loan) {
+        final bal = loan.remainingBalance > 0
+            ? loan.remainingBalance
+            : loan.totalRepayment;
+        return DropdownMenuItem<String>(
+          value: loan.id,
+          child: Text(
+            '${loan.type} — ₦${bal.formatNumber()} left',
+            style: const TextStyle(fontSize: 13),
+            overflow: TextOverflow.ellipsis,
+          ),
+        );
+      }).toList(),
+      onChanged: (value) => setState(() => _selectedLoanId = value),
+    );
+  }
+
   Widget _splitField(String label, TextEditingController controller) {
     return AppTextField(
       label: label,
@@ -291,9 +368,22 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
           return;
         }
       }
+      final isLoanRepay = _allocationType == 'loan_repayment';
+      if (isLoanRepay && _selectedLoanId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Select the loan you are repaying.'),
+            backgroundColor: CoopvestColors.warning,
+          ),
+        );
+        setState(() => _isProcessing = false);
+        return;
+      }
       final initData = <String, dynamic>{
         'amount': amount,
         'payment_type': _allocationType,
+        if (isLoanRepay) 'allocation_type': 'loan_repayment',
+        if (isLoanRepay && _selectedLoanId != null) 'loan_id': _selectedLoanId,
       };
       if (splitAllocations != null) initData['allocations'] = splitAllocations;
       final resp = await apiClient.dio.post('/payments/initialize', data: initData);
@@ -329,8 +419,12 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
       if (status == 'success') {
         await ref.read(walletProvider.notifier).loadWallet();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Payment confirmed — your wallet has been credited. 🎉'),
+          SnackBar(
+            content: Text(
+              _allocationType == 'loan_repayment'
+                  ? 'Payment confirmed — your loan balance has been reduced. 🎉'
+                  : 'Payment confirmed — your wallet has been credited. 🎉',
+            ),
             backgroundColor: CoopvestColors.success,
           ),
         );
@@ -390,6 +484,16 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
 
       final isLoanRepay = _allocationType == 'loan_repayment';
       final isSavings = _allocationType == 'monthly_contribution';
+      if (isLoanRepay && _selectedLoanId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Select the loan you are repaying.'),
+            backgroundColor: CoopvestColors.warning,
+          ),
+        );
+        setState(() => _isProcessing = false);
+        return;
+      }
       String description;
       if (_allocationType == 'mixed') description = 'Split payment';
       else if (isLoanRepay) description = 'Loan repayment';
@@ -433,6 +537,7 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
         description: '$description via ${_selectedPaymentMethod.replaceAll('_', ' ')}',
         proofUrl: proofUrl,
         allocationType: _allocationType,
+        loanId: isLoanRepay ? _selectedLoanId : null,
         allocations: allocations,
       );
       
@@ -726,9 +831,23 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
                     ),
                   ],
                   onChanged: (value) {
-                    if (value != null) setState(() => _allocationType = value);
+                    if (value != null) {
+                      setState(() {
+                        _allocationType = value;
+                        if (value != 'loan_repayment') _selectedLoanId = null;
+                      });
+                      if (value == 'loan_repayment') {
+                        ref.read(loanProvider.notifier).getLoans();
+                      }
+                    }
                   },
                 ),
+
+                if (_allocationType == 'loan_repayment') ...[
+                  const SizedBox(height: 16),
+                  _buildLoanPicker(context),
+                ],
+
                 const SizedBox(height: 24),
 
                 AppTextField(

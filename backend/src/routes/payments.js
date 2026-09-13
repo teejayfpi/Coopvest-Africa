@@ -250,14 +250,31 @@ async function applyAllocations(proof, { recordedBy = null } = {}) {
         .eq('reference', proof.id)
         .maybeSingle();
       if (!alreadyApplied) {
-        const { data: memberLoans } = await supabase
-          .from('loans')
-          .select('id, loan_id, remaining_balance, total_repayment, status')
-          .eq('profile_id', proof.profile_id)
-          .in('status', ['active', 'approved'])
-          .order('remaining_balance', { ascending: false, nullsFirst: false })
-          .limit(1);
-        const targetLoan = (memberLoans && memberLoans[0]) || null;
+        // Prefer an explicitly targeted loan (loan_id from the allocation),
+        // otherwise fall back to the member's active loan with the highest
+        // remaining balance.
+        const loanAlloc = allocations.find((a) => a.type === 'loan_repayment');
+        const targetedLoanId = loanAlloc?.loan_id || null;
+        let targetLoan = null;
+        if (targetedLoanId) {
+          const { data: targeted } = await supabase
+            .from('loans')
+            .select('id, loan_id, remaining_balance, total_repayment, status')
+            .eq('id', targetedLoanId)
+            .in('status', ['active', 'approved', 'repaying'])
+            .maybeSingle();
+          if (targeted) targetLoan = targeted;
+        }
+        if (!targetLoan) {
+          const { data: memberLoans } = await supabase
+            .from('loans')
+            .select('id, loan_id, remaining_balance, total_repayment, status')
+            .eq('profile_id', proof.profile_id)
+            .in('status', ['active', 'approved', 'repaying'])
+            .order('remaining_balance', { ascending: false, nullsFirst: false })
+            .limit(1);
+          targetLoan = (memberLoans && memberLoans[0]) || null;
+        }
         if (targetLoan) {
           const now = new Date().toISOString();
           const currentBal = parseFloat(targetLoan.remaining_balance ?? targetLoan.total_repayment ?? 0) || 0;
@@ -340,6 +357,7 @@ router.post(
     body('payment_type').optional().isString(),
     body('allocation_type').optional().isIn(['monthly_contribution', 'loan_repayment', 'fine', 'fee', 'registration_fee', 'mixed']),
     body('allocations').optional().isArray(),
+    body('loan_id').optional().isString(),
   ],
   validate,
   async (req, res) => {
@@ -348,7 +366,12 @@ router.post(
       const paymentType = ALLOWED_PAYMENT_TYPES.has(req.body.payment_type)
         ? req.body.payment_type
         : 'monthly_contribution';
-      const allocations = normalizeAllocations(amountNgn, req.body.allocation_type, req.body.allocations);
+      const allocations = normalizeAllocations(amountNgn, req.body.allocation_type, req.body.allocations)
+        // Carry an explicitly targeted loan into the loan_repayment allocation
+        // so settlement reduces THAT loan rather than the highest-balance one.
+        .map((a) => (a.type === 'loan_repayment' && req.body.loan_id && !a.loan_id
+          ? { ...a, loan_id: req.body.loan_id }
+          : a));
       const allocationType = req.body.allocation_type || (Array.isArray(req.body.allocations) && req.body.allocations.length ? 'mixed' : paymentType);
       const dbPaymentType = (DB_PAYMENT_TYPE[paymentType] || 'other');
 
@@ -394,6 +417,7 @@ router.post(
           source: 'mobile_app',
           allocation_type: allocationType,
           allocations,
+          ...(req.body.loan_id ? { loan_id: req.body.loan_id } : {}),
         },
       };
       let { error: insertErr } = await supabase
