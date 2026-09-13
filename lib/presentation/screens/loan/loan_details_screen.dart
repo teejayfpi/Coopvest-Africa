@@ -8,6 +8,7 @@ import '../../../data/models/loan_models.dart';
 import '../../../presentation/providers/loan_provider.dart';
 import '../../../presentation/widgets/common/buttons.dart';
 import '../../../presentation/widgets/common/cards.dart';
+import '../wallet/deposit_screen.dart';
 
 /// Fetches the real guarantor list for a loan from the backend
 /// (GET /loans/:loanId/guarantors).
@@ -309,7 +310,16 @@ class LoanDetailsScreen extends ConsumerWidget {
               if (loan.status == 'Active' || loan.status == 'Repaying')
                 PrimaryButton(
                   label: 'Make Repayment',
-                  onPressed: () {},
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => DepositScreen(
+                          initialAllocationType: 'loan_repayment',
+                          initialLoanId: loan.id,
+                        ),
+                      ),
+                    );
+                  },
                   width: double.infinity,
                 ),
             ],
