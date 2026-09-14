@@ -206,7 +206,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
           physics: const AlwaysScrollableScrollPhysics(),
           child: Column(
             children: [
-              _buildHeader(context, userName, membershipId, user?.name ?? 'User', user?.id ?? ''),
+              _buildHeader(context, userName, membershipId, user?.name ?? 'User', user?.id ?? '', loansState),
               
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -384,10 +384,26 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
     );
   }
 
-  Widget _buildHeader(BuildContext context, String name, String membershipId, String fullName, String userId) {
+  Widget _buildHeader(BuildContext context, String name, String membershipId, String fullName, String userId, LoansState loansState) {
     final walletState = ref.watch(walletProvider);
     final wallet = walletState.wallet;
-    final totalBalance = (wallet?.balance ?? 0.0) + (wallet?.totalContributions ?? 0.0);
+
+    // Total Balance (headline) = the member's lifetime monthly savings.
+    // `total_savings` is only ever incremented by approved monthly savings
+    // contributions/deposits — loans and fees are never added to it.
+    final totalSavings = wallet?.totalSavings ?? 0.0;
+
+    // Outstanding loan = what's still owed on active/approved/repaying loans.
+    final outstandingLoan = loansState.loans
+        .where((l) => isLoanActive(l.status))
+        .fold(0.0, (sum, l) => sum + l.remainingBalance);
+
+    // Total loan applied = original amount of loans still in the pipeline
+    // (not yet completed, rejected or cancelled) so the figure returns to 0
+    // once every loan is fully repaid.
+    final totalLoanApplied = loansState.loans
+        .where((l) => !const ['completed', 'rejected', 'cancelled'].contains(l.status))
+        .fold(0.0, (sum, l) => sum + l.amount);
     
     return Container(
       width: double.infinity,
@@ -569,7 +585,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  '₦${totalBalance.formatNumber()}',
+                  '₦${totalSavings.formatNumber()}',
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 32,
@@ -579,7 +595,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
                 ),
                 const SizedBox(height: 8),
                 // Growth indicator - only show if there's actual data
-                if (totalBalance > 0)
+                if (totalSavings > 0)
                   Text(
                     'Updated just now',
                     style: TextStyle(
@@ -597,7 +613,38 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 18),
+                // Breakdown summary — monthly savings, outstanding loan and
+                // total loan applied, so members see the full picture at a glance.
+                _buildHeaderSummaryRow(
+                  context,
+                  'Total Savings',
+                  '\u20a6${totalSavings.formatNumber()}',
+                  icon: Icons.savings_outlined,
+                ),
+                const SizedBox(height: 10),
+                _buildHeaderSummaryRow(
+                  context,
+                  'Outstanding Loan',
+                  '\u20a6${outstandingLoan.formatNumber()}',
+                  icon: Icons.account_balance_wallet_outlined,
+                  valueColor: outstandingLoan > 0 ? const Color(0xFFFFCC80) : Colors.white.withOpacity(0.9),
+                ),
+                const SizedBox(height: 10),
+                _buildHeaderSummaryRow(
+                  context,
+                  'Total Loan Applied',
+                  '\u20a6${totalLoanApplied.formatNumber()}',
+                  icon: Icons.description_outlined,
+                ),
+                const SizedBox(height: 10),
+                _buildHeaderSummaryRow(
+                  context,
+                  'Available to Withdraw',
+                  '\u20a6${(wallet?.availableForWithdrawal ?? 0.0).formatNumber()}',
+                  icon: Icons.account_balance_outlined,
+                ),
+                const SizedBox(height: 18),
                 // Quick actions row — fills the empty green space and gives
                 // users the two most common wallet actions one tap away.
                 Row(
@@ -641,6 +688,42 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildHeaderSummaryRow(
+    BuildContext context,
+    String label,
+    String value, {
+    required IconData icon,
+    Color? valueColor,
+  }) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Row(
+          children: [
+            Icon(icon, color: Colors.white.withOpacity(0.7), size: 15),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.8),
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            color: valueColor ?? Colors.white,
+            fontSize: 13,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
     );
   }
 
