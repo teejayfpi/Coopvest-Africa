@@ -29,7 +29,7 @@ class _BankAccount {
       bankName: json['bank_name']?.toString() ?? '',
       accountNumber: json['account_number']?.toString() ?? '',
       accountName: json['account_name']?.toString() ?? '',
-      isDefault: json['is_default'] == true,
+      isDefault: json['is_primary'] == true,
     );
   }
 }

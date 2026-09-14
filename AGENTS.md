@@ -192,3 +192,15 @@ approval step. Table + one-pending-per-member unique index:
 `backend/migrations/032_withdrawal_requests.sql`. The endpoint returns 503 with
 a friendly message when that migration hasn't been applied yet.
 
+## Schema gotchas found against the live DB
+- `bank_accounts` uses `is_primary`, **not** `is_default`. The backend routes and
+  the mobile bank-account/withdrawal screens must all read/write `is_primary` —
+  writing `is_default` fails with "column does not exist" and blocks adding a
+  bank account entirely.
+- `withdrawal_requests` already existed in production in a legacy shape
+  (`user_id` text, `user_name`, no member FK), so a `CREATE TABLE IF NOT EXISTS`
+  is a no-op. Migration 032 is therefore additive `ALTER TABLE ... ADD COLUMN IF
+  NOT EXISTS profile_id/bank_account_id/description/processed_by/processed_at`.
+- `contribution_plans` has a FK to `profiles(id)` and `UNIQUE (profile_id)`, so
+  `.upsert(..., { onConflict: 'profile_id' })` is safe.
+

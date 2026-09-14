@@ -1,9 +1,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'feature_service.dart';
 import 'logger_service.dart';
 
-/// Feature flags service for dynamic feature toggles
+/// Feature flags service for dynamic feature toggles.
+///
+/// Flags are cached in SharedPreferences so they survive a restart. The
+/// authoritative remote source is the admin-configured backend (`FeatureService`,
+/// GET /api/features/platform/mobile) — Remote Config was never a dependency of
+/// this app, so this service must not reference Firebase Remote Config.
 class FeatureFlagsService {
   static final FeatureFlagsService _instance = FeatureFlagsService._();
   factory FeatureFlagsService() => _instance;
@@ -11,7 +16,7 @@ class FeatureFlagsService {
 
   final Map<String, bool> _localFlags = {};
   bool _isInitialized = false;
-  FirebaseRemoteConfig? _remoteConfig;
+  String? _maintenanceMessage;
 
   /// Default feature flags
   static const Map<String, bool> _defaultFlags = {
@@ -42,11 +47,7 @@ class FeatureFlagsService {
       // Load local cache first
       await _loadLocalCache();
       
-      // Initialize remote config
-      _remoteConfig = FirebaseRemoteConfig.instance;
-      await _remoteConfig!.setDefaults(_defaultFlags);
-      
-      // Fetch remote config
+      // Refresh from the backend flag source.
       await _fetchRemoteConfig();
       
       _isInitialized = true;
@@ -71,23 +72,46 @@ class FeatureFlagsService {
     }
   }
 
-  /// Fetch remote config from Firebase
+  /// Refresh flags from the admin-configured backend and cache them locally.
+  ///
+  /// The admin dashboard is the single source of truth; the app reads the flags
+  /// through `FeatureService`, which owns the endpoint and its retry/caching
+  /// policy. This service mirrors the result into SharedPreferences so a cold
+  /// start has flags available before the first network call.
   Future<void> _fetchRemoteConfig() async {
     try {
-      await _remoteConfig!.fetchAndActivate();
-      
-      // Update local flags with remote values
+      final featureService = FeatureService();
+      await featureService.refresh();
+
       for (final key in _defaultFlags.keys) {
-        _localFlags[key] = _remoteConfig!.getBool(key);
+        final backendKey = _backendFlagName(key);
+        if (backendKey == null) continue; // no backend counterpart; keep default
+        _localFlags[key] = featureService.isEnabled(backendKey);
       }
-      
-      // Cache locally
+
       await _cacheLocally();
-      
-      logger.info('Remote config fetched and activated');
+
+      logger.info('Feature flags refreshed from backend');
     } catch (e) {
-      logger.error('Failed to fetch remote config: $e');
+      logger.error('Failed to refresh feature flags: $e');
     }
+  }
+
+  /// Map a local flag key to its backend `FeatureService.featureNames` key.
+  /// Returns null when the flag has no backend counterpart, in which case the
+  /// local default is kept rather than flipping the feature off.
+  String? _backendFlagName(String localKey) {
+    const aliases = {
+      'enable_loan_application': 'loan_requests',
+      'enable_withdrawal': 'withdrawals',
+      'enable_biometric_login': 'biometric_login',
+      'enable_referral': 'referral_program',
+      'enable_rollover': 'rollover_requests',
+      'enable_salary_deduction': 'salary_deduction',
+      'enable_push_notifications': 'push_notifications',
+    };
+    final alias = aliases[localKey] ?? localKey;
+    return FeatureService.featureNames.containsKey(alias) ? alias : null;
   }
 
   /// Cache values locally
@@ -127,14 +151,9 @@ class FeatureFlagsService {
   bool get isMaintenanceMode => isEnabled('maintenance_mode');
 
   /// Get maintenance message
-  String get maintenanceMessage {
-    try {
-      return _remoteConfig?.getString('maintenance_message') ??
-             'We are currently undergoing scheduled maintenance. Please check back soon.';
-    } catch (e) {
-      return 'We are currently undergoing scheduled maintenance. Please check back soon.';
-    }
-  }
+  String get maintenanceMessage =>
+      _maintenanceMessage ??
+      'We are currently undergoing scheduled maintenance. Please check back soon.';
 
   /// Check if onboarding is enabled
   bool get isNewOnboardingEnabled => isEnabled('enable_new_onboarding');

@@ -68,7 +68,7 @@ router.post(
           account_number: accountNumber,
           account_name: accountName,
           bank_code: bankCode || null,
-          is_default: (count || 0) === 0,
+          is_primary: (count || 0) === 0,
         })
         .select('*')
         .single();
@@ -190,12 +190,12 @@ router.patch('/:id/default', gated, [param('id').isUUID()], validate, async (req
   try {
     const { error: clearErr } = await supabase
       .from('bank_accounts')
-      .update({ is_default: false })
+      .update({ is_primary: false })
       .eq('profile_id', req.user.id);
     if (clearErr) throw clearErr;
     const { data, error } = await supabase
       .from('bank_accounts')
-      .update({ is_default: true })
+      .update({ is_primary: true })
       .eq('id', req.params.id)
       .eq('profile_id', req.user.id)
       .select('*')
