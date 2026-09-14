@@ -6,7 +6,9 @@ import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/utils/utils.dart';
 import '../../../data/models/wallet_models.dart';
+import '../../../data/models/loan_models.dart';
 import '../../../presentation/providers/wallet_provider.dart';
+import '../../../presentation/providers/loan_provider.dart';
 import '../../../presentation/widgets/common/buttons.dart';
 import '../../../presentation/widgets/common/cards.dart';
 import '../savings/savings_goals_screen.dart';
@@ -44,7 +46,10 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
   }
 
   Future<void> _loadData() async {
-    await ref.read(walletProvider.notifier).loadWallet();
+    await Future.wait([
+      ref.read(walletProvider.notifier).loadWallet(),
+      ref.read(loanProvider.notifier).getLoans(),
+    ]);
     await ref.read(walletProvider.notifier).loadTransactions();
     await ref.read(walletProvider.notifier).loadSavingsGoals();
   }
@@ -53,6 +58,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
   Widget build(BuildContext context) {
     final walletState = ref.watch(walletProvider);
     final wallet = walletState.wallet;
+    final loansState = ref.watch(loanProvider);
     final savingsGoals = walletState.savingsGoals;
     final recentTransactions = walletState.transactions.take(5).toList();
 
@@ -76,7 +82,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
         ],
       ),
       body: SafeArea(
-        child: _buildBody(context, walletState, wallet, savingsGoals, recentTransactions),
+        child: _buildBody(context, walletState, wallet, loansState, savingsGoals, recentTransactions),
       ),
     );
   }
@@ -85,6 +91,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
     BuildContext context,
     WalletState walletState,
     Wallet? wallet,
+    LoansState loansState,
     List<SavingsGoal> savingsGoals,
     List<Transaction> recentTransactions,
   ) {
@@ -139,7 +146,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Balance Card
-            _buildBalanceCard(context, wallet),
+            _buildBalanceCard(context, wallet, loansState),
             
             const SizedBox(height: 24),
 
@@ -161,10 +168,22 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
     );
   }
 
-  Widget _buildBalanceCard(BuildContext context, Wallet? wallet) {
+  Widget _buildBalanceCard(BuildContext context, Wallet? wallet, LoansState loansState) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    final displayBalance = _isBalanceHidden ? '••••••' : '₦${(wallet?.balance ?? 0).toStringAsFixed(2)}';
-    
+
+    // Total Balance (headline) = lifetime monthly savings. `total_savings` is
+    // only ever incremented by approved monthly savings contributions/deposits,
+    // never by loans or fees.
+    final totalSavings = wallet?.totalSavings ?? 0.0;
+    final outstandingLoan = loansState.loans
+        .where((l) => isLoanActive(l.status))
+        .fold(0.0, (sum, l) => sum + l.remainingBalance);
+    final totalLoanApplied = loansState.loans
+        .where((l) => !const ['completed', 'rejected', 'cancelled'].contains(l.status))
+        .fold(0.0, (sum, l) => sum + l.amount);
+
+    final displayBalance = _isBalanceHidden ? '••••••' : '₦${totalSavings.toStringAsFixed(2)}';
+
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -298,8 +317,78 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
               ),
             ],
           ),
+          const SizedBox(height: 24),
+          // Breakdown summary — total savings, outstanding loan and total loan
+          // applied, so the wallet card shows the same picture as the home card.
+          _buildWalletSummaryRow(
+            context,
+            isDarkMode,
+            'Total Savings',
+            _isBalanceHidden ? '••••••' : '₦${totalSavings.toStringAsFixed(0)}',
+            icon: Icons.savings_outlined,
+          ),
+          const SizedBox(height: 12),
+          _buildWalletSummaryRow(
+            context,
+            isDarkMode,
+            'Outstanding Loan',
+            _isBalanceHidden ? '••••••' : '₦${outstandingLoan.toStringAsFixed(0)}',
+            icon: Icons.account_balance_wallet_outlined,
+            valueColor: outstandingLoan > 0
+                ? (isDarkMode ? const Color(0xFFFFCC80) : const Color(0xFFFFE0B2))
+                : (isDarkMode ? context.textSecondary : Colors.white.withOpacity(0.9)),
+          ),
+          const SizedBox(height: 12),
+          _buildWalletSummaryRow(
+            context,
+            isDarkMode,
+            'Total Loan Applied',
+            _isBalanceHidden ? '••••••' : '₦${totalLoanApplied.toStringAsFixed(0)}',
+            icon: Icons.description_outlined,
+          ),
         ],
       ),
+    );
+  }
+
+  Widget _buildWalletSummaryRow(
+    BuildContext context,
+    bool isDarkMode,
+    String label,
+    String value, {
+    required IconData icon,
+    Color? valueColor,
+  }) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Row(
+          children: [
+            Icon(
+              icon,
+              color: isDarkMode ? context.textSecondary : Colors.white.withOpacity(0.7),
+              size: 16,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color: isDarkMode ? context.textSecondary : Colors.white.withOpacity(0.8),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 14,
+            color: valueColor ?? (isDarkMode ? context.textPrimary : Colors.white),
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
     );
   }
 
