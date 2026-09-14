@@ -189,16 +189,26 @@ class WalletRepository {
     }
   }
 
-  /// Make withdrawal
-  Future<void> makeWithdrawal(double amount, {String? description}) async {
+  /// Request a bank withdrawal. The request is queued for finance; the wallet
+  /// is debited only once the payout is confirmed, so this does not change the
+  /// balance.
+  Future<void> requestWithdrawal({
+    required double amount,
+    required String bankAccountId,
+    String? description,
+  }) async {
     try {
-      final response = await _apiClient.post(
-        '/wallet/withdraw',
-        data: {'amount': amount, if (description != null) 'description': description},
+      await _apiClient.post(
+        '/wallet/withdrawals',
+        data: {
+          'amount': amount,
+          'bank_account_id': bankAccountId,
+          if (description != null) 'description': description,
+        },
       );
       return;
     } catch (e) {
-      logger.e('Make withdrawal error: $e');
+      logger.e('Request withdrawal error: $e');
       rethrow;
     }
   }
@@ -391,18 +401,25 @@ class WalletNotifier extends StateNotifier<WalletState> {
     }
   }
 
-  /// Make withdrawal
-  Future<void> makeWithdrawal({
+  /// Request a bank withdrawal and refresh the wallet afterwards. The balance
+  /// only changes once finance confirms the payout, so the refresh is for any
+  /// server-side revalidation rather than an expected debit.
+  Future<void> requestWithdrawal({
     required double amount,
+    required String bankAccountId,
     String? description,
   }) async {
     state = state.copyWith(status: WalletStatus.loading);
     try {
-      await _walletRepository.makeWithdrawal(amount, description: description);
+      await _walletRepository.requestWithdrawal(
+        amount: amount,
+        bankAccountId: bankAccountId,
+        description: description,
+      );
       await loadWallet();
       state = state.copyWith(status: WalletStatus.loaded);
     } catch (e) {
-      logger.e('Make withdrawal error: $e');
+      logger.e('Request withdrawal error: $e');
       state = state.copyWith(
         status: WalletStatus.error,
         error: e.toString(),

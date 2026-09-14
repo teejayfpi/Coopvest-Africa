@@ -27,11 +27,16 @@ class DepositScreen extends ConsumerStatefulWidget {
   final String? initialAllocationType;
   final String? initialLoanId;
 
+  /// Pre-fills the amount field — used by the obligations "Pay Now" action so
+  /// the member pays the exact monthly figure without retyping it.
+  final double? initialAmount;
+
   const DepositScreen({
     super.key,
     this.userId,
     this.initialAllocationType,
     this.initialLoanId,
+    this.initialAmount,
   });
 
   @override
@@ -59,6 +64,10 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
     super.initState();
     _allocationType = widget.initialAllocationType ?? 'monthly_contribution';
     _selectedLoanId = widget.initialLoanId;
+    final initialAmount = widget.initialAmount;
+    if (initialAmount != null && initialAmount > 0) {
+      _amountController.text = initialAmount.toStringAsFixed(0);
+    }
     Future.microtask(() {
       ref.read(paymentSettingsProvider.notifier).loadFromApi();
       // Load the member's loans so the loan-repayment picker has options.

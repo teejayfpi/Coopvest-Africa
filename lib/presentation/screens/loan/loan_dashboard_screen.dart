@@ -13,6 +13,7 @@ import '../../../presentation/widgets/common/buttons.dart';
 import '../../../presentation/widgets/common/cards.dart';
 import 'loan_application_screen.dart';
 import '../../widgets/loan/loan_eligibility_card.dart';
+import '../../widgets/obligations_card.dart';
 
 /// Loan Dashboard Screen - View and manage all loan applications
 class LoanDashboardScreen extends ConsumerStatefulWidget {
@@ -204,7 +205,7 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
                 const SizedBox(height: 24),
 
                 // Monthly obligations: savings contribution vs loan repayment
-                _buildObligationsCard(loans),
+                const ObligationsCard(),
 
                 const SizedBox(height: 24),
 
@@ -256,129 +257,6 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildObligationsCard(List<Loan> loans) {
-    final obligationsAsync = ref.watch(obligationsProvider);
-
-    return obligationsAsync.when(
-      data: (data) {
-        final monthlyContribution = (data['monthly_savings'] as num?)?.toDouble() ?? 0.0;
-        final loansData = (data['loans'] as List?) ?? const [];
-        final fines = (data['fines'] as List?) ?? const [];
-        final fees = (data['fees'] as List?) ?? const [];
-        final totalDue = (data['total_due'] as num?)?.toDouble() ?? 0.0;
-
-        final monthlyLoanRepayment = loansData.fold<double>(
-          0,
-          (sum, l) => sum + (((l as Map)['monthly_repayment'] as num?)?.toDouble() ?? 0),
-        );
-        final loanRemaining = loansData.fold<double>(
-          0,
-          (sum, l) => sum + (((l as Map)['remaining_balance'] as num?)?.toDouble() ?? 0),
-        );
-
-        final finesTotal = fines.fold<double>(
-          0,
-          (sum, f) => sum + (((f as Map)['amount'] as num?)?.toDouble() ?? 0),
-        );
-        final feesTotal = fees.fold<double>(
-          0,
-          (sum, f) => sum + (((f as Map)['amount'] as num?)?.toDouble() ?? 0),
-        );
-
-        return AppCard(
-          backgroundColor: context.cardBackground,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Your obligations this month',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: context.textPrimary),
-              ),
-              const SizedBox(height: 12),
-              _obligationRow(
-                'Monthly Savings \u2192 Member\'s savings',
-                '\u20a6${monthlyContribution.toStringAsFixed(0)}',
-                CoopvestColors.primary,
-              ),
-              if (loansData.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                _obligationRow(
-                  'Loan Repayment \u2192 Loan balance',
-                  '\u20a6${monthlyLoanRepayment.toStringAsFixed(0)}',
-                  CoopvestColors.info,
-                ),
-              ],
-              if (finesTotal > 0) ...[
-                const SizedBox(height: 8),
-                ...fines.map((f) => Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: _obligationRow(
-                        'Fine: ${(f as Map)['label'] ?? ''} \u2192 Penalty account',
-                        '\u20a6${(((f as Map)['amount'] as num?)?.toDouble() ?? 0).toStringAsFixed(0)}',
-                        CoopvestColors.error,
-                      ),
-                    )),
-              ],
-              if (feesTotal > 0) ...[
-                const SizedBox(height: 8),
-                ...fees.map((f) => Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: _obligationRow(
-                        'Fee: ${(f as Map)['label'] ?? ''}',
-                        '\u20a6${(((f as Map)['amount'] as num?)?.toDouble() ?? 0).toStringAsFixed(0)}',
-                        CoopvestColors.warning,
-                      ),
-                    )),
-              ],
-              if (loansData.isNotEmpty && loanRemaining > 0) ...[
-                const SizedBox(height: 8),
-                _obligationRow(
-                  'Loan balance remaining',
-                  '\u20a6${loanRemaining.toStringAsFixed(0)}',
-                  CoopvestColors.warning,
-                ),
-              ],
-              const Divider(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Total due this month',
-                    style: TextStyle(fontWeight: FontWeight.bold, color: context.textPrimary),
-                  ),
-                  Text(
-                    '\u20a6${totalDue.toStringAsFixed(0)}',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: context.textPrimary,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (_, __) => const SizedBox.shrink(),
-    );
-  }
-
-  Widget _obligationRow(String label, String value, Color color) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Row(children: [
-          Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-          const SizedBox(width: 8),
-          Text(label, style: TextStyle(color: context.textSecondary, fontSize: 13)),
-        ]),
-        Text(value, style: TextStyle(fontWeight: FontWeight.w600, color: context.textPrimary, fontSize: 13)),
-      ],
     );
   }
 

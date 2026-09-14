@@ -16,7 +16,6 @@ import '../../../presentation/providers/auth_provider.dart';
 import '../../../presentation/providers/wallet_provider.dart';
 import '../../../presentation/providers/loan_provider.dart';
 import '../../../presentation/providers/contributions/contribution_provider.dart';
-import '../../../presentation/providers/insights_provider.dart';
 import '../../../presentation/providers/notifications_provider.dart';
 import 'notifications_screen.dart';
 import '../../../core/services/realtime_notification_service.dart';
@@ -26,7 +25,7 @@ import '../../../presentation/providers/announcement_provider.dart';
 import '../../../presentation/providers/guarantor_provider.dart';
 import '../../../presentation/providers/document_provider.dart';
 import '../../../presentation/screens/wallet/deposit_screen.dart';
-// import '../../../presentation/screens/wallet/withdrawal_screen.dart';
+import '../../../presentation/screens/wallet/withdrawal_screen.dart';
 import '../../../presentation/screens/loan/loan_dashboard_screen.dart';
 import '../../../presentation/screens/wallet/wallet_dashboard_screen.dart';
 import '../../../presentation/screens/referral/referral_dashboard_screen.dart';
@@ -38,6 +37,7 @@ import '../../../presentation/screens/documents/document_upload_screen.dart';
 import '../../../presentation/screens/profile/profile_settings_screen.dart';
 
 import '../../../presentation/widgets/loan/loan_eligibility_card.dart';
+import '../../../presentation/widgets/obligations_card.dart';
 
 class HomeDashboardScreen extends ConsumerStatefulWidget {
   const HomeDashboardScreen({super.key});
@@ -184,7 +184,6 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
     final walletState = ref.watch(walletProvider);
     final wallet = walletState.wallet;
     final loansState = ref.watch(loanProvider);
-    final contributionState = ref.watch(contributionProvider);
     
     final userName = user?.name.split(' ').first ?? 'User';
     final membershipId = user?.id.substring(0, 6) ?? 'N/A';
@@ -325,6 +324,13 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
 
                     const SizedBox(height: 24),
 
+                    // Your obligations this month — sits directly under the
+                    // Quick Actions so the member sees what is due and can pay
+                    // it without leaving the dashboard.
+                    const ObligationsCard(),
+
+                    const SizedBox(height: 24),
+
                     // Recent Activity preview — what users check right after balance.
                     _buildRecentActivitySection(
                       context,
@@ -348,24 +354,6 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
                       ),
                     ),
 
-                    const SizedBox(height: 24),
-                    
-                    // Insights & Loan Status
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          flex: 3,
-                          child: _buildInsightsCard(context, walletState, contributionState),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          flex: 2,
-                          child: _buildLoanStatusCard(context, loansState),
-                        ),
-                      ],
-                    ),
-                    
                     const SizedBox(height: 28),
                     
                     // Notifications Section - Real-time from provider
@@ -667,17 +655,12 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
                       child: _buildHeaderActionChip(
                         label: 'Withdraw',
                         icon: Icons.north_east_rounded,
-                        onTap: () {
-                          // Bank withdrawals are temporarily unavailable.
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'Withdrawals to bank are temporarily unavailable. Please check back soon.',
-                              ),
-                              duration: Duration(seconds: 4),
-                            ),
-                          );
-                        },
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => WithdrawalScreen(userId: userId),
+                          ),
+                        ),
                         filled: false,
                       ),
                     ),
@@ -1183,264 +1166,6 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
       default:
         return type[0].toUpperCase() + type.substring(1);
     }
-  }
-
-  Widget _buildInsightsCard(BuildContext context, WalletState walletState, ContributionState contributionState) {
-    final summary = contributionState.summary;
-    final totalThisMonth = summary?.totalThisMonth ?? 0.0;
-    final expectedMonthly = (summary?.expectedMonthlyAmount ?? 0.0);
-    final lifetime = summary?.lifetimeContributions ?? (walletState.wallet?.totalContributions ?? 0.0);
-    final progress = expectedMonthly > 0 ? (totalThisMonth / expectedMonthly).clamp(0.0, 1.0) : 0.0;
-    final isUpToDate = summary?.contributionStatus == 'up_to_date';
-
-    return GestureDetector(
-      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => WalletDashboardScreen(userId: ref.read(currentUserProvider)?.id ?? '', userName: ref.read(currentUserProvider)?.name ?? ''))),
-      child: Container(
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: context.cardBackground,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: CoopvestColors.primary.withOpacity(0.06),
-              blurRadius: 16,
-              offset: const Offset(0, 6),
-            ),
-            BoxShadow(
-              color: Colors.black.withOpacity(0.03),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-          border: Border.all(
-            color: CoopvestColors.primary.withOpacity(0.06),
-            width: 1,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Insights',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: context.textPrimary,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: CoopvestColors.primary.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    'View All',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: CoopvestColors.primary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            Text(
-              'This Month\'s Contribution',
-              style: TextStyle(
-                fontSize: 12,
-                color: context.textSecondary,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  '\u20a6${totalThisMonth.formatNumber()}',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: context.textPrimary,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 3),
-                  child: Text(
-                    expectedMonthly > 0 ? 'of \u20a6${expectedMonthly.formatNumber()}' : 'target not set',
-                    style: TextStyle(fontSize: 11, color: context.textSecondary),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: LinearProgressIndicator(
-                value: progress,
-                minHeight: 8,
-                backgroundColor: context.dividerColor,
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  isUpToDate ? CoopvestColors.success : CoopvestColors.primary,
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _buildInsightMiniStat(
-                  context,
-                  'Lifetime',
-                  '\u20a6${lifetime.formatNumber()}',
-                ),
-                _buildInsightMiniStat(
-                  context,
-                  'Status',
-                  isUpToDate
-                      ? 'Up to date'
-                      : (summary?.contributionStatus == 'overdue' ? 'Overdue' : 'Pending'),
-                  color: isUpToDate
-                      ? CoopvestColors.success
-                      : (summary?.contributionStatus == 'overdue'
-                          ? CoopvestColors.error
-                          : CoopvestColors.warning),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInsightMiniStat(BuildContext context, String label, String value, {Color? color}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(fontSize: 10, color: context.textSecondary),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            color: color ?? context.textPrimary,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildLoanStatusCard(BuildContext context, LoansState loansState) {
-    final pendingLoan = loansState.loans.any((l) => l.status == 'under_review' || l.status == 'pending_guarantors');
-    final activeLoan = loansState.loans.any((l) => isLoanActive(l.status));
-    
-    final statusColor = pendingLoan 
-        ? CoopvestColors.warning 
-        : (activeLoan ? CoopvestColors.primary : context.textSecondary);
-    final statusText = pendingLoan 
-        ? 'Pending Approval' 
-        : (activeLoan ? 'Active Loan' : 'No Applications');
-    final statusIcon = pendingLoan 
-        ? Icons.hourglass_empty_rounded 
-        : (activeLoan ? Icons.check_circle_outline : Icons.info_outline_rounded);
-    
-    return GestureDetector(
-      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => LoanDashboardScreen(userId: ref.read(currentUserProvider)?.id ?? '', userName: ref.read(currentUserProvider)?.name ?? '', userPhone: ref.read(currentUserProvider)?.phone ?? ''))),
-      child: Container(
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              statusColor.withOpacity(0.08),
-              statusColor.withOpacity(0.02),
-            ],
-          ),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: statusColor.withOpacity(0.15),
-            width: 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: statusColor.withOpacity(0.08),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Loan Status',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: context.textPrimary,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: -0.2,
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    statusIcon,
-                    color: statusColor,
-                    size: 18,
-                  ),
-                ),
-              ],
-            ),
-            const Spacer(),
-            Text(
-              statusText,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: statusColor,
-                letterSpacing: -0.3,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: context.cardBackground,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                'View Details',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: context.textSecondary,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   Widget _buildNotificationItem(BuildContext context, String title, String time, IconData icon, Color color, VoidCallback onTap) {
