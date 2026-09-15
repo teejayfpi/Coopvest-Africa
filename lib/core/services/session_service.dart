@@ -1,8 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../data/repositories/auth_repository.dart';
-import 'api_client.dart';
+import '../network/api_client.dart';
 
 /// Session timeout configuration
 class SessionConfig {
@@ -41,6 +40,8 @@ class SessionService {
 
   SessionState get state => _state;
   int get remainingSeconds => _remainingSeconds;
+  /// When the current session began. Null until [startSession] is called.
+  DateTime? get sessionStartTime => _sessionStartTime;
   bool get isActive => _state == SessionState.active || _state == SessionState.expiring;
 
   /// Initialize session tracking
@@ -124,7 +125,7 @@ class SessionService {
   Future<bool> _verifySession() async {
     try {
       final apiClient = ApiClient();
-      await apiClient.get('/auth/session');
+      await apiClient.get('/auth/profile');
       return true;
     } catch (e) {
       return false;

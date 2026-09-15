@@ -20,6 +20,7 @@ const validate = require('../middleware/validate');
 const logger = require('../utils/logger');
 const notifyService = require('../services/notifyService');
 const alertService = require('../services/alertService');
+const { resolveMonthlyContribution } = require('../lib/monthlyContribution');
 
 const newRef = (prefix) => `${prefix}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 
@@ -75,6 +76,55 @@ async function notifyAdminsNewDeposit({ amount, userId, depositId, hasProof }) {
     logger.warn('notifyAdminsNewDeposit error (non-fatal):', err.message);
   }
 }
+/**
+ * Notify all admin/staff profiles about a new withdrawal request.
+ * Non-fatal: errors are logged but never bubble up to the caller.
+ */
+async function notifyAdminsNewWithdrawal({ amount, userId, requestId }) {
+  try {
+    const amountFmt = Number(amount).toLocaleString('en-NG', { style: 'currency', currency: 'NGN' });
+    const title = 'New Withdrawal Request';
+    const body = `A withdrawal of ${amountFmt} is awaiting approval. Process it in the admin dashboard.`;
+
+    const { data: admins } = await supabase
+      .from('profiles')
+      .select('id, email')
+      .in('role', ['admin', 'super_admin', 'superadmin', 'staff', 'operator']);
+
+    if (!admins || admins.length === 0) {
+      logger.info('notifyAdminsNewWithdrawal: no admin profiles found');
+      return;
+    }
+
+    const profileIds = admins.map((a) => a.id);
+    const adminEmails = admins.map((a) => a.email).filter(Boolean);
+
+    await notifyService.broadcast({
+      profileIds,
+      channels: ['in_app', 'push'],
+      title,
+      body,
+      type: 'withdrawal',
+    });
+
+    if (adminEmails.length > 0) {
+      await alertService.sendEmailAlert({
+        title: `\u{1F4B8} ${title}`,
+        message: `${body}<br><br>Request ID: <code>${requestId || 'N/A'}</code><br>User ID: <code>${userId}</code>`,
+        auditId: requestId || 'withdrawal',
+        userId,
+        riskLevel: 'INFO',
+        timestamp: new Date().toISOString(),
+        metadata: { amount },
+      }).catch((err) => logger.warn('Admin withdrawal email failed (non-fatal):', err.message));
+    }
+
+    logger.info(`Admin withdrawal notification sent to ${profileIds.length} admin(s)`);
+  } catch (err) {
+    logger.warn('notifyAdminsNewWithdrawal error (non-fatal):', err.message);
+  }
+}
+
 const newTransactionId = () => `TXN-${crypto.randomUUID()}`;
 
 async function ensureWallet(profileId) {
@@ -148,14 +198,27 @@ async function computeObligations(profileId) {
     month_paid_loan: false, // reserved; paid flags evaluated per loan below
   };
 
-  // Pledged monthly contribution
+  // Pledged monthly contribution. contribution_plans is the live value —
+  // it is what the member's increase/reduction requests update and what the
+  // savings row is seeded from at registration, so it must win. The savings
+  // row is only a fallback for members whose plan predates the sync.
   try {
-    const { data: savings } = await supabase
-      .from('savings')
-      .select('monthly_savings')
-      .eq('profile_id', profileId)
-      .maybeSingle();
-    obligations.monthly_savings = Number(savings?.monthly_savings) || 0;
+    const [{ data: savings }, { data: plan }] = await Promise.all([
+      supabase
+        .from('savings')
+        .select('monthly_savings')
+        .eq('profile_id', profileId)
+        .maybeSingle(),
+      supabase
+        .from('contribution_plans')
+        .select('current_monthly_amount')
+        .eq('profile_id', profileId)
+        .maybeSingle(),
+    ]);
+    obligations.monthly_savings = resolveMonthlyContribution({
+      planAmount: plan?.current_monthly_amount,
+      savingsAmount: savings?.monthly_savings,
+    });
   } catch (sErr) {
     logger.warn('obligations: savings lookup failed:', sErr.message);
   }
@@ -255,6 +318,23 @@ router.get('/balance', authenticate, async (req, res) => {
       }
     } catch (sErr) {
       logger.warn('wallet balance: savings lookup failed:', sErr.message);
+    }
+
+    // The member's live pledged contribution lives in contribution_plans (the
+    // registration sync + increase/reduction requests all target it); the
+    // savings mirror can lag. Prefer the plan, fall back to savings.
+    try {
+      const { data: plan } = await supabase
+        .from('contribution_plans')
+        .select('current_monthly_amount')
+        .eq('profile_id', req.user.id)
+        .maybeSingle();
+      monthlySavings = resolveMonthlyContribution({
+        planAmount: plan?.current_monthly_amount,
+        savingsAmount: monthlySavings,
+      });
+    } catch (pErr) {
+      logger.warn('wallet balance: contribution plan lookup failed:', pErr.message);
     }
 
     // Total confirmed contributions = sum of successful contribution records.
@@ -542,26 +622,96 @@ router.get('/deposit-requests', authenticate, async (req, res) => {
 });
 
 /**
- * POST /api/v1/wallet/withdraw
+ * POST /api/v1/wallet/withdrawals
+ *
+ * Member-initiated bank withdrawal. Creates a `withdrawal_requests` row for
+ * finance to action; the wallet is only debited when the payout is confirmed
+ * on the admin side, so a member can never move money out of the system by
+ * calling this endpoint. Replaces the old POST /withdraw, which debited the
+ * wallet immediately and never paid anything out.
  */
 router.post(
-  '/withdraw',
+  '/withdrawals',
   authenticate,
-  [body('amount').isFloat({ min: 0.01 }), body('description').optional().isString()],
+  [
+    body('amount').isFloat({ min: 0.01 }),
+    body('bank_account_id').isUUID(),
+    body('description').optional().isString(),
+  ],
   validate,
   async (req, res) => {
     try {
-      const { amount, description } = req.body;
-      const wallet = await adjustBalance(req.user.id, -Number(amount));
-      const txn = await recordTransaction(req.user.id, {
-        type: 'withdrawal',
-        category: 'debit',
-        amount,
-        description: description || 'Wallet withdrawal',
-      });
-      res.status(201).json({ success: true, wallet, transaction: txn });
+      const amount = Number(req.body.amount);
+      const { bank_account_id, description } = req.body;
+
+      const { data: wallet } = await supabase
+        .from('wallets')
+        .select('balance')
+        .eq('profile_id', req.user.id)
+        .maybeSingle();
+      const balance = Number(wallet?.balance) || 0;
+      if (amount > balance) {
+        return res.status(400).json({
+          success: false,
+          error: `You can withdraw up to ₦${balance.toLocaleString('en-NG')} — your available balance.`,
+        });
+      }
+
+      // Only accounts the member owns can receive the payout.
+      const { data: account } = await supabase
+        .from('bank_accounts')
+        .select('id, bank_name, account_number, account_name')
+        .eq('id', bank_account_id)
+        .eq('profile_id', req.user.id)
+        .maybeSingle();
+      if (!account) {
+        return res.status(404).json({ success: false, error: 'Select one of your saved bank accounts.' });
+      }
+
+      const { data: existing } = await supabase
+        .from('withdrawal_requests')
+        .select('id')
+        .eq('profile_id', req.user.id)
+        .eq('status', 'pending')
+        .maybeSingle();
+      if (existing) {
+        return res.status(400).json({
+          success: false,
+          error: 'You already have a withdrawal awaiting approval. Please wait for it to be processed.',
+        });
+      }
+
+      const { data: request, error } = await supabase
+        .from('withdrawal_requests')
+        .insert({
+          profile_id: req.user.id,
+          amount,
+          bank_account_id: account.id,
+          bank_name: account.bank_name,
+          account_number: account.account_number,
+          account_name: account.account_name,
+          status: 'pending',
+          description: description || 'Wallet withdrawal',
+        })
+        .select('*')
+        .single();
+      if (error) {
+        // 42P01 = undefined_table: migration 032 hasn't been applied yet.
+        if (error.code === '42P01' || /relation .* does not exist/i.test(error.message)) {
+          logger.error('withdrawal_requests table missing — run migration 032');
+          return res.status(503).json({
+            success: false,
+            error: 'Withdrawals are not available right now. Please try again later.',
+          });
+        }
+        throw error;
+      }
+
+      await notifyAdminsNewWithdrawal({ amount, userId: req.user.id, requestId: request.id });
+
+      res.status(201).json({ success: true, withdrawal: request });
     } catch (err) {
-      logger.error('withdraw error:', err);
+      logger.error('withdrawal request error:', err);
       res.status(err.statusCode || 500).json({ success: false, error: err.message });
     }
   }

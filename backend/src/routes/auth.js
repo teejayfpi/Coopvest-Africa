@@ -400,6 +400,50 @@ function checkCompletion(personal_info, employment_info) {
   };
 }
 
+/**
+ * Persist a member's pledged monthly contribution as their active plan.
+ *
+ * The registration onboarding collects a monthly amount, but it used to be
+ * stored only in `kyc.personal_info.monthly_amount` — nothing read it back, so
+ * the obligations breakdown showed ₦0 for every new member. Writing it to
+ * `contribution_plans.current_monthly_amount` (the same table the member's
+ * later increase/reduction requests update) makes it the single source of
+ * truth for "Monthly Savings" in obligations.
+ *
+ * Never lowers an amount the member already set: onboarding can be resumed, so
+ * a stale step save must not undo a later increase.
+ */
+async function syncMonthlyContributionPlan(profileId, monthlyAmount) {
+  const amount = Number(monthlyAmount);
+  if (!Number.isFinite(amount) || amount <= 0) return;
+
+  try {
+    const { data: existing } = await supabase
+      .from('contribution_plans')
+      .select('id, current_monthly_amount, minimum_amount')
+      .eq('profile_id', profileId)
+      .maybeSingle();
+
+    if (existing && Number(existing.current_monthly_amount) >= amount) return;
+
+    const { error } = await supabase
+      .from('contribution_plans')
+      .upsert(
+        {
+          profile_id: profileId,
+          current_monthly_amount: amount,
+          minimum_amount: existing?.minimum_amount || amount,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'profile_id' }
+      );
+
+    if (error) throw error;
+  } catch (err) {
+    logger.warn('complete-registration: contribution plan sync failed:', err.message);
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/v1/auth/complete-registration/status
 // Returns whether the authenticated user has already completed onboarding.
@@ -593,6 +637,16 @@ router.post('/complete-registration', authenticate, async (req, res) => {
       logger.error('complete-registration: kyc upsert failed:', kycError.message);
       return res.status(500).json({ success: false, error: kycError.message });
     }
+
+    // 3. Persist the member's pledged monthly contribution so it becomes the
+    //    active plan and the obligations breakdown can show it. The value was
+    //    previously only written to kyc.personal_info, so every new member saw
+    //    "Monthly Savings ₦0" in obligations until an admin edited it by hand.
+    //    Best-effort: a failure here must not fail the registration itself.
+    await syncMonthlyContributionPlan(
+      req.user.id,
+      personal_info_candidate.monthly_amount
+    );
 
     return res.status(200).json({
       success: true,

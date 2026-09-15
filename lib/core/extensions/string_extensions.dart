@@ -25,9 +25,15 @@ extension StringExtensions on String {
     return emailRegex.hasMatch(this);
   }
 
-  /// Checks if string is a valid phone number
+  /// Checks if string is a valid Nigerian phone number.
+  ///
+  /// Accepts the forms members actually type: "08031234567" (local),
+  /// "2348012345678" (country code), "+2348012345678" and "0803 123 4567"
+  /// (spaces). Punctuation is stripped first — the previous implementation only
+  /// removed a single leading non-digit, so a spaced number such as
+  /// "0803 123 4567" failed despite being valid.
   bool isValidPhone() {
-    final phoneRegex = RegExp(r'^\d{10,15}$');
-    return phoneRegex.hasMatch(replaceAll(RegExp(r'^\D'),''));
+    final digits = replaceAll(RegExp(r'[\s+\-()]'), '');
+    return RegExp(r'^\d{11,13}$').hasMatch(digits);
   }
 }

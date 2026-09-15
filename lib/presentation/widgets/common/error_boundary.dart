@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
-import '../../core/services/logger_service.dart';
+import '../../../core/services/logger_service.dart';
 
 /// Global error boundary widget that catches Flutter errors
 class ErrorBoundary extends StatefulWidget {
@@ -24,15 +23,33 @@ class _ErrorBoundaryState extends State<ErrorBoundary> {
   bool _hasError = false;
   String? _errorMessage;
 
+  /// The builder that was installed before this widget mounted, restored on
+  /// dispose so the global hook doesn't outlive the boundary that set it.
+  ErrorWidgetBuilder? _previousErrorWidgetBuilder;
+
   @override
   void initState() {
     super.initState();
-    // Set up global error handler
-    _setupErrorHandlers();
+    // Install the global ErrorWidget builder once, here — not in build(), which
+    // would reassign the global on every rebuild (and returned the builder from
+    // a widget slot, which doesn't type-check).
+    _previousErrorWidgetBuilder = ErrorWidget.builder;
+    ErrorWidget.builder = (FlutterErrorDetails details) {
+      // Defer: reporting mutates state and must not run during the build that
+      // is already failing.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _handleError(details);
+      });
+      return _buildDefaultErrorWidget();
+    };
   }
 
-  void _setupErrorHandlers() {
-    // This is handled at the main.dart level with FlutterError.onError
+  @override
+  void dispose() {
+    if (_previousErrorWidgetBuilder != null) {
+      ErrorWidget.builder = _previousErrorWidgetBuilder!;
+    }
+    super.dispose();
   }
 
   @override
@@ -75,18 +92,7 @@ class _ErrorBoundaryState extends State<ErrorBoundary> {
       return widget.fallback ?? _buildDefaultErrorWidget();
     }
 
-    return Builder(
-      builder: (context) {
-        // Use Builder to establish a new ErrorWidget builder context
-        return ErrorWidget.builder = (FlutterErrorDetails details) {
-          // Catch the error and show fallback UI
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _handleError(details);
-          });
-          return _buildDefaultErrorWidget();
-        };
-      },
-    );
+    return widget.child;
   }
 
   Widget _buildDefaultErrorWidget() {

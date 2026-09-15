@@ -83,3 +83,45 @@ The lockfile pins `gotrue 2.15.0` (via `supabase_flutter ^2.3.0`). Its
   (INSERT on `notifications` with `profile_id = userId`) never fires.
   Migration `029_notifications_realtime.sql` does this (applied via Mgmt API).
 - `feature_flag.notifications` = `true` live (fail-open if missing) — not the issue.
+## Monthly contribution is the obligations source of truth
+`contribution_plans.current_monthly_amount` is the single source of truth for
+a member's monthly savings. `savings.monthly_savings` is a denormalised mirror
+that can lag. Resolution lives in the pure helper
+`src/lib/monthlyContribution.js` (`resolveMonthlyContribution`) and is used by
+`GET /wallet/obligations` and `GET /wallet/balance` — plan wins, savings is the
+fallback. Registration (`POST /auth/complete-registration`) seeds the plan via
+`syncMonthlyContributionPlan()` (never lowers an amount already set, so a
+resumed onboarding save can't undo a later increase). A member's contribution
+increase/reduction therefore flows straight into "Your obligations this month"
+without any further wiring.
+
+## Obligations card is shared
+`lib/presentation/widgets/obligations_card.dart` (`ObligationsCard`) renders
+"Your obligations this month" with a **Pay Now** action that opens
+`DepositScreen` pre-filled with the monthly figure (`initialAmount`). It is
+used by both the home dashboard (directly below Quick Actions) and the loan
+dashboard. Do not re-add a private per-screen obligations builder — keep the
+two surfaces in sync through this widget.
+
+## Withdrawals are request-based, never an instant debit
+`POST /api/v1/wallet/withdrawals` (body: `amount`, `bank_account_id`) inserts a
+`withdrawal_requests` row and notifies admins; the wallet is **not** debited
+until finance confirms the payout. The old `POST /wallet/withdraw`, which
+debited immediately and paid nothing out, has been removed — do not reinstate
+it, and do not add a payout integration to this route without a finance
+approval step. Table + one-pending-per-member unique index:
+`backend/migrations/032_withdrawal_requests.sql`. The endpoint returns 503 with
+a friendly message when that migration hasn't been applied yet.
+
+## Schema gotchas found against the live DB
+- `bank_accounts` uses `is_primary`, **not** `is_default`. The backend routes and
+  the mobile bank-account/withdrawal screens must all read/write `is_primary` —
+  writing `is_default` fails with "column does not exist" and blocks adding a
+  bank account entirely.
+- `withdrawal_requests` already existed in production in a legacy shape
+  (`user_id` text, `user_name`, no member FK), so a `CREATE TABLE IF NOT EXISTS`
+  is a no-op. Migration 032 is therefore additive `ALTER TABLE ... ADD COLUMN IF
+  NOT EXISTS profile_id/bank_account_id/description/processed_by/processed_at`.
+- `contribution_plans` has a FK to `profiles(id)` and `UNIQUE (profile_id)`, so
+  `.upsert(..., { onConflict: 'profile_id' })` is safe.
+

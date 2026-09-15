@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'logger_service.dart';
 
@@ -47,7 +46,7 @@ class AnalyticsService {
     try {
       await _analytics?.logScreenView(
         screenName: screenName,
-        screenClassOverride: screenClass,
+        screenClass: screenClass,
         parameters: parameters != null ? {'parameters': parameters} : null,
       );
       logger.debug('Analytics: Screen viewed - $screenName');
@@ -177,7 +176,7 @@ class AnalyticsService {
       await _analytics?.logShare(
         contentType: 'referral_code',
         itemId: referralCode,
-        shareMethod: 'copy_link',
+        method: 'copy_link',
       );
       logger.debug('Analytics: Referral shared - $referralCode');
     } catch (e) {
@@ -185,7 +184,9 @@ class AnalyticsService {
     }
   }
 
-  /// Log search performed
+  /// Log search performed. firebase_analytics' logSearch accepts
+  /// travel-specific counts (numberOfNights/Rooms/Passengers), not a generic
+  /// result count, so the category is forwarded as a custom parameter instead.
   Future<void> logSearch({
     required String searchTerm,
     String? searchCategory,
@@ -194,7 +195,7 @@ class AnalyticsService {
     try {
       await _analytics?.logSearch(
         searchTerm: searchTerm,
-        numberOfResults: 0,
+        parameters: searchCategory != null ? {'search_category': searchCategory} : null,
       );
       logger.debug('Analytics: Search - "$searchTerm"');
     } catch (e) {
@@ -290,7 +291,7 @@ class AnalyticsService {
   }) async {
     if (!_isEnabled) return;
     try {
-      await _analytics?.setUserId(userId);
+      await _analytics?.setUserId(id: userId);
       if (userType != null) {
         await _analytics?.setUserProperty(name: 'user_type', value: userType);
       }
@@ -310,7 +311,7 @@ class AnalyticsService {
   Future<void> clearUserProperties() async {
     if (!_isEnabled) return;
     try {
-      await _analytics?.setUserId(null);
+      await _analytics?.setUserId(id: null);
       logger.debug('Analytics: User properties cleared');
     } catch (e) {
       logger.error('Failed to clear user properties: $e');
