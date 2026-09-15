@@ -28,170 +28,10 @@ const { authenticate } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const logger = require('../utils/logger');
 const notifyService = require('../services/notifyService');
+const { ALLOWED_PAYMENT_TYPES, DB_PAYMENT_TYPE, normalizeAllocations } = require('../lib/allocations');
 
 const PAYSTACK_BASE = 'https://api.paystack.co';
 const MIN_AMOUNT_NGN = 100;
-
-// UI allocation choices accepted by /initialize. The DB proof row uses the
-// legacy payment_proofs.payment_type CHECK set (see 007_payment_proofs.sql),
-// so fine/fee/mixed are stored as `other` with the full breakdown in metadata.
-const ALLOWED_PAYMENT_TYPES = new Set([
-  'monthly_contribution',
-  'loan_repayment',
-  'registration_fee',
-  'investment',
-  'other',
-  'fine',
-  'fee',
-  'mixed',
-]);
-
-// payment_proofs.payment_type CHECK-compatible storage type for a UI choice.
-
-const DB_PAYMENT_TYPE = {
-  monthly_contribution: 'monthly_contribution',
-  loan_repayment: 'loan_repayment',
-  registration_fee: 'registration_fee',
-  investment: 'investment',
-  other: 'other',
-  fine: 'other',
-  fee: 'other',
-  mixed: 'other',
-};
-
-function secretKey() {
-  return process.env.PAYSTACK_SECRET_KEY || null;
-}
-
-async function paystackFetch(path, options = {}) {
-  const key = secretKey();
-  if (!key) {
-    const err = new Error('Paystack is not configured on the server.');
-    err.statusCode = 503;
-    throw err;
-  }
-  const response = await fetch(`${PAYSTACK_BASE}${path}`, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${key}`,
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
-  });
-  const payload = await response.json().catch(() => ({}));
-  return { ok: response.ok, status: response.status, payload };
-}
-
-/**
- * Record a Paystack deposit as an approved payment proof so the existing
- * approval trigger (savings credit, transaction row, digital receipt) runs
- * through the exact same path as an admin-approved manual deposit.
- * Idempotent: a proof already approved for this reference is left alone.
- */
-async function settleSuccessfulCharge(reference) {
-  const { data: proof, error } = await supabase
-    .from('payment_proofs')
-    .select('*')
-    .eq('transaction_reference', reference)
-    .is('deleted_at', null)
-    .maybeSingle();
-  if (error) throw error;
-  if (!proof) {
-    logger.warn(`paystack settle: no payment proof parked for reference ${reference}`);
-    return { settled: false, reason: 'no_proof' };
-  }
-  if (proof.status === 'approved') {
-    return { settled: true, already: true, proof };
-  }
-
-  const now = new Date().toISOString();
-  const { error: updErr } = await supabase
-    .from('payment_proofs')
-    .update({
-      status: 'approved',
-      approved_at: now,
-      // approved_by stays null — settled by the gateway, not an admin.
-      admin_notes: 'Auto-approved via Paystack charge confirmation.',
-      updated_at: now,
-    })
-    .eq('id', proof.id);
-  if (updErr) throw updErr;
-
-  // Registration fee → flip the activation flag (same effect as the admin
-  // approval handler; the DB trigger itself only writes the receipt).
-  if (proof.payment_type === 'registration_fee') {
-    await supabase
-      .from('profiles')
-      .update({
-        registration_fee_paid: true,
-        registration_fee_paid_at: now,
-        registration_completed: true,
-        updated_at: now,
-      })
-      .eq('id', proof.profile_id);
-    await supabase
-      .from('member_fees')
-      .update({ status: 'paid', paid_at: now, deposit_id: proof.id })
-      .eq('profile_id', proof.profile_id)
-      .eq('fee_type', 'registration_fee')
-      .eq('status', 'outstanding');
-  }
-
-  // Apply the allocation breakdown (savings/loan/fines/fees) for every
-  // instant type — straight monthly proofs reuse the DB trigger for savings,
-  // while loan/fine/fee/mixed need this loop (rare non-fatal failures are
-  // logged inside applyAllocations, never block the approval).
-  await applyAllocations(proof);
-
-
-  // Confirm the charge to the member in realtime — the app's in-app WebView
-  // poll usually sees the success, but this push/in-app notification covers
-  // weak-network handoffs where the poll fails or the app was backgrounded, so
-  // the member still gets an explicit auto-confirmation (and the wallet/status
-  // screens can refresh via the realtime notification listener).
-  try {
-    await notifyService.notifyPaymentProofApproved({
-      profileId: proof.profile_id,
-      amount: proof.amount,
-      paymentType: proof.payment_type,
-      transactionReference: proof.transaction_reference,
-    });
-    logger.info(`paystack settle: confirmation sent to ${proof.profile_id} (proof ${proof.id})`);
-  } catch (notifyErr) {
-    logger.warn(`paystack settle: confirmation notification failed (non-fatal): ${notifyErr.message}`);
-  }
-
-  logger.info(`paystack settle: proof ${proof.id} approved (reference ${reference})`);
-  return { settled: true, already: false, proof };
-}
-
-/**
- * Normalize the mobile app's allocation choice into the same breakdown the
- * manual /wallet/contribute path produces (see wallet.js. This is what the
- * instant Paystack settlement applies (savings→wallet credit, loan_repayment
- * →loan reduction,and fine/fee/registration_fee→member_fees settlement).
- */
-function normalizeAllocations(amount, allocationType, allocations) {
-  const type = allocationType || (Array.isArray(allocations) && allocations.length ? 'mixed' : 'monthly_contribution');
-  if (Array.isArray(allocations) && allocations.length > 0) {
-    return allocations.map((a) => ({
-      type: String(a.type || '').replace(/[^a-z_]/gi, '').toLowerCase(),
-      amount: Number(a.amount) || 0,
-      loan_id: a.loan_id || null,
-      fee_id: a.fee_id || null,
-    })).filter((a) => a.amount > 0);
-  }
-  if (type === 'monthly_contribution') {
-    return [{ type: 'savings', amount: Number(amount) }];
-  }
-  if (type === 'loan_repayment') {
-    return [{ type: 'loan_repayment', amount: Number(amount) }];
-  }
-  if (type === 'mixed') {
-    return [];
-  }
-  return [{ type, amount: Number(amount) }];
-}
 
 /**
  * Apply the allocations of an auto-approved Paystack charge (mirrors the
@@ -218,16 +58,26 @@ async function applyAllocations(proof, { recordedBy = null } = {}) {
   try {
     const metadata = (proof.metadata || {});
     const allocationType = metadata.allocation_type || 'monthly_contribution';
+    // Derive the breakdown from the STORED payment type, not the allocation
+    // label: an approved registration_fee/loan_repayment proof must never be
+    // re-interpreted as savings (that credited registration fees and loan
+    // repayments straight into member wallets).
+    const derivedType = proof.payment_type === 'monthly_contribution'
+      ? 'monthly_contribution'
+      : (proof.allocation_type || allocationType);
     const allocations = Array.isArray(metadata.allocations) && metadata.allocations.length
       ? metadata.allocations
-      : normalizeAllocations(Number(proof.amount) || 0, allocationType, null);
+      : normalizeAllocations(Number(proof.amount) || 0, derivedType, null);
     const savingsAmt = allocations.reduce((s, a) => s + (a.type === 'savings' ? a.amount : 0), 0);
     const loanAmt = allocations.reduce((s, a) => s + (a.type === 'loan_repayment' ? a.amount : 0), 0);
     const feeAllocs = allocations.filter((a) => ['fine', 'fee', 'registration_fee'].includes(a.type));
 
     // 1. Savings → credit the wallet (skip when the DB trigger already did
-    // it for straight monthly_contribution proofs).
-    if (savingsAmt > 0 && proof.payment_type !== 'monthly_contribution') {
+    // it for straight monthly_contribution proofs, and never for a
+    // registration_fee proof — that is a fee, not a member saving).
+    if (savingsAmt > 0
+      && proof.payment_type !== 'monthly_contribution'
+      && proof.payment_type !== 'registration_fee') {
 
       const { ensureWallet } = require('./wallet');
       const wallet = await ensureWallet(proof.profile_id);
@@ -366,13 +216,14 @@ router.post(
       const paymentType = ALLOWED_PAYMENT_TYPES.has(req.body.payment_type)
         ? req.body.payment_type
         : 'monthly_contribution';
-      const allocations = normalizeAllocations(amountNgn, req.body.allocation_type, req.body.allocations)
+      const requestedAllocation = req.body.allocation_type || paymentType;
+      const allocations = normalizeAllocations(amountNgn, requestedAllocation, req.body.allocations)
         // Carry an explicitly targeted loan into the loan_repayment allocation
         // so settlement reduces THAT loan rather than the highest-balance one.
         .map((a) => (a.type === 'loan_repayment' && req.body.loan_id && !a.loan_id
           ? { ...a, loan_id: req.body.loan_id }
           : a));
-      const allocationType = req.body.allocation_type || (Array.isArray(req.body.allocations) && req.body.allocations.length ? 'mixed' : paymentType);
+      const allocationType = requestedAllocation;
       const dbPaymentType = (DB_PAYMENT_TYPE[paymentType] || 'other');
 
       const reference = `CVP-${req.user.id.slice(0, 8)}-${Date.now()}`;

@@ -76,23 +76,23 @@ class _SalaryDeductionConsentScreenState extends ConsumerState<SalaryDeductionCo
       // All server errors — including 404 — must surface to the user.
       // Salary deduction consent is a legal obligation; it cannot be silently
       // skipped because the endpoint is unavailable. The backend must be fixed.
-      logger.e('Salary consent server error [\${e.statusCode}]: \${e.message}');
+      logger.e('Salary consent server error [${e.statusCode}]: ${e.message}');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(
             e.statusCode == 404
                 ? 'Consent service is unavailable (404). Please contact support.'
-                : 'Server error (\${e.statusCode}). Please try again.',
+                : 'Server error (${e.statusCode}). Please try again.',
           ),
           backgroundColor: CoopvestColors.error,
         ));
       }
     } on ValidationException catch (e) {
       // 400 Bad Request — consent was rejected by the server; do NOT proceed
-      logger.e('Salary consent validation error: \${e.message}');
+      logger.e('Salary consent validation error: ${e.message}');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Consent failed: \${e.message}'),
+          content: Text('Consent failed: ${e.message}'),
           backgroundColor: CoopvestColors.error,
         ));
       }
@@ -102,7 +102,7 @@ class _SalaryDeductionConsentScreenState extends ConsumerState<SalaryDeductionCo
       }
     } on NetworkException catch (e) {
       // Network error — user must retry; consent must be recorded server-side
-      logger.e('Network error during consent submission: \${e.message}');
+      logger.e('Network error during consent submission: ${e.message}');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Network error. Please check your connection and try again.'),
@@ -111,7 +111,7 @@ class _SalaryDeductionConsentScreenState extends ConsumerState<SalaryDeductionCo
       }
     } catch (e) {
       // Unknown error — do not silently proceed; show the error to the user
-      logger.e('Consent submission error: \$e');
+      logger.e('Consent submission error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('Unexpected error. Please try again.'),
