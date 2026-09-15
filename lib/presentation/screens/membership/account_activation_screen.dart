@@ -44,6 +44,7 @@ class _AccountActivationScreenState
       final resp = await apiClient.dio.post('/payments/initialize', data: {
         'amount': AppConfig.entranceFee,
         'payment_type': 'registration_fee',
+        'allocation_type': 'registration_fee',
       });
       final data = resp.data as Map<String, dynamic>;
       final url = data['authorization_url'] as String?;
@@ -57,11 +58,15 @@ class _AccountActivationScreenState
       final confirmed = await showPaystackCheckoutDialog(context, url: url);
       if (confirmed != true || !mounted) return;
 
+      // Poll the backend for confirmation (the webhook usually beats us to
+      // it — either path credits the wallet exactly once). The API runs on a
+      // cold-starting host, so allow for a slow first verify before falling
+      // back to the "will activate automatically" message.
       String status = 'pending';
-      for (var attempt = 0; attempt < 5 && status != 'success'; attempt++) {
+      for (var attempt = 0; attempt < 8 && status != 'success'; attempt++) {
         if (attempt > 0) await Future.delayed(const Duration(seconds: 2));
         try {
-          final verify = await apiClient.dio.get('/payments/verify/\$reference');
+          final verify = await apiClient.dio.get('/payments/verify/$reference');
           status =
               (verify.data as Map<String, dynamic>)['status'] as String? ?? 'pending';
         } catch (_) {/* keep polling */}
@@ -97,7 +102,7 @@ class _AccountActivationScreenState
           : e;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Online payment failed: \$detail'),
+          content: Text('Online payment failed: $detail'),
           backgroundColor: CoopvestColors.error,
         ),
       );

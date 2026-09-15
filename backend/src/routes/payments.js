@@ -28,63 +28,10 @@ const { authenticate } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const logger = require('../utils/logger');
 const notifyService = require('../services/notifyService');
+const { ALLOWED_PAYMENT_TYPES, DB_PAYMENT_TYPE, normalizeAllocations } = require('../lib/allocations');
 
 const PAYSTACK_BASE = 'https://api.paystack.co';
 const MIN_AMOUNT_NGN = 100;
-
-// UI allocation choices accepted by /initialize. The DB proof row uses the
-// legacy payment_proofs.payment_type CHECK set (see 007_payment_proofs.sql),
-// so fine/fee/mixed are stored as `other` with the full breakdown in metadata.
-const ALLOWED_PAYMENT_TYPES = new Set([
-  'monthly_contribution',
-  'loan_repayment',
-  'registration_fee',
-  'investment',
-  'other',
-  'fine',
-  'fee',
-  'mixed',
-]);
-
-// payment_proofs.payment_type CHECK-compatible storage type for a UI choice.
-const DB_PAYMENT_TYPE = {
-  monthly_contribution: 'monthly_contribution',
-  loan_repayment: 'loan_repayment',
-  registration_fee: 'registration_fee',
-  investment: 'investment',
-  other: 'other',
-  fine: 'other',
-  fee: 'other',
-  mixed: 'other',
-};
-
-/**
- * Normalize the mobile app's allocation choice into the same breakdown the
- * manual /wallet/contribute path produces (see wallet.js. This is what the
- * instant Paystack settlement applies (savings→wallet credit, loan_repayment
- * →loan reduction,and fine/fee/registration_fee→member_fees settlement).
- */
-function normalizeAllocations(amount, allocationType, allocations) {
-  const type = allocationType || (Array.isArray(allocations) && allocations.length ? 'mixed' : 'monthly_contribution');
-  if (Array.isArray(allocations) && allocations.length > 0) {
-    return allocations.map((a) => ({
-      type: String(a.type || '').replace(/[^a-z_]/gi, '').toLowerCase(),
-      amount: Number(a.amount) || 0,
-      loan_id: a.loan_id || null,
-      fee_id: a.fee_id || null,
-    })).filter((a) => a.amount > 0);
-  }
-  if (type === 'monthly_contribution') {
-    return [{ type: 'savings', amount: Number(amount) }];
-  }
-  if (type === 'loan_repayment') {
-    return [{ type: 'loan_repayment', amount: Number(amount) }];
-  }
-  if (type === 'mixed') {
-    return [];
-  }
-  return [{ type, amount: Number(amount) }];
-}
 
 /**
  * Apply the allocations of an auto-approved Paystack charge (mirrors the
@@ -109,16 +56,26 @@ async function applyAllocations(proof, { recordedBy = null } = {}) {
   try {
     const metadata = (proof.metadata || {});
     const allocationType = metadata.allocation_type || 'monthly_contribution';
+    // Derive the breakdown from the STORED payment type, not the allocation
+    // label: an approved registration_fee/loan_repayment proof must never be
+    // re-interpreted as savings (that credited ₦5,000 registration fees and
+    // loan repayments straight into member wallets).
+    const derivedType = proof.payment_type === 'monthly_contribution'
+      ? 'monthly_contribution'
+      : (proof.allocation_type || allocationType);
     const allocations = Array.isArray(metadata.allocations) && metadata.allocations.length
       ? metadata.allocations
-      : normalizeAllocations(Number(proof.amount) || 0, allocationType, null);
+      : normalizeAllocations(Number(proof.amount) || 0, derivedType, null);
     const savingsAmt = allocations.reduce((s, a) => s + (a.type === 'savings' ? a.amount : 0), 0);
     const loanAmt = allocations.reduce((s, a) => s + (a.type === 'loan_repayment' ? a.amount : 0), 0);
     const feeAllocs = allocations.filter((a) => ['fine', 'fee', 'registration_fee'].includes(a.type) );
 
     // 1. Savings → credit the wallet (skip when the DB trigger already did
-    // it for straight monthly_contribution proofs).
-    if (savingsAmt > 0 && proof.payment_type !== 'monthly_contribution') {
+    // it for straight monthly_contribution proofs, and never for a
+    // registration_fee proof — that is a fee, not a member saving).
+    if (savingsAmt > 0
+      && proof.payment_type !== 'monthly_contribution'
+      && proof.payment_type !== 'registration_fee') {
       const { ensureWallet } = require('./wallet');
       const wallet = await ensureWallet(proof.profile_id);
       if (wallet && wallet.id) {
@@ -368,13 +325,18 @@ router.post(
       const paymentType = ALLOWED_PAYMENT_TYPES.has(req.body.payment_type)
         ? req.body.payment_type
         : 'monthly_contribution';
-      const allocations = normalizeAllocations(amountNgn, req.body.allocation_type, req.body.allocations)
+      // Fall back to the declared payment_type when the caller omits an
+      // explicit allocation_type. The activation screen posts
+      // { amount, payment_type: 'registration_fee' } with no allocation_type;
+      // without this the charge was treated as a monthly contribution.
+      const requestedAllocation = req.body.allocation_type || paymentType;
+      const allocations = normalizeAllocations(amountNgn, requestedAllocation, req.body.allocations)
         // Carry an explicitly targeted loan into the loan_repayment allocation
         // so settlement reduces THAT loan rather than the highest-balance one.
         .map((a) => (a.type === 'loan_repayment' && req.body.loan_id && !a.loan_id
           ? { ...a, loan_id: req.body.loan_id }
           : a));
-      const allocationType = req.body.allocation_type || (Array.isArray(req.body.allocations) && req.body.allocations.length ? 'mixed' : paymentType);
+      const allocationType = requestedAllocation;
       const dbPaymentType = (DB_PAYMENT_TYPE[paymentType] || 'other');
 
       const reference = `CVP-${req.user.id.slice(0, 8)}-${Date.now()}`;
