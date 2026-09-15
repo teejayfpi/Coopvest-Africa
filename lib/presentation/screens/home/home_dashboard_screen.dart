@@ -133,6 +133,12 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
         ref.read(notificationsProvider.notifier).loadNotifications(),
       ]);
 
+      // Re-fetch obligations. The obligations card reads a FutureProvider that
+      // is otherwise cached forever, so without this the "Monthly Savings"
+      // figure keeps showing the amount from app start — a member who raises
+      // their contribution only saw it after a restart.
+      ref.invalidate(obligationsProvider);
+
       // Fetch recent transactions for the home preview (non-blocking).
       ref.read(walletProvider.notifier).loadTransactions(page: 1, pageSize: 5);
 

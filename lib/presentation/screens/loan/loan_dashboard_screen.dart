@@ -50,9 +50,17 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
     // The backend marks disbursed loans as 'approved' (not 'active'), so we
     // treat 'approved' as an active/repaying loan for display purposes.
     final activeLoans = loans.where((l) => isLoanActive(l.status)).length;
-    final totalBorrowed = loans.fold(0.0, (sum, l) => sum + l.amount);
-    // Total repaid = sum over all loans of (totalRepayment - remainingBalance).
-    final totalRepaid = loans.fold(0.0, (sum, l) => sum + l.amountRepaid);
+    // Only count loans that were actually disbursed. A cancelled or rejected
+    // application was never borrowing, and its NULL remaining_balance makes it
+    // look fully repaid — which inflated "Total Repaid" by ₦1.3m on a member
+    // whose cancelled applications outweighed their real loans.
+    final disbursedLoans =
+        loans.where((l) => !isLoanNeverDisbursed(l.status)).toList();
+    final totalBorrowed =
+        disbursedLoans.fold(0.0, (sum, l) => sum + l.amount);
+    // Total repaid = sum over disbursed loans of (totalRepayment - remainingBalance).
+    final totalRepaid =
+        disbursedLoans.fold(0.0, (sum, l) => sum + l.amountRepaid);
 
     final overdueLoans = loans.where((l) => l.status.toLowerCase() == 'overdue' || l.status.toLowerCase() == 'in_recovery').toList();
     final hasOverdueLoans = overdueLoans.isNotEmpty;
@@ -75,6 +83,9 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
         child: RefreshIndicator(
           onRefresh: () async {
             await ref.read(loanProvider.notifier).getLoans();
+            // The obligations card is a cached FutureProvider; refresh it so a
+            // contribution change made elsewhere shows up here too.
+            ref.invalidate(obligationsProvider);
           },
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
