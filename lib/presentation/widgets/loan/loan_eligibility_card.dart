@@ -34,13 +34,20 @@ class LoanEligibilityCard extends ConsumerWidget {
     final monthsDone = user?.membershipDurationMonths ?? 0;
     final monthsRequired = AppConfig.loanEligibilityMonths;
     final monthsLeft = (monthsRequired - monthsDone).clamp(0, monthsRequired);
-    final progress = (monthsDone / monthsRequired).clamp(0.0, 1.0);
-    // TESTING ONLY: 6-month contribution requirement bypassed for loan testing.
-    // Restore the original check below when testing is complete:
-    // final isEligible = monthsDone >= monthsRequired;
-    final isEligible = true;
+    // Guard the division: loanEligibilityMonths is 0 while the requirement is
+    // waived, and 0/0 is NaN, which renders as a broken progress ring.
+    final progress =
+        monthsRequired > 0 ? (monthsDone / monthsRequired).clamp(0.0, 1.0) : 1.0;
+    final isEligible = monthsDone >= monthsRequired;
 
-    final totalSavings = walletState.wallet?.totalContributions ?? 0.0;
+    // Savings basis must match the loan application screen, which uses the
+    // wallet's totalSavings and falls back to the wallet balance. The card
+    // previously used total_contributions (0 for most members), so it showed
+    // "₦0" max loan while the very next screen quoted a real limit.
+    final wallet = walletState.wallet;
+    final totalSavings = wallet == null
+        ? 0.0
+        : (wallet.totalSavings > 0 ? wallet.totalSavings : wallet.balance);
     final maxLoan = loanNotifier.calculateMaxLoanAmount(totalSavings);
 
     final primaryColor = isEligible ? CoopvestColors.success : CoopvestColors.primary;

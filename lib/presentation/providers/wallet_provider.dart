@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/network/api_client.dart';
 import '../../core/utils/utils.dart';
 import '../../data/models/wallet_models.dart';
+import 'contributions/contribution_plan_provider.dart';
 
 /// Wallet Repository Provider
 final walletRepositoryProvider = Provider<WalletRepository>((ref) {
@@ -493,7 +494,15 @@ final walletErrorProvider = Provider<String?>((ref) {
 });
 
 /// Obligations breakdown provider (savings / loans / fines / fees / total_due)
+///
+/// Re-fetches whenever the member's monthly contribution changes. Obligations
+/// are derived from the contribution plan server-side, so without this the
+/// card kept showing the amount from app start — a member who raised their
+/// contribution only saw the new figure after restarting the app.
 final obligationsProvider = FutureProvider<Map<String, dynamic>>((ref) async {
+  ref.watch(
+    contributionPlanProvider.select((s) => s.plan?.currentMonthlyAmount),
+  );
   final repo = ref.watch(walletRepositoryProvider);
   return repo.getObligations();
 });

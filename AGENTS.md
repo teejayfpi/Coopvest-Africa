@@ -125,3 +125,47 @@ a friendly message when that migration hasn't been applied yet.
 - `contribution_plans` has a FK to `profiles(id)` and `UNIQUE (profile_id)`, so
   `.upsert(..., { onConflict: 'profile_id' })` is safe.
 
+## `handle_payment_proof_approval` never wrote a contribution (fixed, 033)
+The trigger inserts into `contributions`
+`(profile_id, amount, status, contribution_month, payment_proof_id, notes)`,
+but `contributions` had neither `payment_proof_id` nor `notes`. Postgres raised
+`column "payment_proof_id" of relation "contributions" does not exist`, and the
+trigger's own `exception when others then new_contribution_id := null;` swallowed
+it. Approving a monthly contribution therefore never created the contribution
+row and `contributions` stayed **empty for the whole install** — members saw a 0
+-month contribution history and loan insights fell back to the savings row.
+Migration `033_fix_payment_proof_contribution.sql` adds the two columns (and
+`payment_proofs.contribution_id`, the write-back target). Verified: the exact
+insert now succeeds.
+Lesson: the trigger's blanket exception handler hides schema drift. When money
+columns or new tables are added, check triggers that write them.
+
+## `obligationsProvider` must be invalidated after a contribution change
+`obligationsProvider` is a `FutureProvider` and is otherwise cached for the
+lifetime of the app, so the "Monthly Savings" figure kept showing the amount
+from launch — a member who raised their contribution only saw the new number
+after restarting. It now `watch`es
+`contributionPlanProvider.select((s) => s.plan?.currentMonthlyAmount)`, so any
+increase/reduction re-fetches it; `home_dashboard_screen._loadData()` and the
+loan dashboard's pull-to-refresh also `ref.invalidate(obligationsProvider)`.
+Do not remove these — without them the card silently goes stale again.
+
+## Loan totals must exclude never-disbursed loans
+Cancelled/rejected applications are not borrowing. The backend leaves
+`remaining_balance` NULL for them, which parses to 0, so
+`totalRepayment - remainingBalance` reports the **entire** loan as repaid.
+"Total Borrowed"/"Total Repaid" now filter through
+`isLoanNeverDisbursed(status)` (`lib/data/models/loan_models.dart`) — on the
+live test account that removed ₦1.3m of phantom repayments. Covered by
+`test/unit/loan_totals_test.dart`.
+
+## Loan eligibility card must use the same savings basis as the application
+`loan_eligibility_card.dart` computed its max loan from
+`wallet.totalContributions` (0 for most members, so it showed "0 max loan
+available") while `loan_application_screen.dart` uses `wallet.totalSavings`
+falling back to `wallet.balance`. The card now uses the same expression. It also
+had `isEligible = true` hardcoded as a testing bypass, showing "You qualify for
+a loan!" regardless of tenure; that is restored to
+`monthsDone >= monthsRequired`, with `progress` guarded against a 0-month
+requirement (0/0 is NaN and broke the progress ring).
+

@@ -223,6 +223,20 @@ class Loan extends Equatable {
 bool isLoanActive(String status) =>
     status == 'active' || status == 'repaying' || status == 'approved';
 
+/// True for loan statuses that never resulted in money being disbursed.
+///
+/// Cancelled/rejected applications are not borrowing, so they must be excluded
+/// from "Total Borrowed" and "Total Repaid". They cannot be excluded by
+/// `remainingBalance` either: the backend leaves it NULL for a cancelled loan,
+/// which parses to 0, so `totalRepayment - remainingBalance` reports the whole
+/// loan as repaid even though nothing was ever paid.
+bool isLoanNeverDisbursed(String status) => const {
+      'cancelled',
+      'canceled',
+      'rejected',
+      'declined',
+    }.contains(status.toLowerCase());
+
 /// Guarantor Model
 class Guarantor extends Equatable {
   final String id;
