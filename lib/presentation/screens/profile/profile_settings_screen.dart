@@ -332,6 +332,16 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
         title: const Text('Settings'),
         elevation: 0,
         automaticallyImplyLeading: false,
+        // Logout also lives at the foot of this screen, but that sits ~6
+        // viewport-heights down a long flat list — members could not find it.
+        // Surfacing it in the app bar makes it reachable without scrolling.
+        actions: [
+          IconButton(
+            tooltip: 'Logout',
+            icon: const Icon(Icons.logout),
+            onPressed: _showLogoutDialog,
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),

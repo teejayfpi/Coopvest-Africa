@@ -169,3 +169,42 @@ a loan!" regardless of tenure; that is restored to
 `monthsDone >= monthsRequired`, with `progress` guarded against a 0-month
 requirement (0/0 is NaN and broke the progress ring).
 
+## Never invent a money figure when a fetch fails
+`ContributionPlanApiService.getContributionPlan()` used to swallow every error
+and return a fabricated `CurrentMonthlyAmount: 5000`. A member on ₦10,000
+therefore saw "Current Monthly Contribution ₦5,000" and was offered ₦10,000 as
+an "increase" to their own current amount. The model's `fromJson` had the same
+`?? 5000.0` fallback. Both now fail loudly: the service propagates, the model
+throws a FormatException on a missing `current_monthly_amount`, and the screen
+renders a "Could not load your contribution plan / Try Again" state instead of
+guessing. The increase/reduction sheets refuse to open without a loaded plan.
+General rule: a wrong financial figure is worse than an error message.
+
+PostgREST returns `numeric` columns as JSON **strings** (`"10000.00"`), so
+parse money fields defensively (`_toDouble` accepts num or numeric string).
+A bare `as num` cast throws on a perfectly valid response.
+
+## Contribution increase/reduction must not fake success
+The provider used to "apply optimistically" on failure: it updated local state
+and showed a success message even when the request never reached the server.
+For a reduction it also invented a local request id and a +90-day effective
+date, so the member saw "submitted" with no server record and waited three
+months for a change that was never requested. Both paths now report the
+server's message (`ApiException.message`, so policy codes such as
+REDUCTION_BLOCKED_ACTIVE_LOAN reach the member) via `_errorText`.
+
+## Due contribution reductions are applied on read
+Nothing ever applied the 3-month reduction notice, so a pending request stayed
+pending forever and the member never got the lower amount. `getOrCreatePlan()`
+now calls `applyDueReduction()`, which, when `effective_date <= now()`, sets the
+plan to `requested_amount` and marks the request `applied`. It is best-effort
+and never throws, so plan reads cannot break. `status` has no CHECK constraint,
+so `applied` is safe.
+
+## Money formatting must stay grouped
+`Formatters.formatCurrency` (core/utils/utils.dart) groups thousands and keeps
+2dp. Several screens used `toStringAsFixed(2)` directly, rendering
+`₦100150000.00` next to the header's `₦100,150,000`. Use the shared formatter —
+import it with `show Formatters` in files that also need string extensions, to
+avoid an ambiguous-extension clash with `capitalize`.
+

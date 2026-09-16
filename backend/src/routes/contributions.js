@@ -36,7 +36,18 @@ async function getOrCreatePlan(profileId) {
     .select('*')
     .eq('profile_id', profileId)
     .maybeSingle();
-  if (data) return data;
+  if (data) {
+    // A reduction request carries a 3-month notice period. Nothing ever applied
+    // it, so a member who requested a reduction stayed on the higher amount
+    // indefinitely and the UI showed "1 month remaining" forever.
+    await applyDueReduction(profileId, data);
+    const { data: refreshed } = await supabase
+      .from('contribution_plans')
+      .select('*')
+      .eq('profile_id', profileId)
+      .maybeSingle();
+    return refreshed || data;
+  }
 
   const { data: created, error } = await supabase
     .from('contribution_plans')
@@ -49,6 +60,53 @@ async function getOrCreatePlan(profileId) {
     .single();
   if (error) throw error;
   return created;
+}
+
+/**
+ * Apply a pending reduction whose notice period has elapsed.
+ *
+ * A reduction is only "due" once `effective_date` has passed. We then set the
+ * plan to the requested amount and mark the request applied, so the member
+ * actually gets the lower contribution they were promised three months ago.
+ * Never throws: a failure here must not break plan reads.
+ */
+async function applyDueReduction(profileId, plan) {
+  try {
+    const { data: due } = await supabase
+      .from('contribution_plan_reductions')
+      .select('id, requested_amount, effective_date')
+      .eq('profile_id', profileId)
+      .eq('status', 'pending')
+      .lte('effective_date', new Date().toISOString())
+      .order('effective_date', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (!due) return;
+
+    const amount = Number(due.requested_amount);
+    if (!Number.isFinite(amount) || amount <= 0) return;
+
+    await supabase
+      .from('contribution_plans')
+      .update({
+        current_monthly_amount: amount,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('profile_id', profileId);
+
+    await supabase
+      .from('contribution_plan_reductions')
+      .update({ status: 'applied', updated_at: new Date().toISOString() })
+      .eq('id', due.id);
+
+    logger.info(
+      `Applied due contribution reduction for ${profileId}: ` +
+        `${plan.current_monthly_amount} -> ${amount} (effective ${due.effective_date})`,
+    );
+  } catch (err) {
+    logger.warn('applyDueReduction failed (non-fatal):', err.message);
+  }
 }
 
 /**

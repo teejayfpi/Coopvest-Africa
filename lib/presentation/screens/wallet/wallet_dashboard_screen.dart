@@ -182,7 +182,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
         .where((l) => !const ['completed', 'rejected', 'cancelled'].contains(l.status))
         .fold(0.0, (sum, l) => sum + l.amount);
 
-    final displayBalance = _isBalanceHidden ? '••••••' : '₦${totalSavings.toStringAsFixed(2)}';
+    final displayBalance = _isBalanceHidden ? '••••••' : Formatters.formatCurrency(totalSavings);
 
     return Container(
       padding: const EdgeInsets.all(24),
@@ -280,7 +280,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      _isBalanceHidden ? '••••••' : '₦${(wallet?.availableForWithdrawal ?? 0).toStringAsFixed(2)}',
+                      _isBalanceHidden ? '••••••' : Formatters.formatCurrency(wallet?.availableForWithdrawal ?? 0),
                       style: TextStyle(
                         color: isDarkMode ? context.textPrimary : Colors.white,
                         fontWeight: FontWeight.bold,
@@ -305,7 +305,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      _isBalanceHidden ? '••••••' : '₦${(wallet?.pendingContributions ?? 0).toStringAsFixed(2)}',
+                      _isBalanceHidden ? '••••••' : Formatters.formatCurrency(wallet?.pendingContributions ?? 0),
                       style: TextStyle(
                         color: isDarkMode ? context.textPrimary : Colors.white,
                         fontWeight: FontWeight.bold,
@@ -649,7 +649,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
                   style: TextStyle(fontSize: 12, color: context.textSecondary),
                 ),
                 trailing: Text(
-                  '${isDeposit ? '+' : '-'}₦${tx.amount.toStringAsFixed(2)}',
+                  '${isDeposit ? '+' : '-'}${Formatters.formatCurrency(tx.amount)}',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: isDeposit ? Colors.green : Colors.orange,

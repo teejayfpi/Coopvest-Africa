@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/utils/utils.dart' show Formatters;
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/extensions/string_extensions.dart';
@@ -191,7 +192,7 @@ class TransactionsHistoryScreen extends ConsumerWidget {
               ),
             ),
             Text(
-              '${isCredit ? '+' : '-'}₦${txn.amount.toStringAsFixed(2)}',
+              '${isCredit ? '+' : '-'}${Formatters.formatCurrency(txn.amount)}',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 color: isCredit ? CoopvestColors.success : CoopvestColors.error,
