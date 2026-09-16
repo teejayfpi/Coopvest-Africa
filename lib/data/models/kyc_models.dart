@@ -373,25 +373,44 @@ class KYCSubmission extends Equatable {
 }
 
 /// Organization Model
+///
+/// Mirrors the `organizations` row as exposed by
+/// `GET /api/v1/organizations/selectable`. The previous shape expected
+/// `category`/`is_verified` fields that the API has never returned, so
+/// `fromJson` threw on every call and the employer picker fell back to a
+/// hardcoded list of generic strings that could never match a real organisation.
 class Organization extends Equatable {
   final String id;
   final String name;
-  final String category;
-  final bool isVerified;
+
+  /// Optional short code finance officers quote on remittance advice.
+  final String? code;
+
+  /// Organisation type (Government, Education, …). Free text from the backend.
+  final String? type;
+
+  /// How often the employer remits: monthly, biweekly, quarterly, ad_hoc.
+  final String remittanceCycle;
 
   const Organization({
     required this.id,
     required this.name,
-    required this.category,
-    this.isVerified = true,
+    this.code,
+    this.type,
+    this.remittanceCycle = 'monthly',
   });
 
   factory Organization.fromJson(Map<String, dynamic> json) {
     return Organization(
-      id: json['id'] as String,
-      name: json['name'] as String,
-      category: json['category'] as String,
-      isVerified: json['is_verified'] as bool? ?? true,
+      id: (json['id'] ?? '').toString(),
+      name: (json['name'] ?? '').toString(),
+      code: json['code']?.toString(),
+      type: json['type']?.toString(),
+      // The endpoint returns camelCase `remittanceCycle`; the raw table uses
+      // snake_case, so accept either.
+      remittanceCycle:
+          (json['remittanceCycle'] ?? json['remittance_cycle'] ?? 'monthly')
+              .toString(),
     );
   }
 
@@ -399,13 +418,18 @@ class Organization extends Equatable {
     return {
       'id': id,
       'name': name,
-      'category': category,
-      'is_verified': isVerified,
+      if (code != null) 'code': code,
+      if (type != null) 'type': type,
+      'remittanceCycle': remittanceCycle,
     };
   }
 
+  /// "Name (CODE)" when a code exists, otherwise just the name — the label the
+  /// member sees in the picker.
+  String get displayLabel => code == null || code!.isEmpty ? name : '$name ($code)';
+
   @override
-  List<Object?> get props => [id, name, category, isVerified];
+  List<Object?> get props => [id, name, code, type, remittanceCycle];
 }
 
 /// Employment Types

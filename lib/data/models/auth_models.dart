@@ -22,6 +22,24 @@ class User extends Equatable {
   final bool isEmailVerified;
   final bool registrationCompleted; // true if user completed registration flow
   final bool registrationFeePaid; // true once the entrance fee is verified & settled
+
+  /// True when the fee is waived rather than paid: a salary-deduction member
+  /// whose employer recovers it from salary. Distinct from [registrationFeePaid]
+  /// so the app can say "deducted from your salary" instead of implying payment.
+  final bool registrationFeeExempt;
+
+  /// True when the fee is paid *or* exempt — the condition the activation gate
+  /// actually acts on.
+  final bool registrationFeeSettled;
+
+  /// How the member contributes: 'payroll'/'salary_deduction' for employer
+  /// deduction, otherwise self-paid.
+  final String? contributionMethod;
+
+  /// The employer this member's salary deduction runs through, if any.
+  final String? organizationId;
+  final String? organizationName;
+
   final DateTime createdAt;
   final DateTime? updatedAt;
 
@@ -46,6 +64,11 @@ class User extends Equatable {
     this.isEmailVerified = false,
     this.registrationCompleted = false,
     this.registrationFeePaid = false,
+    this.registrationFeeExempt = false,
+    this.registrationFeeSettled = false,
+    this.contributionMethod,
+    this.organizationId,
+    this.organizationName,
     required this.createdAt,
     this.updatedAt,
   });
@@ -103,6 +126,18 @@ class User extends Equatable {
           (json['activation_gate'] is Map<String, dynamic>
               ? (json['activation_gate'] as Map<String, dynamic>)['registration_fee_paid'] as bool? ?? false
               : false),
+      // Read from the activation gate so the app routes on exactly the same
+      // decision the server enforces, rather than re-deriving it client-side.
+      registrationFeeExempt: _gateFlag(json, 'registration_fee_exempt'),
+      registrationFeeSettled: _gateFlag(json, 'registration_fee_settled') ||
+          (json['registration_fee_paid'] as bool? ?? false),
+      contributionMethod: json['contribution_method'] as String? ??
+          json['contributionMethod'] as String? ??
+          json['contribution_type'] as String?,
+      organizationId: json['organization_id'] as String? ??
+          json['organizationId'] as String?,
+      organizationName: json['organization_name'] as String? ??
+          json['organizationName'] as String?,
       createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt'] as String) : (json['created_at'] != null ? DateTime.parse(json['created_at'] as String) : DateTime.now()),
       updatedAt: json['updatedAt'] != null ? DateTime.parse(json['updatedAt'] as String) : (json['updated_at'] != null ? DateTime.parse(json['updated_at'] as String) : null),
     );
@@ -150,6 +185,11 @@ class User extends Equatable {
     bool? isEmailVerified,
     bool? registrationCompleted,
     bool? registrationFeePaid,
+    bool? registrationFeeExempt,
+    bool? registrationFeeSettled,
+    String? contributionMethod,
+    String? organizationId,
+    String? organizationName,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -173,10 +213,32 @@ class User extends Equatable {
       isEmailVerified: isEmailVerified ?? this.isEmailVerified,
       registrationCompleted: registrationCompleted ?? this.registrationCompleted,
       registrationFeePaid: registrationFeePaid ?? this.registrationFeePaid,
+      registrationFeeExempt: registrationFeeExempt ?? this.registrationFeeExempt,
+      registrationFeeSettled: registrationFeeSettled ?? this.registrationFeeSettled,
+      contributionMethod: contributionMethod ?? this.contributionMethod,
+      organizationId: organizationId ?? this.organizationId,
+      organizationName: organizationName ?? this.organizationName,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
   }
+
+  /// True when this member contributes by employer payroll deduction.
+  ///
+  /// Both spellings are in circulation: the settings screen writes 'payroll'
+  /// and the KYC flow writes 'salary_deduction'.
+  bool get onSalaryDeduction {
+    final method = contributionMethod;
+    return method == 'payroll' ||
+        method == 'salary_deduction' ||
+        method == 'salary-based';
+  }
+
+  /// Whether the activation gate should let this member through on the fee
+  /// requirement — paid or exempt. Falls back to an explicit paid flag so an
+  /// older backend that omits `registration_fee_settled` still works.
+  bool get hasSettledRegistrationFee =>
+      registrationFeeSettled || registrationFeePaid;
 
   @override
   List<Object?> get props => [
@@ -197,9 +259,24 @@ class User extends Equatable {
     isEmailVerified,
     registrationCompleted,
     registrationFeePaid,
+    registrationFeeExempt,
+    registrationFeeSettled,
+    contributionMethod,
+    organizationId,
+    organizationName,
     createdAt,
     updatedAt,
   ];
+}
+
+/// Read a boolean out of the nested `activation_gate` object.
+///
+/// The gate is nested because the server sends it as one machine-readable blob;
+/// tolerating its absence keeps this model usable against older responses.
+bool _gateFlag(Map<String, dynamic> json, String key) {
+  final gate = json['activation_gate'];
+  if (gate is Map) return gate[key] as bool? ?? false;
+  return false;
 }
 
 /// Auth Response Model

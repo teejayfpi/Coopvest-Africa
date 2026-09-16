@@ -126,6 +126,18 @@ class MonthlyContribution extends Equatable {
   final String? notes;
   final List<StatusHistory>? statusHistory;
 
+  /// How this contribution reached Coopvest: 'salary_deduction' when an employer
+  /// deducted it from payroll and finance posted the remittance, otherwise a
+  /// self-paid source. Drives the provenance line in the history list, so a
+  /// member can tell a payroll entry from one they paid themselves.
+  final String? contributionSource;
+
+  /// The employer behind a salary-deduction entry, when known.
+  final String? organizationName;
+
+  /// True when this entry arrived by employer payroll deduction.
+  bool get isSalaryDeduction => contributionSource == 'salary_deduction';
+
   const MonthlyContribution({
     required this.id,
     required this.userId,
@@ -143,6 +155,8 @@ class MonthlyContribution extends Equatable {
     required this.updatedAt,
     this.notes,
     this.statusHistory,
+    this.contributionSource,
+    this.organizationName,
   });
 
   factory MonthlyContribution.fromJson(Map<String, dynamic> json) {
@@ -172,6 +186,16 @@ class MonthlyContribution extends Equatable {
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
       notes: json['notes'] as String?,
+      // Accept both snake_case (raw row) and camelCase (normalised payload),
+      // and fall back to payment_method so entries posted before the source
+      // column existed still read as payroll when that is what they were.
+      contributionSource: json['contribution_source'] as String? ??
+          json['contributionSource'] as String? ??
+          ((json['payment_method'] as String?) == 'salary_deduction'
+              ? 'salary_deduction'
+              : null),
+      organizationName: json['organization_name'] as String? ??
+          json['organizationName'] as String?,
       statusHistory: json['status_history'] != null
           ? (json['status_history'] as List)
               .map((e) => StatusHistory.fromJson(e as Map<String, dynamic>))
@@ -197,6 +221,8 @@ class MonthlyContribution extends Equatable {
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
       'notes': notes,
+      'contribution_source': contributionSource,
+      'organization_name': organizationName,
       'status_history': statusHistory?.map((e) => e.toJson()).toList(),
     };
   }
@@ -219,6 +245,8 @@ class MonthlyContribution extends Equatable {
         updatedAt,
         notes,
         statusHistory,
+        contributionSource,
+        organizationName,
       ];
 }
 

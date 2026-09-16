@@ -884,7 +884,7 @@ router.get('/statement', authenticate, async (req, res) => {
 router.get('/payment-settings', authenticate, async (req, res) => {
   try {
     const { data, error } = await supabase
-      .from('settings')
+      .from('system_settings')
       .select('value')
       .eq('key', 'payment_account')
       .maybeSingle();
