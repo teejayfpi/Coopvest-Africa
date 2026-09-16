@@ -13,6 +13,8 @@ analyzer:
     - "**/*.config.dart"
     - "build/**"
     - "lib/generated_plugin_registrant.dart"
+    - android/**
+    - ios/**
 
 linter:
   rules:

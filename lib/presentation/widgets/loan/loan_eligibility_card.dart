@@ -34,10 +34,16 @@ class LoanEligibilityCard extends ConsumerWidget {
     final monthsDone = user?.membershipDurationMonths ?? 0;
     final monthsRequired = AppConfig.loanEligibilityMonths;
     final monthsLeft = (monthsRequired - monthsDone).clamp(0, monthsRequired);
-    // Guard the division: loanEligibilityMonths is 0 while the requirement is
-    // waived, and 0/0 is NaN, which renders as a broken progress ring.
-    final progress =
-        monthsRequired > 0 ? (monthsDone / monthsRequired).clamp(0.0, 1.0) : 1.0;
+    // The 6-month minimum is deliberately waived while the platform is in
+    // testing (`AppConfig.loanEligibilityMonths = 0`, and loanPolicy.js says the
+    // rule is "intentionally NOT enforced here yet"). Guard the division — 0/0
+    // is NaN, which renders as a broken progress ring — and treat a waived
+    // requirement as "no minimum" rather than a 100% milestone, so the copy
+    // below does not claim progress the member has not made.
+    final requirementWaived = monthsRequired <= 0;
+    final progress = requirementWaived
+        ? 1.0
+        : (monthsDone / monthsRequired).clamp(0.0, 1.0);
     final isEligible = monthsDone >= monthsRequired;
 
     // Savings basis must match the loan application screen, which uses the
@@ -183,7 +189,9 @@ class LoanEligibilityCard extends ConsumerWidget {
                           ),
                         ),
                         Text(
-                          'of $monthsRequired',
+                          // "of 0" previously read "0 of 0 months", which looks
+                          // like missing data. Name the waived state instead.
+                          requirementWaived ? 'no minimum' : 'of $monthsRequired',
                           style: TextStyle(
                             fontSize: 11,
                             color: context.textSecondary,
@@ -307,14 +315,20 @@ class LoanEligibilityCard extends ConsumerWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Contribution months progress',
+                    requirementWaived
+                        ? 'Membership tenure'
+                        : 'Contribution months progress',
                     style: TextStyle(
                       fontSize: 11,
                       color: context.textSecondary,
                     ),
                   ),
                   Text(
-                    '${(progress * 100).round()}%',
+                    // While the minimum is waived, "100%" is meaningless — show
+                    // the member's actual tenure instead of a milestone met.
+                    requirementWaived
+                        ? '$monthsDone ${monthsDone == 1 ? 'month' : 'months'}'
+                        : '${(progress * 100).round()}%',
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
