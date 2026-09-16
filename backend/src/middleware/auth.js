@@ -14,6 +14,7 @@
 
 const supabase = require('../config/supabase');
 const logger = require('../utils/logger');
+const { gateStatusFor } = require('../lib/activationGate');
 
 /**
  * Extract the Supabase session_id from an already-verified JWT payload.
@@ -258,7 +259,11 @@ async function loadGateProfile(profileId) {
     // NOTE: profiles table has NO membership_status column (termination state
     // lives in termination_requests). Selecting it made this query fail and
     // the gate treated every member as inactive.
-    .select('id, kyc_verified, registration_fee_paid, is_active, is_flagged')
+    // organization_id, contribution_method and contribution_type are read so
+    // the registration-fee exemption can be derived: a salary-deduction member
+    // with an employer on file is exempt because their fee is recovered from
+    // salary and remitted with their contributions.
+    .select('id, kyc_verified, registration_fee_paid, is_active, is_flagged, organization_id, contribution_method, contribution_type')
     .eq('id', profileId)
     .maybeSingle();
   return data;
@@ -285,17 +290,9 @@ async function attachGateStatus(req, res, next) {
 }
 
 /** Build a stable, machine-readable gate summary from a profiles row. */
-function gateStatusFor(profile) {
-  const kycApproved = profile?.kyc_verified === true;
-  const feePaid = profile?.registration_fee_paid === true;
-  const blocked = profile?.is_active === false || profile?.is_flagged === true;
-  return {
-    activated: kycApproved && feePaid && !blocked,
-    kyc_approved: kycApproved,
-    registration_fee_paid: feePaid,
-    blocked,
-  };
-}
+// Activation-gate rules live in lib/activationGate.js so they can be unit
+// tested; the gate, the /auth payload and the migration all share one
+// definition of when a registration fee counts as settled.
 
 /**
  * Require the member to have passed the activation gate (KYC approved AND

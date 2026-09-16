@@ -32,6 +32,7 @@ const referralRoutes = require('./routes/referrals');
 const ticketRoutes = require('./routes/tickets');
 const adminTicketRoutes = require('./routes/adminTickets');
 const adminRoutes = require('./routes/admin');
+const organizationRoutes = require('./routes/organizations');
 const loanRoutes = require('./routes/loans');
 const walletRoutes = require('./routes/wallet');
 const userRoutes = require('./routes/user');
@@ -279,6 +280,12 @@ app.use('/api/v1/termination', requireActivated, terminationRoutes);
 app.use('/api/v1/payment-proofs', paymentProofRoutes);
 app.use('/api/v1/payments', require('./routes/payments'));
 
+// Partner organisations — member-facing. `selectable` backs the employer picker
+// in the app (replacing the hardcoded list) and `request-approval` is the
+// endpoint the app has always called but which never existed, so the request
+// 404'd silently.
+app.use('/api/v1/organizations', organizationRoutes);
+
 // ==============================================================================
 // FLUTTER APP COMPATIBILITY — /api/<path> mirrors /api/v1/<path>
 // The Flutter Dio client uses baseUrl=/api, so all requests hit /api/<path>.
@@ -293,6 +300,7 @@ app.use('/api/loans', requireFeatureFlag('loanModule'), requireActivated, loanRo
 app.use('/api/wallet', requireActivated, walletRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/kyc', kycRoutes);
+app.use('/api/organizations', organizationRoutes);
 app.use('/api/savings', requireFeatureFlag('savingsModule'), requireActivated, savingsRoutes);
 app.use('/api/rollover', requireActivated, rolloverRoutes);
 app.use('/api/investments', requireFeatureFlag('investmentModule'), requireActivated, investmentsRoutes);

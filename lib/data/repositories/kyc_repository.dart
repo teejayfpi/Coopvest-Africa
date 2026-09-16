@@ -195,26 +195,33 @@ class KYCRepository {
     }
   }
 
-  /// Get organizations
-  Future<List<Organization>> getOrganizations({
-    String? search,
-    String? category,
-  }) async {
+  /// Organisations a member may pick for salary deduction.
+  ///
+  /// Hits `/organizations/selectable`, which returns only active organisations
+  /// with deduction enabled — offering an employer that is not set up to remit
+  /// would leave the member unable to contribute at all.
+  ///
+  /// The previous implementation called `/organizations`, a path that was never
+  /// mounted on the backend, and read `data['data']` when the payload uses
+  /// `organizations`. Both faults were swallowed by the caller's best-effort
+  /// try/catch, which is why the picker silently fell back to a hardcoded list.
+  Future<List<Organization>> getOrganizations({String? search}) async {
     try {
       final response = await _apiClient.get(
-        '/organizations',
+        '/organizations/selectable',
         queryParameters: {
-          if (search != null) 'search': search,
-          if (category != null) 'category': category,
+          if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
         },
       );
 
       final data = response as Map<String, dynamic>;
-      final organizations = (data['data'] as List)
-          .map((item) => Organization.fromJson(item as Map<String, dynamic>))
-          .toList();
+      final raw = data['organizations'] ?? data['data'];
+      if (raw is! List) return const [];
 
-      return organizations;
+      return raw
+          .whereType<Map>()
+          .map((item) => Organization.fromJson(Map<String, dynamic>.from(item)))
+          .toList();
     } catch (e) {
       logger.e('Get organizations error: $e');
       rethrow;
@@ -288,14 +295,37 @@ class KYCRepository {
   }
 
   /// Request organization approval
-  Future<void> requestOrganizationApproval(String organizationName) async {
+  ///
+  /// The endpoint now exists (it previously 404'd silently, so the member was
+  /// told nothing and no admin ever saw the request). Returns the backend's
+  /// status: `pending` when the employer must be enrolled, or `enrolled` when
+  /// it turns out they already are and the member can simply select them.
+  Future<Map<String, dynamic>> requestOrganizationApproval(String organizationName) async {
     try {
-      await _apiClient.post(
+      final response = await _apiClient.post(
         '/organizations/request-approval',
         data: {'organization_name': organizationName},
       );
+      if (response is Map<String, dynamic>) return response;
+      if (response is Map) return Map<String, dynamic>.from(response);
+      return const {'success': true, 'status': 'pending'};
     } catch (e) {
       logger.e('Request organization approval error: $e');
+      rethrow;
+    }
+  }
+
+  /// The member's own organisation and deduction status, so the contribution
+  /// screen can say "Salary deduction via X" instead of offering a payment it
+  /// makes no sense to offer.
+  Future<Map<String, dynamic>> getMyOrganizationStatus() async {
+    try {
+      final response = await _apiClient.get('/organizations/me');
+      if (response is Map<String, dynamic>) return response;
+      if (response is Map) return Map<String, dynamic>.from(response);
+      return const {};
+    } catch (e) {
+      logger.e('Get my organization status error: $e');
       rethrow;
     }
   }

@@ -25,6 +25,7 @@ const newAuthClient = () => createClient(
   { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } }
 );
 const logger = require('../utils/logger');
+const activationGate = require('../lib/activationGate');
 const {
   hasValue,
   buildRegistrationCandidates,
@@ -67,12 +68,7 @@ const buildUserPayload = (authUser, profile) => {
     updated_at: profile?.updated_at || authUser.updated_at || authUser.created_at,
     // Machine-readable membership activation gate (mirrors /auth/me) so the
     // Flutter AuthGuard can route to the correct onboarding step.
-    activation_gate: {
-      activated: kycApproved && feePaid && !blocked,
-      kyc_approved: kycApproved,
-      registration_fee_paid: feePaid,
-      blocked,
-    },
+    activation_gate: activationGate.gateStatusFor(profile),
   };
 };
 
@@ -97,7 +93,7 @@ const ensureProfile = async (authUser, extra = {}) => {
   const userId = extra.userId || `USR-${Date.now().toString(36).toUpperCase()}`;
   const { data: existing } = await supabase
     .from('profiles')
-    .select('id, user_id, email, name, phone, role, kyc_verified, is_active, registration_fee_paid, registration_completed, completed_at, profile_picture, created_at, updated_at')
+    .select('id, user_id, email, name, phone, role, kyc_verified, is_active, registration_fee_paid, registration_completed, completed_at, profile_picture, created_at, updated_at, organization_id, contribution_method, contribution_type')
     .eq('id', authUser.id)
     .maybeSingle();
 
@@ -114,7 +110,7 @@ const ensureProfile = async (authUser, extra = {}) => {
       role: 'member',
       is_active: true,
     })
-    .select('id, user_id, email, name, phone, role, kyc_verified, is_active, registration_fee_paid, registration_completed, completed_at, profile_picture, created_at, updated_at')
+    .select('id, user_id, email, name, phone, role, kyc_verified, is_active, registration_fee_paid, registration_completed, completed_at, profile_picture, created_at, updated_at, organization_id, contribution_method, contribution_type')
     .single();
 
   if (error) {
@@ -235,7 +231,7 @@ router.post('/refresh', [
     const authUser = data.user;
     const { data: profile } = await supabase
       .from('profiles')
-      .select('id, user_id, email, name, phone, role, kyc_verified, is_active, registration_fee_paid, profile_picture, created_at, updated_at')
+      .select('id, user_id, email, name, phone, role, kyc_verified, is_active, registration_fee_paid, profile_picture, created_at, updated_at, organization_id, contribution_method, contribution_type')
       .eq('id', authUser.id)
       .maybeSingle();
 
@@ -724,7 +720,7 @@ router.post('/sync', (req, res, next) => { req.skipSingleSessionCheck = true; ne
       .from('profiles')
       .update(updateData)
       .eq('id', profileId)
-      .select('id, user_id, email, name, phone, role, kyc_verified, is_active, registration_fee_paid, profile_picture, created_at, updated_at')
+      .select('id, user_id, email, name, phone, role, kyc_verified, is_active, registration_fee_paid, profile_picture, created_at, updated_at, organization_id, contribution_method, contribution_type')
       .maybeSingle();
 
     if (error) {
@@ -806,12 +802,7 @@ router.get(['/me', '/profile'], authenticate, async (req, res) => {
         // Machine-readable membership activation gate so the app can render
         // the correct onboarding step (KYC vs registration fee) without
         // trusting a client-only check.
-        activation_gate: {
-          activated: kycApproved && feePaid && !blocked,
-          kyc_approved: kycApproved,
-          registration_fee_paid: feePaid,
-          blocked,
-        },
+        activation_gate: activationGate.gateStatusFor(profile),
       });
     }
 

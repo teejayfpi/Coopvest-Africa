@@ -271,20 +271,34 @@ class KYCCubit extends StateNotifier<KYCState> {
     _persistDraft();
   }
 
+  /// Fetch the enrolable partner organisations and cache them in state.
+  ///
+  /// Returns the list so a caller can render a retry/empty state from a single
+  /// await rather than watching the whole KYC state. Deliberately rethrows:
+  /// the employer picker must be able to tell "no employers enrolled" apart
+  /// from "the request failed", because the two need different copy.
+  Future<List<Organization>> loadOrganizations({String? search}) async {
+    final organizations = await _repository.getOrganizations(search: search);
+    state = state.copyWith(organizations: organizations);
+    return organizations;
+  }
+
   /// Search organizations
   Future<void> searchOrganizations(String query) async {
     try {
-      final organizations = await _repository.getOrganizations(search: query);
-      state = state.copyWith(organizations: organizations);
+      await loadOrganizations(search: query);
     } catch (e) {
       logger.e('Search organizations error: $e');
     }
   }
 
-  /// Request organization approval
-  Future<void> requestOrganizationApproval(String organizationName) async {
+  /// Request organization approval.
+  ///
+  /// Returns the backend's response so the caller can distinguish "queued for
+  /// review" from "already enrolled — just select it".
+  Future<Map<String, dynamic>> requestOrganizationApproval(String organizationName) async {
     try {
-      await _repository.requestOrganizationApproval(organizationName);
+      return await _repository.requestOrganizationApproval(organizationName);
     } catch (e) {
       logger.e('Request organization approval error: $e');
       rethrow;

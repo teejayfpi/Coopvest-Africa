@@ -187,6 +187,9 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(currentUserProvider);
+    // True when this member's contributions arrive via employer payroll rather
+    // than being paid in-app; drives the contribution CTA below.
+    final onSalaryDeduction = user?.onSalaryDeduction ?? false;
     final walletState = ref.watch(walletProvider);
     final wallet = walletState.wallet;
     final loansState = ref.watch(loanProvider);
@@ -294,9 +297,21 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
                         Expanded(
                           child: _buildActionButton(
                             context,
-                            'Make Contribution',
-                            Icons.payments_outlined,
-                            () => Navigator.push(context, MaterialPageRoute(builder: (context) => DepositScreen(userId: user?.id ?? ''))),
+                            // Salary-deduction members do not pay themselves: their
+                            // employer deducts at source and finance posts the
+                            // remittance. Offering "Make Contribution" led them into
+                            // a payment flow that double-credits money they never
+                            // paid. Show where their contribution actually comes from
+                            // and open their history instead.
+                            onSalaryDeduction ? 'View Contributions' : 'Make Contribution',
+                            onSalaryDeduction ? Icons.receipt_long_outlined : Icons.payments_outlined,
+                            () {
+                              if (onSalaryDeduction) {
+                                Navigator.push(context, MaterialPageRoute(builder: (context) => const MonthlyContributionsScreen()));
+                              } else {
+                                Navigator.push(context, MaterialPageRoute(builder: (context) => DepositScreen(userId: user?.id ?? '')));
+                              }
+                            },
                             color: CoopvestColors.primary,
                           ),
                         ),

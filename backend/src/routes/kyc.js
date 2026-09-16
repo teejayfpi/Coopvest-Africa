@@ -193,6 +193,65 @@ router.post(
         .select('*')
         .single();
       if (error) throw error;
+
+      // A KYC submission completes registration and links the member to their
+      // employer. `profiles.organization_id` is what the registration-fee
+      // exemption and payroll-remittance matching both key on, and nothing was
+      // ever writing it — the app only ever sent the employer *name*, which
+      // cannot be reconciled against reliably.
+      //
+      // Only an id that actually exists is accepted, so a stale or spoofed id
+      // cannot silently grant the fee exemption.
+      const now = new Date().toISOString();
+      const requestedOrgId = employmentInfo?.organization_id ?? null;
+      let organizationId = null;
+      if (requestedOrgId) {
+        const { data: org } = await supabase
+          .from('organizations')
+          .select('id')
+          .eq('id', requestedOrgId)
+          .eq('status', 'active')
+          .maybeSingle();
+        if (org) {
+          organizationId = org.id;
+        } else {
+          logger.warn(
+            `kyc submit: organisation ${requestedOrgId} not found or inactive; not linking profile ${req.user.id}`,
+          );
+        }
+      }
+
+      const { error: profileErr } = await supabase
+        .from('profiles')
+        .update({
+          registration_completed: true,
+          completed_at: now,
+          updated_at: now,
+          ...(organizationId ? { organization_id: organizationId } : {}),
+        })
+        .eq('id', req.user.id);
+      if (profileErr) {
+        // Non-fatal: KYC was saved, just the gate flag failed. Log and continue.
+        logger.error('kyc submit: registration_completed flag update failed:', profileErr.message);
+      }
+
+      // A member who has chosen salary deduction and named an employer has
+      // effectively consented to payroll deduction; record it so the
+      // contribution screen can state it without asking again.
+      if (organizationId) {
+        const { data: existingProfile } = await supabase
+          .from('profiles')
+          .select('contribution_method')
+          .eq('id', req.user.id)
+          .maybeSingle();
+        if (!existingProfile?.contribution_method) {
+          await supabase
+            .from('profiles')
+            .update({ contribution_method: 'payroll', updated_at: now })
+            .eq('id', req.user.id);
+        }
+      }
+
       res.json({ success: true, kyc: data });
     } catch (err) {
       logger.error('kyc submit error:', err);

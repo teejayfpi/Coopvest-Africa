@@ -23,7 +23,7 @@ router.use(requireAdmin);
 router.get('/payment-settings', async (req, res) => {
   try {
     const { data, error } = await supabase
-      .from('settings')
+      .from('system_settings')
       .select('value')
       .eq('key', 'payment_account')
       .maybeSingle();
@@ -116,7 +116,7 @@ router.put('/payment-settings', async (req, res) => {
 
     // Upsert payment settings
     const { data, error } = await supabase
-      .from('settings')
+      .from('system_settings')
       .upsert(
         { key: 'payment_account', value: paymentSettings },
         { onConflict: 'key' }
@@ -141,7 +141,7 @@ router.put('/payment-settings', async (req, res) => {
 router.get('/salary-deduction', async (req, res) => {
   try {
     const { data, error } = await supabase
-      .from('settings')
+      .from('system_settings')
       .select('value')
       .eq('key', 'salary_deduction_global')
       .maybeSingle();
@@ -177,7 +177,7 @@ router.put('/salary-deduction', async (req, res) => {
     }
 
     const { data, error } = await supabase
-      .from('settings')
+      .from('system_settings')
       .upsert(
         { key: 'salary_deduction_global', value: { enabled, updated_at: new Date().toISOString() } },
         { onConflict: 'key' }
@@ -221,7 +221,12 @@ router.get('/organizations', async (req, res) => {
  */
 router.post('/organizations', async (req, res) => {
   try {
-    const { name, deduction_type } = req.body;
+    const {
+      name, code, deduction_type, remittance_cycle,
+      contactEmail: contact_email, address,
+      contact_name, contact_phone,
+      remittance_bank_name, remittance_account_number, remittance_account_name,
+    } = req.body;
 
     if (!name) {
       return res.status(400).json({
@@ -230,13 +235,39 @@ router.post('/organizations', async (req, res) => {
       });
     }
 
+    // A duplicate code would silently break remittance matching, which uses it
+    // as the stable handle finance officers quote on remittance advice.
+    if (code) {
+      const { data: clash } = await supabase
+        .from('organizations')
+        .select('id, name')
+        .eq('code', code)
+        .maybeSingle();
+      if (clash) {
+        return res.status(409).json({
+          success: false,
+          error: `Organisation code "${code}" is already used by ${clash.name}.`,
+        });
+      }
+    }
+
     const { data, error } = await supabase
       .from('organizations')
       .insert({
         name,
+        code: code || null,
         deduction_type: deduction_type || 'manual_upload',
+        // New organisations start disabled: enabling deduction affects real
+        // payroll, so it is an explicit follow-up action.
         deduction_enabled: false,
-        remittance_cycle: 'monthly',
+        remittance_cycle: remittance_cycle || 'monthly',
+        contact_email: contact_email || null,
+        address: address || null,
+        contact_name: contact_name || null,
+        contact_phone: contact_phone || null,
+        remittance_bank_name: remittance_bank_name || null,
+        remittance_account_number: remittance_account_number || null,
+        remittance_account_name: remittance_account_name || null,
       })
       .select()
       .single();
@@ -258,11 +289,25 @@ router.post('/organizations', async (req, res) => {
 router.patch('/organizations/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { deduction_enabled, ...rest } = req.body;
+    const body = req.body || {};
 
-    const updateData = { ...rest };
-    if (typeof deduction_enabled === 'boolean') {
-      updateData.deduction_enabled = deduction_enabled;
+    // Whitelist the writable columns. Spreading `...rest` over the request body
+    // let any caller write any column (including `member_count`), and it made
+    // typos silently succeed as no-ops.
+    const ALLOWED = [
+      'name', 'code', 'type', 'status', 'contact_email', 'address',
+      'deduction_type', 'deduction_enabled', 'remittance_cycle',
+      'contact_name', 'contact_phone',
+      'remittance_bank_name', 'remittance_account_number', 'remittance_account_name',
+      'remittance_reference_hint', 'notes',
+    ];
+    const updateData = {};
+    for (const key of ALLOWED) {
+      if (body[key] !== undefined) updateData[key] = body[key];
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ success: false, error: 'No supported fields supplied' });
     }
 
     const { data, error } = await supabase

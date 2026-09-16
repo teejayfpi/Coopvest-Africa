@@ -586,6 +586,34 @@ class _MonthlyContributionsScreenState
                   ],
                 ),
               ],
+              // Provenance. A salary-deduction entry was never paid in-app — the
+              // employer deducted it and finance posted the remittance — so say
+              // so, otherwise the member cannot reconcile it against a payslip.
+              if (contribution.isSalaryDeduction) ...[
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.business_center_outlined,
+                      size: 14,
+                      color: CoopvestColors.primary,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        contribution.organizationName == null
+                            ? 'Salary deduction via your employer'
+                            : 'Salary deduction via ${contribution.organizationName}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: CoopvestColors.primary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),

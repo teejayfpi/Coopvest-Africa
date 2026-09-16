@@ -49,61 +49,18 @@ class _KYCEmploymentDetailsScreenState
     'Lagos', 'Abuja FCT', 'Rivers', 'Oyo', 'Kano', 'Enugu', 'Delta', 'Other'
   ];
 
-  // Pre-approved organizations
-  final List<Map<String, dynamic>> _preApprovedOrganizations = [
-    {
-      'label': 'Government',
-      'icon': Icons.account_balance,
-      'organizations': [
-        'Federal Government Ministries, Departments & Agencies (MDAs)',
-        'State Government MDAs',
-        'Local Government Councils',
-      ]
-    },
-    {
-      'label': 'Education',
-      'icon': Icons.school,
-      'organizations': [
-        'Federal Universities',
-        'State Universities',
-        'Private Universities',
-        'Federal Teaching Hospitals',
-        'State Teaching Hospitals',
-        'Polytechnics',
-        'Colleges of Education',
-      ]
-    },
-    {
-      'label': 'Health',
-      'icon': Icons.local_hospital,
-      'organizations': [
-        'Federal Health Institutions',
-        'State Health Institutions',
-        'Private Hospitals',
-      ]
-    },
-    {
-      'label': 'Banking & Finance',
-      'icon': Icons.monetization_on,
-      'organizations': [
-        'Commercial Banks',
-        'Microfinance Banks',
-        'Insurance Companies',
-        'Asset Management Companies',
-      ]
-    },
-    {
-      'label': 'Private Sector',
-      'icon': Icons.business,
-      'organizations': [
-        'Registered Corporate Organizations',
-        'Faith-Based Institutions',
-        'Approved Private Companies',
-      ]
-    },
-  ];
-
-  List<String> _filteredOrganizations = [];
+  // Partner organisations are fetched from the backend so a new employer can be
+  // added without an app release. This replaced a hardcoded list of ~18 generic
+  // strings ("Federal Universities", "Commercial Banks", …) that could never
+  // match a real `organizations` row, so the member's employer was recorded as
+  // free text with no organisation id — and nothing could ever be remitted
+  // against it.
+  List<Organization> _organizations = [];
+  bool _organizationsLoading = true;
+  String? _organizationsError;
+  /// Organisation the member picked, tracked by id as well as name so a payroll
+  /// remittance can be matched to them later.
+  String? _selectedOrganizationId;
   String _searchQuery = '';
 
   @override
@@ -119,11 +76,7 @@ class _KYCEmploymentDetailsScreenState
     _yearsOfEmploymentController = TextEditingController();
     _lgaController = TextEditingController();
     _organizationSearchController.addListener(_onOrganizationSearch);
-
-    _filteredOrganizations = _preApprovedOrganizations
-        .expand((cat) => cat['organizations'] as List)
-        .cast<String>()
-        .toList();
+    _loadOrganizations();
 
     // Make sure we have the member's existing KYC loaded so we can pre-fill
     // already-saved data and skip steps that are already complete.
@@ -230,22 +183,49 @@ class _KYCEmploymentDetailsScreenState
     super.dispose();
   }
 
+  /// Load the enrolled partner organisations once, at screen entry.
+  ///
+  /// A failure leaves the list empty and surfaces a retry rather than silently
+  /// showing a stale hardcoded list — a member must not be able to pick an
+  /// employer that is not actually enrolled, because their contributions could
+  /// never be remitted.
+  Future<void> _loadOrganizations() async {
+    setState(() {
+      _organizationsLoading = true;
+      _organizationsError = null;
+    });
+    try {
+      final orgs = await ref.read(kycProvider.notifier).loadOrganizations();
+      if (!mounted) return;
+      setState(() {
+        _organizations = orgs;
+        _organizationsLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _organizationsLoading = false;
+        _organizationsError = 'Could not load organizations. Please try again.';
+      });
+    }
+  }
+
   void _onOrganizationSearch() {
+    // The full list is small and already in memory, so filtering is local and
+    // instant; a network round-trip per keystroke would add latency for no
+    // benefit and would fail offline mid-KYC.
     setState(() {
       _searchQuery = _organizationSearchController.text.toLowerCase();
-      if (_searchQuery.isEmpty) {
-        _filteredOrganizations = _preApprovedOrganizations
-            .expand((cat) => cat['organizations'] as List)
-            .cast<String>()
-            .toList();
-      } else {
-        _filteredOrganizations = _preApprovedOrganizations
-            .expand((cat) => cat['organizations'] as List)
-            .cast<String>()
-            .where((org) => org.toLowerCase().contains(_searchQuery))
-            .toList();
-      }
     });
+  }
+
+  /// Organisations matching the current search text.
+  List<Organization> get _filteredOrganizations {
+    if (_searchQuery.isEmpty) return _organizations;
+    return _organizations.where((o) {
+      return o.name.toLowerCase().contains(_searchQuery) ||
+          (o.code ?? '').toLowerCase().contains(_searchQuery);
+    }).toList();
   }
 
   void _selectDateOfBirth() async {
@@ -323,6 +303,9 @@ class _KYCEmploymentDetailsScreenState
     // Update KYC state
     ref.read(kycProvider.notifier).updateEmploymentDetails(
       employmentType: _selectedEmploymentType,
+      // The id is what lets a payroll remittance be matched to this member; the
+      // name alone cannot be reconciled against reliably.
+      organizationId: _selectedOrganizationId,
       organizationName: _selectedOrganization,
       jobTitle: _jobTitleController.text,
       monthlyIncomeRange: _selectedIncomeRange,
@@ -670,29 +653,213 @@ class _KYCEmploymentDetailsScreenState
                 ),
               ),
               const SizedBox(height: 12),
-              Expanded(
-                child: ListView.builder(
-                  itemCount: _filteredOrganizations.length,
-                  itemBuilder: (context, index) {
-                    final org = _filteredOrganizations[index];
-                    return ListTile(
-                      title: Text(org, style: TextStyle(color: context.textPrimary)),
-                      onTap: () {
-                        setState(() {
-                          _selectedOrganization = org;
-                        });
-                        Navigator.pop(context);
-                      },
-                    );
-                  },
-                ),
-              ),
+              Expanded(child: _buildOrganizationList(setModalState)),
             ],
           ),
         ),
       ),
     );
   }
+
+  Widget _buildOrganizationList(StateSetter setModalState) {
+    if (_organizationsLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_organizationsError != null) {
+      return _buildOrganizationMessage(
+        icon: Icons.cloud_off,
+        title: 'Could not load organizations',
+        message: _organizationsError!,
+        actionLabel: 'Try again',
+        onAction: () {
+          setModalState(() {});
+          _loadOrganizations();
+        },
+      );
+    }
+
+    if (_organizations.isEmpty) {
+      return _buildOrganizationMessage(
+        icon: Icons.business_outlined,
+        title: 'No organizations enrolled yet',
+        message:
+            'Your employer is not yet set up for salary deduction. Request them below and we will contact them.',
+        actionLabel: 'Request my employer',
+        onAction: () => _promptRequestApproval(),
+      );
+    }
+
+    final results = _filteredOrganizations;
+
+    if (results.isEmpty) {
+      // The member's employer is not enrolled. Previously there was nothing to
+      // do here at all, and the "request approval" call went to an endpoint that
+      // did not exist — so the member was stuck. Now the search text they typed
+      // becomes the request.
+      final typed = _organizationSearchController.text.trim();
+      return _buildOrganizationMessage(
+        icon: Icons.search_off,
+        title: 'No match found',
+        message: typed.isEmpty
+            ? 'No organizations match your search.'
+            : '"$typed" is not enrolled yet. You can request them below.',
+        actionLabel: typed.isEmpty ? null : 'Request "$typed"',
+        onAction: typed.isEmpty ? null : () => _promptRequestApproval(typed),
+      );
+    }
+
+    return ListView.builder(
+      itemCount: results.length,
+      itemBuilder: (context, index) {
+        final org = results[index];
+        return ListTile(
+          title: Text(org.name, style: TextStyle(color: context.textPrimary)),
+          subtitle: org.code == null || org.code!.isEmpty
+              ? null
+              : Text(
+                  org.code!,
+                  style: TextStyle(color: context.textSecondary, fontSize: 12),
+                ),
+          onTap: () {
+            setState(() {
+              _selectedOrganization = org.name;
+              _selectedOrganizationId = org.id;
+            });
+            Navigator.pop(context);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildOrganizationMessage({
+    required IconData icon,
+    required String title,
+    required String message,
+    String? actionLabel,
+    VoidCallback? onAction,
+  }) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 44, color: context.textSecondary),
+            const SizedBox(height: 12),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: context.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: context.textSecondary, height: 1.4),
+            ),
+            if (actionLabel != null && onAction != null) ...[
+              const SizedBox(height: 20),
+              PrimaryButton(label: actionLabel, onPressed: onAction),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Ask us to enrol an employer.
+  ///
+  /// Defaults to whatever the member typed in the search box, since they have
+  /// already told us who their employer is by trying to find them.
+  Future<void> _promptRequestApproval([String? prefilled]) async {
+    final controller = TextEditingController(
+      text: prefilled ?? _organizationSearchController.text.trim(),
+    );
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Request your employer'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Tell us who you work for and we will contact them about joining '
+              'Coopvest. Salary deduction can be switched on once they are enrolled.',
+              style: TextStyle(color: context.textSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Employer name',
+                hintText: 'e.g. Lagos State Ministry of Finance',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Send request'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+    final name = controller.text.trim();
+    if (name.isEmpty) return;
+
+    try {
+      final result =
+          await ref.read(kycProvider.notifier).requestOrganizationApproval(name);
+      if (!mounted) return;
+
+      final status = result['status'];
+      if (status == 'enrolled') {
+        // The employer turned out to be enrolled after all — refresh so the
+        // member can simply pick them instead of waiting on a needless request.
+        await _loadOrganizations();
+        if (!mounted) return;
+        _showSnack(
+          result['message']?.toString() ??
+              '$name is already enrolled — you can select it now.',
+        );
+      } else {
+        if (!mounted) return;
+        _showSnack(
+          result['message']?.toString() ??
+              'Request received. We will contact your employer.',
+        );
+        if (mounted) Navigator.pop(context);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      _showSnack('Could not send your request. Please try again.', isError: true);
+    }
+  }
+
+  void _showSnack(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? CoopvestColors.error : null,
+      ),
+    );
+  }
+
 
   Widget _buildProgressStep(int step, bool isCompleted) {
     return Container(

@@ -186,7 +186,13 @@ class _AuthGuardState extends ConsumerState<AuthGuard> {
     // KYC, and the admin then verifies KYC + payment together. Gating on
     // admin approval here would let unpaid members onto the dashboard while
     // their KYC awaits review.
-    if (!user.registrationFeePaid) {
+    // Salary-deduction members are exempt: their fee is recovered from salary by
+    // their employer and remitted with their contributions, so sending them to
+    // the in-app payment screen would demand money through a channel that isn't
+    // theirs. `hasSettledRegistrationFee` covers paid *and* exempt; the backend
+    // derives the exemption in its activation gate, so this routes on exactly
+    // the decision the server enforces rather than a second, client-side rule.
+    if (!user.hasSettledRegistrationFee) {
       return _ActivationStage.feePending;
     }
     return _ActivationStage.active;

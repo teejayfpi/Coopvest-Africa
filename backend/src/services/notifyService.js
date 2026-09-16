@@ -21,6 +21,7 @@
 
 const logger = require('../utils/logger');
 const supabase = require('../config/supabase');
+const alertService = require('./alertService');
 
 // ── Firebase Admin SDK (lazy-init so the server starts without credentials) ──
 let _firebaseApp = null;
@@ -600,6 +601,109 @@ async function notifyPaymentProofInfoRequested({ profileId, message, paymentProo
   logger.info(`Payment proof info request notification sent to ${profileId}`);
 }
 
+/**
+ * Tell admins a member is waiting for their employer to be enrolled.
+ *
+ * Without this the request was only visible by inspecting the database, so a
+ * member could be told "we'll be in touch" and never be contacted. Mirrors the
+ * admin-notification pattern used for withdrawals (in-app + push to every
+ * admin, plus an email alert that never blocks the request itself).
+ */
+async function notifyAdminsOrganizationApprovalRequest({ profileId, memberName, organizationName }) {
+  const title = 'Organization Approval Requested';
+  const body = `${memberName} has asked to contribute by salary deduction and needs "${organizationName}" enrolled as a partner organisation.`;
+
+  const { data: admins } = await supabase
+    .from('profiles')
+    .select('id, email')
+    .in('role', ['admin', 'super_admin', 'superadmin', 'staff', 'operator']);
+
+  if (!admins || admins.length === 0) {
+    logger.info('notifyAdminsOrganizationApprovalRequest: no admin profiles found');
+    return;
+  }
+
+  const profileIds = admins.map((a) => a.id);
+  const adminEmails = admins.map((a) => a.email).filter(Boolean);
+
+  await broadcast({
+    profileIds,
+    channels: ['in_app', 'push'],
+    title,
+    body,
+    type: 'organization_approval',
+  });
+
+  if (adminEmails.length > 0) {
+    await alertService.sendEmailAlert({
+      title: `🏢 ${title}`,
+      message: `${body}<br><br>Member ID: <code>${profileId}</code>`,
+      auditId: `org-approval-${profileId}`,
+      userId: profileId,
+      riskLevel: 'INFO',
+      timestamp: new Date().toISOString(),
+      metadata: { organizationName },
+    }).catch((err) => logger.warn('Org approval admin email failed (non-fatal):', err.message));
+  }
+
+  logger.info(`Organization approval notification sent to ${profileIds.length} admin(s)`);
+}
+
+/**
+ * Tell a member their salary-deduction contribution has been posted.
+ *
+ * This is their money arriving without them doing anything, so silence would
+ * read as "my employer deducted but nothing happened". States the month and the
+ * employer so the member can tie it to a payslip.
+ */
+async function notifySalaryDeductionContributionPosted({
+  profileId,
+  amount,
+  contributionMonth,
+  organizationName,
+  hasRegistrationFee = false,
+}) {
+  const amountFmt = `₦${Number(amount || 0).toLocaleString()}`;
+  const monthLabel = formatMonthLabel(contributionMonth);
+  const via = organizationName ? ` via ${organizationName}` : ' via salary deduction';
+
+  const title = 'Salary Deduction Contribution Posted';
+  const body = `Your${monthLabel ? ` ${monthLabel}` : ''} contribution of ${amountFmt}${via} has been posted to your account.`;
+  const bodyWithFee = hasRegistrationFee
+    ? `${body} Your registration fee has also been settled through payroll deduction.`
+    : body;
+
+  const type = 'contribution_posted';
+  const data = {
+    contributionMonth: contributionMonth || '',
+    amount: String(amount || 0),
+    organizationName: organizationName || '',
+    source: 'salary_deduction',
+  };
+
+  await Promise.all([
+    sendInApp({ profileId, title, body: bodyWithFee, type, priority: 'normal' }),
+    pushToProfile({ profileId, title, body: bodyWithFee, type, data }),
+  ]);
+  logger.info(`Salary deduction posted notification sent to ${profileId}`);
+}
+
+/** 'YYYY-MM' → 'September 2026'. Returns '' for anything unparseable. */
+function formatMonthLabel(contributionMonth) {
+  if (!contributionMonth) return '';
+  const direct = /^(\d{4})-(\d{2})$/.exec(String(contributionMonth));
+  if (direct) {
+    const d = new Date(Number(direct[1]), Number(direct[2]) - 1, 1);
+    if (!Number.isNaN(d.getTime())) {
+      return d.toLocaleString('en-NG', { month: 'long', year: 'numeric' });
+    }
+    return '';
+  }
+  const parsed = new Date(contributionMonth);
+  if (Number.isNaN(parsed.getTime())) return '';
+  return parsed.toLocaleString('en-NG', { month: 'long', year: 'numeric' });
+}
+
 module.exports = {
   sendInApp,
   sendEmail,
@@ -622,4 +726,7 @@ module.exports = {
   notifyPaymentProofApproved,
   notifyPaymentProofRejected,
   notifyPaymentProofInfoRequested,
+  // Salary deduction / organisation remittance
+  notifyAdminsOrganizationApprovalRequest,
+  notifySalaryDeductionContributionPosted,
 };
