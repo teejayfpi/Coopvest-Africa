@@ -77,7 +77,11 @@ class _ManageContributionPlanScreenState
           ? const Center(
               child:
                   CircularProgressIndicator(color: CoopvestColors.primary))
-          : RefreshIndicator(
+          : planState.plan == null
+              ? _LoadFailed(onRetry: () => ref
+                  .read(contributionPlanProvider.notifier)
+                  .load())
+              : RefreshIndicator(
               color: CoopvestColors.primary,
               onRefresh: () =>
                   ref.read(contributionPlanProvider.notifier).load(),
@@ -126,7 +130,9 @@ class _CurrentAmountCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final amount = plan?.currentMonthlyAmount ?? 5000.0;
+    // Never fall back to a guessed amount: showing ₦5,000 when the real plan is
+    // ₦10,000 is worse than showing that we don't know it yet.
+    final amount = plan?.currentMonthlyAmount;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
@@ -154,7 +160,7 @@ class _CurrentAmountCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            '₦${amount.formatNumber()}',
+            amount == null ? '—' : '₦${amount.formatNumber()}',
             style: const TextStyle(
               color: Colors.white,
               fontSize: 36,
@@ -325,6 +331,53 @@ class _PendingReductionBanner extends ConsumerWidget {
 }
 
 // ---------------------------------------------------------------------------
+// Plan load failure
+// ---------------------------------------------------------------------------
+class _LoadFailed extends StatelessWidget {
+  final VoidCallback onRetry;
+  const _LoadFailed({required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.cloud_off,
+                size: 56, color: CoopvestColors.warning),
+            const SizedBox(height: 16),
+            Text(
+              'Could not load your contribution plan',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: context.textPrimary,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'We could not fetch your current monthly contribution, so it is '
+              'hidden rather than shown incorrectly.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: context.textSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 20),
+            FilledButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Try Again'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Policy info box
 // ---------------------------------------------------------------------------
 class _PolicyInfoBox extends StatelessWidget {
@@ -410,7 +463,17 @@ class _IncreaseCard extends ConsumerWidget {
   }
 
   void _showIncreaseSheet(BuildContext context, WidgetRef ref) {
-    final current = plan?.currentMonthlyAmount ?? 5000.0;
+    // Without a loaded plan we cannot compute valid presets, and a guessed
+    // amount would offer the member their own current figure. Bail out.
+    final current = plan?.currentMonthlyAmount;
+    if (current == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text(
+            'Your contribution plan could not be loaded. Pull down to retry.'),
+        backgroundColor: CoopvestColors.error,
+      ));
+      return;
+    }
     final ctrl = TextEditingController();
     double? selected;
     final presets = _presetsAbove(current);
@@ -544,7 +607,15 @@ class _ReductionCard extends ConsumerWidget {
   }
 
   void _showReductionSheet(BuildContext context, WidgetRef ref) {
-    final current = plan?.currentMonthlyAmount ?? 5000.0;
+    final current = plan?.currentMonthlyAmount;
+    if (current == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text(
+            'Your contribution plan could not be loaded. Pull down to retry.'),
+        backgroundColor: CoopvestColors.error,
+      ));
+      return;
+    }
     final ctrl = TextEditingController();
     double? selected;
     final presets = _presetsBelow(current);

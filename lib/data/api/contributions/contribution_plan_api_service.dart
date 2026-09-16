@@ -1,5 +1,4 @@
 import 'package:dio/dio.dart';
-import '../../../core/utils/utils.dart';
 
 /// Model for the member's current contribution plan
 class ContributionPlan {
@@ -13,16 +12,37 @@ class ContributionPlan {
     this.pendingReduction,
   });
 
+  /// Parse the plan payload.
+  ///
+  /// `current_monthly_amount` is required: defaulting it to ₦5,000 when the
+  /// field was missing produced a display that contradicted the real plan, so
+  /// a malformed payload now throws instead.
+  ///
+  /// Values are parsed defensively: PostgREST returns `numeric` columns as JSON
+  /// strings (e.g. `"10000.00"`), so a bare `as num` cast throws on a perfectly
+  /// valid response.
   factory ContributionPlan.fromJson(Map<String, dynamic> json) {
+    final amount = _toDouble(json['current_monthly_amount']);
+    if (amount == null) {
+      throw const FormatException(
+        'Contribution plan response is missing current_monthly_amount',
+      );
+    }
     return ContributionPlan(
-      currentMonthlyAmount:
-          (json['current_monthly_amount'] as num?)?.toDouble() ?? 5000.0,
-      minimumAmount: (json['minimum_amount'] as num?)?.toDouble() ?? 5000.0,
+      currentMonthlyAmount: amount,
+      minimumAmount: _toDouble(json['minimum_amount']) ?? 5000.0,
       pendingReduction: json['pending_reduction'] != null
           ? PendingReductionRequest.fromJson(
               json['pending_reduction'] as Map<String, dynamic>)
           : null,
     );
+  }
+
+  /// Accepts num or numeric string; returns null for anything unparseable.
+  static double? _toDouble(Object? value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value.trim());
+    return null;
   }
 }
 
@@ -45,8 +65,8 @@ class PendingReductionRequest {
   factory PendingReductionRequest.fromJson(Map<String, dynamic> json) {
     return PendingReductionRequest(
       id: json['id'] as String? ?? '',
-      requestedAmount:
-          (json['requested_amount'] as num?)?.toDouble() ?? 5000.0,
+      // PostgREST returns numeric as a JSON string; `as num` would throw.
+      requestedAmount: ContributionPlan._toDouble(json['requested_amount']) ?? 0,
       requestedAt: DateTime.parse(
           json['requested_at'] as String? ?? DateTime.now().toIso8601String()),
       effectiveDate: DateTime.parse(json['effective_date'] as String? ??
@@ -71,14 +91,15 @@ class ContributionPlanApiService {
   ContributionPlanApiService(this._dio);
 
   /// Get the member's current contribution plan
+  ///
+  /// Throws on failure rather than inventing a figure. This previously
+  /// swallowed every error and returned a fabricated ₦5,000, so a member whose
+  /// plan is ₦10,000 saw "Current Monthly Contribution ₦5,000" and was offered
+  /// ₦10,000 as an "increase" — i.e. their own current amount. A wrong money
+  /// figure must surface as an error, never as plausible-looking data.
   Future<ContributionPlan> getContributionPlan() async {
-    try {
-      final response = await _dio.get('/contributions/plan');
-      return ContributionPlan.fromJson(response.data as Map<String, dynamic>);
-    } catch (e) {
-      logger.w('Could not fetch contribution plan from API, using defaults: $e');
-      return const ContributionPlan(currentMonthlyAmount: 5000.0);
-    }
+    final response = await _dio.get('/contributions/plan');
+    return ContributionPlan.fromJson(response.data as Map<String, dynamic>);
   }
 
   /// Increase monthly contribution — takes effect immediately

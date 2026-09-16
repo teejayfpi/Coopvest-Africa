@@ -94,24 +94,13 @@ class ContributionPlanNotifier
       return true;
     } catch (e) {
       logger.e('Increase contribution error: $e');
-      // Apply optimistically in UI even if API is unreachable (dev mode)
-      final current = state.plan;
-      if (current != null) {
-        state = state.copyWith(
-          isSaving: false,
-          plan: ContributionPlan(
-            currentMonthlyAmount: newAmount,
-            minimumAmount: current.minimumAmount,
-            pendingReduction: current.pendingReduction,
-          ),
-          successMessage:
-              'Your monthly contribution has been increased to ₦${_fmt(newAmount)}.',
-        );
-        return true;
-      }
+      // Report the failure. This previously applied the increase "optimistically"
+      // and showed a success message even when the request never reached the
+      // server, so the member believed their contribution had changed when the
+      // plan was untouched — and no admin was ever notified.
       state = state.copyWith(
         isSaving: false,
-        error: 'Failed to update contribution. Please try again.',
+        error: _errorText(e, 'Could not update your contribution. Please try again.'),
       );
       return false;
     }
@@ -167,28 +156,15 @@ class ContributionPlanNotifier
       return true;
     } catch (e) {
       logger.e('Request reduction error: $e');
-      // Optimistic update for dev mode
-      final current = state.plan;
-      final effectiveDate = DateTime.now().add(const Duration(days: 90));
-      final pending = PendingReductionRequest(
-        id: 'local_${DateTime.now().millisecondsSinceEpoch}',
-        requestedAmount: newAmount,
-        requestedAt: DateTime.now(),
-        effectiveDate: effectiveDate,
-        status: 'pending',
-      );
+      // Report the failure rather than fabricating a local "pending" request:
+      // the old optimistic path invented an id and effective date, told the
+      // member their reduction was submitted, and left no server record — so
+      // they waited three months for a change that was never requested.
       state = state.copyWith(
         isSaving: false,
-        plan: ContributionPlan(
-          currentMonthlyAmount: current?.currentMonthlyAmount ?? currentAmount,
-          minimumAmount: current?.minimumAmount ?? minimumContribution,
-          pendingReduction: pending,
-        ),
-        successMessage:
-            'Reduction request submitted. Your contribution will reduce '
-            'to ₦${_fmt(newAmount)} from ${_fmtDate(effectiveDate)}.',
+        error: _errorText(e, 'Could not submit your reduction request. Please try again.'),
       );
-      return true;
+      return false;
     }
   }
 
@@ -249,13 +225,13 @@ class ContributionPlanNotifier
         (m) => '${m[1]},',
       );
 
-  String _fmtDate(DateTime d) =>
-      '${_monthName(d.month)} ${d.year}';
-
-  String _monthName(int m) => const [
-        '', 'January', 'February', 'March', 'April', 'May', 'June',
-        'July', 'August', 'September', 'October', 'November', 'December'
-      ][m];
+  /// Prefer the server's message (ApiException carries it) over a generic one,
+  /// so a policy rejection such as REDUCTION_BLOCKED_ACTIVE_LOAN reaches the
+  /// member instead of "please try again".
+  String _errorText(Object e, String fallback) {
+    if (e is ApiException && e.message.isNotEmpty) return e.message;
+    return fallback;
+  }
 }
 
 /// The contribution plan provider
