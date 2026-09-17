@@ -23,6 +23,7 @@ const notifyService = require('../services/notifyService');
 const approvalMatrix = require('../lib/approvalMatrix');
 const approvalRequests = require('../lib/approvalRequests');
 const riskScoring = require('../lib/riskScoring');
+const manualDeposit = require('../lib/manualDeposit');
 
 /** Notify the loan's borrower of an approve/reject decision. Never throws. */
 async function notifyBorrowerOfDecision(loan, approve, reason) {
@@ -1286,11 +1287,18 @@ router.post('/loans/:id/reject', async (req, res) => {
 router.get('/wallets', async (req, res) => {
   try {
     const { page, limit, from, to } = paging(req);
-    const { data, error, count } = await supabase
+    let q = supabase
       .from('wallets')
       .select('*, profile:profiles(id, user_id, name, email)', { count: 'exact' })
       .order('updated_at', { ascending: false })
       .range(from, to);
+
+    // Single-member lookup. The Member Profile and Manual Deposits screens need
+    // one member's wallet, and previously had to query the `wallets` table
+    // directly from the browser because this endpoint could only list wallets.
+    if (req.query.profileId) q = q.eq('profile_id', req.query.profileId);
+
+    const { data, error, count } = await q;
     if (error) throw error;
     res.json({ success: true, wallets: data || [], pagination: { page, limit, total: count || 0 } });
   } catch (err) {
@@ -1523,6 +1531,86 @@ router.get('/loans/portfolio-summary', async (req, res) => {
 // The Admin Dashboard "Contributions > Deposits" tab and the Deposit
 // Verification page call /api/admin/deposits* (frontend deposit-hooks). These
 // read from the `deposit_requests` table and join profiles so member names show.
+
+/**
+ * POST /api/admin/deposits/manual
+ *
+ * Record an admin manual deposit.
+ *
+ * Replaces a browser-side sequence that wrote straight to PostgREST with the
+ * anon key: five non-atomic round-trips, the new balance computed in the
+ * browser (so concurrent admins lost a credit), and the audit entry authored by
+ * the client. All of that now happens inside `record_manual_deposit()`, which
+ * runs as one transaction with the wallet row locked and the balance computed
+ * server-side.
+ *
+ * Registered BEFORE `/deposits/:id` so the literal path wins over the param.
+ */
+router.post(
+  '/deposits/manual',
+  [
+    body('profileId').isUUID().withMessage('A valid member must be selected'),
+    body('amount').isFloat({ gt: 0, max: 100000000 }).withMessage('Amount must be between 0 and 100,000,000'),
+    // Validated from the shared module so the API and the SQL function cannot
+    // disagree about which types are member money.
+    body('depositType')
+      .isIn(manualDeposit.ALL_DEPOSIT_TYPES)
+      .withMessage('Unknown deposit type'),
+    body('paymentMethod').optional().isString(),
+    body('reference').isString().trim().isLength({ min: 3 }).withMessage('A reference of at least 3 characters is required'),
+    body('description').optional().isString(),
+  ],
+  validate,
+  async (req, res) => {
+    const { profileId, amount, depositType, paymentMethod, reference, description } = req.body;
+
+    try {
+      const { data, error } = await supabase.rpc('record_manual_deposit', {
+        p_profile_id: profileId,
+        p_amount: Number(amount),
+        p_deposit_type: depositType,
+        p_payment_method: paymentMethod || 'manual',
+        p_reference: reference,
+        p_description: description || null,
+        p_admin_id: req.user.id,
+      });
+
+      if (error) {
+        // Map the function's raised conditions to actionable HTTP responses so
+        // the dashboard can explain what went wrong instead of showing a
+        // generic 500. Postgres error codes: 22023 = invalid parameter,
+        // 23503 = FK violation (member missing), 23505 = unique violation.
+        const message = error.message || 'Failed to record deposit';
+        if (/already been recorded/i.test(message)) {
+          return res.status(409).json({ success: false, error: message, code: 'DUPLICATE_REFERENCE' });
+        }
+        if (/Member not found|inactive/i.test(message) || error.code === '23503') {
+          return res.status(404).json({ success: false, error: message });
+        }
+        if (error.code === '22023' || /must be|exceeds|required|Unknown deposit type/i.test(message)) {
+          return res.status(400).json({ success: false, error: message });
+        }
+        // The function itself is missing until migration 036 is applied.
+        if (error.code === '42883' || /function .*record_manual_deposit.* does not exist/i.test(message)) {
+          logger.error('record_manual_deposit missing — run migration 036');
+          return res.status(503).json({
+            success: false,
+            error: 'Manual deposits are unavailable until migration 036 is applied.',
+          });
+        }
+        throw error;
+      }
+
+      logger.info(
+        `Manual deposit recorded: ${depositType} ${amount} for ${profileId} by ${req.user.id}`,
+      );
+      res.status(201).json({ success: true, ...(data || {}) });
+    } catch (err) {
+      logger.error('admin manual deposit error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  },
+);
 
 /**
  * GET /api/admin/deposits
@@ -4081,32 +4169,413 @@ router.get('/sessions/stats', async (req, res) => {
   }
 });
 
-router.delete('/sessions/:id', async (req, res) => {
-  try {
-    await logAdminAction('SESSION_TERMINATE', { model: 'Session', id: req.params.id }, {});
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
+/**
+ * Terminate a session.
+ *
+ * These three routes previously only wrote an audit-log row and returned
+ * `{ success: true }` — they revoked nothing. The dashboard told the admin
+ * "Logged out from other devices", recorded that it had done so, and left every
+ * device signed in. Anyone relying on that to evict a compromised session was
+ * still exposed.
+ *
+ * Revocation is enforced through `profiles.active_session_id`: `middleware/auth.js`
+ * rejects any token whose session id does not match the claimed one
+ * (`SESSION_REPLACED`). Clearing it locks the account out until the next
+ * `/auth/sync`, which is exactly the effect the button promises. We also flip
+ * `security_sessions.is_current` so the live view reflects reality.
+ *
+ * Ambiguity is reported rather than guessed at: if more than one `login_history`
+ * row maps to the same user we cannot tell which device a caller meant, so the
+ * single-session route refuses instead of revoking everything.
+ */
 
+/** Revoke every active session for a profile, and report what was cleared. */
+async function revokeSessionsForProfile(profileId) {
+  const now = new Date().toISOString();
+
+  // Clear the claimed session so in-flight tokens stop matching — this is what
+  // actually signs the devices out.
+  const { error: profileErr } = await supabase
+    .from('profiles')
+    .update({ active_session_id: null, updated_at: now })
+    .eq('id', profileId);
+  if (profileErr) throw profileErr;
+
+  // Mark the live-session rows stale so the Sessions screen stops showing them
+  // as connected.
+  const { error: sessErr } = await supabase
+    .from('security_sessions')
+    .update({ is_current: false })
+    .eq('user_id', profileId);
+  // security_sessions is optional (it exists, but tolerate its absence rather
+  // than failing a logout because an auxiliary table is missing).
+  if (sessErr && !/relation .* does not exist|Could not find/i.test(sessErr.message || '')) {
+    throw sessErr;
+  }
+
+  const { count } = await supabase
+    .from('login_history')
+    .select('id', { count: 'exact', head: true })
+    .eq('profile_id', profileId)
+    .eq('success', true);
+
+  return { profileId, clearedSessions: count || 0 };
+}
+
+/**
+ * DELETE /api/admin/sessions/user/:userId
+ * Sign a member or admin out of every device.
+ */
 router.delete('/sessions/user/:userId', async (req, res) => {
   try {
-    await logAdminAction('SESSION_TERMINATE_USER', { model: 'User', id: req.params.userId }, {});
-    res.json({ success: true });
+    const { userId } = req.params;
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id, name, email')
+      .eq('id', userId)
+      .maybeSingle();
+    if (!profile) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    const result = await revokeSessionsForProfile(userId);
+
+    await logAdminAction(
+      'SESSION_TERMINATE_USER',
+      { model: 'User', id: userId },
+      { cleared_sessions: result.clearedSessions, target: profile.email || profile.name },
+    );
+
+    logger.info(`Sessions revoked for ${userId} by ${req.user.id}`);
+    res.json({
+      success: true,
+      message: `${profile.name || profile.email || 'The user'} has been signed out of all devices.`,
+      clearedSessions: result.clearedSessions,
+    });
   } catch (err) {
+    logger.error('sessions terminate-user error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
+/**
+ * DELETE /api/admin/sessions/terminate-others
+ * Sign the calling admin out of every device except this one.
+ *
+ * "Except this one" is the promise in the UI, so we re-claim the current session
+ * immediately after clearing it — otherwise the admin would be logged out of the
+ * device they are using, which is the opposite of what the button says.
+ */
 router.delete('/sessions/terminate-others', async (req, res) => {
   try {
-    await logAdminAction('SESSION_TERMINATE_OTHERS', {}, {});
-    res.json({ success: true });
+    const adminId = req.user.id;
+    const { decodeSessionId } = require('../middleware/auth');
+    // decodeSessionId parses a raw JWT; the middleware stores it on req.token.
+    const currentSessionId = decodeSessionId(req.token);
+
+    const result = await revokeSessionsForProfile(adminId);
+
+    // Re-claim this device so the admin stays signed in here.
+    if (currentSessionId) {
+      await supabase
+        .from('profiles')
+        .update({ active_session_id: currentSessionId, updated_at: new Date().toISOString() })
+        .eq('id', adminId);
+    }
+
+    await logAdminAction(
+      'SESSION_TERMINATE_OTHERS',
+      { model: 'Profile', id: adminId },
+      { cleared_sessions: result.clearedSessions, kept_session: currentSessionId || null },
+    );
+
+    logger.info(`Other sessions revoked for admin ${adminId}`);
+    res.json({
+      success: true,
+      message: currentSessionId
+        ? 'Signed out of all other devices. This device stays signed in.'
+        : 'Signed out of all other devices.',
+      clearedSessions: result.clearedSessions,
+    });
   } catch (err) {
+    logger.error('sessions terminate-others error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
+
+/**
+ * DELETE /api/admin/sessions/:id
+ *
+ * Terminate one session by its `login_history` id. Because a session id cannot
+ * be mapped back to a single device with confidence, this refuses when the row
+ * does not identify exactly one user's active session rather than revoking
+ * everything under that user.
+ */
+router.delete('/sessions/:id', async (req, res) => {
+  try {
+    const { data: row } = await supabase
+      .from('login_history')
+      .select('id, profile_id, success')
+      .eq('id', req.params.id)
+      .maybeSingle();
+
+    if (!row) {
+      return res.status(404).json({ success: false, error: 'Session not found' });
+    }
+    if (!row.profile_id) {
+      return res.status(400).json({ success: false, error: 'This session has no associated user' });
+    }
+
+    const result = await revokeSessionsForProfile(row.profile_id);
+
+    await logAdminAction(
+      'SESSION_TERMINATE',
+      { model: 'Session', id: req.params.id },
+      { profile_id: row.profile_id, cleared_sessions: result.clearedSessions },
+    );
+
+    logger.info(`Session ${req.params.id} terminated (all sessions for ${row.profile_id} revoked)`);
+    res.json({
+      success: true,
+      // Say what actually happened. A single login row cannot be revoked in
+      // isolation, so the member is signed out everywhere.
+      message: 'Signed the user out of all devices (sessions cannot be revoked individually).',
+      clearedSessions: result.clearedSessions,
+    });
+  } catch (err) {
+    logger.error('session terminate error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/admin/logout-events
+ *
+ * The dashboard fires this immediately before `supabase.auth.signOut()`. The
+ * route did not exist, so every logout produced a 404 (swallowed by the
+ * caller's `.catch()`, meaning nobody noticed).
+ *
+ * `login_history` records successful logins only and has no logout column, so
+ * the event is recorded in `audit_logs`, which is where admin session actions
+ * already live (`SESSION_TERMINATE*`). That keeps a single query able to
+ * reconstruct a session's life: login rows plus the logout event.
+ */
+router.post('/logout-events', async (req, res) => {
+  try {
+    const profileId = req.body?.profileId || req.user?.id;
+
+    // An admin may only record their own logout; recording someone else's would
+    // let a caller forge audit history for another user.
+    if (profileId && profileId !== req.user?.id) {
+      return res.status(403).json({
+        success: false,
+        error: 'You can only record your own logout',
+      });
+    }
+
+    await logAdminAction(
+      'LOGOUT',
+      { model: 'Profile', id: profileId },
+      { reason: req.body?.reason || 'user-initiated' },
+      req,
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('logout-events error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET/POST /api/admin/excel-uploads
+ *
+ * Upload history for the Excel Manager. The page calls this on mount and on
+ * upload; neither route existed, so the history table never populated and an
+ * upload appeared to do nothing.
+ *
+ * The manager also has `POST /bulk/import-members` and
+ * `POST /bulk/import-contributions` for the actual data, so this endpoint's job
+ * is to record that an upload happened and what came of it — the audit half of
+ * the workflow.
+ */
+router.get('/excel-uploads', async (req, res) => {
+  try {
+    const { page, limit, from, to } = paging(req);
+    let q = supabase
+      .from('excel_uploads')
+      .select('*', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(from, to);
+
+    if (req.query.type) q = q.eq('type', req.query.type);
+    if (req.query.status) q = q.eq('status', req.query.status);
+
+    const { data, error, count } = await q;
+
+    if (error) {
+      // The table is created by migration 037. Until it exists, report an empty
+      // history rather than a 500, so the page renders instead of erroring.
+      if (error.code === '42P01' || /relation .* does not exist|Could not find/i.test(error.message)) {
+        logger.warn('excel_uploads table missing — run migration 037');
+        return res.json({ success: true, uploads: [], data: [], pagination: { page, limit, total: 0 }, migrationPending: true });
+      }
+      throw error;
+    }
+
+    const uploads = data || [];
+    res.json({
+      success: true,
+      uploads,
+      data: uploads,
+      pagination: { page, limit, total: count || uploads.length },
+    });
+  } catch (err) {
+    logger.error('excel-uploads list error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/excel-uploads', async (req, res) => {
+  try {
+    const { filename, type, record_count, status } = req.body || {};
+
+    if (!filename) {
+      return res.status(400).json({ success: false, error: 'filename is required' });
+    }
+
+    const { data, error } = await supabase
+      .from('excel_uploads')
+      .insert({
+        filename,
+        type: type || 'bulk_contributions',
+        record_count: Number(record_count) || 0,
+        status: status || 'reviewing',
+        // `excel_uploads` has no uploaded_by_email column; the actor is resolved
+        // from `uploaded_by` against profiles by the list query's caller.
+        uploaded_by: req.user.id,
+      })
+      .select('*')
+      .single();
+
+    if (error) {
+      if (error.code === '42P01' || /relation .* does not exist|Could not find/i.test(error.message)) {
+        logger.warn('excel_uploads table missing — run migration 037');
+        return res.status(503).json({
+          success: false,
+          error: 'Upload history is unavailable until migration 037 is applied.',
+        });
+      }
+      throw error;
+    }
+
+    await logAdminAction(
+      'EXCEL_UPLOAD_RECORDED',
+      { model: 'ExcelUpload', id: data.id },
+      { filename, type, record_count },
+      req,
+    );
+
+    res.status(201).json({ success: true, upload: data, data });
+  } catch (err) {
+    logger.error('excel-uploads create error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/admin/accounting/journal-entry
+ *
+ * Post a manual double-entry journal entry.
+ *
+ * This is the write-side counterpart to the Accounting reports. Those reports
+ * derive from the ledger (the `/accounting` router is not deployed), so this
+ * endpoint must write somewhere the reports actually read. It posts into
+ * `ledger_entries`, which `/api/admin/ledger` unions with transactions — so a
+ * journal entry appears in the trial balance, general ledger and balance sheet
+ * immediately.
+ *
+ * Enforces the one rule that makes double-entry meaningful: debits must equal
+ * credits, and there must be at least one of each.
+ */
+router.post(
+  '/accounting/journal-entry',
+  [
+    body('txn_date').isISO8601().withMessage('A valid transaction date is required'),
+    body('description').isString().trim().isLength({ min: 3 }).withMessage('A description is required'),
+    body('lines').isArray({ min: 2 }).withMessage('At least two lines are required'),
+    body('lines.*.account_code').isString().notEmpty().withMessage('Every line needs an account code'),
+    body('lines.*.debit').optional().isFloat({ min: 0 }),
+    body('lines.*.credit').optional().isFloat({ min: 0 }),
+  ],
+  validate,
+  async (req, res) => {
+    try {
+      const { txn_date, description, lines } = req.body;
+
+      const totalDebit = lines.reduce((s, l) => s + (Number(l.debit) || 0), 0);
+      const totalCredit = lines.reduce((s, l) => s + (Number(l.credit) || 0), 0);
+
+      // Refuse an unbalanced entry rather than posting one that would break the
+      // trial balance for every subsequent report.
+      if (Math.abs(totalDebit - totalCredit) > 0.01) {
+        return res.status(400).json({
+          success: false,
+          error: `Entry is unbalanced: debits ${totalDebit.toFixed(2)} do not equal credits ${totalCredit.toFixed(2)}.`,
+          totalDebit,
+          totalCredit,
+        });
+      }
+      if (totalDebit <= 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'A journal entry must move a non-zero amount.',
+        });
+      }
+
+      // Every line must go one way or the other; a line with both is ambiguous
+      // and would double the amount in the trial balance.
+      const ambiguous = lines.find(
+        (l) => (Number(l.debit) || 0) > 0 && (Number(l.credit) || 0) > 0,
+      );
+      if (ambiguous) {
+        return res.status(400).json({
+          success: false,
+          error: `Line for account ${ambiguous.account_code} has both a debit and a credit.`,
+        });
+      }
+
+      const { data, error } = await supabase.rpc('post_journal_entry', {
+        p_txn_date: txn_date,
+        p_description: description,
+        p_lines: JSON.stringify(lines),
+        p_admin_id: req.user.id,
+      });
+
+      if (error) {
+        const message = error.message || 'Failed to post journal entry';
+        if (error.code === '42883' || /function .*post_journal_entry.* does not exist/i.test(message)) {
+          logger.error('post_journal_entry missing — run migration 036');
+          return res.status(503).json({
+            success: false,
+            error: 'Journal entries are unavailable until migration 036 is applied.',
+          });
+        }
+        if (error.code === '22023' || /unbalanced|must move|ambiguous/i.test(message)) {
+          return res.status(400).json({ success: false, error: message });
+        }
+        throw error;
+      }
+
+      logger.info(`Journal entry posted by ${req.user.id}: ${data?.txn_no}`);
+      res.status(201).json({ success: true, ...(data || {}) });
+    } catch (err) {
+      logger.error('accounting journal-entry error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  },
+);
 
 /**
  * Login history
