@@ -146,10 +146,19 @@ router.post(
       }
 
       // ── Savings-based eligibility cap (Policy §3) ─────────────────────────
-      // savings.total_saved is never written anywhere in the codebase, so it
-      // is always 0 and would cap every loan at ₦0. Use the wallet balance —
-      // the member's actual funds — as the basis for the eligibility cap,
-      // falling back to total_saved only if it was ever populated.
+      // The cap is the member's savings × the product multiplier.
+      //
+      // The previous comment here claimed total_saved "is never written anywhere
+      // in the codebase, so it is always 0". That is wrong: the payment-proof
+      // triggers in migrations 007 and 023 increment it on every verified
+      // deposit, and production has members with a real balance. The code below
+      // already preferred it, so behaviour matched policy — but the comment
+      // invited someone to "fix" the ordering and cap loans against the wallet
+      // instead, which for a member holding savings and an empty wallet would
+      // drop their ceiling to zero.
+      //
+      // Preference order: total_saved (verified savings), else the wallet
+      // balance (funds the member actually holds).
       const { data: savings, error: savingsErr } = await supabase
         .from('savings')
         .select('total_saved')
