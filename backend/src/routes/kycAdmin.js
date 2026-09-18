@@ -34,7 +34,6 @@ async function logAdminAction(action, target, metadata = {}, req = null) {
   try {
     await supabase.from('audit_logs').insert({
       actor_id: null,
-      actor_type: 'admin',
       action,
       resource: target?.model || null,
       resource_id: target?.id || null,
@@ -56,7 +55,6 @@ async function logMemberActivity(profileId, activityType, description, metadata 
       description,
       metadata,
       actor_id: actorId,
-      actor_type: 'admin',
       ip_address: req?.ip || null,
       device_info: req?.get('user-agent') || null,
     });
