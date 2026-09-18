@@ -19,7 +19,7 @@
  */
 
 const express = require('express');
-const { body, param } = require('express-validator');
+const { body, param, query } = require('express-validator');
 const router = express.Router();
 
 const supabase = require('../config/supabase');
@@ -239,6 +239,17 @@ router.delete('/:id', [param('id').isUUID()], validate, async (req, res) => {
 });
 
 // ── GET /:id/eligibility ───────────────────────────────────────────────────────
+//
+// Rollover eligibility is: at least 70% of the ORIGINAL PRINCIPAL repaid, no
+// serious default, the account in good standing, the loan still active, and
+// within the consecutive-rollover cap.
+//
+// This previously computed 50% of *total amount paid* using `loan.total_repaid`,
+// a column that does not exist. The expression always evaluated to 0, so the
+// feature was unreachable — every member was told they did not qualify.
+//
+// The rule lives in `loan_rollover_eligibility()`, which reports each condition
+// separately so the app can show a checklist rather than a bare "no".
 
 router.get(
   '/:id/eligibility',
@@ -248,49 +259,93 @@ router.get(
     try {
       const { data: loan, error: lErr } = await supabase
         .from('loans')
-        .select('*')
+        .select('id')
         .eq('loan_id', req.params.id)
         .eq('profile_id', req.user.id)
         .maybeSingle();
       if (lErr) throw lErr;
       if (!loan) return res.status(404).json({ success: false, error: 'Loan not found' });
 
-      const repaymentPercentage =
-        loan.total_repaid && loan.amount
-          ? (loan.total_repaid / loan.amount) * 100
-          : 0;
-      const hasMinimum50 = repaymentPercentage >= 50;
-
-      const threeMonthsAgo = new Date();
-      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-      const { count: savingsCount } = await supabase
-        .from('contributions')
-        .select('*', { count: 'exact', head: true })
-        .eq('profile_id', req.user.id)
-        .gte('created_at', threeMonthsAgo.toISOString());
-
-      const hasConsistentSavings = (savingsCount || 0) >= 3;
-      const isEligible = hasMinimum50 && hasConsistentSavings;
-
-      const errors = [];
-      if (!hasMinimum50) errors.push(`Minimum 50% repayment required (current: ${repaymentPercentage.toFixed(1)}%)`);
-      if (!hasConsistentSavings) errors.push('Minimum 3 months of consistent savings required');
+      const { data, error } = await supabase.rpc('loan_rollover_eligibility', {
+        p_loan_id: loan.id,
+      });
+      if (error) {
+        if (error.code === '42883' || /loan_rollover_eligibility.* does not exist/i.test(error.message)) {
+          logger.error('loan_rollover_eligibility missing — run migration 039');
+          return res.status(503).json({
+            success: false,
+            error: 'Rollover is unavailable until migration 039 is applied.',
+          });
+        }
+        throw error;
+      }
 
       res.json({
         success: true,
         eligibility: {
-          status: isEligible ? 'eligible' : 'ineligible',
-          is_eligible: isEligible,
-          has_minimum_50_percent_repayment: hasMinimum50,
-          has_consistent_savings: hasConsistentSavings,
-          repayment_percentage: repaymentPercentage,
-          consecutive_savings_months: savingsCount || 0,
-          eligibility_errors: errors,
-          eligibility_warnings: [],
+          status: data.is_eligible ? 'eligible' : 'ineligible',
+          is_eligible: data.is_eligible,
+          has_minimum_principal_repaid: data.has_minimum_principal_repaid,
+          has_no_serious_default: data.has_no_serious_default,
+          account_in_good_standing: data.account_in_good_standing,
+          within_rollover_limit: data.within_rollover_limit,
+          min_principal_percentage: data.min_principal_percentage,
+          repayment_percentage: data.repayment_percentage,
+          rollover_count: data.rollover_count,
+          max_consecutive_rollovers: data.max_consecutive_rollovers,
+          blockers: data.blockers,
+          position: data.position,
+          // The app's existing checklist items read these two names.
+          has_minimum_50_percent_repayment: data.has_minimum_principal_repaid,
+          has_consistent_savings: data.account_in_good_standing,
         },
       });
     } catch (err) {
       logger.error('eligibility check error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+);
+
+// ── GET /:id/rollover-terms ────────────────────────────────────────────────────
+//
+// The refinancing calculation the member must see before accepting:
+//   new loan - outstanding balance settled = net amount to the member.
+
+router.get(
+  '/:id/rollover-terms',
+  [
+    param('id').isString().notEmpty(),
+    query('amount').optional().isFloat({ min: 0 }),
+    query('tenureMonths').optional().isInt({ min: 1, max: 60 }),
+  ],
+  validate,
+  async (req, res) => {
+    try {
+      const { data: loan, error: lErr } = await supabase
+        .from('loans')
+        .select('id')
+        .eq('loan_id', req.params.id)
+        .eq('profile_id', req.user.id)
+        .maybeSingle();
+      if (lErr) throw lErr;
+      if (!loan) return res.status(404).json({ success: false, error: 'Loan not found' });
+
+      const { data, error } = await supabase.rpc('loan_rollover_terms', {
+        p_loan_id: loan.id,
+        p_requested_amount: req.query.amount ? Number(req.query.amount) : null,
+        p_new_tenure_months: req.query.tenureMonths ? Number(req.query.tenureMonths) : null,
+      });
+      if (error) {
+        if (error.code === '42883') {
+          return res.status(503).json({ success: false, error: 'Rollover is unavailable until migration 039 is applied.' });
+        }
+        throw error;
+      }
+
+      res.json({ success: true, terms: data });
+    } catch (err) {
+      logger.error('rollover terms error:', err);
       res.status(500).json({ success: false, error: err.message });
     }
   }
@@ -556,8 +611,10 @@ router.patch(
       // Previously this handler only flipped the status, so the member received
       // "your new repayment schedule is now active" while the loan's tenure and
       // monthly repayment were unchanged.
-      const { data: applied, error: applyErr } = await supabase.rpc('apply_loan_rollover', {
+      const { data: applied, error: applyErr } = await supabase.rpc('execute_loan_rollover', {
         p_rollover_id: req.params.id,
+        p_requested_amount: Number(rollover.requested_amount ?? 0),
+        p_new_tenure_months: Number(rollover.requested_tenure ?? rollover.extension_months ?? 12),
         p_admin_id: req.user.id,
       });
       if (applyErr) {

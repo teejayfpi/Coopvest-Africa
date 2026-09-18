@@ -79,17 +79,17 @@ describe('rollover flow', () => {
     }
   });
 
-  test('approval applies the rollover to the loan', () => {
+  test('approval executes the refinance', () => {
     // Both the admin route and the member-facing admin route must call the
-    // function that actually changes the loan.
-    expect(adminSource).toMatch(/rpc\('apply_loan_rollover'/);
-    expect(memberSource).toMatch(/rpc\('apply_loan_rollover'/);
+    // function that creates the new loan and settles the old one.
+    expect(adminSource).toMatch(/rpc\('execute_loan_rollover'/);
+    expect(memberSource).toMatch(/rpc\('execute_loan_rollover'/);
   });
 
-  test('the member is only notified after the loan is extended', () => {
+  test('the member is only notified after the rollover is executed', () => {
     // Ordering matters: notifying first would repeat the original bug of
     // telling the member their schedule changed when it had not.
-    const idxApply = adminSource.indexOf("rpc('apply_loan_rollover'");
+    const idxApply = adminSource.indexOf("rpc('execute_loan_rollover'");
     const idxNotify = adminSource.indexOf('notifyRolloverApproved');
     expect(idxApply).toBeGreaterThan(-1);
     expect(idxNotify).toBeGreaterThan(-1);

@@ -435,52 +435,122 @@ class RolloverGuarantor extends Equatable {
 /// Rollover Eligibility Check Result
 class RolloverEligibility extends Equatable {
   final RolloverEligibilityStatus status;
-  final bool hasMinimum50PercentRepayment;
-  final bool hasConsistentSavings;
-  final List<String> eligibilityErrors;
-  final List<String> eligibilityWarnings;
-  final double repaymentPercentage;
-  final int consecutiveSavingsMonths;
+
+  /// Whether the member may REQUEST a rollover. Never an approval.
   final bool isEligible;
+
+  /// The threshold in force, read from the backend so the business can change
+  /// it (70% today) without an app release.
+  final double minPrincipalPercentage;
+
+  /// Percentage of the ORIGINAL PRINCIPAL repaid — not of the total amount
+  /// paid. Interest, fees and penalties inflate "amount paid", so a member
+  /// could otherwise appear eligible without having repaid 70% of what they
+  /// actually borrowed.
+  final double repaymentPercentage;
+
+  /// The five rules, reported individually so the screen can show a checklist.
+  final bool hasMinimumPrincipalRepaid;
+  final bool hasNoSeriousDefault;
+  final bool accountInGoodStanding;
+  final bool withinRolloverLimit;
+  final bool loanIsActive;
+
+  final int rolloverCount;
+  final int maxConsecutiveRollovers;
+
+  /// Human-readable reasons the member cannot roll over yet.
+  final List<String> blockers;
+
+  /// The loan's human reference (e.g. LN-000123), needed to reload terms.
+  final String? loanRef;
+
+  /// Principal position: original, repaid and outstanding.
+  final double originalPrincipal;
+  final double principalRepaid;
+  final double outstandingPrincipal;
+  final double outstandingBalance;
 
   const RolloverEligibility({
     this.status = RolloverEligibilityStatus.unknown,
-    this.hasMinimum50PercentRepayment = false,
-    this.hasConsistentSavings = false,
-    this.eligibilityErrors = const [],
-    this.eligibilityWarnings = const [],
+    this.isEligible = false,
+    this.minPrincipalPercentage = 70,
     this.repaymentPercentage = 0,
-    this.consecutiveSavingsMonths = 0,
-  }) : isEligible = hasMinimum50PercentRepayment && hasConsistentSavings;
+    this.hasMinimumPrincipalRepaid = false,
+    this.hasNoSeriousDefault = false,
+    this.accountInGoodStanding = false,
+    this.withinRolloverLimit = false,
+    this.loanIsActive = false,
+    this.rolloverCount = 0,
+    this.maxConsecutiveRollovers = 2,
+    this.blockers = const [],
+    this.loanRef,
+    this.originalPrincipal = 0,
+    this.principalRepaid = 0,
+    this.outstandingPrincipal = 0,
+    this.outstandingBalance = 0,
+  });
+
+  /// How much principal is still outstanding before the member qualifies.
+  double get principalStillRequired {
+    final target = originalPrincipal * (minPrincipalPercentage / 100);
+    return (target - principalRepaid).clamp(0, double.infinity).toDouble();
+  }
+
+  /// 0..1 progress toward the threshold, for the progress bar.
+  double get thresholdProgress {
+    final target = originalPrincipal * (minPrincipalPercentage / 100);
+    if (target <= 0) return 0;
+    return (principalRepaid / target).clamp(0, 1).toDouble();
+  }
 
   factory RolloverEligibility.fromJson(Map<String, dynamic> json) {
+    final position = (json['position'] as Map<String, dynamic>?) ?? const {};
+    double num_(dynamic v) => (v as num?)?.toDouble() ?? 0;
+
     return RolloverEligibility(
       status: _parseEligibilityStatus(json['status'] as String? ?? 'unknown'),
-      hasMinimum50PercentRepayment:
-          json['has_minimum_50_percent_repayment'] as bool? ?? false,
-      hasConsistentSavings: json['has_consistent_savings'] as bool? ?? false,
-      eligibilityErrors: (json['eligibility_errors'] as List<dynamic>?)
-              ?.map((e) => e as String)
+      isEligible: json['is_eligible'] as bool? ?? false,
+      minPrincipalPercentage: num_(json['min_principal_percentage'] ?? 70),
+      repaymentPercentage: num_(json['repayment_percentage']),
+      hasMinimumPrincipalRepaid: json['has_minimum_principal_repaid'] as bool? ?? false,
+      hasNoSeriousDefault: json['has_no_serious_default'] as bool? ?? false,
+      accountInGoodStanding: json['account_in_good_standing'] as bool? ?? false,
+      withinRolloverLimit: json['within_rollover_limit'] as bool? ?? false,
+      loanIsActive: json['loan_is_active'] as bool? ?? true,
+      rolloverCount: (json['rollover_count'] as num?)?.toInt() ?? 0,
+      maxConsecutiveRollovers: (json['max_consecutive_rollovers'] as num?)?.toInt() ?? 2,
+      // Blockers arrive as objects with a message; keep the messages.
+      blockers: (json['blockers'] as List<dynamic>?)
+              ?.map((b) => b is Map ? (b['message']?.toString() ?? '') : b.toString())
+              .where((m) => m.isNotEmpty)
               .toList() ??
-          [],
-      eligibilityWarnings: (json['eligibility_warnings'] as List<dynamic>?)
-              ?.map((e) => e as String)
-              .toList() ??
-          [],
-      repaymentPercentage: (json['repayment_percentage'] as num?)?.toDouble() ?? 0,
-      consecutiveSavingsMonths: json['consecutive_savings_months'] as int? ?? 0,
+          const [],
+      loanRef: position['loan_ref']?.toString(),
+      originalPrincipal: num_(position['original_principal']),
+      principalRepaid: num_(position['principal_repaid']),
+      outstandingPrincipal: num_(position['outstanding_principal']),
+      outstandingBalance: num_(position['outstanding_balance']),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'status': status.toString().split('.').last,
-      'has_minimum_50_percent_repayment': hasMinimum50PercentRepayment,
-      'has_consistent_savings': hasConsistentSavings,
-      'eligibility_errors': eligibilityErrors,
-      'eligibility_warnings': eligibilityWarnings,
+      'is_eligible': isEligible,
+      'min_principal_percentage': minPrincipalPercentage,
       'repayment_percentage': repaymentPercentage,
-      'consecutive_savings_months': consecutiveSavingsMonths,
+      'has_minimum_principal_repaid': hasMinimumPrincipalRepaid,
+      'has_no_serious_default': hasNoSeriousDefault,
+      'account_in_good_standing': accountInGoodStanding,
+      'within_rollover_limit': withinRolloverLimit,
+      'rollover_count': rolloverCount,
+      'max_consecutive_rollovers': maxConsecutiveRollovers,
+      'blockers': blockers,
+      'original_principal': originalPrincipal,
+      'principal_repaid': principalRepaid,
+      'outstanding_principal': outstandingPrincipal,
+      'outstanding_balance': outstandingBalance,
     };
   }
 
@@ -502,13 +572,20 @@ class RolloverEligibility extends Equatable {
   @override
   List<Object?> get props => [
         status,
-        hasMinimum50PercentRepayment,
-        hasConsistentSavings,
-        eligibilityErrors,
-        eligibilityWarnings,
-        repaymentPercentage,
-        consecutiveSavingsMonths,
         isEligible,
+        minPrincipalPercentage,
+        repaymentPercentage,
+        hasMinimumPrincipalRepaid,
+        hasNoSeriousDefault,
+        accountInGoodStanding,
+        withinRolloverLimit,
+        rolloverCount,
+        blockers,
+        loanRef,
+        originalPrincipal,
+        principalRepaid,
+        outstandingPrincipal,
+        outstandingBalance,
       ];
 }
 
@@ -521,6 +598,11 @@ class RolloverState extends Equatable {
   final List<RolloverGuarantor> guarantors;
   final List<RolloverGuarantor> selectedGuarantors;
   final int? newTenure;
+  /// The refinancing calculation for the current amount/tenure selection.
+  final RolloverTerms? rolloverTerms;
+  /// The amount the member is asking for, kept so a tenure change can
+  /// recompute the terms.
+  final double? rolloverAmount;
   final String? error;
   final bool isLoading;
 
@@ -532,6 +614,8 @@ class RolloverState extends Equatable {
     this.guarantors = const [],
     this.selectedGuarantors = const [],
     this.newTenure,
+    this.rolloverTerms,
+    this.rolloverAmount,
     this.error,
     this.isLoading = false,
   });
@@ -550,6 +634,8 @@ class RolloverState extends Equatable {
     List<RolloverGuarantor>? guarantors,
     List<RolloverGuarantor>? selectedGuarantors,
     int? newTenure,
+    RolloverTerms? rolloverTerms,
+    double? rolloverAmount,
     String? error,
     bool? isLoading,
   }) {
@@ -561,6 +647,8 @@ class RolloverState extends Equatable {
       guarantors: guarantors ?? this.guarantors,
       selectedGuarantors: selectedGuarantors ?? this.selectedGuarantors,
       newTenure: newTenure ?? this.newTenure,
+      rolloverTerms: rolloverTerms ?? this.rolloverTerms,
+      rolloverAmount: rolloverAmount ?? this.rolloverAmount,
       error: error,
       isLoading: isLoading ?? this.isLoading,
     );
@@ -577,5 +665,77 @@ class RolloverState extends Equatable {
         newTenure,
         error,
         isLoading,
+      ];
+}
+
+/// The refinancing calculation for a rollover.
+///
+/// The member must see this before accepting, because the new loan does NOT pay
+/// out in full: the outstanding balance is settled from it, and only the
+/// difference is disbursed.
+///
+///   new loan - existing balance settled = net amount to the member
+class RolloverTerms extends Equatable {
+  final bool valid;
+  final List<String> errors;
+
+  /// The ceiling for the new loan: savings x the product multiplier.
+  final double maximumEligible;
+  final double loanMultiplier;
+  final double memberSavings;
+
+  final double requestedAmount;
+  final double interestRate;
+  final int newTenureMonths;
+  final double totalRepayment;
+  final double monthlyRepayment;
+
+  /// The breakdown: new loan, what it settles, and what the member receives.
+  final double settlementAmount;
+  final double netAmountToMember;
+
+  const RolloverTerms({
+    this.valid = false,
+    this.errors = const [],
+    this.maximumEligible = 0,
+    this.loanMultiplier = 3,
+    this.memberSavings = 0,
+    this.requestedAmount = 0,
+    this.interestRate = 0,
+    this.newTenureMonths = 12,
+    this.totalRepayment = 0,
+    this.monthlyRepayment = 0,
+    this.settlementAmount = 0,
+    this.netAmountToMember = 0,
+  });
+
+  factory RolloverTerms.fromJson(Map<String, dynamic> json) {
+    final settlement = (json['settlement'] as Map<String, dynamic>?) ?? const {};
+    double num_(dynamic v) => (v as num?)?.toDouble() ?? 0;
+    return RolloverTerms(
+      valid: json['valid'] as bool? ?? false,
+      // Errors arrive as objects with a message.
+      errors: (json['errors'] as List<dynamic>?)
+              ?.map((e) => e is Map ? (e['message']?.toString() ?? '') : e.toString())
+              .where((m) => m.isNotEmpty)
+              .toList() ??
+          const [],
+      maximumEligible: num_(json['maximum_eligible']),
+      loanMultiplier: num_(json['loan_multiplier'] ?? 3),
+      memberSavings: num_(json['member_savings']),
+      requestedAmount: num_(json['requested_amount']),
+      interestRate: num_(json['interest_rate']),
+      newTenureMonths: (json['new_tenure_months'] as num?)?.toInt() ?? 12,
+      totalRepayment: num_(json['total_repayment']),
+      monthlyRepayment: num_(json['monthly_repayment']),
+      settlementAmount: num_(settlement['existing_balance_settled']),
+      netAmountToMember: num_(settlement['net_amount_to_member']),
+    );
+  }
+
+  @override
+  List<Object?> get props => [
+        valid, errors, maximumEligible, requestedAmount, newTenureMonths,
+        totalRepayment, monthlyRepayment, settlementAmount, netAmountToMember,
       ];
 }
