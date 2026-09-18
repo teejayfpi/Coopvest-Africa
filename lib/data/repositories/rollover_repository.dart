@@ -37,8 +37,32 @@ class RolloverRepository {
       }
     } catch (e) {
       _logger.error('Check rollover eligibility error: $e');
-      // Return mock data for demo/testing
-      return ApiResult.success(_getMockEligibility(loanId));
+      // Report the failure. This previously returned `_getMockEligibility`,
+      // i.e. fabricated eligibility for a credit decision — a member could be
+      // told they qualified when the check had not run at all. A gate that
+      // cannot be evaluated must fail closed.
+      return ApiResult.error(
+        'Could not check rollover eligibility. Please try again.',
+      );
+    }
+  }
+
+  /// The refinancing calculation for a proposed rollover.
+  Future<ApiResult<RolloverTerms>> getRolloverTerms({
+    required String loanId,
+    double? amount,
+    int? tenureMonths,
+  }) async {
+    try {
+      final terms = await _apiService.getRolloverTerms(
+        loanId,
+        amount: amount,
+        tenureMonths: tenureMonths,
+      );
+      return ApiResult.success(terms);
+    } catch (e) {
+      _logger.error('Get rollover terms error: $e');
+      return ApiResult.error('Could not calculate the rollover terms.');
     }
   }
 
@@ -244,18 +268,6 @@ class RolloverRepository {
   }
 
   // ============== Mock Data for Demo/Testing ==============
-
-  RolloverEligibility _getMockEligibility(String loanId) {
-    return RolloverEligibility(
-      status: RolloverEligibilityStatus.eligible,
-      hasMinimum50PercentRepayment: true,
-      hasConsistentSavings: true,
-      eligibilityErrors: [],
-      eligibilityWarnings: [],
-      repaymentPercentage: 65.0,
-      consecutiveSavingsMonths: 6,
-    );
-  }
 
   LoanRollover _getMockRollover(String loanId) {
     final now = DateTime.now();

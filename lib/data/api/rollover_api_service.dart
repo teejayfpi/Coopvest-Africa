@@ -16,10 +16,30 @@ class RolloverApiService {
 
   RolloverApiService(this._dio);
 
-  /// Check eligibility for a loan rollover
+  /// Check eligibility for a loan rollover.
+  ///
+  /// Returns the principal position and each of the five rules separately, so
+  /// the screen can show a checklist rather than a bare yes/no.
   Future<RolloverEligibilityResponse> checkEligibility(String loanId) =>
       _dio.get('/rollover/$loanId/eligibility')
           .then((r) => RolloverEligibilityResponse.fromJson(r.data));
+
+  /// The refinancing calculation for a proposed rollover:
+  ///   new loan - the balance it settles = the net amount to the member.
+  Future<RolloverTerms> getRolloverTerms(
+    String loanId, {
+    double? amount,
+    int? tenureMonths,
+  }) =>
+      _dio.get('/rollover/$loanId/rollover-terms', queryParameters: {
+        if (amount != null) 'amount': amount,
+        if (tenureMonths != null) 'tenureMonths': tenureMonths,
+      }).then((r) {
+        final data = r.data as Map<String, dynamic>;
+        return RolloverTerms.fromJson(
+          (data['terms'] as Map<String, dynamic>?) ?? data,
+        );
+      });
 
   /// Create a new rollover request
   Future<RolloverRequestResponse> createRolloverRequest(String loanId, RolloverRequest request) =>

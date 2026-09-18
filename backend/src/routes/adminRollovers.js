@@ -137,7 +137,9 @@ router.get('/rollovers', async (req, res) => {
  */
 router.post(
   '/rollovers/:id/approve',
-  [param('id').isUUID(), body('notes').optional().isString()],
+  [param('id').isUUID(), body('notes').optional().isString(),
+   body('requestedAmount').optional().isFloat({ gt: 0 }),
+   body('tenureMonths').optional().isInt({ min: 1, max: 60 })],
   validate,
   async (req, res) => {
     try {
@@ -167,6 +169,30 @@ router.post(
 
       const now = new Date().toISOString();
 
+      // The refinance needs the new loan amount and tenure. Accept them from the
+      // admin, else derive a sane default: the maximum the member qualifies for
+      // at their current savings, over the existing tenure.
+      const { data: terms } = await supabase.rpc('loan_rollover_terms', {
+        p_loan_id: rollover.loan_id,
+        p_requested_amount: req.body.requestedAmount ?? null,
+        p_new_tenure_months: req.body.tenureMonths ?? null,
+      });
+
+      const requestedAmount = Number(
+        req.body.requestedAmount ?? terms?.maximum_eligible ?? 0,
+      );
+      const requestedTenure = Number(
+        req.body.tenureMonths ?? terms?.new_tenure_months ?? rollover.extension_months ?? 12,
+      );
+
+      if (!requestedAmount || requestedAmount <= 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'A new loan amount is required to approve a rollover.',
+          terms,
+        });
+      }
+
       const { error: approveErr } = await supabase
         .from('rollovers')
         .update({
@@ -182,10 +208,13 @@ router.post(
         .eq('id', id);
       if (approveErr) throw approveErr;
 
-      // Apply the extension. If this fails the approval is rolled back so the
-      // member is never left in an "approved but unchanged" state.
-      const { data: applied, error: applyErr } = await supabase.rpc('apply_loan_rollover', {
+      // Execute the refinance: create the new loan, settle the old one, and
+      // disburse only the net difference. If this fails the approval is rolled
+      // back so the member is never left in an "approved but unchanged" state.
+      const { data: applied, error: applyErr } = await supabase.rpc('execute_loan_rollover', {
         p_rollover_id: id,
+        p_requested_amount: requestedAmount,
+        p_new_tenure_months: requestedTenure,
         p_admin_id: req.user.id,
       });
 
@@ -196,8 +225,8 @@ router.post(
           .eq('id', id);
 
         const message = applyErr.message || 'Failed to apply the rollover';
-        if (applyErr.code === '42883' || /apply_loan_rollover.* does not exist/i.test(message)) {
-          logger.error('apply_loan_rollover missing — run migration 038');
+        if (applyErr.code === '42883' || /execute_loan_rollover.* does not exist/i.test(message)) {
+          logger.error('execute_loan_rollover missing — run migration 039');
           return res.status(503).json({
             success: false,
             error: 'Rollover approval is unavailable until migration 038 is applied.',
@@ -221,7 +250,7 @@ router.post(
       logger.info(`Rollover ${id} approved and applied by ${req.user.id}`);
       res.json({
         success: true,
-        message: `Loan extended by ${applied?.extension_months} months to ${applied?.new_tenure_months} months. New monthly repayment: ₦${Number(applied?.new_monthly_repayment || 0).toLocaleString()}.`,
+        message: `Rollover executed. New loan ${applied?.new_loan_ref} of ₦${Number(applied?.terms?.requested_amount || 0).toLocaleString()}; ₦${Number(applied?.settlement_amount || 0).toLocaleString()} settled the old loan and ₦${Number(applied?.net_disbursed || 0).toLocaleString()} was disbursed to the member.`,
         applied,
       });
     } catch (err) {

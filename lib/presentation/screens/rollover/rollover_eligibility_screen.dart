@@ -8,6 +8,7 @@ import '../../providers/rollover_provider.dart';
 import '../../providers/loan_provider.dart';
 import '../../widgets/common/buttons.dart';
 import '../../widgets/rollover/rollover_common_widgets.dart';
+import 'rollover_request_screen.dart';
 
 /// Rollover Eligibility Check Screen
 class RolloverEligibilityScreen extends ConsumerStatefulWidget {
@@ -155,12 +156,34 @@ class _RolloverEligibilityScreenState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(children: [Icon(eligibility.isEligible ? Icons.check_circle : Icons.info, color: eligibility.isEligible ? CoopvestColors.success : CoopvestColors.warning), const SizedBox(width: 8), Text(eligibility.isEligible ? 'Eligible for Rollover' : 'Not Eligible', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: context.textPrimary))]),
+            Row(children: [Icon(eligibility.isEligible ? Icons.check_circle : Icons.info, color: eligibility.isEligible ? CoopvestColors.success : CoopvestColors.warning), const SizedBox(width: 8), Text(
+                eligibility.isEligible ? '🔄 Loan Rollover Available' : '🔒 Loan Rollover',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: context.textPrimary),
+              )]),
             const SizedBox(height: 16),
             const Divider(),
             const SizedBox(height: 8),
-            EligibilityCheckItem(isMet: eligibility.hasMinimum50PercentRepayment, title: '50% Principal Repaid', subtitle: eligibility.hasMinimum50PercentRepayment ? '${eligibility.repaymentPercentage.toStringAsFixed(1)}% repaid' : 'Need at least 50% repayment'),
-            EligibilityCheckItem(isMet: eligibility.hasConsistentSavings, title: 'Consistent Monthly Savings', subtitle: eligibility.hasConsistentSavings ? '${eligibility.consecutiveSavingsMonths} consecutive months' : 'Need consistent savings history'),
+            EligibilityCheckItem(
+              isMet: eligibility.hasMinimumPrincipalRepaid,
+              title: '${eligibility.minPrincipalPercentage.toStringAsFixed(0)}% of principal repaid',
+              subtitle: '${eligibility.repaymentPercentage.toStringAsFixed(1)}% repaid'
+                  '${eligibility.hasMinimumPrincipalRepaid ? '' : ' — ₦${eligibility.principalStillRequired.toStringAsFixed(0)} still to repay'}',
+            ),
+            EligibilityCheckItem(
+              isMet: eligibility.hasNoSeriousDefault,
+              title: 'No serious default',
+              subtitle: eligibility.hasNoSeriousDefault ? 'No defaulted or in-recovery loans' : 'A defaulted or in-recovery loan must be resolved first',
+            ),
+            EligibilityCheckItem(
+              isMet: eligibility.accountInGoodStanding,
+              title: 'Account in good standing',
+              subtitle: eligibility.accountInGoodStanding ? 'No outstanding obligations' : 'Outstanding fines or fees must be settled',
+            ),
+            EligibilityCheckItem(
+              isMet: eligibility.withinRolloverLimit,
+              title: 'Within the rollover limit',
+              subtitle: '${eligibility.rolloverCount} of ${eligibility.maxConsecutiveRollovers} consecutive rollovers used',
+            ),
           ],
         ),
       ),
@@ -174,9 +197,19 @@ class _RolloverEligibilityScreenState
 
     return Column(
       children: [
-        PrimaryButton(label: 'Request Rollover', onPressed: () {}, width: double.infinity),
+        PrimaryButton(
+          label: 'Request Rollover',
+          width: double.infinity,
+          // Was an empty callback, so the button did nothing at all.
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => RolloverRequestScreen(loan: loan)),
+          ),
+        ),
         const SizedBox(height: 12),
-        TextButton(onPressed: () => rolloverNotifier.checkEligibility(loanId: loan.id), child: const Text('Refresh Eligibility')),
+        TextButton(
+          onPressed: () => rolloverNotifier.checkEligibility(loanId: loan.id),
+          child: const Text('Refresh Eligibility'),
+        ),
       ],
     );
   }

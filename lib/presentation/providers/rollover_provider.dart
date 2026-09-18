@@ -404,6 +404,34 @@ class RolloverNotifier extends StateNotifier<RolloverState> {
   /// Set the new tenure for rollover
   void setNewTenure(int tenure) {
     state = state.copyWith(newTenure: tenure);
+    // Refresh the calculation so the member sees the new monthly repayment for
+    // the tenor they just picked, rather than a stale figure.
+    final loanId = state.eligibility?.loanRef;
+    if (loanId != null && state.rolloverAmount != null) {
+      loadRolloverTerms(loanId: loanId, amount: state.rolloverAmount!, tenureMonths: tenure);
+    }
+  }
+
+  /// Fetch the refinancing calculation for a proposed amount and tenure.
+  Future<void> loadRolloverTerms({
+    required String loanId,
+    required double amount,
+    int? tenureMonths,
+  }) async {
+    state = state.copyWith(rolloverAmount: amount, isLoading: true, error: null);
+    final result = await RolloverRepository(
+      apiService: _apiService,
+      authRepository: _authRepository,
+    ).getRolloverTerms(
+      loanId: loanId,
+      amount: amount,
+      tenureMonths: tenureMonths ?? state.newTenure,
+    );
+    if (result.success && result.data != null) {
+      state = state.copyWith(rolloverTerms: result.data, isLoading: false);
+    } else {
+      state = state.copyWith(isLoading: false, error: result.error);
+    }
   }
 
   /// Clear selected guarantors
