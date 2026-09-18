@@ -398,28 +398,19 @@ router.get('/transactions', authenticate, async (req, res) => {
 /**
  * POST /api/v1/wallet/deposit
  */
-router.post(
-  '/deposit',
-  authenticate,
-  [body('amount').isFloat({ min: 0.01 }), body('description').optional().isString()],
-  validate,
-  async (req, res) => {
-    try {
-      const { amount, description } = req.body;
-      const wallet = await adjustBalance(req.user.id, Number(amount));
-      const txn = await recordTransaction(req.user.id, {
-        type: 'deposit',
-        category: 'credit',
-        amount,
-        description: description || 'Wallet deposit',
-      });
-      res.status(201).json({ success: true, wallet, transaction: txn });
-    } catch (err) {
-      logger.error('deposit error:', err);
-      res.status(err.statusCode || 500).json({ success: false, error: err.message });
-    }
-  }
-);
+// POST /wallet/deposit was REMOVED — it credited a member's wallet with no
+// payment, no proof and no admin verification:
+//
+//     const wallet = await adjustBalance(req.user.id, Number(amount));
+//
+// Any authenticated member could therefore mint their own balance by calling it
+// directly. It was a legacy endpoint that predates the verified deposit flow;
+// the mobile app uses POST /wallet/contribute (which creates a pending
+// deposit_request for an admin to verify) and GET /wallet/deposit-requests, and
+// nothing — app, admin dashboard, or backend — called this route. It is deleted
+// rather than gated because there is no legitimate caller to preserve.
+//
+// The verified path is POST /wallet/contribute below.
 
 /**
  * POST /api/v1/wallet/contribute - Creates a pending deposit request (requires admin verification)
