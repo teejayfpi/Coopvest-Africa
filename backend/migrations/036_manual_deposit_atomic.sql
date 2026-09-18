@@ -28,6 +28,63 @@
 -- dashboard is reduced to one call.
 
 -- ---------------------------------------------------------------------------
+-- Repair the allocation_type CHECK constraints
+-- ---------------------------------------------------------------------------
+-- Production carries TWO CHECK constraints on `deposit_requests.allocation_type`
+-- that must both hold, so the effective allowed set is their intersection:
+--
+--   allocation_type_check                 -> monthly_contribution, loan_repayment,
+--                                            fine, fee, registration_fee, mixed
+--   deposit_requests_allocation_type_check -> monthly_contribution, loan_repayment,
+--                                            mixed
+--
+-- Migration 020 created the narrow one (as an unnamed CHECK) and migration 021
+-- tried to replace it, but its lookup used `pg_get_constraintdef(oid) LIKE
+-- '%allocation_type%IN%'` — Postgres normalises `IN (...)` to `= ANY (ARRAY[...])`,
+-- so the pattern never matched, the old constraint was never dropped, and a
+-- second wider one was added alongside it.
+--
+-- The consequence is live: `routes/wallet.js` derives `paymentAlloc` from the
+-- member's chosen allocation and can emit 'fine', 'fee' or 'registration_fee'.
+-- Those are rejected by the narrow constraint, and because that insert sits
+-- inside a `try/catch` marked non-fatal, the failure is silent — the debit
+-- transaction is created but the `deposit_requests` row an admin needs in order
+-- to verify it is not.
+--
+-- This also blocks `record_manual_deposit()` from recording an entrance fee.
+--
+-- Drop every allocation_type CHECK and add one correct, validated constraint.
+
+DO $$
+DECLARE
+  v_conname TEXT;
+BEGIN
+  FOR v_conname IN
+    SELECT conname FROM pg_constraint
+    WHERE conrelid = 'public.deposit_requests'::regclass
+      AND contype = 'c'
+      AND pg_get_constraintdef(oid) LIKE '%allocation_type%'
+  LOOP
+    EXECUTE format('ALTER TABLE public.deposit_requests DROP CONSTRAINT %I', v_conname);
+    RAISE NOTICE 'dropped constraint %', v_conname;
+  END LOOP;
+END $$;
+
+ALTER TABLE public.deposit_requests
+  ADD CONSTRAINT deposit_requests_allocation_type_final
+  CHECK (allocation_type IN (
+    'monthly_contribution',
+    'loan_repayment',
+    'fine',
+    'fee',
+    'registration_fee',
+    'mixed'
+  ));
+
+COMMENT ON CONSTRAINT deposit_requests_allocation_type_final ON public.deposit_requests IS
+  'Single authoritative allocation_type constraint. Replaces the narrow migration-020 CHECK that migration 021 failed to drop, which silently blocked fine/fee/registration_fee allocations.';
+
+-- ---------------------------------------------------------------------------
 -- Deposit type semantics
 -- ---------------------------------------------------------------------------
 -- The page offered six deposit types and credited the member's wallet for ALL
@@ -234,7 +291,7 @@ BEGIN
   INSERT INTO public.audit_logs (
     action, target_model, target_id, metadata, actor_id, actor_role, details, created_at
   ) VALUES (
-    'MANUAL_DEPOSIT_CREATED', 'deposit_requests', v_deposit_id,
+    'MANUAL_DEPOSIT_CREATED', 'deposit_requests', v_deposit_id::text,
     jsonb_build_object(
       'profile_id', p_profile_id,
       'member_name', v_profile.name,
@@ -249,8 +306,13 @@ BEGIN
       'transaction_id', v_txn_id
     ),
     p_admin_id, 'admin',
-    'Manual deposit: ' || v_type_label || ' of ' || p_amount::text ||
-      ' for ' || COALESCE(v_profile.name, p_profile_id::text),
+    -- `audit_logs.details` is jsonb, so this must be an object, not a string.
+    jsonb_build_object(
+      'summary', 'Manual deposit: ' || v_type_label || ' of ' || p_amount::text ||
+                 ' for ' || COALESCE(v_profile.name, p_profile_id::text),
+      'deposit_type', p_deposit_type,
+      'amount', p_amount
+    ),
     v_now
   );
 
