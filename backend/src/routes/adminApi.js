@@ -4549,7 +4549,11 @@ router.post(
       const { data, error } = await supabase.rpc('post_journal_entry', {
         p_txn_date: txn_date,
         p_description: description,
-        p_lines: JSON.stringify(lines),
+        // Pass the array itself, NOT JSON.stringify(lines). Stringifying sends a
+        // JSON *string* to a jsonb parameter, so `jsonb_typeof(p_lines)` is
+        // 'string' rather than 'array' and the function rejects a valid entry as
+        // "needs at least two lines".
+        p_lines: lines,
         p_admin_id: req.user.id,
       });
 

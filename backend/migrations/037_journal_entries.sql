@@ -39,17 +39,31 @@ DECLARE
   v_total_credit NUMERIC(18,2) := 0;
   v_posted      INTEGER := 0;
   v_admin_name  TEXT;
+  v_lines       JSONB;
 BEGIN
   -- ── Validate ──────────────────────────────────────────────────────────────
   IF p_description IS NULL OR length(btrim(p_description)) < 3 THEN
     RAISE EXCEPTION 'A description of at least 3 characters is required' USING ERRCODE = '22023';
   END IF;
-  IF p_lines IS NULL OR jsonb_typeof(p_lines) <> 'array' OR jsonb_array_length(p_lines) < 2 THEN
+  -- Tolerate a JSON-encoded array as well as a real one. Callers that pass
+  -- `JSON.stringify(lines)` deliver a jsonb *string*, and rejecting that with
+  -- "needs at least two lines" is misleading; decode it instead. `p_lines` is an
+  -- IN parameter so the decoded copy lives in v_lines.
+  v_lines := p_lines;
+  IF v_lines IS NOT NULL AND jsonb_typeof(v_lines) = 'string' THEN
+    BEGIN
+      v_lines := (v_lines #>> '{}')::jsonb;
+    EXCEPTION WHEN OTHERS THEN
+      RAISE EXCEPTION 'lines must be a JSON array' USING ERRCODE = '22023';
+    END;
+  END IF;
+
+  IF v_lines IS NULL OR jsonb_typeof(v_lines) <> 'array' OR jsonb_array_length(v_lines) < 2 THEN
     RAISE EXCEPTION 'A journal entry needs at least two lines' USING ERRCODE = '22023';
   END IF;
 
   -- Sum first so a bad entry is rejected before anything is written.
-  FOR v_line IN SELECT * FROM jsonb_array_elements(p_lines) LOOP
+  FOR v_line IN SELECT * FROM jsonb_array_elements(v_lines) LOOP
     IF COALESCE(v_line->>'account_code', '') = '' THEN
       RAISE EXCEPTION 'Every line requires an account_code' USING ERRCODE = '22023';
     END IF;
@@ -76,7 +90,7 @@ BEGIN
   SELECT name INTO v_admin_name FROM public.profiles WHERE id = p_admin_id;
 
   -- ─ Post every line under one txn_no ──────────────────────────────────────
-  FOR v_line IN SELECT * FROM jsonb_array_elements(p_lines) LOOP
+  FOR v_line IN SELECT * FROM jsonb_array_elements(v_lines) LOOP
     INSERT INTO public.ledger_entries (
       txn_no, txn_date, reference, type, description,
       account_code, account_name,
@@ -114,14 +128,19 @@ BEGIN
       'txn_no', v_txn_no,
       'txn_date', p_txn_date,
       'description', p_description,
-      'lines', p_lines,
+      'lines', v_lines,
       'total_debit', v_total_debit,
       'total_credit', v_total_credit,
       'posted_by', v_admin_name
     ),
     p_admin_id, 'admin',
-    'Journal entry ' || v_txn_no || ': ' || btrim(p_description) ||
-      ' (' || v_total_debit::text || ' across ' || v_posted::text || ' lines)',
+    -- `audit_logs.details` is jsonb, so this must be an object, not a string.
+    jsonb_build_object(
+      'summary', 'Journal entry ' || v_txn_no || ': ' || btrim(p_description) ||
+                 ' (' || v_total_debit::text || ' across ' || v_posted::text || ' lines)',
+      'txn_no', v_txn_no,
+      'total_debit', v_total_debit
+    ),
     NOW()
   );
 
