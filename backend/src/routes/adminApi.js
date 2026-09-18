@@ -19,6 +19,7 @@ const logger = require('../utils/logger');
 const governance = require('./governance');
 const referralService = require('../services/referralService');
 const adminPlatform = require('./adminPlatform');
+const adminRollovers = require('./adminRollovers');
 const notifyService = require('../services/notifyService');
 const approvalMatrix = require('../lib/approvalMatrix');
 const approvalRequests = require('../lib/approvalRequests');
@@ -66,6 +67,10 @@ router.use(governance);
 // system search, attention required, loan approval matrix, notification
 // templates, payroll reconciliation). Mounted under /api/admin/<path>.
 router.use(adminPlatform);
+
+// Rollover Management in the admin dashboard calls /api/admin/rollovers*;
+// no such routes existed, so the page 404'd on mount and on every action.
+router.use(adminRollovers);
 
 // All admin roles (requireAdmin accepts 'super_admin' but historic queries
 // filtered 'superadmin' only — keep both spellings so the Super Admin always

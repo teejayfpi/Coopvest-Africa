@@ -536,17 +536,40 @@ router.patch(
         return res.status(400).json({ success: false, error: 'Rollover is not awaiting approval' });
       }
 
+      const now = new Date().toISOString();
       const { data, error } = await supabase
         .from('rollovers')
         .update({
           status: 'approved',
-          approved_at: new Date().toISOString(),
+          approved_at: now,
           admin_notes: req.body.adminNotes || null,
+          reviewed_by: req.user.id,
+          reviewed_at: now,
+          updated_at: now,
         })
         .eq('id', req.params.id)
         .select('*')
         .single();
       if (error) throw error;
+
+      // Apply the extension to the loan BEFORE telling the member it is active.
+      // Previously this handler only flipped the status, so the member received
+      // "your new repayment schedule is now active" while the loan's tenure and
+      // monthly repayment were unchanged.
+      const { data: applied, error: applyErr } = await supabase.rpc('apply_loan_rollover', {
+        p_rollover_id: req.params.id,
+        p_admin_id: req.user.id,
+      });
+      if (applyErr) {
+        await supabase
+          .from('rollovers')
+          .update({ status: 'awaiting_admin_approval', approved_at: null, updated_at: now })
+          .eq('id', req.params.id);
+        return res.status(400).json({
+          success: false,
+          error: applyErr.message || 'Failed to apply the rollover to the loan',
+        });
+      }
 
       // Notify borrower — fire-and-forget
       notify.notifyRolloverApproved({
@@ -589,7 +612,10 @@ router.patch(
         .from('rollovers')
         .update({
           status: 'rejected',
-          rejected_at: new Date().toISOString(),
+          // `rejected_at` does not exist on this table (verified against
+          // production: 42703). `reviewed_at` is the real column.
+          reviewed_at: new Date().toISOString(),
+          reviewed_by: req.user.id,
           rejection_reason: req.body.rejectionReason,
         })
         .eq('id', req.params.id)
