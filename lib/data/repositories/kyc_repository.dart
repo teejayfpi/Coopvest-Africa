@@ -52,6 +52,11 @@ class KYCRepository {
 
       return KYCSubmission(
         dateOfBirth: str(row['date_of_birth'] ?? personal['date_of_birth']),
+        // Preserve the real lifecycle status from the backend so the AuthGuard
+        // can tell "genuinely not submitted" (pending) apart from a failed
+        // fetch. Defaulting to 'pending' here previously caused every network
+        // blip to re-trigger the KYC flow for members who had already
+        // submitted.
         gender: str(personal['gender']),
         employmentType: str(employment['employment_type'] ?? employment['employmentType']) ?? '',
         organizationId: str(employment['organization_id'] ?? employment['organizationId']),

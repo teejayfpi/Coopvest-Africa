@@ -31,7 +31,7 @@ class _AuthGuardState extends ConsumerState<AuthGuard> {
   int _silentRetryCount = 0;
   static const int _maxSilentRetries = 3;
 
-  /// Retry the KYC fetch quietly after a delay (gives a cold-starting backend
+    /// Retry the KYC fetch quietly after a delay (gives a cold-starting backend
   /// time to wake). Silent retries never toggle the provider's loading status,
   /// so the dashboard stays on screen instead of flashing a spinner.
   void _scheduleSilentKycRetry() {
@@ -44,6 +44,7 @@ class _AuthGuardState extends ConsumerState<AuthGuard> {
       await ref.read(kycProvider.notifier).initializeKYC(silent: true);
     });
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -64,9 +65,13 @@ class _AuthGuardState extends ConsumerState<AuthGuard> {
     // which forced every member through the 8-step profile form before they
     // could reach the payment screen — the length members complained about.
     // `registration_completed` is still set by the backend once the fee
-    // settles (and by the KYC flow) and is still shown as a progress signal,
+    // settles (and by the KYC flow), and is still shown as a progress signal,
     // but it no longer blocks entry to the app. The questions it collected are
     // asked during KYC, which is deferred to the point of applying for a loan.
+    //
+    // The block below must stay reachable for an authenticated member whose
+    // profile has not been filled in: they pay the fee and get their
+    // dashboard, with an incomplete profile simply meaning no loan yet.
 
     // The dashboard gate is the registration FEE, not KYC.
     //
@@ -75,8 +80,8 @@ class _AuthGuardState extends ConsumerState<AuthGuard> {
     // required KYC *approval*, so a member who had paid still could not see
     // their money while an admin reviewed their documents. The flow is now:
     // sign up -> verify -> contribution type -> pay -> dashboard, with KYC
-    // deferred to the point of borrowing (see LoanApplicationScreen's KYC gate
-    // and the requireActivated mounts in the backend).
+    // deferred to the point of borrowing (see AuthGuard's `kycRequiredForCredit`
+    // note and the requireActivated mounts in the backend).
     //
     // So route on the fee alone. The server is authoritative and mirrors this
     // split (requireRegistrationPaid on wallet/savings, requireActivated on
@@ -86,9 +91,9 @@ class _AuthGuardState extends ConsumerState<AuthGuard> {
       return const AccountActivationScreen();
     }
 
-    // Fee settled -> dashboard. Fetch KYC status in the background so the loan
-    // flow and the profile screen have it ready, but never block on it: a
-    // member with a settled fee is allowed onto the dashboard regardless of
+    // Fee settled -> dashboard. Fetch KYC status in the background so the
+    // loan flow and the profile screen have it ready, but never block on it:
+    // a member with a settled fee is allowed onto the dashboard regardless of
     // where their KYC review has got to.
     final kycState = ref.watch(kycProvider);
     if (!_kycInitialized) {
@@ -118,6 +123,7 @@ class _AuthGuardState extends ConsumerState<AuthGuard> {
     // KYC, and the admin then verifies KYC + payment together. Gating on
     // admin approval here would let unpaid members onto the dashboard while
     // their KYC awaits review.
+    //
     // Salary-deduction members are exempt: their fee is recovered from salary by
     // their employer and remitted with their contributions, so sending them to
     // the in-app payment screen would demand money through a channel that isn't

@@ -74,7 +74,8 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
       _amountController.text = initialAmount.toStringAsFixed(0);
     }
     Future.microtask(() {
-      // MANUAL DEPOSIT DISABLED — the Opay bank details panel is gone.
+      // MANUAL DEPOSIT DISABLED — the Opay bank details panel that consumed
+      // these settings is gone; Paystack handles the payment.
       // ref.read(paymentSettingsProvider.notifier).loadFromApi();
       // Load the member's loans so the loan-repayment picker has options.
       if (_allocationType == 'loan_repayment') {
@@ -385,8 +386,8 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
 
   /// Instant deposit via Paystack: initialize on the backend, open the
   /// checkout in the browser, then confirm on return. On success the
-  /// backend credits the wallet automatically — no proof upload, no admin
-  /// verification wait.
+  /// backend credits the wallet automatically (savings) or reduces the loan
+  /// balance (loan repayment) — no proof upload, no admin verification wait.
   Future<void> _payWithPaystack() async {
     if (!_formKey.currentState!.validate()) return;
     final amount = double.tryParse(_amountController.text.replaceAll(',', ''));
@@ -400,50 +401,22 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
       return;
     }
 
+    final isLoanRepay = _allocationType == 'loan_repayment';
+    if (isLoanRepay && _selectedLoanId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Select the loan you are repaying.'),
+          backgroundColor: CoopvestColors.warning,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isProcessing = true);
     try {
-      final apiClient = ref.read(apiClientProvider);
-      List<Map<String, dynamic>>? splitAllocations;
-      if (_allocationType == 'mixed') {
-        double parseSplit(TextEditingController c) =>
-            double.tryParse(c.text.replaceAll(',', '')) ?? 0;
-        splitAllocations = [
-          {'type': 'savings', 'amount': parseSplit(_splitSavingsController)},
-          {'type': 'loan_repayment', 'amount': parseSplit(_splitLoanController)},
-          {'type': 'fine', 'amount': parseSplit(_splitFineController)},
-          {'type': 'fee', 'amount': parseSplit(_splitFeeController)},
-        ].where((a) => (a['amount'] as double) > 0).toList();
-
-        final total = splitAllocations.fold<double>(0, (s, a) => s + (a['amount'] as double));
-        // `amount.abs()` was a no-op on a positive amount and applied abs() to
-        // the wrong side of the comparison, so the guard could pass on a
-        // mismatched split. Compare the difference to the total.
-        if ((total - amount).abs() > 0.01) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Split amounts (₦${total.toStringAsFixed(0)}) must equal the total (₦${amount.toStringAsFixed(0)})'),
-              backgroundColor: CoopvestColors.error,
-            ),
-          );
-          setState(() => _isProcessing = false);
-
-          return;
-        }
-      }
-      final isLoanRepay = _allocationType == 'loan_repayment';
-      if (isLoanRepay && _selectedLoanId == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Select the loan you are repaying.'),
-            backgroundColor: CoopvestColors.warning,
-          ),
-        );
-        setState(() => _isProcessing = false);
-        return;
-      }
       // `payment_type` is the storage label the backend CHECK-constrains, so
-      // fine / fee / mixed map to 'other'; the real obligation travels in
-      // `allocation_type` + `allocations`.
+      // fine / fee / mixed / registration_fee map to 'other'; the real
+      // obligation travels in `allocation_type` + `allocations`.
       const dbPaymentType = {
         'monthly_contribution': 'monthly_contribution',
         'loan_repayment': 'loan_repayment',
@@ -453,15 +426,55 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
         'fee': 'other',
         'mixed': 'other',
       };
-      final initData = <String, dynamic>{
+      final paymentType = dbPaymentType[_allocationType] ?? 'monthly_contribution';
+      final isMixed = _allocationType == 'mixed';
+      if (isMixed) {
+        final splitTotal = [
+          _splitSavingsController,
+          _splitLoanController,
+          _splitFineController,
+          _splitFeeController,
+        ].fold<double>(0, (sum, c) => sum + (double.tryParse(c.text.replaceAll(',', '')) ?? 0));
+        // Compare the DIFFERENCE to the total. An earlier form of this check
+        // applied abs() to the wrong side, so a mismatched split could pass.
+        if ((splitTotal - amount).abs() > 0.01) {
+          setState(() => _isProcessing = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Split amounts (₦${splitTotal.toStringAsFixed(0)}) must equal the total (₦${amount.toStringAsFixed(0)})'),
+              backgroundColor: CoopvestColors.error,
+            ),
+          );
+          return;
+        }
+      }
+      if (_allocationType == 'loan_repayment' && _selectedLoanId == null) {
+        setState(() => _isProcessing = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Select the loan you are repaying.'),
+            backgroundColor: CoopvestColors.warning,
+          ),
+        );
+        return;
+      }
+      final allocations = isMixed
+          ? [
+              {'type': 'savings', 'amount': double.tryParse(_splitSavingsController.text.replaceAll(',', '')) ?? 0},
+              {'type': 'loan_repayment', 'amount': double.tryParse(_splitLoanController.text.replaceAll(',', '')) ?? 0},
+              {'type': 'fine', 'amount': double.tryParse(_splitFineController.text.replaceAll(',', '')) ?? 0},
+              {'type': 'fee', 'amount': double.tryParse(_splitFeeController.text.replaceAll(',', '')) ?? 0},
+            ].where((a) => (a['amount'] as double) > 0).toList()
+          : null;
+
+      final apiClient = ref.read(apiClientProvider);
+      final resp = await apiClient.dio.post('/payments/initialize', data: {
         'amount': amount,
-        'payment_type': dbPaymentType[_allocationType] ?? 'monthly_contribution',
+        'payment_type': paymentType,
         'allocation_type': _allocationType,
+        if (allocations != null && allocations.isNotEmpty) 'allocations': allocations,
         if (isLoanRepay && _selectedLoanId != null) 'loan_id': _selectedLoanId,
-        if (isLoanRepay && _selectedLoanId != null) 'loan_id': _selectedLoanId,
-      };
-      if (splitAllocations != null) initData['allocations'] = splitAllocations;
-      final resp = await apiClient.dio.post('/payments/initialize', data: initData);
+      });
       final data = resp.data as Map<String, dynamic>;
       final url = data['authorization_url'] as String?;
       final reference = data['reference'] as String?;
@@ -496,7 +509,7 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              _allocationType == 'loan_repayment'
+              isLoanRepay
                   ? 'Payment confirmed — your loan balance has been reduced. 🎉'
                   : 'Payment confirmed — your wallet has been credited. 🎉',
             ),
@@ -641,7 +654,12 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
       setState(() => _isProcessing = false);
     }
   }
+  */
 
+  // MANUAL DEPOSIT DISABLED — `_copyToClipboard` and `_showPendingDialog`
+  // only served the bank-transfer panel and the "pending verification"
+  // confirmation. Both are retired with the manual flow.
+  /*
   void _copyToClipboard(String text, String label) {
     Clipboard.setData(ClipboardData(text: text));
     ScaffoldMessenger.of(context).showSnackBar(

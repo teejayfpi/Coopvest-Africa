@@ -147,6 +147,12 @@ class AuthRepository {
           'phone': phone,
           'referralCode': referralCode,
         },
+        // In-app verification: the deep-link URL from the single source of truth
+        // in AppConfig. This used to be hardcoded to the admin dashboard's
+        // /verify-email page, which sent members into the OPERATOR portal to
+        // confirm their own account. The app's deep-link handler routes
+        // coopvest://verify-email and https://coopvest.africa/verify-email into
+        // the in-app verify screen; see AppConfig for the domain caveat.
         emailRedirectTo: AppConfig.emailVerifyRedirect,
       );
 

@@ -8,6 +8,7 @@ import '../../../core/extensions/number_extensions.dart';
 import '../../../data/models/loan_models.dart';
 import '../../../core/network/api_client.dart';
 import '../../../presentation/providers/loan_provider.dart';
+import '../../../presentation/navigation/rollover_routes.dart';
 import '../../../presentation/providers/wallet_provider.dart';
 import '../../../presentation/widgets/common/buttons.dart';
 import '../../../presentation/widgets/common/cards.dart';
@@ -498,6 +499,30 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
                     ),
                   ),
                 ],
+              ),
+            ],
+            // Rollover entry point. Previously NOTHING in the app navigated to
+            // any rollover screen, so the feature was unreachable even once a
+            // member qualified. Shown for an active loan; the eligibility
+            // screen itself explains the 70% requirement if they are short.
+            if (loan.status.toLowerCase() == 'active' ||
+                loan.status.toLowerCase() == 'repaying') ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => RolloverNavigator.toEligibility(context, loan),
+                  icon: const Icon(Icons.sync, size: 16),
+                  label: const Text('Loan Rollover'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: CoopvestColors.primary,
+                    side: BorderSide(color: CoopvestColors.primary.withOpacity(0.4)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                  ),
+                ),
               ),
             ],
           ],
