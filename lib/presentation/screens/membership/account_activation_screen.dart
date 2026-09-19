@@ -321,6 +321,22 @@ class _AccountActivationScreenState
                 ),
               ),
               */
+              // Escape hatch. This screen is now the single gate right after
+              // sign-up (it used to be reachable only after the whole profile
+              // form and KYC), and it has `automaticallyImplyLeading: false`,
+              // so without this a member who is not ready to pay would be
+              // stranded here with no way to leave.
+              const SizedBox(height: 20),
+              TextButton(
+                onPressed: () =>
+                    ref.read(authProvider.notifier).logout(),
+                child: Text(
+                  'Sign out',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: CoopvestColors.textSecondary,
+                  ),
+                ),
+              ),
             ],
           ),
         ),

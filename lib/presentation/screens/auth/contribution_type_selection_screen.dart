@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
+import '../../../core/network/api_client.dart';
 import '../../widgets/common/buttons.dart';
 
 /// Contribution type selection before KYC registration
@@ -53,11 +54,44 @@ class _ContributionTypeSelectionScreenState
             ? 'direct_deposit'
             : 'salary_deduction';
 
-    // Navigate to registration onboarding
+    // Persist the choice. Best-effort and non-blocking: the member is already
+    // authenticated here, and the channel decides whether employment details
+    // are collected at KYC time (salary deduction) or skipped (direct deposit).
+    // A failure must not stop them reaching the payment screen, so this is
+    // fired without awaiting the result.
+    //
+    // Salary deduction needs the employer on file before the backend accepts
+    // it (and before the registration-fee exemption can apply), so a 422 here
+    // is expected until KYC collects the employer — that is why the call is
+    // deliberately ignored on error rather than surfaced.
+    _persistContributionType(updatedData['contribution_type']!);
+
+    // The critical path is now: sign up -> verify email -> pick contribution
+    // type -> pay the registration fee -> dashboard.
+    //
+    // This used to route into the 8-step profile onboarding (step3), which went
+    // on to the KYC form, and only then reached the payment screen — the flow
+    // members complained was too long. The profile/KYC questions are now asked
+    // as part of KYC, which is deferred to the point of applying for a loan
+    // (see LoanApplicationScreen's KYC gate), so the member goes straight to
+    // paying and then into the app.
     Navigator.of(context).pushNamed(
-      '/register-step3',
+      '/account-activation',
       arguments: updatedData,
     );
+  }
+
+  /// Record the chosen contribution channel on the member's KYC record.
+  /// Errors are swallowed on purpose — see the call site.
+  Future<void> _persistContributionType(String contributionType) async {
+    try {
+      final apiClient = ref.read(apiClientProvider);
+      await apiClient.post('/kyc/contribution-type', data: {
+        'contribution_type': contributionType,
+      });
+    } catch (_) {
+      // Non-fatal: the choice is re-applied when the member completes KYC.
+    }
   }
 
   @override
