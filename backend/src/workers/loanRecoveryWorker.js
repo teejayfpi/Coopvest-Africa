@@ -31,22 +31,67 @@ const LATE_REPAYMENT_PENALTY_NGN = 3000;
  * Looks at missed_months column on the loan record if available,
  * or falls back to counting unpaid installments past their due date.
  */
-function getConsecutiveMissedMonths(loan) {
-  // Use server-tracked missed_months if available
-  if (typeof loan.missed_months === 'number') return loan.missed_months;
-  // Fallback: estimate from last_repayment_date vs today.
-  // `disbursed_at` doesn't exist on the loans table; `approved_at` is the
-  // closest actual populated timestamp for when the loan started.
-  const disbursedAtValue = loan.disbursed_at || loan.approved_at;
-  if (!disbursedAtValue) return 0;
-  const disbursed = new Date(disbursedAtValue);
+/**
+ * How many consecutive monthly repayments this loan has missed.
+ *
+ * Counted from the repayments actually recorded against it, which is the only
+ * source of truth that exists on this table. The previous implementation read
+ * `loan.missed_months` and `loan.payments_made` — neither is a column on
+ * `loans` (verified against production), so `payments_made` was always 0 and the
+ * function returned every month elapsed since approval:
+ *
+ *   monthsSinceApproved - 0 = monthsSinceApproved
+ *
+ * That misfired in both directions:
+ *   - A member in good standing who had repaid every month was still reported as
+ *     having missed all of them, and escalated to a ₦3,000 penalty.
+ *   - `next_due_date` is never written anywhere in the codebase, so the separate
+ *     overdue queries could never match a loan either.
+ *
+ * Months are counted as the number of scheduled instalments that have come due
+ * since approval and have no matching paid repayment.
+ */
+async function getConsecutiveMissedMonths(loan) {
+  const startValue = loan.disbursed_at || loan.approved_at || loan.created_at;
+  if (!startValue) return 0;
+
+  const start = new Date(startValue);
+  if (Number.isNaN(start.getTime())) return 0;
+
   const now = new Date();
-  const monthsSinceDisbursed =
-    (now.getFullYear() - disbursed.getFullYear()) * 12 +
-    (now.getMonth() - disbursed.getMonth());
-  const expectedPayments = Math.min(monthsSinceDisbursed, loan.tenure_months || loan.tenure || 0);
-  const paidPayments = loan.payments_made || 0;
-  return Math.max(0, expectedPayments - paidPayments);
+  const monthsSinceStart =
+    (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth());
+
+  const tenure = Number(loan.tenure_months || loan.tenure || 0);
+  const expectedPayments = tenure > 0 ? Math.min(monthsSinceStart, tenure) : monthsSinceStart;
+  if (expectedPayments <= 0) return 0;
+
+  // Count distinct calendar months in which a repayment was actually received.
+  const { data: repayments, error } = await supabase
+    .from('loan_repayments')
+    .select('paid_at, created_at, status')
+    .eq('loan_id', loan.id)
+    .in('status', ['paid', 'completed', 'successful']);
+
+  if (error) {
+    // Do not guess. Escalating a member on a failed lookup is worse than
+    // skipping this cycle — the next run will pick it up.
+    logger.warn(
+      `loanRecoveryWorker: repayment lookup failed for loan ${loan.loan_id || loan.id}: ${error.message}`,
+    );
+    return 0;
+  }
+
+  const paidMonths = new Set();
+  for (const r of repayments || []) {
+    const when = new Date(r.paid_at || r.created_at);
+    if (Number.isNaN(when.getTime())) continue;
+    paidMonths.add(`${when.getFullYear()}-${when.getMonth()}`);
+  }
+
+  // One instalment is expected per month; any month without a payment counts.
+  const paidCount = Math.min(paidMonths.size, expectedPayments);
+  return Math.max(0, expectedPayments - paidCount);
 }
 
 async function notifyAdminOfDefault(loan, stage) {
@@ -117,7 +162,7 @@ async function processDue() {
 
     for (const loan of activeLoans) {
       try {
-        const missedMonths = getConsecutiveMissedMonths(loan);
+        const missedMonths = await getConsecutiveMissedMonths(loan);
 
         if (missedMonths <= 0) continue; // No missed payments — nothing to do
 
