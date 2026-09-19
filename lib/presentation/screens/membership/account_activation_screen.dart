@@ -5,10 +5,12 @@ import '../../widgets/paystack_checkout_dialog.dart';
 import '../../../config/app_config.dart';
 import '../../../config/theme_config.dart';
 import '../../../core/network/api_client.dart';
-import '../../../data/models/payment_proof_model.dart';
+// MANUAL DEPOSIT DISABLED — the registration fee is paid instantly via
+// Paystack; the proof upload flow and its payment-type model are retired.
+// import '../../../data/models/payment_proof_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/common/buttons.dart';
-import '../contributions/payment_proof_upload_screen.dart';
+// import '../contributions/payment_proof_upload_screen.dart';
 
 /// Account Activation Screen
 ///
@@ -269,6 +271,11 @@ class _AccountActivationScreenState
                   height: 1.4,
                 ),
               ),
+              // MANUAL DEPOSIT DISABLED — the "Pay by Transfer & Upload
+              // Proof" alternative and its OR divider were removed. The
+              // instant Paystack button above is now the only way to pay the
+              // registration fee, so no proof is ever uploaded by hand.
+              /*
               const SizedBox(height: 20),
               Row(
                 children: [
@@ -311,6 +318,23 @@ class _AccountActivationScreenState
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: CoopvestColors.textSecondary,
                   height: 1.4,
+                ),
+              ),
+              */
+              // Escape hatch. This screen is now the single gate right after
+              // sign-up (it used to be reachable only after the whole profile
+              // form and KYC), and it has `automaticallyImplyLeading: false`,
+              // so without this a member who is not ready to pay would be
+              // stranded here with no way to leave.
+              const SizedBox(height: 20),
+              TextButton(
+                onPressed: () =>
+                    ref.read(authProvider.notifier).logout(),
+                child: Text(
+                  'Sign out',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: CoopvestColors.textSecondary,
+                  ),
                 ),
               ),
             ],

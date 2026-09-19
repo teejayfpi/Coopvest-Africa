@@ -1,3 +1,16 @@
+// MANUAL DEPOSIT DISABLED
+//
+// "My Deposits" tracked manual (bank transfer) deposit requests through the
+// Submitted -> Under Review -> Verified/Rejected timeline, including the
+// uploaded proof-of-payment thumbnail. Members now pay instantly through
+// Paystack and the charge settles automatically, so there is no manual
+// request or proof to track.
+//
+// The entire file is commented out rather than deleted so the flow can be
+// restored with a single revert if manual payments ever come back.
+//
+// ignore_for_file: unused_import, unused_element, unused_field, unused_local_variable
+/*
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -639,3 +652,4 @@ class _TimelineStep {
     this.color,
   });
 }
+*/

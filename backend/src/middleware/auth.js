@@ -320,6 +320,47 @@ function requireActivated(req, res, next) {
   });
 }
 
+/**
+ * Require only that the registration fee is settled (paid, or exempt via
+ * salary deduction) — KYC is NOT required.
+ *
+ * Members complained the onboarding was too long: they were forced through the
+ * full KYC form *and* the registration payment before they could see the
+ * dashboard at all. The dashboard, wallet and savings carry no credit risk,
+ * and gating them on KYC locked out paying members indefinitely while an admin
+ * reviewed their documents.
+ *
+ * So the gate is split by risk:
+ *   - requireRegistrationPaid — dashboard / wallet / savings / contributions.
+ *     The member has paid, so they can see and use their own money.
+ *   - requireActivated — credit and disbursement (loans, rollover). KYC stays
+ *     mandatory here because lending without a verified identity is the real
+ *     exposure.
+ *
+ * The response carries the same machine-readable `gate` breakdown, with
+ * `kyc_required: false`, so the app can tell "you still owe KYC before a loan"
+ * apart from "you cannot see your own wallet".
+ */
+function requireRegistrationPaid(req, res, next) {
+  return authenticate(req, res, async () => {
+    try {
+      const profile = await loadGateProfile(req.user.id);
+      const gate = gateStatusFor(profile);
+      req.gate = gate;
+      if (gate.registration_fee_settled && !gate.blocked) return next();
+      return res.status(403).json({
+        success: false,
+        error: 'Pay your registration fee to unlock your member dashboard.',
+        code: ACTIVATION_BLOCKED,
+        gate: { ...gate, kyc_required: false },
+      });
+    } catch (err) {
+      logger.error('requireRegistrationPaid: gate check failed:', err.message);
+      return res.status(500).json({ success: false, error: 'Failed to verify membership status' });
+    }
+  });
+}
+
 module.exports = {
   authenticate,
   optionalAuth,
@@ -329,6 +370,7 @@ module.exports = {
   requireSuperAdmin,
   decodeSessionId,
   requireActivated,
+  requireRegistrationPaid,
   attachGateStatus,
   gateStatusFor,
   ACTIVATION_BLOCKED,

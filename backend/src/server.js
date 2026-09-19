@@ -228,7 +228,7 @@ app.get('/health', (req, res) => {
 });
 
 // WebSocket stats endpoint (requires authentication)
-const { authenticate, requireActivated } = require('./middleware/auth');
+const { authenticate, requireActivated, requireRegistrationPaid } = require('./middleware/auth');
 app.get('/ws/stats', authenticate, (req, res) => {
   const stats = websocketService.getStats();
   res.json({
@@ -255,28 +255,28 @@ app.use('/api/v1/auth', emailVerificationRoutes);
 app.use('/api/v1/referrals', requireFeatureFlag('referralSystem'), referralRoutes);
 app.use('/api/v1/tickets', ticketRoutes);
 app.use('/api/v1/loans', requireFeatureFlag('loanModule'), requireActivated, loanRoutes);
-app.use('/api/v1/wallet', requireActivated, walletRoutes);
+app.use('/api/v1/wallet', requireRegistrationPaid, walletRoutes);
 app.use('/api/v1/user', userRoutes);
 app.use('/api/v1/kyc', kycRoutes);
-app.use('/api/v1/savings', requireFeatureFlag('savingsModule'), requireActivated, savingsRoutes);
+app.use('/api/v1/savings', requireFeatureFlag('savingsModule'), requireRegistrationPaid, savingsRoutes);
 app.use('/api/v1/rollover', requireActivated, rolloverRoutes);
-app.use('/api/v1/investments', requireFeatureFlag('investmentModule'), requireActivated, investmentsRoutes);
+app.use('/api/v1/investments', requireFeatureFlag('investmentModule'), requireRegistrationPaid, investmentsRoutes);
 app.use('/api/v1/notifications', requireFeatureFlag('notifications'), notificationRoutes);
 app.use('/api/v1/bank-accounts', requireActivated, bankAccountRoutes);
 app.use('/api/v1/banks', banksRoutes);
 app.use('/api/v1/terms', termsRoutes);
-app.use('/api/v1/transactions', requireActivated, transactionRoutes);
+app.use('/api/v1/transactions', requireRegistrationPaid, transactionRoutes);
 app.use('/api/v1/settings', settingsRoutes);
 app.use('/api/v1/watchlist', watchlistRoutes);
 app.use('/api/v1/analytics', analyticsRoutes);
 app.use('/api/v1/guarantor', requireActivated, guarantorRoutes);
 app.use('/api/v1/announcements', announcementRoutes);
-app.use('/api/v1/contributions', requireActivated, contributionRoutes);
+app.use('/api/v1/contributions', requireRegistrationPaid, contributionRoutes);
 app.use('/api/v1/documents', documentRoutes);
 app.use('/api/v1/admin-termination', adminTerminationRoutes);
 // Admin portal path (mounted under the /api/admin prefix the dashboard uses).
 app.use('/api/admin/termination', adminTerminationRoutes);
-app.use('/api/v1/termination', requireActivated, terminationRoutes);
+app.use('/api/v1/termination', requireRegistrationPaid, terminationRoutes);
 app.use('/api/v1/payment-proofs', paymentProofRoutes);
 app.use('/api/v1/payments', require('./routes/payments'));
 
@@ -297,24 +297,24 @@ app.use('/api/auth', emailVerificationRoutes);
 app.use('/api/referrals', requireFeatureFlag('referralSystem'), referralRoutes);
 app.use('/api/tickets', ticketRoutes);
 app.use('/api/loans', requireFeatureFlag('loanModule'), requireActivated, loanRoutes);
-app.use('/api/wallet', requireActivated, walletRoutes);
+app.use('/api/wallet', requireRegistrationPaid, walletRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/kyc', kycRoutes);
 app.use('/api/organizations', organizationRoutes);
-app.use('/api/savings', requireFeatureFlag('savingsModule'), requireActivated, savingsRoutes);
+app.use('/api/savings', requireFeatureFlag('savingsModule'), requireRegistrationPaid, savingsRoutes);
 app.use('/api/rollover', requireActivated, rolloverRoutes);
-app.use('/api/investments', requireFeatureFlag('investmentModule'), requireActivated, investmentsRoutes);
+app.use('/api/investments', requireFeatureFlag('investmentModule'), requireRegistrationPaid, investmentsRoutes);
 app.use('/api/notifications', requireFeatureFlag('notifications'), notificationRoutes);
 app.use('/api/bank-accounts', requireActivated, bankAccountRoutes);
-app.use('/api/transactions', requireActivated, transactionRoutes);
+app.use('/api/transactions', requireRegistrationPaid, transactionRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/watchlist', watchlistRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/guarantor', requireActivated, guarantorRoutes);
 app.use('/api/announcements', announcementRoutes);
-app.use('/api/contributions', requireActivated, contributionRoutes);
+app.use('/api/contributions', requireRegistrationPaid, contributionRoutes);
 app.use('/api/documents', documentRoutes);
-app.use('/api/termination', requireActivated, terminationRoutes);
+app.use('/api/termination', requireRegistrationPaid, terminationRoutes);
 app.use('/api/payment-proofs', paymentProofRoutes);
 app.use('/api/payments', require('./routes/payments'));
 app.use('/api/kyc', kycAdminRoutes);

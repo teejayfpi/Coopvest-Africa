@@ -1,7 +1,9 @@
-import 'dart:io';
+// MANUAL DEPOSIT DISABLED — `dart:io` (File) and `image_picker` were only
+// used to attach a proof-of-payment receipt.
+// import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
+// import 'package:image_picker/image_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../widgets/paystack_checkout_dialog.dart';
@@ -11,7 +13,8 @@ import '../../../core/utils/utils.dart';
 import '../../../core/network/api_client.dart';
 import '../../../presentation/providers/wallet_provider.dart';
 import '../../../presentation/providers/loan_provider.dart';
-import '../../../presentation/providers/payment_settings_provider.dart';
+// MANUAL DEPOSIT DISABLED — bank details were only shown for manual transfers.
+// import '../../../presentation/providers/payment_settings_provider.dart';
 import '../../../presentation/widgets/common/buttons.dart';
 import '../../../presentation/widgets/common/cards.dart';
 import '../../../presentation/widgets/common/inputs.dart';
@@ -46,7 +49,8 @@ class DepositScreen extends ConsumerStatefulWidget {
 class _DepositScreenState extends ConsumerState<DepositScreen> {
   final _amountController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
-  String _selectedPaymentMethod = 'bank_transfer';
+  // MANUAL DEPOSIT DISABLED — members pay instantly via Paystack only.
+  // String _selectedPaymentMethod = 'bank_transfer';
   late String _allocationType;
   String? _selectedLoanId;
   final _splitSavingsController = TextEditingController();
@@ -54,10 +58,11 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
   final _splitFineController = TextEditingController();
   final _splitFeeController = TextEditingController();
   bool _isProcessing = false;
-  File? _proofFile;
-  bool _isUploadingProof = false;
-  String? _proofUrl;
-  final ImagePicker _imagePicker = ImagePicker();
+  // MANUAL DEPOSIT DISABLED — proof-of-payment upload removed.
+  // File? _proofFile;
+  // bool _isUploadingProof = false;
+  // String? _proofUrl;
+  // final ImagePicker _imagePicker = ImagePicker();
 
   @override
   void initState() {
@@ -69,7 +74,8 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
       _amountController.text = initialAmount.toStringAsFixed(0);
     }
     Future.microtask(() {
-      ref.read(paymentSettingsProvider.notifier).loadFromApi();
+      // MANUAL DEPOSIT DISABLED — the Opay bank details panel is gone.
+      // ref.read(paymentSettingsProvider.notifier).loadFromApi();
       // Load the member's loans so the loan-repayment picker has options.
       if (_allocationType == 'loan_repayment') {
         ref.read(loanProvider.notifier).getLoans();
@@ -104,12 +110,18 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
     },
   ];
 
-  final List<Map<String, dynamic>> _paymentMethods = [
-    {'value': 'bank_transfer', 'label': 'Bank Transfer', 'icon': Icons.account_balance},
-    {'value': 'card', 'label': 'Debit Card', 'icon': Icons.credit_card},
-    {'value': 'ussd', 'label': 'USSD', 'icon': Icons.phone_android},
-  ];
+  // MANUAL DEPOSIT DISABLED — the payment-method selector (bank transfer /
+  // card / USSD) is gone; every deposit now goes through Paystack.
+  // final List<Map<String, dynamic>> _paymentMethods = [
+  //   {'value': 'bank_transfer', 'label': 'Bank Transfer', 'icon': Icons.account_balance},
+  //   {'value': 'card', 'label': 'Debit Card', 'icon': Icons.credit_card},
+  //   {'value': 'ussd', 'label': 'USSD', 'icon': Icons.phone_android},
+  // ];
 
+  // MANUAL DEPOSIT DISABLED — proof-of-payment image picking, upload source
+  // sheet and the proof picker widget are all removed. Members pay via
+  // Paystack and the backend settles the charge, so no receipt is attached.
+  /*
   Future<void> _pickProofImage(ImageSource source) async {
     try {
       final picked = await _imagePicker.pickImage(
@@ -265,6 +277,45 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
     );
   }
 
+  */
+
+  /// Label for the single Paystack action, named after what the member is
+  /// actually paying for so "Pay Instantly" never reads as a generic deposit.
+  String _paystackButtonLabel() {
+    switch (_allocationType) {
+      case 'loan_repayment':
+        return 'Pay Instantly (Card / Transfer)';
+      case 'fine':
+        return 'Pay Fine Instantly (Card / Transfer)';
+      case 'fee':
+        return 'Pay Fee Instantly (Card / Transfer)';
+      case 'registration_fee':
+        return 'Pay Registration Fee Instantly (Card / Transfer)';
+      case 'mixed':
+        return 'Pay Split Amount Instantly (Card / Transfer)';
+      default:
+        return 'Pay Instantly (Card / Transfer)';
+    }
+  }
+
+  /// Explains how the Paystack charge settles, per allocation type.
+  String _paystackFootnote() {
+    switch (_allocationType) {
+      case 'loan_repayment':
+        return 'Paid online — your loan balance is reduced automatically once Paystack confirms.';
+      case 'fine':
+        return 'Paid online — this fine is settled automatically once Paystack confirms.';
+      case 'fee':
+        return 'Paid online — this fee is settled automatically once Paystack confirms.';
+      case 'registration_fee':
+        return 'Paid online — your registration fee is settled automatically once Paystack confirms.';
+      case 'mixed':
+        return 'Paid online — each obligation is settled automatically once Paystack confirms.';
+      default:
+        return 'Paid online — your wallet is credited automatically once Paystack confirms.';
+    }
+  }
+
   /// Loan picker shown when "Loan Repayment" allocation is selected. Lets the
   /// member choose WHICH loan they are repaying; defaults to the loan that
   /// navigated here (initialLoanId) when present.
@@ -364,8 +415,10 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
         ].where((a) => (a['amount'] as double) > 0).toList();
 
         final total = splitAllocations.fold<double>(0, (s, a) => s + (a['amount'] as double));
-        if ((total - amount.abs() > 0.01)) {
-
+        // `amount.abs()` was a no-op on a positive amount and applied abs() to
+        // the wrong side of the comparison, so the guard could pass on a
+        // mismatched split. Compare the difference to the total.
+        if ((total - amount).abs() > 0.01) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Split amounts (₦${total.toStringAsFixed(0)}) must equal the total (₦${amount.toStringAsFixed(0)})'),
@@ -388,10 +441,23 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
         setState(() => _isProcessing = false);
         return;
       }
+      // `payment_type` is the storage label the backend CHECK-constrains, so
+      // fine / fee / mixed map to 'other'; the real obligation travels in
+      // `allocation_type` + `allocations`.
+      const dbPaymentType = {
+        'monthly_contribution': 'monthly_contribution',
+        'loan_repayment': 'loan_repayment',
+        'registration_fee': 'registration_fee',
+        'investment': 'investment',
+        'fine': 'other',
+        'fee': 'other',
+        'mixed': 'other',
+      };
       final initData = <String, dynamic>{
         'amount': amount,
-        'payment_type': _allocationType,
-        if (isLoanRepay) 'allocation_type': 'loan_repayment',
+        'payment_type': dbPaymentType[_allocationType] ?? 'monthly_contribution',
+        'allocation_type': _allocationType,
+        if (isLoanRepay && _selectedLoanId != null) 'loan_id': _selectedLoanId,
         if (isLoanRepay && _selectedLoanId != null) 'loan_id': _selectedLoanId,
       };
       if (splitAllocations != null) initData['allocations'] = splitAllocations;
@@ -461,6 +527,11 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
     }
   }
 
+  // MANUAL DEPOSIT DISABLED — `_processDeposit` submitted a manual deposit
+  // (bank transfer) with an optional proof-of-payment upload and waited for
+  // admin verification. Members now pay instantly through Paystack, so this
+  // whole flow is retired. See `_payWithPaystack`.
+  /*
   Future<void> _processDeposit() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isProcessing = true);
@@ -653,6 +724,8 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
     );
   }
 
+  */
+
   void _goBack() {
     Navigator.of(context).pop();
   }
@@ -663,6 +736,10 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
     super.dispose();
   }
 
+  // MANUAL DEPOSIT DISABLED — the bank-transfer details panel (Opay account
+  // number + copy-to-clipboard) and its `_buildDetailRow` helper only existed
+  // to support manual transfers. Retired with the manual flow.
+  /*
   Widget _buildBankTransferDetails(BuildContext context) {
     final account = ref.watch(paymentSettingsProvider);
     return Container(
@@ -779,6 +856,7 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
       ],
     );
   }
+  */
 
   @override
   Widget build(BuildContext context) {
@@ -913,6 +991,11 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
 
                 const SizedBox(height: 24),
 
+                // MANUAL DEPOSIT DISABLED — the payment-method selector
+                // (Bank Transfer / Debit Card / USSD), the bank-transfer
+                // details panel and the proof-of-payment picker were removed.
+                // Every deposit is now settled instantly via Paystack.
+                /*
                 Text('Payment Method', style: TextStyle(fontWeight: FontWeight.bold, color: context.textPrimary)),
                 const SizedBox(height: 12),
 
@@ -956,14 +1039,7 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
                     );
                   }).toList(),
                 ),
-
-                // Bank transfer details panel
-                if (_selectedPaymentMethod == 'bank_transfer')
-                  _buildBankTransferDetails(context),
-
-                // Proof of payment (bank transfer only)
-                if (_selectedPaymentMethod == 'bank_transfer')
-                  _buildProofPicker(context),
+                */
 
                 const SizedBox(height: 24),
 
@@ -975,9 +1051,7 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          _selectedPaymentMethod == 'bank_transfer'
-                              ? 'After transferring, submit this form and your wallet will be credited once payment is confirmed.'
-                              : 'Deposits are processed instantly. Bank transfers may take 1-2 minutes to reflect.',
+                          _paystackFootnote(),
                           style: TextStyle(color: context.textPrimary, fontSize: 12),
                         ),
                       ),
@@ -988,36 +1062,25 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
                 const SizedBox(height: 32),
 
                 _isProcessing
-                    ? Column(children: [
-                        const Center(child: CircularProgressIndicator(color: CoopvestColors.primary)),
-                        if (_isUploadingProof) ...[
-                          const SizedBox(height: 8),
-                          Text('Uploading proof...', style: TextStyle(fontSize: 12, color: context.textSecondary)),
-                        ],
-                      ])
+                    ? const Center(child: CircularProgressIndicator(color: CoopvestColors.primary))
                     : Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          // Instant online payment — the app charges via Paystack
-                          // and the backend auto-settles the chosen allocation
-                          // (savings wallet credit, loan repayment, fine/fee).
+                          // Instant online payment — the backend settles the
+                          // charge automatically: savings credit the wallet,
+                          // loan repayments reduce the balance, and fine / fee
+                          // / registration_fee settle the matching obligation.
                           PrimaryButton(
-                            label: 'Pay Instantly (Card / Transfer)',
+                            label: _paystackButtonLabel(),
                             onPressed: _payWithPaystack,
                             width: double.infinity,
                             icon: const Icon(Icons.bolt, color: Colors.white),
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Instant — your payment is applied automatically.',
+                            'Instant — settled automatically once Paystack confirms. No proof upload, no waiting for an admin.',
                             textAlign: TextAlign.center,
                             style: TextStyle(fontSize: 11, color: context.textSecondary),
-                          ),
-                          const SizedBox(height: 16),
-                          PrimaryButton(
-                            label: 'Deposit ₦${_amountController.text.isEmpty ? '0' : _amountController.text} Manually',
-                            onPressed: _processDeposit,
-                            width: double.infinity,
                           ),
                         ],
                       ),

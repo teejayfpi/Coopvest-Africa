@@ -10,6 +10,7 @@ import '../../../core/network/api_client.dart';
 import '../../../data/models/referral_models.dart';
 import '../../../presentation/providers/auth_provider.dart';
 import '../../../presentation/providers/contributions/contribution_provider.dart';
+import '../../../presentation/providers/kyc_provider.dart';
 import '../../../presentation/providers/referral_provider.dart';
 import '../../../presentation/providers/wallet_provider.dart';
 import '../../../presentation/widgets/common/buttons.dart';
@@ -494,8 +495,77 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
     ) ?? false;
   }
 
+  /// True when the member has already submitted KYC (awaiting review or
+  /// approved). A loan is credit, so KYC must be on file before we lend —
+  /// this is the point the onboarding KYC was moved to, instead of blocking
+  /// the whole app up front.
+  bool _kycIsSubmitted() {
+    final status = (ref.read(kycProvider).submission?.status ?? '').toLowerCase();
+    if (status == 'submitted' ||
+        status == 'in_review' ||
+        status == 'verified' ||
+        status == 'approved' ||
+        status == 'rejected') {
+      return true;
+    }
+    // Fall back to the profile: a member whose KYC the admin has already
+    // approved is obviously cleared, even if the local probe hasn't landed.
+    final profileStatus =
+        (ref.read(authProvider).user?.kycStatus ?? '').toLowerCase();
+    return profileStatus == 'approved' ||
+        profileStatus == 'verified' ||
+        profileStatus == 'submitted' ||
+        profileStatus == 'in_review';
+  }
+
+  /// Send the member into the KYC flow. Returns once they have been told why.
+  Future<void> _promptForKyc() async {
+    final proceed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.verified_user_outlined, color: CoopvestColors.primary),
+            SizedBox(width: 8),
+            Expanded(child: Text('Complete your KYC first')),
+          ],
+        ),
+        content: const Text(
+          'A loan is credit, so we need to verify who you are before we can '
+          'review an application.\n\n'
+          'Filling in your verification details takes a few minutes and only '
+          'has to be done once.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Not now'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Start verification'),
+          ),
+        ],
+      ),
+    );
+    if (proceed == true && mounted) {
+      // Starting from the contribution-method choice, which is the entry point
+      // of the standalone KYC flow.
+      Navigator.of(context).pushNamed('/kyc-deduction-type').then((_) {
+        if (mounted) ref.read(kycProvider.notifier).initializeKYC(silent: true);
+      });
+    }
+  }
+
   Future<void> _submitApplication() async {
-    // First check if user is eligible for loan
+    // KYC gate — checked before eligibility so a member who has not verified
+    // is told the real reason rather than a generic eligibility warning.
+    if (!_kycIsSubmitted()) {
+      await _promptForKyc();
+      return;
+    }
+
+    // Then check if user is eligible for loan
     final eligibility = _checkLoanEligibility();
     if (!(eligibility['isEligible'] as bool)) {
       ScaffoldMessenger.of(context).showSnackBar(

@@ -15,9 +15,12 @@ import '../savings/savings_goals_screen.dart';
 import '../transactions/transactions_history_screen.dart';
 import 'deposit_screen.dart';
 import 'withdrawal_screen.dart';
-import 'deposit_status_screen.dart';
-import '../contributions/payment_proof_upload_screen.dart';
-import '../contributions/payment_proofs_status_screen.dart';
+// MANUAL DEPOSIT DISABLED — the manual 'My Deposits' tracker is retired.
+// import 'deposit_status_screen.dart';
+// MANUAL DEPOSIT DISABLED — proof-of-payment upload / status screens are
+// retired; members pay instantly via Paystack.
+// import '../contributions/payment_proof_upload_screen.dart';
+// import '../contributions/payment_proofs_status_screen.dart';
 
 /// Wallet Dashboard Screen
 class WalletDashboardScreen extends ConsumerStatefulWidget {
@@ -410,18 +413,22 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
           Icons.file_upload_outlined,
           () => Navigator.push(context, MaterialPageRoute(builder: (context) => WithdrawalScreen(userId: widget.userId))),
         ),
-        _buildActionItem(
-          context,
-          'My Proofs',
-          Icons.fact_check_outlined,
-          () => Navigator.push(context, MaterialPageRoute(builder: (context) => const PaymentProofsStatusScreen())),
-        ),
-        _buildActionItem(
-          context,
-          'My Deposits',
-          Icons.receipt_long_outlined,
-          () => Navigator.push(context, MaterialPageRoute(builder: (context) => const DepositStatusScreen())),
-        ),
+        // MANUAL DEPOSIT DISABLED — "My Proofs" and "My Deposits" tracked
+        // manual bank-transfer submissions awaiting admin verification.
+        // Payments are now settled instantly by Paystack, so neither
+        // list has anything to show.
+        // _buildActionItem(
+        //   context,
+        //   'My Proofs',
+        //   Icons.fact_check_outlined,
+        //   () => Navigator.push(context, MaterialPageRoute(builder: (context) => const PaymentProofsStatusScreen())),
+        // ),
+        // _buildActionItem(
+        //   context,
+        //   'My Deposits',
+        //   Icons.receipt_long_outlined,
+        //   () => Navigator.push(context, MaterialPageRoute(builder: (context) => const DepositStatusScreen())),
+        // ),
         _buildActionItem(
           context,
           'History',
