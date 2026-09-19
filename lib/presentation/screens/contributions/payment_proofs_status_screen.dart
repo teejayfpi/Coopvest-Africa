@@ -1,3 +1,16 @@
+// MANUAL DEPOSIT DISABLED
+//
+// This screen was part of the manual (bank transfer) payment flow: the member
+// transferred money, uploaded a proof-of-payment receipt, and waited for an
+// admin to verify it. Members now pay instantly through Paystack and the
+// backend settles the charge automatically, so proof submission is retired.
+//
+// The entire file is commented out rather than deleted so the flow can be
+// restored with a single revert if manual payments ever come back.
+//
+// ignore_for_file: unused_import, unused_element, unused_field, unused_local_variable
+
+/*
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -881,3 +894,4 @@ class _ErrorState extends StatelessWidget {
     );
   }
 }
+*/

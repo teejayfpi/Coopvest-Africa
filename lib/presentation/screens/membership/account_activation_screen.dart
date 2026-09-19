@@ -5,10 +5,12 @@ import '../../widgets/paystack_checkout_dialog.dart';
 import '../../../config/app_config.dart';
 import '../../../config/theme_config.dart';
 import '../../../core/network/api_client.dart';
-import '../../../data/models/payment_proof_model.dart';
+// MANUAL DEPOSIT DISABLED — the registration fee is paid instantly via
+// Paystack; the proof upload flow and its payment-type model are retired.
+// import '../../../data/models/payment_proof_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/common/buttons.dart';
-import '../contributions/payment_proof_upload_screen.dart';
+// import '../contributions/payment_proof_upload_screen.dart';
 
 /// Account Activation Screen
 ///
@@ -269,6 +271,11 @@ class _AccountActivationScreenState
                   height: 1.4,
                 ),
               ),
+              // MANUAL DEPOSIT DISABLED — the "Pay by Transfer & Upload
+              // Proof" alternative and its OR divider were removed. The
+              // instant Paystack button above is now the only way to pay the
+              // registration fee, so no proof is ever uploaded by hand.
+              /*
               const SizedBox(height: 20),
               Row(
                 children: [
@@ -313,6 +320,7 @@ class _AccountActivationScreenState
                   height: 1.4,
                 ),
               ),
+              */
             ],
           ),
         ),
