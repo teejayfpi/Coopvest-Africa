@@ -45,8 +45,9 @@ class PrimaryButton extends StatelessWidget {
           disabledForegroundColor: CoopvestColors.mediumGray,
           padding: padding,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(CoopvestShape.buttonRadius),
           ),
+          // Flat: the brand is flat, so no resting elevation.
           elevation: 0,
         ),
         child: isLoading

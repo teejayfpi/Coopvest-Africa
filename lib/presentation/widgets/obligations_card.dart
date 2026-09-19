@@ -57,20 +57,83 @@ class ObligationsCard extends ConsumerWidget {
         final payableNow =
             hasLoanObligation ? monthlyLoanRepayment : monthlyContribution;
 
+        // Nothing due: show the "all caught up" state rather than a card of
+        // ₦0 rows, which reads like a broken screen. The green check plus the
+        // copy means the good news is not conveyed by colour alone.
+        if (totalDue <= 0) {
+          return AppCard(
+            backgroundColor: context.cardBackground,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: CoopvestShape.iconChip(
+                    CoopvestColors.successSurface,
+                    circular: true,
+                  ),
+                  child: const Icon(
+                    Icons.check_circle_outline,
+                    color: CoopvestColors.successText,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: CoopvestShape.gapMd),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "You're all caught up",
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                          color: context.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: CoopvestShape.gapXs),
+                      Text(
+                        'No contributions or repayments due.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: context.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
         return AppCard(
           backgroundColor: context.cardBackground,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Your obligations this month',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: context.textPrimary,
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Your obligations this month',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      color: context.textPrimary,
+                    ),
+                  ),
+                  Text(
+                    'View all',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: CoopvestColors.primary,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: CoopvestShape.gapMd),
               _obligationRow(
                 context,
                 'Monthly Savings \u2192 Member\'s savings',
@@ -94,7 +157,7 @@ class ObligationsCard extends ConsumerWidget {
                         context,
                         'Fine: ${_entryLabel(f)} \u2192 Penalty account',
                         '\u20a6${_entryAmount(f).formatNumber()}',
-                        CoopvestColors.error,
+                        CoopvestColors.errorText,
                       ),
                     )),
               ],
@@ -106,7 +169,7 @@ class ObligationsCard extends ConsumerWidget {
                         context,
                         'Fee: ${_entryLabel(f)}',
                         '\u20a6${_entryAmount(f).formatNumber()}',
-                        CoopvestColors.warning,
+                        CoopvestColors.pendingText,
                       ),
                     )),
               ],
@@ -116,7 +179,7 @@ class ObligationsCard extends ConsumerWidget {
                   context,
                   'Loan balance remaining',
                   '\u20a6${loanRemaining.formatNumber()}',
-                  CoopvestColors.warning,
+                  CoopvestColors.pendingText,
                 ),
               ],
               const Divider(height: 24),

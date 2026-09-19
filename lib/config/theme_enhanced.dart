@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 /// Coopvest Enhanced Colors - Beautiful gradient and effect colors
 class CoopvestColorsEnhanced {
   // Primary Gradient Colors
-  static const Color primaryGradientStart = Color(0xFF1B5E20);
-  static const Color primaryGradientEnd = Color(0xFF2E7D32);
+  static const Color primaryGradientStart = Color(0xFF0B5D46);
+  static const Color primaryGradientEnd = Color(0xFF0F7A5C);
   static const Color secondaryGradientStart = Color(0xFF4CAF50);
   static const Color secondaryGradientEnd = Color(0xFF81C784);
 
@@ -79,8 +79,8 @@ class CoopvestColorsEnhanced {
 
   // Card Gradients
   static const List<Color> cardGradient1 = [
-    Color(0xFF1B5E20),
-    Color(0xFF2E7D32),
+    Color(0xFF0B5D46),
+    Color(0xFF0F7A5C),
   ];
 
   static const List<Color> cardGradient2 = [
@@ -113,7 +113,7 @@ class CoopvestColorsEnhanced {
 
   // Chart Colors
   static const List<Color> chartColors = [
-    Color(0xFF1B5E20),
+    Color(0xFF0B5D46),
     Color(0xFF4CAF50),
     Color(0xFF81C784),
     Color(0xFFA5D6A7),
@@ -220,7 +220,7 @@ class CoopvestGradients {
   // Diagonal gradient
   static LinearGradient diagonal = const LinearGradient(
     colors: [
-      Color(0xFF1B5E20),
+      Color(0xFF0B5D46),
       Color(0xFF4CAF50),
       Color(0xFF81C784),
     ],

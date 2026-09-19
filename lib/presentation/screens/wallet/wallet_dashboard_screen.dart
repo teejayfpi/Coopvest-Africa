@@ -193,7 +193,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
         gradient: LinearGradient(
           colors: isDarkMode 
               ? [context.cardBackground, context.cardBackground.withOpacity(0.8)]
-              : [CoopvestColors.primary, const Color(0xFF2E7D32)],
+              : [CoopvestColors.primary, const Color(0xFF0F7A5C)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),

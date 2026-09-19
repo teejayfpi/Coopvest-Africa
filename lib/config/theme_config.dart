@@ -2,32 +2,88 @@ import 'package:flutter/material.dart';
 
 /// Coopvest Color Palette
 class CoopvestColors {
-  // Primary Colors
-  static const Color primary = Color(0xFF1B5E20); // Coopvest Green
-  static const Color primaryLight = Color(0xFF2E7D32); // Lighter Green
-  static const Color primaryDark = Color(0xFF1B5E20); // Darker Green
-  static const Color secondary = Color(0xFF2E7D32);
-  static const Color tertiary = Color(0xFF558B2F);
+  // ───────────────────────────────────────────────────────────────────────────
+  // Brand palette — emerald + gold fintech system.
+  //
+  // These are the single source of truth; screens should reference the token
+  // rather than pasting a hex literal. The palette is a flat, two-colour brand
+  // (emerald primary, gold accent) with gold reserved for ONE primary action
+  // per screen so nothing competes with it.
+  //
+  // Every foreground/background pair below is checked against WCAG AA:
+  // normal text >= 4.5:1, large text and UI boundaries >= 3:1. Three values
+  // from the original brief were adjusted because they failed that bar — see
+  // the notes on `textHint`, `success`/`pending` and the tinted pills.
+  // ───────────────────────────────────────────────────────────────────────────
+
+  // Primary — emerald. Header, links, active navigation, focus.
+  static const Color primary = Color(0xFF0B5D46);
+  static const Color primaryLight = Color(0xFF0F7A5C); // Savings tint
+  static const Color primaryDark = Color(0xFF084234);
+  static const Color secondary = Color(0xFF0F7A5C);
+  static const Color tertiary = Color(0xFF16A34A);
+
+  // Accent — gold. Exactly one primary action per screen uses `accent`.
+  // `onAccent` is dark by design: white on gold is only 1.82:1, so gold
+  // buttons must never use white text.
+  static const Color accent = Color(0xFFF2B705);
+  static const Color onAccent = Color(0xFF3D2E00); // 7.27:1 on accent
+  static const Color accentPressed = Color(0xFFDBA400);
+  static const Color accentIcon = Color(0xFF8A6300); // gold text/icon on white: 5.43:1
+
+  // Surfaces
+  static const Color pageBackground = Color(0xFFF5F7F6);
+  static const Color cardBorder = Color(0xFFE3EAE6);
+
+  // Icon chips — only the tint changes between cards.
+  static const Color iconTintGreen = Color(0xFFE3F1EB);
+  static const Color iconTintMint = Color(0xFFDDF3EA);
+  static const Color iconTintGold = Color(0xFFFFF1C2);
+
+  // Header
+  static const Color headerDivider = Color(0xFF2F7F68);
+  static const Color headerOutline = Color(0xFF6FB39D); // secondary button border, 3.23:1
+  static const Color headerChip = Color(0xFF1F7A62);
+  static const Color headerLabel = Color(0xFFCDE5DB); // 5.93:1 on primary
+  static const Color headerNudge = Color(0xFFF5D56B); // 5.48:1 on primary
 
   // Neutral Colors
   static const Color black = Color(0xFF000000);
-  static const Color darkGray = Color(0xFF212121);
-  static const Color mediumGray = Color(0xFF757575);
-  static const Color lightGray = Color(0xFFE0E0E0);
-  static const Color veryLightGray = Color(0xFFF5F5F5);
+  static const Color darkGray = Color(0xFF101B16);
+  static const Color mediumGray = Color(0xFF5C6B64);
+  static const Color lightGray = Color(0xFFE3EAE6);
+  static const Color veryLightGray = Color(0xFFF5F7F6);
   static const Color white = Color(0xFFFFFFFF);
-  static const Color textPrimary = Color(0xFF212121);
-  static const Color textSecondary = Color(0xFF757575);
 
-  // Semantic Colors
-  static const Color success = Color(0xFF2E7D32);
-  static const Color warning = Color(0xFFF57C00);
-  static const Color warningLight = Color(0xFFFFF3E0);
-  static const Color error = Color(0xFFC62828);
-  static const Color errorLight = Color(0xFFFFEBEE);
+  // Text. `textPrimary` and `textSecondary` are the body pair; `textHint` is
+  // deliberately darker than the brief's #8A9891, which measured only 3.01:1
+  // on a card and 2.80:1 on the page background — both below AA for normal
+  // text. #66756D measures 4.85:1 / 4.51:1.
+  static const Color textPrimary = Color(0xFF101B16);
+  static const Color textSecondary = Color(0xFF5C6B64);
+  static const Color textHint = Color(0xFF66756D);
+
+  // Semantic Colors.
+  //
+  // NOTE: these are the *fill / icon* values. Text on white uses the darker
+  // `*Text` variants below, because #16A34A (3.30:1) and #D97706 (3.19:1)
+  // both fail AA as body text. Pills pair a #DCFCE7/#FEF3C7/#FEE2E2 wash with
+  // the dark variant, and status is always paired with an icon or label so
+  // colour is never the only signal.
+  static const Color success = Color(0xFF16A34A);
+  static const Color successText = Color(0xFF15803D); // 5.02:1 on white
+  static const Color successSurface = Color(0xFFDCFCE7);
+  static const Color warning = Color(0xFFD97706);
+  static const Color pendingText = Color(0xFFB45309); // 5.02:1 on white
+  static const Color pendingSurface = Color(0xFFFEF3C7);
+  static const Color warningLight = Color(0xFFFFF1C2);
+  static const Color error = Color(0xFFDC2626);
+  static const Color errorText = Color(0xFFB91C1C); // 6.47:1 on white
+  static const Color errorSurface = Color(0xFFFEE2E2);
+  static const Color errorLight = Color(0xFFFEE2E2);
   static const Color info = Color(0xFF1565C0);
   static const Color infoLight = Color(0xFFE3F2FD);
-  static const Color scaffoldBackground = Color(0xFFFFFFFF);
+  static const Color scaffoldBackground = Color(0xFFF5F7F6);
 
   // Dark Mode Colors
   static const Color darkBackground = Color(0xFF121212);
@@ -35,6 +91,44 @@ class CoopvestColors {
   static const Color darkText = Color(0xFFFFFFFF);
   static const Color darkTextSecondary = Color(0xFFB0B0B0);
   static const Color darkDivider = Color(0xFF424242);
+}
+
+/// Coopvest shape and spacing tokens.
+///
+/// One radius family for the whole app: cards 16, buttons 12, icon chips 10,
+/// quick-action circles. Spacing is always a multiple of 4/8 so the vertical
+/// rhythm is identical between cards.
+class CoopvestShape {
+  static const double cardRadius = 16;
+  static const double buttonRadius = 12;
+  static const double chipRadius = 10;
+  static const double headerRadius = 24;
+
+  static const double gapXs = 4;
+  static const double gapSm = 8;
+  static const double gapMd = 12;
+  static const double gapLg = 16;
+  static const double gapXl = 24;
+
+  /// Minimum interactive size. Anything tappable must be at least this, per
+  /// the accessibility requirement, even when the visual is smaller.
+  static const double minTouchTarget = 44;
+
+  /// Card treatment, shared by every card so nothing drifts: white fill, thin
+  /// border, flat (no shadow). Depth comes from the border, not elevation.
+  static BoxDecoration cardDecoration(BuildContext context) => BoxDecoration(
+        color: CoopvestColors.white,
+        borderRadius: BorderRadius.circular(cardRadius),
+        border: Border.all(color: CoopvestColors.cardBorder),
+      );
+
+  /// Tinted icon chip. Only the tint varies between cards.
+  static BoxDecoration iconChip(Color tint, {bool circular = false}) =>
+      BoxDecoration(
+        color: tint,
+        shape: circular ? BoxShape.circle : BoxShape.rectangle,
+        borderRadius: circular ? null : BorderRadius.circular(chipRadius),
+      );
 }
 
 /// Coopvest Typography
@@ -168,12 +262,13 @@ class CoopvestTheme {
     useMaterial3: true,
     brightness: Brightness.light,
     primaryColor: CoopvestColors.primary,
-    scaffoldBackgroundColor: CoopvestColors.white,
+    scaffoldBackgroundColor: CoopvestColors.pageBackground,
     colorScheme: const ColorScheme.light(
       primary: CoopvestColors.primary,
       secondary: CoopvestColors.secondary,
       tertiary: CoopvestColors.tertiary,
-      surface: CoopvestColors.veryLightGray,
+      surface: CoopvestColors.pageBackground,
+      outline: CoopvestColors.cardBorder,
       error: CoopvestColors.error,
       onPrimary: CoopvestColors.white,
       onSecondary: CoopvestColors.white,
@@ -185,29 +280,37 @@ class CoopvestTheme {
       foregroundColor: CoopvestColors.darkGray,
       elevation: 0,
       centerTitle: false,
+      scrolledUnderElevation: 0,
       titleTextStyle: CoopvestTypography.headlineLarge,
     ),
     bottomNavigationBarTheme: const BottomNavigationBarThemeData(
       backgroundColor: CoopvestColors.white,
       selectedItemColor: CoopvestColors.primary,
-      unselectedItemColor: CoopvestColors.mediumGray,
-      elevation: 8,
+      unselectedItemColor: CoopvestColors.textHint,
+      elevation: 0,
+      type: BottomNavigationBarType.fixed,
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         backgroundColor: CoopvestColors.primary,
         foregroundColor: CoopvestColors.white,
+        minimumSize: const Size(0, CoopvestShape.minTouchTarget),
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(CoopvestShape.buttonRadius),
+        ),
         textStyle: CoopvestTypography.labelLarge,
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
         foregroundColor: CoopvestColors.primary,
-        side: const BorderSide(color: CoopvestColors.lightGray),
+        side: const BorderSide(color: CoopvestColors.cardBorder),
+        minimumSize: const Size(0, CoopvestShape.minTouchTarget),
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(CoopvestShape.buttonRadius),
+        ),
         textStyle: CoopvestTypography.labelLarge,
       ),
     ),

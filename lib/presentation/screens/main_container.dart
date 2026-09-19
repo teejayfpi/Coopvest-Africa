@@ -44,14 +44,9 @@ class _MainContainerState extends ConsumerState<MainContainer> {
         children: _screens,
       ),
       bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 10,
-              offset: const Offset(0, -5),
-            ),
-          ],
+        decoration: const BoxDecoration(
+          // Flat: a single hairline top border instead of a drop shadow.
+          border: Border(top: BorderSide(color: CoopvestColors.cardBorder)),
         ),
         child: BottomNavigationBar(
           currentIndex: _selectedIndex,
@@ -61,32 +56,39 @@ class _MainContainerState extends ConsumerState<MainContainer> {
             });
           },
           type: BottomNavigationBarType.fixed,
-          backgroundColor: context.cardBackground,
+          elevation: 0,
+          backgroundColor: CoopvestColors.white,
           selectedItemColor: CoopvestColors.primary,
-          unselectedItemColor: context.textSecondary,
+          // Inactive label sits at the hint token, which is AA-compliant on
+          // white (the old secondary grey was borderline at this size).
+          unselectedItemColor: CoopvestColors.textHint,
           selectedLabelStyle:
-              const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+              const TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
           unselectedLabelStyle:
-              const TextStyle(fontWeight: FontWeight.normal, fontSize: 12),
+              const TextStyle(fontWeight: FontWeight.w400, fontSize: 12),
+          // The active tab gets a soft emerald pill behind the icon, so the
+          // state does not rely on colour alone — the pill and the filled icon
+          // are both shape cues.
           items: const [
             BottomNavigationBarItem(
-              icon: Icon(Icons.home_outlined),
-              activeIcon: Icon(Icons.home),
+              icon: _NavIcon(icon: Icons.home_outlined),
+              activeIcon: _NavIcon(icon: Icons.home, active: true),
               label: 'Home',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.account_balance_wallet_outlined),
-              activeIcon: Icon(Icons.account_balance_wallet),
+              icon: _NavIcon(icon: Icons.account_balance_wallet_outlined),
+              activeIcon:
+                  _NavIcon(icon: Icons.account_balance_wallet, active: true),
               label: 'Wallet',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.description_outlined),
-              activeIcon: Icon(Icons.description),
+              icon: _NavIcon(icon: Icons.description_outlined),
+              activeIcon: _NavIcon(icon: Icons.description, active: true),
               label: 'Loans',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.person_outline),
-              activeIcon: Icon(Icons.person),
+              icon: _NavIcon(icon: Icons.person_outline),
+              activeIcon: _NavIcon(icon: Icons.person, active: true),
               label: 'Profile',
             ),
           ],
@@ -122,6 +124,32 @@ class _LoanTab extends ConsumerWidget {
       userId: user?.id ?? '',
       userName: user?.name ?? 'User',
       userPhone: user?.phone ?? '',
+    );
+  }
+}
+
+/// Bottom-nav icon with an optional soft emerald pill behind it.
+///
+/// The pill is generated natively by [BottomNavigationBar] unless a custom
+/// icon is supplied; supplying one keeps the size and radius consistent with
+/// the rest of the app (10px chip radius) instead of the Material default.
+class _NavIcon extends StatelessWidget {
+  final IconData icon;
+  final bool active;
+
+  const _NavIcon({required this.icon, this.active = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      decoration: active
+          ? BoxDecoration(
+              color: CoopvestColors.iconTintGreen,
+              borderRadius: BorderRadius.circular(CoopvestShape.chipRadius + 6),
+            )
+          : null,
+      child: Icon(icon, size: 22),
     );
   }
 }
