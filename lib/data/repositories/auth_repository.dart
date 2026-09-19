@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../config/app_config.dart';
 import '../../core/network/api_client.dart';
 import '../../core/utils/utils.dart';
 import '../models/auth_models.dart';
@@ -143,7 +144,19 @@ class AuthRepository {
           'phone': phone,
           'referralCode': referralCode,
         },
-        emailRedirectTo: 'https://admin-dashboard-api-server.vercel.app/verify-email',
+        // In-app verification: hand Supabase the deep-link URL from the single
+        // source of truth in AppConfig. This was hardcoded to the admin
+        // dashboard's /verify-email page, which sent members into the OPERATOR
+        // portal to confirm their account instead of verifying inside the app.
+        //
+        // Note: the https host below needs a live coopvest.africa plus an
+        // /.well-known/assetlinks.json (Android App Links) for the OS to hand
+        // the link to the app rather than a browser. Neither is set up today,
+        // so this works reliably only once that domain is published. The
+        // custom-scheme `coopvest://verify-email` filter in AndroidManifest.xml
+        // additionally resolves in-app without depending on the domain, and the
+        // in-app OTP entry on the verify screen covers everything else.
+        emailRedirectTo: AppConfig.emailVerifyRedirect,
       );
 
       if (response.user == null) {
