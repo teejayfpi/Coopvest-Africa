@@ -813,11 +813,11 @@ class _GuarantorDashboardScreenState
                     backgroundColor: Colors.white,
                     eyeStyle: const QrEyeStyle(
                       eyeShape: QrEyeShape.square,
-                      color: Color(0xFF1B5E20),
+                      color: Color(0xFF0B5D46),
                     ),
                     dataModuleStyle: const QrDataModuleStyle(
                       dataModuleShape: QrDataModuleShape.square,
-                      color: Color(0xFF1B5E20),
+                      color: Color(0xFF0B5D46),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -826,7 +826,7 @@ class _GuarantorDashboardScreenState
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF1B5E20),
+                      color: Color(0xFF0B5D46),
                     ),
                   ),
                   const SizedBox(height: 4),

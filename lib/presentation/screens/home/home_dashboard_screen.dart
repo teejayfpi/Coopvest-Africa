@@ -52,6 +52,11 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
   Timer? _refreshTimer;
   bool _appInForeground = true;
 
+  /// Whether the member has hidden their balances. Purely local UI state —
+  /// it hides the figures behind dots so a member can open the app in public
+  /// without exposing their money. Not persisted: reopening shows balances.
+  bool _balanceHidden = false;
+
   @override
   void initState() {
     super.initState();
@@ -230,12 +235,13 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
                             child: _buildCompactStatCard(
                               context,
                               'Wallet',
-                              '₦${walletBalance.formatNumber()}',
+                              walletBalance.formatCurrencyCompact(),
                               Icons.account_balance_wallet_outlined,
                               () => Navigator.push(context, MaterialPageRoute(builder: (context) => WalletDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? ''))),
                               accentColor: CoopvestColors.primary,
+                              chipTint: CoopvestColors.iconTintGreen,
                               isZero: walletBalance <= 0,
-                              zeroHint: 'Add Money',
+                              zeroHint: 'Add money →',
                               onZeroTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => DepositScreen(userId: user?.id ?? ''))),
                             ),
                           ),
@@ -244,12 +250,13 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
                             child: _buildCompactStatCard(
                               context,
                               'Savings',
-                              '₦${(wallet?.totalSavings ?? 0.0).formatNumber()}',
+                              (wallet?.totalSavings ?? 0.0).formatCurrencyCompact(),
                               Icons.savings_outlined,
                               () => Navigator.push(context, MaterialPageRoute(builder: (context) => const MonthlyContributionsScreen())),
-                              accentColor: const Color(0xFF2E7D32),
+                              accentColor: CoopvestColors.primaryLight,
+                              chipTint: CoopvestColors.iconTintMint,
                               isZero: (wallet?.totalSavings ?? 0.0) <= 0,
-                              zeroHint: 'Start saving',
+                              zeroHint: 'Start saving →',
                               onZeroTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => DepositScreen(userId: user?.id ?? ''))),
                             ),
                           ),
@@ -258,12 +265,15 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
                             child: _buildCompactStatCard(
                               context,
                               'Loans',
-                              '₦${activeLoans.formatNumber()}',
+                              activeLoans.formatCurrencyCompact(),
                               Icons.monetization_on_outlined,
                               () => Navigator.push(context, MaterialPageRoute(builder: (context) => LoanDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? '', userPhone: user?.phone ?? ''))),
-                              accentColor: const Color(0xFF1565C0),
+                              // Loans is the gold card: gold chip, deepened
+                              // gold icon and link so it stays legible on white.
+                              accentColor: CoopvestColors.accentIcon,
+                              chipTint: CoopvestColors.iconTintGold,
                               isZero: activeLoans <= 0,
-                              zeroHint: 'Apply now',
+                              zeroHint: 'Apply now →',
                               onZeroTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => LoanDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? '', userPhone: user?.phone ?? ''))),
                             ),
                           ),
@@ -322,7 +332,10 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
                             'Apply for Loan',
                             Icons.description_outlined,
                             () => Navigator.push(context, MaterialPageRoute(builder: (context) => LoanDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? '', userPhone: user?.phone ?? ''))),
-                            color: const Color(0xFF1565C0), // matches the Loans card
+                            // Gold, matching the Loans card. Uses the deepened
+                            // gold so the icon stays legible on the light chip.
+                            color: CoopvestColors.accentIcon,
+                            chipTint: CoopvestColors.iconTintGold,
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -337,7 +350,9 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
                                 backgroundColor: CoopvestColors.primary,
                               ),
                             ),
-                            color: const Color(0xFF00897B), // teal = growth
+                            // Mint chip = growth.
+                            color: CoopvestColors.primaryLight,
+                            chipTint: CoopvestColors.iconTintMint,
                           ),
                         ),
                       ],
@@ -417,27 +432,15 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.only(top: 50, left: 20, right: 20, bottom: 60),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            const Color(0xFF1B5E20),
-            const Color(0xFF2E7D32),
-            const Color(0xFF388E3C),
-          ],
+      decoration: const BoxDecoration(
+        // Flat single emerald, no gradient and no drop shadow — depth comes
+        // from the shape (24px bottom corners) and the summary cards that
+        // overlap it, not from elevation.
+        color: CoopvestColors.primary,
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(CoopvestShape.headerRadius),
+          bottomRight: Radius.circular(CoopvestShape.headerRadius),
         ),
-        borderRadius: const BorderRadius.only(
-          bottomLeft: Radius.circular(32),
-          bottomRight: Radius.circular(32),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF1B5E20).withOpacity(0.3),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -565,102 +568,115 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
                         letterSpacing: 0.5,
                       ),
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.visibility_outlined,
-                            color: Colors.white.withOpacity(0.9),
-                            size: 14,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            'ID: $membershipId',
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.9),
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
+                    // Tappable pill: shows the member ID and toggles balance
+                    // visibility. Previously the eye was decorative and did
+                    // nothing when tapped.
+                    GestureDetector(
+                      onTap: () =>
+                          setState(() => _balanceHidden = !_balanceHidden),
+                      behavior: HitTestBehavior.opaque,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: CoopvestColors.headerChip,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          children: [
+                            // The icon mirrors the state so it is not a
+                            // one-way action: filled eye = visible.
+                            Icon(
+                              _balanceHidden
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_outlined,
+                              color: Colors.white,
+                              size: 14,
                             ),
-                          ),
-                        ],
+                            const SizedBox(width: 4),
+                            Text(
+                              'ID: $membershipId',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 12),
+                // Balance. Hidden state shows dots rather than ₦0 so a member
+                // who hides the figure does not accidentally read it as zero,
+                // and long values abbreviate (₦1.2M) to stay on one line.
                 Text(
-                  '₦${totalSavings.formatNumber()}',
+                  _balanceHidden
+                      ? NumberExtensions.hiddenAmount
+                      : totalSavings.formatCurrencyCompact(),
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: -1,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: -0.5,
                   ),
                 ),
                 const SizedBox(height: 8),
-                // Growth indicator - only show if there's actual data
-                if (totalSavings > 0)
-                  Text(
-                    'Updated just now',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.95),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  )
-                else
-                  Text(
-                    'Make your first contribution',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.95),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
+                Text(
+                  totalSavings > 0
+                      ? 'Updated just now'
+                      : 'Make your first contribution',
+                  style: const TextStyle(
+                    color: CoopvestColors.headerNudge,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
                   ),
-                const SizedBox(height: 18),
+                ),
+                const SizedBox(height: CoopvestShape.gapLg),
+                // Divider between the headline figure and the stat rows.
+                Container(height: 1, color: CoopvestColors.headerDivider),
+                const SizedBox(height: CoopvestShape.gapLg),
                 // Breakdown summary — monthly savings, outstanding loan and
                 // total loan applied, so members see the full picture at a glance.
                 _buildHeaderSummaryRow(
                   context,
                   'Total Savings',
-                  '\u20a6${totalSavings.formatNumber()}',
+                  _balanceHidden ? NumberExtensions.hiddenAmount : totalSavings.formatCurrencyCompact(),
                   icon: Icons.savings_outlined,
                 ),
                 const SizedBox(height: 10),
                 _buildHeaderSummaryRow(
                   context,
                   'Outstanding Loan',
-                  '\u20a6${outstandingLoan.formatNumber()}',
+                  _balanceHidden ? NumberExtensions.hiddenAmount : outstandingLoan.formatCurrencyCompact(),
                   icon: Icons.account_balance_wallet_outlined,
-                  valueColor: outstandingLoan > 0 ? const Color(0xFFFFCC80) : Colors.white.withOpacity(0.9),
                 ),
                 const SizedBox(height: 10),
                 _buildHeaderSummaryRow(
                   context,
                   'Total Loan Applied',
-                  '\u20a6${totalLoanApplied.formatNumber()}',
+                  _balanceHidden ? NumberExtensions.hiddenAmount : totalLoanApplied.formatCurrencyCompact(),
                   icon: Icons.description_outlined,
                 ),
                 const SizedBox(height: 10),
                 _buildHeaderSummaryRow(
                   context,
                   'Available to Withdraw',
-                  '\u20a6${(wallet?.availableForWithdrawal ?? 0.0).formatNumber()}',
+                  _balanceHidden ? NumberExtensions.hiddenAmount : (wallet?.availableForWithdrawal ?? 0.0).formatCurrencyCompact(),
                   icon: Icons.account_balance_outlined,
                 ),
-                const SizedBox(height: 18),
+                const SizedBox(height: CoopvestShape.gapLg),
                 // Quick actions row — fills the empty green space and gives
                 // users the two most common wallet actions one tap away.
                 Row(
                   children: [
                     Expanded(
                       child: _buildHeaderActionChip(
-                        label: 'Add Money',
+                        label: 'Add money',
                         icon: Icons.add_rounded,
                         onTap: () => Navigator.push(
                           context,
@@ -707,12 +723,12 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
       children: [
         Row(
           children: [
-            Icon(icon, color: Colors.white.withOpacity(0.7), size: 15),
+            Icon(icon, color: CoopvestColors.headerLabel, size: 15),
             const SizedBox(width: 8),
             Text(
               label,
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.8),
+              style: const TextStyle(
+                color: CoopvestColors.headerLabel,
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
               ),
@@ -722,9 +738,11 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
         Text(
           value,
           style: TextStyle(
+            // Values are always white; only the row label is muted, so the
+            // figure is the loudest thing in the row.
             color: valueColor ?? Colors.white,
             fontSize: 13,
-            fontWeight: FontWeight.bold,
+            fontWeight: FontWeight.w500,
           ),
         ),
       ],
@@ -737,37 +755,36 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
     required VoidCallback onTap,
     required bool filled,
   }) {
+    // Exactly one gold action per screen: `filled` is the gold primary
+    // ("Add money"). The secondary is a transparent outline. Gold always
+    // carries dark text — white on gold is only 1.82:1.
+    final bg = filled ? CoopvestColors.accent : Colors.transparent;
+    final fg = filled ? CoopvestColors.onAccent : Colors.white;
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(CoopvestShape.buttonRadius),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
+          height: CoopvestShape.minTouchTarget,
           decoration: BoxDecoration(
-            color: filled
-                ? Colors.white
-                : Colors.white.withOpacity(0.15),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: Colors.white.withOpacity(filled ? 0.0 : 0.25),
-            ),
+            color: bg,
+            borderRadius: BorderRadius.circular(CoopvestShape.buttonRadius),
+            border: filled
+                ? null
+                : Border.all(color: CoopvestColors.headerOutline),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                icon,
-                size: 16,
-                color: filled ? CoopvestColors.primary : Colors.white,
-              ),
+              Icon(icon, size: 16, color: fg),
               const SizedBox(width: 6),
               Text(
                 label,
                 style: TextStyle(
                   fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: filled ? CoopvestColors.primary : Colors.white,
+                  fontWeight: FontWeight.w500,
+                  color: fg,
                 ),
               ),
             ],
@@ -796,93 +813,70 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
     bool isZero = false,
     String? zeroHint,
     VoidCallback? onZeroTap,
+    Color chipTint = CoopvestColors.iconTintGreen,
+    Color? iconColor,
+    Color? linkColor,
   }) {
     final cardColor = accentColor ?? CoopvestColors.primary;
+    final effectiveIcon = iconColor ?? cardColor;
+    final effectiveLink = linkColor ?? cardColor;
 
     return GestureDetector(
       onTap: isZero && onZeroTap != null ? onZeroTap : onTap,
       child: Container(
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: context.cardBackground,
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            BoxShadow(
-              color: cardColor.withOpacity(0.10),
-              blurRadius: 16,
-              offset: const Offset(0, 6),
-            ),
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-          border: Border.all(
-            color: cardColor.withOpacity(0.08),
-            width: 1,
-          ),
-        ),
+        // Flat, bordered card — the brief's single card style. No shadow and
+        // no coloured gradient: only the icon tint and the link colour vary
+        // between the three cards.
+        decoration: CoopvestShape.cardDecoration(context),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
               padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    cardColor.withOpacity(0.15),
-                    cardColor.withOpacity(0.05),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: cardColor, size: 22),
+              decoration: CoopvestShape.iconChip(chipTint),
+              child: Icon(icon, color: effectiveIcon, size: 22),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: CoopvestShape.gapMd),
             Text(
               title,
               style: TextStyle(
                 fontSize: 12,
                 color: context.textSecondary,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.2,
+                fontWeight: FontWeight.w400,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: CoopvestShape.gapSm),
             Text(
               value,
               style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.bold,
+                // Card amount: 16/medium per the type scale.
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
                 color: isZero ? context.textSecondary : context.textPrimary,
-                letterSpacing: -0.3,
+                letterSpacing: -0.2,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
             if (isZero && zeroHint != null) ...[
-              const SizedBox(height: 6),
+              const SizedBox(height: CoopvestShape.gapSm),
+              // The link uses its own AA-safe colour: emerald reads fine on
+              // white, but gold must darken to #8A6300 to stay legible.
               Row(
                 children: [
                   Text(
                     zeroHint,
                     style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: cardColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: effectiveLink,
                     ),
                   ),
                   const SizedBox(width: 2),
-                  Icon(
-                    Icons.arrow_forward_rounded,
-                    size: 12,
-                    color: cardColor,
-                  ),
+                  Icon(Icons.arrow_forward_rounded, size: 13, color: effectiveLink),
                 ],
               ),
             ],
@@ -898,57 +892,39 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
     IconData icon,
     VoidCallback onTap, {
     Color color = CoopvestColors.primary,
+    Color chipTint = CoopvestColors.iconTintGreen,
   }) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(CoopvestShape.cardRadius),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
-          decoration: BoxDecoration(
-            color: context.cardBackground,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.06),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
-            border: Border.all(
-              color: color.withOpacity(0.12),
-              width: 1,
-            ),
+          padding: const EdgeInsets.symmetric(
+            vertical: CoopvestShape.gapMd,
+            horizontal: CoopvestShape.gapSm,
           ),
+          decoration: CoopvestShape.cardDecoration(context),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              // Circular chip, single flat tint — no gradient.
               Container(
                 padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      color.withOpacity(0.16),
-                      color.withOpacity(0.06),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(13),
-                ),
+                decoration:
+                    CoopvestShape.iconChip(chipTint, circular: true),
                 child: Icon(icon, color: color, size: 22),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: CoopvestShape.gapSm),
               SizedBox(
                 height: 32,
                 child: Center(
                   child: Text(
                     label,
                     style: TextStyle(
-                      fontSize: 11.5,
+                      fontSize: 12,
                       color: context.textPrimary,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w500,
                       height: 1.2,
                     ),
                     textAlign: TextAlign.center,

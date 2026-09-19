@@ -363,7 +363,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     _TrustBadgeItem(
                       icon: Icons.verified_user_outlined,
                       label: 'Secure Login',
-                      color: const Color(0xFF2E7D32),
+                      color: const Color(0xFF0F7A5C),
                     ),
                     Container(
                       width: 1,

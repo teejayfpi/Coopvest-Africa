@@ -38,19 +38,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       title: 'Welcome to Coopvest Africa',
       description: 'Your trusted cooperative financial partner. Join thousands of members building wealth together.',
       icon: Icons.savings,
-      backgroundColor: Color(0xFF1B5E20),
+      backgroundColor: Color(0xFF0B5D46),
     ),
     OnboardingPage(
       title: 'Save with Ease',
       description: 'Make monthly contributions towards your financial goals. Track your savings progress in real-time.',
       icon: Icons.account_balance_wallet,
-      backgroundColor: Color(0xFF2E7D32),
+      backgroundColor: Color(0xFF0F7A5C),
     ),
     OnboardingPage(
       title: 'Quick Loans',
       description: 'Access affordable loans with flexible repayment options. Build your credit history with timely repayments.',
       icon: Icons.account_balance,
-      backgroundColor: Color(0xFF388E3C),
+      backgroundColor: Color(0xFF16A34A),
     ),
     OnboardingPage(
       title: 'Stay Connected',

@@ -274,7 +274,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen>
                     width: 100,
                     height: 100,
                     decoration: const BoxDecoration(
-                      color: Color(0xFF2E7D32),
+                      color: Color(0xFF0F7A5C),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
@@ -456,7 +456,7 @@ class _CountdownRing extends StatelessWidget {
               strokeWidth: 5,
               backgroundColor: Colors.grey.shade200,
               valueColor: const AlwaysStoppedAnimation<Color>(
-                Color(0xFF2E7D32),
+                Color(0xFF0F7A5C),
               ),
             ),
           ),
