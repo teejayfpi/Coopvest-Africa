@@ -11,25 +11,53 @@ import '../../widgets/rollover/rollover_common_widgets.dart';
 import 'rollover_request_screen.dart';
 
 /// Rollover Eligibility Check Screen
-class RolloverEligibilityScreen extends ConsumerWidget {
+///
+/// Stateful so the screen can fetch loans on entry: reached from the loan
+/// dashboard the list is usually warm, but a cold start or a deep link can
+/// arrive before any loan has been loaded, which previously showed
+/// "No Active Loan" to a member who plainly has one.
+class RolloverEligibilityScreen extends ConsumerStatefulWidget {
   final Loan? loan;
   const RolloverEligibilityScreen({super.key, this.loan});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<RolloverEligibilityScreen> createState() =>
+      _RolloverEligibilityScreenState();
+}
+
+class _RolloverEligibilityScreenState
+    extends ConsumerState<RolloverEligibilityScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Ensure loans are fresh so we can detect an active/repaying loan.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final loanState = ref.read(loanProvider);
+      if (loanState.loans.isEmpty && !loanState.isLoading) {
+        ref.read(loanProvider.notifier).getLoans();
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final loanState = ref.watch(loanProvider);
     final rolloverState = ref.watch(rolloverProvider);
     final rolloverNotifier = ref.read(rolloverProvider.notifier);
 
     // Find active loan - show message if none exists
     final activeLoans = loanState.loans.where((l) => l.status == 'active' || l.status == 'repaying').toList();
-    final activeLoan = loan ?? (activeLoans.isNotEmpty ? activeLoans.first : null);
+    final activeLoan = widget.loan ?? (activeLoans.isNotEmpty ? activeLoans.first : null);
 
     return Scaffold(
       backgroundColor: context.scaffoldBackground,
       appBar: AppBar(title: Text('Rollover Eligibility', style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold)), elevation: 0),
       body: activeLoan == null
-          ? _buildNoActiveLoanMessage(context)
+          // Distinguish "still loading" from "genuinely no loan" so a member is
+          // never told they have no active loan while the list is in flight.
+          ? (loanState.isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _buildNoActiveLoanMessage(context))
           : SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: Column(

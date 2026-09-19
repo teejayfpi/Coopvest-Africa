@@ -25,7 +25,7 @@ class _SplashScreenState extends State<SplashScreen> {
   bool _soundPlayed = false;
   int _elapsedSeconds = 0;
   
-  static const int splashDurationSeconds = 30;
+  static const int splashDurationSeconds = 6;
 
   @override
   void initState() {
@@ -36,6 +36,7 @@ class _SplashScreenState extends State<SplashScreen> {
     
     // The splash is intentionally static. Audio and timing remain active,
     // but the logo and interface do not move.
+    
     // Play sound and start timer
     _playStartupSound();
     _startSplashTimer();
@@ -202,3 +203,4 @@ class _LogoFallback extends StatelessWidget {
     );
   }
 }
+

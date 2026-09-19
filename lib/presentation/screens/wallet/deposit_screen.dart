@@ -435,6 +435,8 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
           _splitFineController,
           _splitFeeController,
         ].fold<double>(0, (sum, c) => sum + (double.tryParse(c.text.replaceAll(',', '')) ?? 0));
+        // Compare the DIFFERENCE to the total. An earlier form of this check
+        // applied abs() to the wrong side, so a mismatched split could pass.
         if ((splitTotal - amount).abs() > 0.01) {
           setState(() => _isProcessing = false);
           ScaffoldMessenger.of(context).showSnackBar(

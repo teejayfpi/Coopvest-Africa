@@ -4,6 +4,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../config/app_config.dart';
 import '../../core/network/api_client.dart';
+import '../../core/utils/error_handler.dart';
 import '../../core/utils/utils.dart';
 import '../models/auth_models.dart';
 import '../models/kyc_models.dart';
@@ -122,6 +123,8 @@ class AuthRepository {
       throw AuthException(_mapSupabaseError(e));
     } catch (e) {
       logger.e('Login error: $e');
+      final networkMsg = ErrorHandler.networkErrorMessage(e);
+      if (networkMsg != null) throw AuthException(networkMsg);
       rethrow;
     }
   }
@@ -144,18 +147,12 @@ class AuthRepository {
           'phone': phone,
           'referralCode': referralCode,
         },
-        // In-app verification: hand Supabase the deep-link URL from the single
-        // source of truth in AppConfig. This was hardcoded to the admin
-        // dashboard's /verify-email page, which sent members into the OPERATOR
-        // portal to confirm their account instead of verifying inside the app.
-        //
-        // Note: the https host below needs a live coopvest.africa plus an
-        // /.well-known/assetlinks.json (Android App Links) for the OS to hand
-        // the link to the app rather than a browser. Neither is set up today,
-        // so this works reliably only once that domain is published. The
-        // custom-scheme `coopvest://verify-email` filter in AndroidManifest.xml
-        // additionally resolves in-app without depending on the domain, and the
-        // in-app OTP entry on the verify screen covers everything else.
+        // In-app verification: the deep-link URL from the single source of truth
+        // in AppConfig. This used to be hardcoded to the admin dashboard's
+        // /verify-email page, which sent members into the OPERATOR portal to
+        // confirm their own account. The app's deep-link handler routes
+        // coopvest://verify-email and https://coopvest.africa/verify-email into
+        // the in-app verify screen; see AppConfig for the domain caveat.
         emailRedirectTo: AppConfig.emailVerifyRedirect,
       );
 
@@ -185,6 +182,8 @@ class AuthRepository {
       throw AuthException(_mapSupabaseError(e));
     } catch (e) {
       logger.e('Register error: $e');
+      final networkMsg = ErrorHandler.networkErrorMessage(e);
+      if (networkMsg != null) throw AuthException(networkMsg);
       rethrow;
     }
   }

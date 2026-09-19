@@ -187,7 +187,8 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
         : summaryContributionMonths;
     
     // Determine eligibility
-    // TEMP: forced true for testing — restore original check when done:
+    // TESTING ONLY: 6-month membership & contribution requirement bypassed for loan testing.
+    // Restore the original check below when testing is complete:
     // final isEligible = membershipMonths >= 6 && finalContributionMonths >= 6;
     final isEligible = true;
     
@@ -642,7 +643,6 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
       String? qrId;
       String? qrCodeData;
 
-      // Create the loan via the backend /loans/apply route.
       // The backend enforces the loan policy (agreement acceptance, savings
       // multiplier cap, active-default restriction) — if it rejects the
       // application we stop here and show the server's reason.

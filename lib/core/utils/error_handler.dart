@@ -297,7 +297,7 @@ class ErrorHandler {
 
   /// Map low-level network failures (DNS lookup failures, no connectivity)
   /// to a friendly message. Returns null when the error is not
-  /// network-related, so callers can fall back to their normal handling..
+  /// network-related, so callers can fall back to their normal handling.
   static String? networkErrorMessage(dynamic error) {
     final str = error.toString().toLowerCase();
     if (str.contains('socketexception') ||

@@ -5,6 +5,7 @@ import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
+import '../../../core/utils/error_handler.dart';
 import '../../../core/utils/utils.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../providers/auth_provider.dart';
@@ -155,10 +156,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       
     } catch (e) {
       if (!mounted) return;
-      final msg = e.toString()
+      final raw = e.toString()
           .replaceFirst('Exception: ', '')
           .replaceFirst('AuthException: ', '');
-      if (msg == 'EMAIL_NOT_VERIFIED') {
+      if (raw == 'EMAIL_NOT_VERIFIED') {
         // Registered but never verified — send them to the verification
         // screen (it resends the link and waits for confirmation).
         Navigator.of(context).pushNamed('/register-step2', arguments: {
@@ -166,6 +167,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         });
         return;
       }
+      final msg = ErrorHandler.networkErrorMessage(e) ?? raw;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(msg), backgroundColor: CoopvestColors.error),
       );

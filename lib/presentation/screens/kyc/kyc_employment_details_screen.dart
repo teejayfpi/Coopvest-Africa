@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
+import '../../../core/utils/utils.dart';
 import '../../../data/models/kyc_models.dart';
 import '../../../presentation/providers/kyc_provider.dart';
 import '../../../presentation/widgets/common/buttons.dart';
@@ -57,11 +58,9 @@ class _KYCEmploymentDetailsScreenState
   List<Organization> _organizations = [];
   bool _organizationsLoading = true;
   String? _organizationsError;
-
   /// Organisation the member picked, tracked by id as well as name so a payroll
   /// remittance can be matched to them later.
   String? _selectedOrganizationId;
-
   String _searchQuery = '';
 
   @override
@@ -253,7 +252,7 @@ class _KYCEmploymentDetailsScreenState
 
     if (picked != null) {
       setState(() {
-        _dateOfBirthController.text = '${picked.day}/${picked.month}/${picked.year}';
+        _dateOfBirthController.text = picked.toIso8601String().split('T')[0];
       });
     }
   }
@@ -860,6 +859,7 @@ class _KYCEmploymentDetailsScreenState
       ),
     );
   }
+
 
   Widget _buildProgressStep(int step, bool isCompleted) {
     return Container(

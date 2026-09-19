@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/utils/utils.dart';
 import '../../data/models/kyc_models.dart';
 import '../../data/repositories/kyc_repository.dart';
@@ -13,7 +16,43 @@ final kycProvider = StateNotifierProvider<KYCCubit, KYCState>((ref) {
 class KYCCubit extends StateNotifier<KYCState> {
   final KYCRepository _repository;
 
+  /// SharedPreferences key under which the in-progress KYC draft is stored so
+  /// an app restart mid-flow doesn't wipe the member's inputs.
+  static const String _draftKey = 'kyc_submission_draft';
+
   KYCCubit(this._repository) : super(const KYCState());
+
+  /// Persist the current submission draft locally (fire-and-forget).
+  void _persistDraft() {
+    final submission = state.submission;
+    if (submission == null) return;
+    SharedPreferences.getInstance()
+        .then((prefs) => prefs.setString(_draftKey, jsonEncode(submission.toJson())))
+        .catchError((Object e) => logger.w('KYC draft save failed: $e'));
+  }
+
+  /// Restore a locally saved draft, if any. Returns null when none exists or
+  /// the stored payload is unreadable.
+  Future<KYCSubmission?> _restoreDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_draftKey);
+      if (raw == null || raw.isEmpty) return null;
+      return KYCSubmission.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+    } catch (e) {
+      logger.w('KYC draft restore failed: $e');
+      return null;
+    }
+  }
+
+  Future<void> _clearDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_draftKey);
+    } catch (e) {
+      logger.w('KYC draft clear failed: $e');
+    }
+  }
 
   /// Initialize KYC.
   ///
@@ -46,6 +85,10 @@ class KYCCubit extends StateNotifier<KYCState> {
       }
       return;
     }
+
+    // Fall back to the locally saved draft when the server has no record yet,
+    // so a member who closed the app mid-flow resumes where they left off.
+    submission ??= await _restoreDraft();
 
     // Best-effort: refresh the organizations list without letting its failure
     // affect the KYC submission status that AuthGuard gates on.
@@ -99,6 +142,7 @@ class KYCCubit extends StateNotifier<KYCState> {
         gender: gender,
       ),
     );
+    _persistDraft();
   }
 
   /// Update employment details
@@ -128,6 +172,7 @@ class KYCCubit extends StateNotifier<KYCState> {
         yearsOfEmployment: yearsOfEmployment ?? current.yearsOfEmployment,
       ),
     );
+    _persistDraft();
   }
 
   /// Update address
@@ -149,6 +194,7 @@ class KYCCubit extends StateNotifier<KYCState> {
         lga: lga ?? current.lga,
       ),
     );
+    _persistDraft();
   }
 
   /// Update ID details
@@ -168,6 +214,7 @@ class KYCCubit extends StateNotifier<KYCState> {
         staffId: staffId ?? current.staffId,
       ),
     );
+    _persistDraft();
   }
 
   /// Update next of kin details
@@ -187,6 +234,7 @@ class KYCCubit extends StateNotifier<KYCState> {
         nokAddress: nokAddress ?? current.nokAddress,
       ),
     );
+    _persistDraft();
   }
 
   /// Update selfie
@@ -196,6 +244,7 @@ class KYCCubit extends StateNotifier<KYCState> {
     state = state.copyWith(
       submission: current.copyWith(selfiePhotoPath: selfiePath),
     );
+    _persistDraft();
   }
   
   /// Update bank details
@@ -219,6 +268,7 @@ class KYCCubit extends StateNotifier<KYCState> {
         bvn: bvn,
       ),
     );
+    _persistDraft();
   }
 
   /// Fetch the enrolable partner organisations and cache them in state.
@@ -228,8 +278,7 @@ class KYCCubit extends StateNotifier<KYCState> {
   /// the employer picker must be able to tell "no employers enrolled" apart
   /// from "the request failed", because the two need different copy.
   Future<List<Organization>> loadOrganizations({String? search}) async {
-    final organizations =
-        await _repository.getOrganizations(search: search);
+    final organizations = await _repository.getOrganizations(search: search);
     state = state.copyWith(organizations: organizations);
     return organizations;
   }
@@ -294,17 +343,36 @@ class KYCCubit extends StateNotifier<KYCState> {
     }
 
     state = state.copyWith(status: KYCStatus.submitting);
-    
+
     try {
-      await _repository.submitKYC(submission);
-      
-      state = state.copyWith(
-        status: KYCStatus.loaded,
-        submission: submission.copyWith(
-          status: 'submitted',
-          submittedAt: DateTime.now(),
-        ),
+      // Upload any photos that are still local device paths before submitting.
+      // A path like /data/user/0/... is meaningless to the backend — swap it
+      // for the server URL returned by the upload endpoint.
+      var toSubmit = submission;
+      final idPath = toSubmit.idPhotoPath;
+      if (idPath != null && idPath.isNotEmpty && !idPath.startsWith('http')) {
+        final uploaded = await _repository.uploadIDDocument(idPath);
+        toSubmit = toSubmit.copyWith(idPhotoPath: uploaded);
+      }
+      final selfiePath = toSubmit.selfiePhotoPath;
+      if (selfiePath != null &&
+          selfiePath.isNotEmpty &&
+          !selfiePath.startsWith('http')) {
+        final uploaded = await _repository.uploadSelfie(selfiePath);
+        toSubmit = toSubmit.copyWith(selfiePhotoPath: uploaded);
+      }
+
+      await _repository.submitKYC(toSubmit);
+
+      final submitted = toSubmit.copyWith(
+        status: 'submitted',
+        submittedAt: DateTime.now(),
       );
+      state = state.copyWith(
+        status: KYCStatus.submitted,
+        submission: submitted,
+      );
+      _persistDraft();
     } catch (e) {
       logger.e('Submit KYC error: $e');
       state = state.copyWith(
@@ -348,6 +416,7 @@ class KYCCubit extends StateNotifier<KYCState> {
   /// Reset KYC
   void resetKYC() {
     state = const KYCState();
+    _clearDraft();
   }
 }
 
@@ -373,6 +442,18 @@ final kycProgressProvider = Provider<double>((ref) {
 final isKYCCompleteProvider = Provider<bool>((ref) {
   final kycState = ref.watch(kycProvider);
   return kycState.isComplete;
+});
+
+/// Whether the member has submitted their KYC (status submitted or verified).
+/// Used to gate features (e.g. loan applications) and to decide whether the
+/// "Complete KYC" prompt should be shown.
+final isKycSubmittedProvider = Provider<bool>((ref) {
+  final kycState = ref.watch(kycProvider);
+  final status = kycState.submission?.status ?? 'pending';
+  return status == 'submitted' ||
+      status == 'verified' ||
+      status == 'in_review' ||
+      status == 'approved';
 });
 
 /// KYC Error Provider

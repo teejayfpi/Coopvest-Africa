@@ -94,7 +94,9 @@ class LoanNotifier extends StateNotifier<LoansState> {
   Future<void> getLoans() async {
     state = state.copyWith(status: LoanStatus.loading);
     try {
-      final userId = await _authRepository.getUserId();
+      // The backend resolves the user from the JWT; getUserId() is not needed
+      // for the request itself but we call it to surface auth issues early.
+      await _authRepository.getUserId();
       final response = await _loanApiService.getUserLoans();
 
       if (response.success) {

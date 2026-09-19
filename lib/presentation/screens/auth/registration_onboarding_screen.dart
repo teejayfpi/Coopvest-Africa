@@ -226,6 +226,7 @@ class _RegistrationOnboardingScreenState
   BankOption? _selectedBank;
   String? _selectedAccountType;
   bool _accountNameVerified = false;
+  bool _manualEntry = false;
   bool _isVerifyingAccountName = false;
 
   @override
@@ -436,8 +437,12 @@ class _RegistrationOnboardingScreenState
       _showError('Account number must be 10 digits.');
       return false;
     }
-    if (!_accountNameVerified || _accountNameCtrl.text.trim().isEmpty) {
+    if (!_accountNameVerified && !_manualEntry) {
       _showError('Please verify your account name before continuing.');
+      return false;
+    }
+    if (_accountNameCtrl.text.trim().isEmpty) {
+      _showError('Please enter the account name.');
       return false;
     }
     if (_selectedAccountType == null || _selectedAccountType!.isEmpty) {
@@ -512,8 +517,48 @@ class _RegistrationOnboardingScreenState
         _isVerifyingAccountName = false;
         _accountNameVerified = false;
       });
+      // When verification itself is down (or the network is), members would
+      // otherwise be hard-blocked from completing registration — offer manual
+      // entry instead. Genuine "account not found" errors still block.
+      if (e.reason == AccountVerificationError.unavailable ||
+          e.reason == AccountVerificationError.network) {
+        final manual = await _offerManualEntry();
+        if (!mounted) return;
+        if (manual == true) {
+          setState(() => _manualEntry = true);
+          return;
+        }
+      }
       _showError(e.message);
     }
+  }
+
+  Future<bool?> _offerManualEntry() {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Verification Unavailable'),
+        content: const Text(
+          'We could not verify this account right now. You can enter the '
+          'account name manually and continue. Make sure the name matches '
+          'the bank account holder.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Try again'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: CoopvestColors.primary,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Enter manually'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<bool?> _confirmAccountName(String accountName) {
@@ -687,10 +732,19 @@ class _RegistrationOnboardingScreenState
       } catch (e) {
         logger.e('Registration data submission error: $e');
         if (mounted) {
-          final errorDetail = e
-              .toString()
-              .replaceFirst('Exception: ', '')
-              .replaceFirst('AuthException: ', '');
+          // AppException.toString() returns the bare server message; strip
+          // framework prefixes for anything else so the member always sees
+          // the server's reason (age gate, missing fields, etc.), never a
+          // raw exception dump or an uninterpolated placeholder.
+          String errorDetail = e is AppException
+              ? e.message
+              : e
+                  .toString()
+                  .replaceFirst('Exception: ', '')
+                  .replaceFirst('AuthException: ', '');
+          if (e is ServerException && e.statusCode == 422) {
+            errorDetail = 'The server rejected some details: $errorDetail';
+          }
           await _showRetryDialog(
             'Could not save your registration details: $errorDetail. '
             'Please check your connection and try again.',
@@ -809,14 +863,17 @@ class _RegistrationOnboardingScreenState
                     accountNameCtrl: _accountNameCtrl,
                     isVerifying: _isVerifyingAccountName,
                     accountNameVerified: _accountNameVerified,
+                    manualEntry: _manualEntry,
                     onBankChanged: (bank) => setState(() {
                           _selectedBank = bank;
                           _accountNameVerified = false;
+                          _manualEntry = false;
                           _accountNameCtrl.clear();
                         }),
                     onAccountNumberChanged: () => setState(() {
-                          if (_accountNameVerified) {
+                          if (_accountNameVerified || _manualEntry) {
                             _accountNameVerified = false;
+                            _manualEntry = false;
                             _accountNameCtrl.clear();
                           }
                         }),
@@ -1872,6 +1929,7 @@ class _BankInfoStep extends StatelessWidget {
   final TextEditingController accountNameCtrl;
   final bool isVerifying;
   final bool accountNameVerified;
+  final bool manualEntry;
   final ValueChanged<BankOption> onBankChanged;
   final VoidCallback onAccountNumberChanged;
   final Function(String?) onAccountTypeChanged;
@@ -1885,6 +1943,7 @@ class _BankInfoStep extends StatelessWidget {
     required this.accountNameCtrl,
     required this.isVerifying,
     required this.accountNameVerified,
+    required this.manualEntry,
     required this.onBankChanged,
     required this.onAccountNumberChanged,
     required this.onAccountTypeChanged,
@@ -1941,35 +2000,36 @@ class _BankInfoStep extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          // Verify Account Button
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-              onPressed: onVerifyAccount,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: CoopvestColors.primary,
-                side: const BorderSide(color: CoopvestColors.primary),
+          // Verify Account Button (hidden once verified or entering manually)
+          if (!accountNameVerified && !manualEntry)
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: onVerifyAccount,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: CoopvestColors.primary,
+                  side: const BorderSide(color: CoopvestColors.primary),
+                ),
+                child: isVerifying
+                    ? const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          SizedBox(
+                              width: 18,
+                              height: 18,
+                              child:
+                                  CircularProgressIndicator(strokeWidth: 2)),
+                          SizedBox(width: 10),
+                          Text('Verifying account details…'),
+                        ],
+                      )
+                    : const Text('Verify Account'),
               ),
-              child: isVerifying
-                  ? const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        SizedBox(
-                            width: 18,
-                            height: 18,
-                            child:
-                                CircularProgressIndicator(strokeWidth: 2)),
-                        SizedBox(width: 10),
-                        Text('Verifying account details…'),
-                      ],
-                    )
-                  : const Text('Verify Account'),
             ),
-          ),
           const SizedBox(height: 20),
-          // Account Name (verified)
+          // Account Name (verified read-only, editable when entering manually)
           Text(
-            'Account Name',
+            manualEntry ? 'Account Name *' : 'Account Name',
             style: TextStyle(
               fontWeight: FontWeight.w600,
               color: context.textPrimary,
@@ -1978,18 +2038,26 @@ class _BankInfoStep extends StatelessWidget {
           const SizedBox(height: 8),
           TextFormField(
             controller: accountNameCtrl,
-            readOnly: true,
+            readOnly: !manualEntry,
             decoration: InputDecoration(
-              hintText: 'Verified account name will appear here',
+              hintText: manualEntry
+                  ? 'Enter the name on the bank account'
+                  : 'Verified account name will appear here',
               filled: true,
-              fillColor: CoopvestColors.success.withOpacity(0.1),
+              fillColor: manualEntry
+                  ? null
+                  : CoopvestColors.success.withOpacity(0.1),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide(color: CoopvestColors.success),
+                borderSide: manualEntry
+                    ? BorderSide(color: context.dividerColor)
+                    : BorderSide(color: CoopvestColors.success),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide(color: CoopvestColors.success),
+                borderSide: manualEntry
+                    ? BorderSide(color: context.dividerColor)
+                    : BorderSide(color: CoopvestColors.success),
               ),
             ),
           ),

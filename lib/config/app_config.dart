@@ -12,6 +12,24 @@ class AppConfig {
   // API Configuration
   static String get apiBaseUrl => EnvironmentContext.config.apiBaseUrl;
   static const Duration apiTimeout = Duration(seconds: 60);
+
+  // Email verification redirect.
+  //
+  // Members verify INSIDE the app. The app registers two deep-link routes
+  // (see android/app/src/main/AndroidManifest.xml):
+  //   * `coopvest://verify-email` — custom scheme, handled by the app directly
+  //     and independent of any web host.
+  //   * `https://coopvest.africa/verify-email` — App Link fallback, used as the
+  //     Supabase redirect because email templates handle https far more
+  //     reliably than a custom scheme.
+  //
+  // CAVEAT: the https App Link only opens the app once coopvest.africa has DNS
+  // and serves /.well-known/assetlinks.json (Android) plus the matching
+  // apple-app-site-association (iOS). Neither exists today — the domain does not
+  // resolve — so until it is published an https link falls back to the browser.
+  // The in-app OTP entry on the verification screen covers that gap so members
+  // can always complete verification without leaving the app.
+  static const String emailVerifyRedirect = 'https://coopvest.africa/verify-email';
   // Fast timeout for the KYC status probe. AuthGuard gates navigation on this
   // call, so a slow or cold-starting backend must not leave the member staring
   // at a loading screen for the full 60s apiTimeout.
@@ -105,11 +123,6 @@ class AppConfig {
   static const String dateFormat = 'dd/MM/yyyy';
   static const String timeFormat = 'HH:mm';
   static const String dateTimeFormat = 'dd/MM/yyyy HH:mm';
-
-  // Auth / Email Verification
-  // Supabase email verification redirect — must match a URL the app can
-  // intercept via deep links (or the hosted verify-email page).
-  static const String emailVerifyRedirect = 'https://coopvest.africa/verify-email';
 
   // Notification Configuration
   static const Duration notificationTimeout = Duration(seconds: 5);
