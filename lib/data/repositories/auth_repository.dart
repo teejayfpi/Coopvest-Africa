@@ -137,6 +137,8 @@ class AuthRepository {
     String? phone,
     String? deviceId,
     String? referralCode,
+    String? termsVersion,
+    String? termsAcceptedAt,
   }) async {
     try {
       final response = await _supabase.auth.signUp(
@@ -146,6 +148,10 @@ class AuthRepository {
           'name': name,
           'phone': phone,
           'referralCode': referralCode,
+          // Policy acceptance, recorded against the member at sign-up so it is
+          // provable. The backend persists it onto the KYC record.
+          if (termsVersion != null) 'terms_version': termsVersion,
+          if (termsAcceptedAt != null) 'terms_accepted_at': termsAcceptedAt,
         },
         // In-app verification: the deep-link URL from the single source of truth
         // in AppConfig. This used to be hardcoded to the admin dashboard's

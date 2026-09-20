@@ -31,6 +31,7 @@ const {
   buildRegistrationCandidates,
   mergeStoredPersonalInfo,
   ageInYears,
+  normalizeDateOfBirth,
   MIN_AGE_YEARS,
 } = require('../services/registrationMerge');
 
@@ -97,7 +98,14 @@ const ensureProfile = async (authUser, extra = {}) => {
     .eq('id', authUser.id)
     .maybeSingle();
 
-  if (existing) return existing;
+  if (existing) {
+    // Record acceptance even for an existing profile, so a member who signed up
+    // before this was captured (or re-registers) still has it on file.
+    if (extra.termsVersion || extra.termsAcceptedAt) {
+      await recordTermsAcceptance(authUser.id, extra.termsVersion, extra.termsAcceptedAt);
+    }
+    return existing;
+  }
 
   const { data: created, error } = await supabase
     .from('profiles')
@@ -117,8 +125,51 @@ const ensureProfile = async (authUser, extra = {}) => {
     logger.error('ensureProfile: insert failed:', error.message);
     return null;
   }
+  await recordTermsAcceptance(authUser.id, extra.termsVersion, extra.termsAcceptedAt);
   return created;
 };
+
+/**
+ * Persist the member's policy acceptance onto their KYC row.
+ *
+ * WHY HERE AND NOT ONLY IN complete-registration
+ * ----------------------------------------------
+ * `POST /auth/complete-registration` writes terms_version / terms_accepted_at
+ * into kyc.personal_info, but the shortened onboarding (sign up -> verify ->
+ * contribution type -> pay) never calls it — KYC is deferred to loan time. So
+ * acceptance collected on the sign-up screen had nowhere to land and was lost.
+ *
+ * Storing it at registration time means consent is recorded when it is given,
+ * which is what makes it provable. Best-effort: a failure must never block
+ * sign-up, and KYC submit still writes it if present.
+ */
+async function recordTermsAcceptance(profileId, version, acceptedAt) {
+  if (!version && !acceptedAt) return;
+  try {
+    const { data: kycRow } = await supabase
+      .from('kyc')
+      .select('id, personal_info')
+      .eq('profile_id', profileId)
+      .maybeSingle();
+
+    const personal = { ...(kycRow?.personal_info || {}) };
+    if (version) personal.terms_version = version;
+    if (acceptedAt) personal.terms_accepted_at = acceptedAt;
+
+    if (kycRow?.id) {
+      await supabase
+        .from('kyc')
+        .update({ personal_info: personal, updated_at: new Date().toISOString() })
+        .eq('id', kycRow.id);
+    } else {
+      await supabase
+        .from('kyc')
+        .insert({ profile_id: profileId, personal_info: personal });
+    }
+  } catch (err) {
+    logger.warn('recordTermsAcceptance failed (non-fatal):', err.message);
+  }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/v1/auth/register
@@ -127,9 +178,13 @@ router.post('/register', [
   body('email').isEmail().withMessage('Valid email is required'),
   body('name').notEmpty().withMessage('Name is required'),
   body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
+  // Policy acceptance captured on the sign-up screen. Optional so older app
+  // builds keep working, but recorded whenever supplied.
+  body('terms_version').optional().isString().isLength({ max: 40 }),
+  body('terms_accepted_at').optional().isString().isLength({ max: 40 }),
 ], validate, async (req, res) => {
   try {
-    const { email, phone, name, password, referralCode } = req.body;
+    const { email, phone, name, password, referralCode, terms_version, terms_accepted_at } = req.body;
     const userId = `USR-${Date.now().toString(36).toUpperCase()}`;
 
     // Throwaway client — see newAuthClient note above.
@@ -148,7 +203,13 @@ router.post('/register', [
     const authUser = data.user;
 
     // Supabase may not have a DB trigger — always ensure the profile row exists.
-    const profile = await ensureProfile(authUser, { userId, name, phone: phone || null });
+    const profile = await ensureProfile(authUser, {
+      userId,
+      name,
+      phone: phone || null,
+      termsVersion: terms_version || null,
+      termsAcceptedAt: terms_accepted_at || null,
+    });
 
     // If no session (email confirmation required), return minimal response.
     if (!data.session) {
@@ -591,7 +652,7 @@ router.post('/complete-registration', authenticate, async (req, res) => {
         {
           profile_id: req.user.id,
           national_id: hasValue(id_number) ? id_number : (existingKyc?.national_id || null),
-          date_of_birth: personal_info_candidate.date_of_birth || null,
+          date_of_birth: normalizeDateOfBirth(personal_info_candidate.date_of_birth),
           address: hasValue(address) ? address : (existingKyc?.address || null),
           personal_info: {
             ...existingPersonal,

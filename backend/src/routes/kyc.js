@@ -15,7 +15,7 @@ const supabase = require('../config/supabase');
 const { authenticate } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const logger = require('../utils/logger');
-const { ageInYears, MIN_AGE_YEARS } = require('../services/registrationMerge');
+const { ageInYears, normalizeDateOfBirth, MIN_AGE_YEARS } = require('../services/registrationMerge');
 
 // In-memory file upload (10 MB max) — the file is streamed straight into
 // Supabase Storage, never touching the disk.
@@ -73,6 +73,9 @@ router.post(
   '/contribution-type',
   [
     body('contribution_type').isIn(['direct_deposit', 'salary_deduction']),
+    // Optional policy acceptance, forwarded from the sign-up screen.
+    body('terms_version').optional().isString().isLength({ max: 40 }),
+    body('terms_accepted_at').optional().isString().isLength({ max: 40 }),
   ],
   validate,
   async (req, res) => {
@@ -99,10 +102,18 @@ router.post(
       }
 
       const now = new Date().toISOString();
+      // `terms_version` and `terms_accepted_at` are recorded here because the
+      // app's signup goes straight to Supabase and never calls
+      // POST /auth/register — so the policy acceptance the member gives on the
+      // sign-up screen has no other durable place to land on the shortened
+      // onboarding path. Accepting only when actually supplied.
+      const { terms_version, terms_accepted_at } = req.body || {};
       const mergedPersonal = {
         ...(kyc.personal_info || {}),
         contribution_type,
         contribution_type_updated_at: now,
+        ...(terms_version ? { terms_version } : {}),
+        ...(terms_accepted_at ? { terms_accepted_at } : {}),
       };
 
       const { data, error } = await supabase
@@ -154,6 +165,11 @@ router.post(
         ...(kyc.personal_info || {}),
         ...(personalInfo || {}),
       };
+      // Normalize the DOB (YYYY-MM-DD or DD/MM/YYYY) so downstream date-column
+      // writes never receive a format Postgres rejects.
+      mergedPersonal.date_of_birth =
+        normalizeDateOfBirth(mergedPersonal.date_of_birth) ||
+        mergedPersonal.date_of_birth;
       const mergedEmployment = {
         ...(kyc.employment_info || {}),
         ...(employmentInfo || {}),
@@ -194,15 +210,18 @@ router.post(
         .single();
       if (error) throw error;
 
-      // A KYC submission completes registration and links the member to their
-      // employer. `profiles.organization_id` is what the registration-fee
-      // exemption and payroll-remittance matching both key on, and nothing was
-      // ever writing it — the app only ever sent the employer *name*, which
-      // cannot be reconciled against reliably.
+      // A KYC submission completes registration — flip the profile flag so the
+      // mobile app's AuthGuard stops re-prompting the onboarding/registration
+      // flow on every launch for members who have already submitted.
+      const now = new Date().toISOString();
+
+      // Link the member to their employer. `profiles.organization_id` is what
+      // the registration-fee exemption and payroll-remittance matching both key
+      // on, and nothing was ever writing it — the app only ever sent the
+      // employer *name*, which cannot be reconciled against reliably.
       //
       // Only an id that actually exists is accepted, so a stale or spoofed id
       // cannot silently grant the fee exemption.
-      const now = new Date().toISOString();
       const requestedOrgId = employmentInfo?.organization_id ?? null;
       let organizationId = null;
       if (requestedOrgId) {
@@ -221,14 +240,15 @@ router.post(
         }
       }
 
+      const profileUpdate = {
+        registration_completed: true,
+        completed_at: now,
+        updated_at: now,
+        ...(organizationId ? { organization_id: organizationId } : {}),
+      };
       const { error: profileErr } = await supabase
         .from('profiles')
-        .update({
-          registration_completed: true,
-          completed_at: now,
-          updated_at: now,
-          ...(organizationId ? { organization_id: organizationId } : {}),
-        })
+        .update(profileUpdate)
         .eq('id', req.user.id);
       if (profileErr) {
         // Non-fatal: KYC was saved, just the gate flag failed. Log and continue.
@@ -236,8 +256,8 @@ router.post(
       }
 
       // A member who has chosen salary deduction and named an employer has
-      // effectively consented to payroll deduction; record it so the
-      // contribution screen can state it without asking again.
+      // effectively consented to payroll deduction; record it so the contribution
+      // screen can state it without asking again.
       if (organizationId) {
         const { data: existingProfile } = await supabase
           .from('profiles')
@@ -273,8 +293,8 @@ router.post(
  * the backend bypasses RLS, so no storage policies are required to write.
  *
  * - `selfie`         → updates the `kyc.selfie` JSONB column { url, uploaded_at }
- * - `id_document`    → inserts a `kyc_documents` row (front_image_url or
- *                      back_image_url when `side=back`).
+ * - `id_document`    → inserts/updates a `kyc_documents` row (front_image_url
+ *                      or back_image_url when `side=back`).
  *
  * Returns: { success: true, url, path, type }
  */
@@ -292,6 +312,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
     // violate the constraint, so map it to 'national_id' (a generic national ID).
     const side = (req.body.side || 'front').toString() === 'back' ? 'back' : 'front';
 
+    req._uploadStep = 'pre-storage';
     const ext = (req.file.originalname.split('.').pop() || 'jpg').toLowerCase();
     if (!['jpg', 'jpeg', 'png', 'webp', 'heic'].includes(ext)) {
       return res.status(400).json({ success: false, error: 'Only JPG, PNG, WEBP or HEIC images are allowed.' });
@@ -305,6 +326,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
         upsert: false,
       });
     if (uploadError) throw uploadError;
+    req._uploadStep = 'after-storage';
 
     // Signed URL (10 years) so the private object is viewable by the app/admin.
     let url;
@@ -322,6 +344,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
 
     const kyc = await getOrCreateKyc(req.user.id);
 
+    req._uploadStep = 'db-write';
     if (type === 'selfie') {
       // The `selfie` column is JSONB. Persist the URL + metadata there. The old
       // code wrote to a non-existent `selfie_url` column, which silently failed
@@ -347,9 +370,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
         if (picErr) logger.warn('kyc upload: profile_picture sync failed:', picErr.message);
       }
     } else {
-      // id_document → kyc_documents row on the correct side column. The table
-      // has no `url`/`meta` columns — using them caused "could not find the
-      // column" errors.
+      // id_document → kyc_documents row on the correct side column.
       const sideKey = side === 'back' ? 'back_image_url' : 'front_image_url';
       const { error: docErr } = await supabase
         .from('kyc_documents')
@@ -360,8 +381,12 @@ router.post('/upload', upload.single('file'), async (req, res) => {
     logger.info(`KYC ${type} uploaded for user ${req.user.id}: ${storagePath}`);
     res.status(201).json({ success: true, url, path: storagePath, type });
   } catch (err) {
-    logger.error('kyc upload error:', err);
-    res.status(500).json({ success: false, error: err.message || 'Upload failed.' });
+    logger.error(`kyc upload error [step=${req._uploadStep || '?'}]:`, err);
+    res.status(500).json({
+      success: false,
+      error: err.message || 'Upload failed.',
+      step: req._uploadStep || 'unknown',
+    });
   }
 });
 
@@ -379,8 +404,10 @@ router.post('/document', async (req, res) => {
       return res.status(400).json({ success: false, error: 'type and url are required' });
     }
     const kyc = await getOrCreateKyc(req.user.id);
-    // The table has no `url`/`meta` columns. Store on front_image_url (or
-    // back_image_url when side=back).
+    // The mobile app uploads a single ID photo; store it on front_image_url
+    // (or back_image_url when an explicit `side: 'back'` is sent). The table
+    // has no `url`/`meta` columns — using them caused "could not find the
+    // 'meta' column" errors.
     const sideKey = side === 'back' ? 'back_image_url' : 'front_image_url';
     const { data, error } = await supabase
       .from('kyc_documents')
@@ -399,9 +426,9 @@ router.post('/document', async (req, res) => {
  * POST /api/v1/kyc/selfie
  *
  * Registers a previously-uploaded selfie URL. Kept for backwards
- * compatibility — prefer POST /kyc/upload (type=selfie). Writes to the
- * `selfie` JSONB column (the table has no `selfie_url` column, so the old
- * code silently failed to save selfies).
+ * compatibility — prefer POST /kyc/upload (type=selfie) which uploads +
+ * registers in one step. Writes to the `selfie` JSONB column (the table has
+ * no `selfie_url` column, so the old code silently failed to save selfies).
  */
 router.post('/selfie', async (req, res) => {
   try {
@@ -431,7 +458,7 @@ router.get('/documents', async (req, res) => {
       .from('kyc_documents')
       .select('*')
       .eq('profile_id', req.user.id)
-      .order('created_at', { ascending: false });
+      .order('uploaded_at', { ascending: false });
     if (error) throw error;
     res.json({ success: true, documents: data || [] });
   } catch (err) {
