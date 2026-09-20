@@ -43,7 +43,9 @@ class _KYCEmploymentDetailsScreenState
   String? _selectedState;
   
   final List<String> _employmentTypes = EmploymentTypes.types;
-  final List<String> _genders = ['Male', 'Female', 'Other', 'Prefer not to say'];
+  // Male / Female only. 'Other' and 'Prefer not to say' were removed so the
+  // field records a binary value the KYC review can act on.
+  final List<String> _genders = ['Male', 'Female'];
   final List<String> _cities = ['Lagos', 'Abuja', 'Port Harcourt', 'Ibadan', 'Kano', 'Other'];
   final List<String> _states = [
     'Lagos', 'Abuja FCT', 'Rivers', 'Oyo', 'Kano', 'Enugu', 'Delta', 'Other'
@@ -279,6 +281,11 @@ class _KYCEmploymentDetailsScreenState
         errors.add('Monthly income range is required');
       }
     }
+    // Gender is required for every member, not just payroll ones: it is part
+    // of the KYC identity record.
+    if (_selectedGender == null || _selectedGender!.isEmpty) {
+      errors.add('Gender is required');
+    }
     if (_dateOfBirthController.text.isEmpty) {
       errors.add('Date of birth is required');
     }
@@ -396,7 +403,8 @@ class _KYCEmploymentDetailsScreenState
 
               // Gender
               AppDropdown<String>(
-                label: 'Gender (Optional)',
+                // Mandatory, Male/Female only.
+                label: 'Gender',
                 value: _selectedGender,
                 items: _genders.map((gender) => DropdownMenuItem(
                   value: gender,

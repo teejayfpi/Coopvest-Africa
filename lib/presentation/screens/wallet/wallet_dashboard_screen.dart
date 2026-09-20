@@ -396,44 +396,42 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
   }
 
   Widget _buildQuickActions(BuildContext context) {
-    return Wrap(
-      alignment: WrapAlignment.spaceAround,
-      spacing: 8,
-      runSpacing: 12,
+    // Three equal columns rather than a spaceAround Wrap.
+    //
+    // spaceAround only distributes evenly when the items happen to fill the
+    // row; with three items of differing label widths the gaps came out uneven
+    // and the icons did not sit on a common centre line, which is what made
+    // Deposit / Withdraw / History look misaligned. Equal Expanded columns pin
+    // each icon to the centre of its own third, so they always line up.
+    //
+    // ("My Proofs" and "My Deposits" were removed with the manual-payment flow;
+    // members pay instantly via Paystack now.)
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildActionItem(
-          context,
-          'Deposit',
-          Icons.add_circle_outline,
-          () => Navigator.push(context, MaterialPageRoute(builder: (context) => DepositScreen(userId: widget.userId))),
+        Expanded(
+          child: _buildActionItem(
+            context,
+            'Deposit',
+            Icons.add_circle_outline,
+            () => Navigator.push(context, MaterialPageRoute(builder: (context) => DepositScreen(userId: widget.userId))),
+          ),
         ),
-        _buildActionItem(
-          context,
-          'Withdraw',
-          Icons.file_upload_outlined,
-          () => Navigator.push(context, MaterialPageRoute(builder: (context) => WithdrawalScreen(userId: widget.userId))),
+        Expanded(
+          child: _buildActionItem(
+            context,
+            'Withdraw',
+            Icons.file_upload_outlined,
+            () => Navigator.push(context, MaterialPageRoute(builder: (context) => WithdrawalScreen(userId: widget.userId))),
+          ),
         ),
-        // MANUAL DEPOSIT DISABLED — "My Proofs" and "My Deposits" tracked
-        // manual bank-transfer submissions awaiting admin verification.
-        // Payments are now settled instantly by Paystack, so neither
-        // list has anything to show.
-        // _buildActionItem(
-        //   context,
-        //   'My Proofs',
-        //   Icons.fact_check_outlined,
-        //   () => Navigator.push(context, MaterialPageRoute(builder: (context) => const PaymentProofsStatusScreen())),
-        // ),
-        // _buildActionItem(
-        //   context,
-        //   'My Deposits',
-        //   Icons.receipt_long_outlined,
-        //   () => Navigator.push(context, MaterialPageRoute(builder: (context) => const DepositStatusScreen())),
-        // ),
-        _buildActionItem(
-          context,
-          'History',
-          Icons.history,
-          () => Navigator.push(context, MaterialPageRoute(builder: (context) => TransactionsHistoryScreen(userId: widget.userId))),
+        Expanded(
+          child: _buildActionItem(
+            context,
+            'History',
+            Icons.history,
+            () => Navigator.push(context, MaterialPageRoute(builder: (context) => TransactionsHistoryScreen(userId: widget.userId))),
+          ),
         ),
       ],
     );
@@ -442,29 +440,26 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
   Widget _buildActionItem(BuildContext context, String label, IconData icon, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
+      // Whole column is tappable, and the 56px chip keeps the target well
+      // above the 44px minimum.
+      behavior: HitTestBehavior.opaque,
       child: Column(
         children: [
           Container(
             padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: context.cardBackground,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
+            decoration: CoopvestShape.iconChip(
+              CoopvestColors.iconTintGreen,
+              circular: true,
             ),
             child: Icon(icon, color: CoopvestColors.primary, size: 28),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: CoopvestShape.gapSm),
           Text(
             label,
+            textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 12,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w500,
               color: context.textPrimary,
             ),
           ),

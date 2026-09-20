@@ -27,7 +27,25 @@ class _KYCDeductionTypeScreenState
     final existing = ref.read(kycProvider).submission?.contributionType;
     if (existing != null && existing.isNotEmpty) {
       _selected = existing;
+      // The channel was already chosen during registration (it is picked right
+      // after email verification, before the registration fee), so asking again
+      // here is a duplicate step. Skip straight to the first section that still
+      // needs data once the loaded submission is available.
+      WidgetsBinding.instance.addPostFrameCallback((_) => _skipIfAlreadyChosen());
     }
+  }
+
+  /// Continue past this screen when the member already picked their channel.
+  ///
+  /// Only runs when the KYC submission has actually loaded, so a cold start
+  /// cannot bounce a member forward before we know their choice.
+  void _skipIfAlreadyChosen() {
+    if (!mounted) return;
+    final submission = ref.read(kycProvider).submission;
+    final type = submission?.contributionType;
+    if (type == null || type.isEmpty) return;
+    _selected = type;
+    _continue();
   }
 
   void _continue() {
