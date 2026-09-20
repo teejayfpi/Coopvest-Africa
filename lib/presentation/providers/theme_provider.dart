@@ -9,7 +9,11 @@ final themeModeProvider = StateNotifierProvider<ThemeNotifier, ThemeMode>((ref) 
 });
 
 class ThemeNotifier extends StateNotifier<ThemeMode> {
-  ThemeNotifier() : super(ThemeMode.system) {
+  // The app opens in LIGHT by default, regardless of the device setting, so
+  // the brand always lands on the light palette; members who want dark switch
+  // to it themselves (the toggle still cycles light <-> dark). A previously
+  // saved choice is honoured on next launch.
+  ThemeNotifier() : super(ThemeMode.light) {
     _loadTheme();
   }
 
@@ -21,24 +25,15 @@ class ThemeNotifier extends StateNotifier<ThemeMode> {
     if (themeIndex != null) {
       state = ThemeMode.values[themeIndex];
     } else {
-      // Default to system preference
-      state = ThemeMode.system;
+      state = ThemeMode.light;
     }
   }
 
+  /// Toggle between light and dark. Deliberately a two-state switch: light is
+  /// the default, so a member tapping the control always gets exactly the
+  /// palette they asked for rather than landing on a "follow the system" stop.
   Future<void> toggleTheme() async {
-    // Cycle through: system -> light -> dark -> system
-    switch (state) {
-      case ThemeMode.system:
-        state = ThemeMode.light;
-        break;
-      case ThemeMode.light:
-        state = ThemeMode.dark;
-        break;
-      case ThemeMode.dark:
-        state = ThemeMode.system;
-        break;
-    }
+    state = state == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_themeKey, state.index);
   }

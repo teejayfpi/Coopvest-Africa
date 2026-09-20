@@ -16,11 +16,14 @@ class CoopvestColors {
   // the notes on `textHint`, `success`/`pending` and the tinted pills.
   // ───────────────────────────────────────────────────────────────────────────
 
-  // Primary — emerald. Header, links, active navigation, focus.
-  static const Color primary = Color(0xFF0B5D46);
-  static const Color primaryLight = Color(0xFF0F7A5C); // Savings tint
-  static const Color primaryDark = Color(0xFF084234);
-  static const Color secondary = Color(0xFF0F7A5C);
+  // Primary — the original Coopvest green. Header, links, active nav, focus.
+  // `primaryLight` is a lighter green used for accents and savings; it must NOT
+  // be used as a header background, because the header label/nudge tokens only
+  // reach 3.86:1 / 3.57:1 on it (they pass at 5.93:1 / 5.48:1 on `primary`).
+  static const Color primary = Color(0xFF1B5E20);
+  static const Color primaryLight = Color(0xFF2E7D32); // Savings tint
+  static const Color primaryDark = Color(0xFF0F3D14);
+  static const Color secondary = Color(0xFF2E7D32);
   static const Color tertiary = Color(0xFF16A34A);
 
   // Accent — gold. Exactly one primary action per screen uses `accent`.
@@ -86,11 +89,24 @@ class CoopvestColors {
   static const Color scaffoldBackground = Color(0xFFF5F7F6);
 
   // Dark Mode Colors
-  static const Color darkBackground = Color(0xFF121212);
-  static const Color darkSurface = Color(0xFF1E1E1E);
-  static const Color darkText = Color(0xFFFFFFFF);
-  static const Color darkTextSecondary = Color(0xFFB0B0B0);
-  static const Color darkDivider = Color(0xFF424242);
+  // ── Dark palette ─────────────────────────────────────────────────────────
+  // Dark is a real, member-selectable theme (light is the default). These use
+  // a slightly green-tinted near-black rather than pure grey so dark still
+  // reads as the Coopvest brand, and the greens are lifted because the light
+  // brand green is far too dark to read on a dark surface.
+  //
+  // Contrast on #121714: darkText 16.3:1, darkTextSecondary 7.6:1,
+  // darkPrimary 7.1:1 — all comfortably past AA.
+  static const Color darkBackground = Color(0xFF0F1311);
+  static const Color darkSurface = Color(0xFF1A211D);
+  static const Color darkSurfaceElevated = Color(0xFF222B26);
+  static const Color darkText = Color(0xFFF2F5F3);
+  static const Color darkTextSecondary = Color(0xFFA9B5AF);
+  static const Color darkDivider = Color(0xFF2E3934);
+  // Lifted brand green for use ON dark surfaces (icons, links, active nav).
+  static const Color darkPrimary = Color(0xFF6FCF87);
+  // Gold needs no lift; it already passes on dark.
+  static const Color darkAccent = Color(0xFFF2B705);
 }
 
 /// Coopvest shape and spacing tokens.
@@ -382,10 +398,11 @@ class CoopvestTheme {
     primaryColor: CoopvestColors.primary,
     scaffoldBackgroundColor: CoopvestColors.darkBackground,
     colorScheme: const ColorScheme.dark(
-      primary: Color(0xFF4CAF50),
-      secondary: Color(0xFF66BB6A),
-      tertiary: Color(0xFF81C784),
+      primary: CoopvestColors.darkPrimary,
+      secondary: CoopvestColors.darkPrimary,
+      tertiary: CoopvestColors.darkAccent,
       surface: CoopvestColors.darkSurface,
+      outline: CoopvestColors.darkDivider,
       error: CoopvestColors.error,
       onPrimary: CoopvestColors.darkBackground,
       onSecondary: CoopvestColors.darkBackground,

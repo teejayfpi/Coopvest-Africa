@@ -307,38 +307,18 @@ class _ContributionTypeSelectionScreenState
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              title,
-                              style: TextStyle(
-                                color: context.textPrimary,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 17,
-                              ),
-                            ),
-                          ),
-                          if (badge != null)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: CoopvestColors.warning.withOpacity(0.12),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                badge,
-                                style: TextStyle(
-                                  color: CoopvestColors.warning,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                        ],
+                      // The title gets the whole column width. It used to share
+                      // this row with the badge pill, which starved it: on a
+                      // 360px screen the pill ("Requires Employer Info") left
+                      // the title roughly 22px, so "Salary Deduction" wrapped
+                      // one letter per line.
+                      Text(
+                        title,
+                        style: TextStyle(
+                          color: context.textPrimary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 17,
+                        ),
                       ),
                       const SizedBox(height: 2),
                       Text(
@@ -348,6 +328,32 @@ class _ContributionTypeSelectionScreenState
                           fontSize: 13,
                         ),
                       ),
+                      // Badge sits on its own line under the subtitle, where
+                      // it cannot compete with the title for width.
+                      if (badge != null) ...[
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: CoopvestColors.warning.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              badge,
+                              style: TextStyle(
+                                color: CoopvestColors.pendingText,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
