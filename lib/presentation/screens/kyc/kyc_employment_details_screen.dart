@@ -222,11 +222,23 @@ class _KYCEmploymentDetailsScreenState
   }
 
   /// Organisations matching the current search text.
+  ///
+  /// Matches on whole words as well as substrings: with 400+ institutions the
+  /// list is impractical to scroll, so members search by what they remember —
+  /// "polytechnic bauchi", "okoho", "bowen iwo". A plain substring test only
+  /// finds a contiguous run, so "polytechnic bauchi" matched nothing even
+  /// though "Federal Polytechnic, Bauchi" is listed. Every whitespace-separated
+  /// term must appear somewhere in the name or code, in any order.
   List<Organization> get _filteredOrganizations {
     if (_searchQuery.isEmpty) return _organizations;
+    final terms = _searchQuery
+        .split(RegExp(r'\s+'))
+        .where((t) => t.isNotEmpty)
+        .toList();
+    if (terms.isEmpty) return _organizations;
     return _organizations.where((o) {
-      return o.name.toLowerCase().contains(_searchQuery) ||
-          (o.code ?? '').toLowerCase().contains(_searchQuery);
+      final haystack = '${o.name} ${o.code ?? ''}'.toLowerCase();
+      return terms.every(haystack.contains);
     }).toList();
   }
 
