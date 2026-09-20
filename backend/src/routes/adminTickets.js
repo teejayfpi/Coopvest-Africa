@@ -27,7 +27,7 @@ router.get('/', async (req, res) => {
     const limit = Math.min(100, parseInt(req.query.limit) || 20);
     let q = supabase
       .from('tickets')
-      .select('*, profile:profiles(id, user_id, name, email)', { count: 'exact' })
+      .select('*, profile:profiles!tickets_profile_id_fkey(id, user_id, name, email)', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range((page - 1) * limit, page * limit - 1);
     if (req.query.status) q = q.eq('status', req.query.status);
@@ -54,7 +54,7 @@ router.get('/:id', [param('id').isUUID()], validate, async (req, res) => {
   try {
     const { data: ticket, error } = await supabase
       .from('tickets')
-      .select('*, profile:profiles(id, user_id, name, email)')
+      .select('*, profile:profiles!tickets_profile_id_fkey(id, user_id, name, email)')
       .eq('id', req.params.id)
       .maybeSingle();
     if (error) throw error;

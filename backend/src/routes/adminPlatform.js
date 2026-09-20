@@ -260,7 +260,15 @@ async function getMergedLedgerRows(q = {}) {
 
   let txRows = [];
   {
-    let tq = supabase.from('transactions').select('*, profile:profiles(id, user_id, name, email)');
+    // Disambiguate the embed. `transactions` has THREE foreign keys to
+    // `profiles` (profile_id, posted_by, verified_by), so a bare
+    // `profile:profiles(...)` makes PostgREST fail with "Could not embed
+    // because more than one relationship was found" — which broke both
+    // GET /ledger and GET /ledger/dashboard outright. Naming the FK pins it to
+    // the member who owns the transaction.
+    let tq = supabase
+      .from('transactions')
+      .select('*, profile:profiles!transactions_profile_id_fkey(id, user_id, name, email)');
     if (q.profileId) tq = tq.eq('profile_id', q.profileId);
     if (q.type) tq = tq.eq('type', q.type);
     if (q.id) {
@@ -904,7 +912,7 @@ router.get('/documents', async (req, res) => {
     const { page, limit } = req.query;
     const p = Math.max(1, parseInt(page, 10) || 1);
     const l = Math.min(100, parseInt(limit, 10) || 50);
-    let q = supabase.from('documents').select('*, profile:profiles(id, name, email)', { count: 'exact' });
+    let q = supabase.from('documents').select('*, profile:profiles!documents_profile_id_fkey(id, name, email)', { count: 'exact' });
     if (req.query.profileId) q = q.eq('profile_id', req.query.profileId);
     if (req.query.type) q = q.eq('document_type', req.query.type);
     if (req.query.status) q = q.eq('status', req.query.status);

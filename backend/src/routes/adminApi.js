@@ -1295,7 +1295,7 @@ router.get('/wallets', async (req, res) => {
     const { page, limit, from, to } = paging(req);
     let q = supabase
       .from('wallets')
-      .select('*, profile:profiles(id, user_id, name, email)', { count: 'exact' })
+      .select('*, profile:profiles!transactions_profile_id_fkey(id, user_id, name, email)', { count: 'exact' })
       .order('updated_at', { ascending: false })
       .range(from, to);
 
@@ -1320,7 +1320,7 @@ router.get('/transactions', async (req, res) => {
     const { page, limit, from, to } = paging(req);
     let q = supabase
       .from('transactions')
-      .select('*, profile:profiles(id, user_id, name, email)', { count: 'exact' })
+      .select('*, profile:profiles!transactions_profile_id_fkey(id, user_id, name, email)', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(from, to);
     if (req.query.type) q = q.eq('type', req.query.type);
@@ -1346,7 +1346,7 @@ router.get('/savings', async (req, res) => {
     const { page, limit, from, to } = paging(req);
     const { data, error, count } = await supabase
       .from('savings')
-      .select('*, profile:profiles(id, user_id, name, email)', { count: 'exact' })
+      .select('*, profile:profiles!transactions_profile_id_fkey(id, user_id, name, email)', { count: 'exact' })
       .order('updated_at', { ascending: false })
       .range(from, to);
     if (error) throw error;
@@ -1430,7 +1430,7 @@ router.get('/notifications', async (req, res) => {
     const { page, limit, from, to } = paging(req);
     const { data, error, count } = await supabase
       .from('notifications')
-      .select('*, profile:profiles(id, user_id, name, email)', { count: 'exact' })
+      .select('*, profile:profiles!transactions_profile_id_fkey(id, user_id, name, email)', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(from, to);
     if (error) throw error;
@@ -2639,7 +2639,7 @@ router.get('/login-history/log', async (req, res) => {
     const { page, limit, from, to } = paging(req);
     const { data, error, count } = await supabase
       .from('audit_logs')
-      .select('*, profile:profiles(id, user_id, name, email)', { count: 'exact' })
+      .select('*, profile:profiles!transactions_profile_id_fkey(id, user_id, name, email)', { count: 'exact' })
       .eq('action', 'LOGIN')
       .order('created_at', { ascending: false })
       .range(from, to);
@@ -2952,7 +2952,7 @@ router.get('/dashboard/recent-activity', async (req, res) => {
     // Get recent transactions
     const { data: transactions } = await supabase
       .from('transactions')
-      .select('*, profile:profiles(id, user_id, name, email)')
+      .select('*, profile:profiles!transactions_profile_id_fkey(id, user_id, name, email)')
       .order('created_at', { ascending: false })
       .limit(limit);
 
@@ -2966,7 +2966,7 @@ router.get('/dashboard/recent-activity', async (req, res) => {
     // Get recent loans
     const { data: recentLoans } = await supabase
       .from('loans')
-      .select('id, amount, status, created_at, profile:profiles(id, user_id, name, email)')
+      .select('id, amount, status, created_at, profile:profiles!loans_profile_id_fkey(id, user_id, name, email)')
       .order('created_at', { ascending: false })
       .limit(5);
 
@@ -3296,7 +3296,7 @@ router.get('/investments/:id', async (req, res) => {
     if (!pool) return res.status(404).json({ success: false, error: 'Pool not found' });
     const { data: participants } = await supabase
       .from('investment_participations')
-      .select('*, profile:profiles(id, user_id, name, email)')
+      .select('*, profile:profiles!transactions_profile_id_fkey(id, user_id, name, email)')
       .eq('pool_id', pool.id)
       .order('created_at', { ascending: false });
     res.json({ success: true, pool, participants: participants || [] });
@@ -3418,7 +3418,7 @@ router.get('/investments/:id/participants', async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('investment_participations')
-      .select('*, profile:profiles(id, user_id, name, email)')
+      .select('*, profile:profiles!transactions_profile_id_fkey(id, user_id, name, email)')
       .eq('pool_id', req.params.id)
       .order('joined_at', { ascending: false });
     if (error) throw error;
