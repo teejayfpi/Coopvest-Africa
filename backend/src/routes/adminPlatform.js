@@ -20,8 +20,10 @@
  * Configuration is stored in the existing `system_settings` key/value table
  * (jsonb `value`) so no schema migration is required to enable these features.
  * The optional `ledger_entries` table (see supabase/migrations/) enables true
- * double-entry persistence; when absent the ledger falls back to a computed
- * view over the existing `transactions` table.
+ * double-entry persistence for admin-posted entries (reversals, adjustments,
+ * payment-proof auto-posts). The ledger endpoints UNION those stored rows with
+ * a computed view over the `transactions` table, so the ledger always reflects
+ * real platform activity even when no backfill/mirror job has run.
  */
 
 const express = require('express');
@@ -29,6 +31,7 @@ const { body, param, query } = require('express-validator');
 const router = express.Router();
 
 const supabase = require('../config/supabase');
+const { normalizeTransaction, mergeLedgerRows } = require('../services/ledgerMerge');
 const { requireSuperAdmin } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const logger = require('../utils/logger');
@@ -212,6 +215,84 @@ router.post(
 // 2. FINANCIAL LEDGER (double-entry, running balance, reversals)
 // ─────────────────────────────────────────────────────────────────────────────
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Load the merged ledger: stored `ledger_entries` rows (when the table exists)
+// unioned with computed rows from `transactions`. The stored table only holds
+// admin-posted entries, so querying it alone renders the ledger empty whenever
+// no backfill/mirror has run — which is exactly the production situation this
+// fixes. Filters are pushed down to both queries where the columns exist;
+// `memberName` on transactions is matched in-memory via the embedded profile.
+async function getMergedLedgerRows(q = {}) {
+  let ledgerRows = [];
+  let ledgerTableMissing = false;
+
+  {
+    let bq = supabase.from('ledger_entries').select('*');
+    if (q.profileId) bq = bq.eq('profile_id', q.profileId);
+    if (q.type) bq = bq.eq('type', q.type);
+    if (q.id) bq = bq.or(`txn_no.eq.${q.id},reference.eq.${q.id}`);
+    if (q.reference) bq = bq.eq('reference', q.reference);
+    if (q.memberName) bq = bq.ilike('member_name', `%${q.memberName}%`);
+    if (q.organization) bq = bq.eq('organization', q.organization);
+    if (q.paymentMethod) bq = bq.eq('payment_method', q.paymentMethod);
+    if (q.amount) bq = bq.eq('amount', q.amount);
+    if (q.status) bq = bq.eq('status', q.status);
+    if (q.source) bq = bq.eq('source', q.source);
+    if (q.reconciled) bq = bq.eq('reconciled', q.reconciled === 'true');
+    if (q.from) bq = bq.gte('created_at', q.from);
+    if (q.to) bq = bq.lte('created_at', q.to);
+    const r = await bq.order('created_at', { ascending: false }).limit(5000);
+    if (r.error && /relation .* does not exist|Could not find|PGRST/i.test(r.error.message)) {
+      ledgerTableMissing = true;
+    } else if (r.error) {
+      throw r.error;
+    } else {
+      ledgerRows = r.data || [];
+    }
+  }
+
+  // Enrich stored rows with member names when not already present.
+  if (ledgerRows.length && !ledgerRows[0].member_name && !ledgerRows[0].memberName) {
+    const names = await profileNameMap(ledgerRows.map((r) => r.profile_id));
+    ledgerRows = ledgerRows.map((r) => ({ ...r, memberName: names[r.profile_id] || null }));
+  }
+
+  let txRows = [];
+  {
+    // Disambiguate the embed. `transactions` has THREE foreign keys to
+    // `profiles` (profile_id, posted_by, verified_by), so a bare
+    // `profile:profiles(...)` makes PostgREST fail with "Could not embed
+    // because more than one relationship was found" — which broke both
+    // GET /ledger and GET /ledger/dashboard outright. Naming the FK pins it to
+    // the member who owns the transaction.
+    let tq = supabase
+      .from('transactions')
+      .select('*, profile:profiles!transactions_profile_id_fkey(id, user_id, name, email)');
+    if (q.profileId) tq = tq.eq('profile_id', q.profileId);
+    if (q.type) tq = tq.eq('type', q.type);
+    if (q.id) {
+      const ors = [`transaction_id.eq.${q.id}`, `reference.eq.${q.id}`];
+      if (UUID_RE.test(q.id)) ors.unshift(`id.eq.${q.id}`);
+      tq = tq.or(ors.join(','));
+    }
+    if (q.reference) tq = tq.eq('reference', q.reference);
+    if (q.paymentMethod) tq = tq.eq('payment_method', q.paymentMethod);
+    if (q.status) tq = tq.eq('status', q.status);
+    if (q.from) tq = tq.gte('created_at', q.from);
+    if (q.to) tq = tq.lte('created_at', q.to);
+    const r = await tq.order('created_at', { ascending: false }).limit(5000);
+    if (r.error) throw r.error;
+    txRows = (r.data || []).map(normalizeTransaction);
+    if (q.memberName) {
+      const needle = q.memberName.toLowerCase();
+      txRows = txRows.filter((t) => (t.memberName || '').toLowerCase().includes(needle));
+    }
+  }
+
+  return { rows: mergeLedgerRows(ledgerRows, txRows), ledgerTableMissing };
+}
+
 const LEDGER_CATEGORY_DEBIT = 'debit';
 const LEDGER_CATEGORY_CREDIT = 'credit';
 
@@ -250,82 +331,21 @@ function buildLedgerFromTransactions(rows, profileId) {
 
 router.get('/ledger', async (req, res) => {
   try {
-    const { page, limit } = req.query;
-    const p = Math.max(1, parseInt(page, 10) || 1);
-    const l = Math.min(200, parseInt(limit, 10) || 50);
-
-    // Prefer a dedicated ledger_entries table when it exists.
-    let data = null;
-    let error = null;
-    let count = 0;
-    let usedFallback = false;
+    const p = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const l = Math.min(200, parseInt(req.query.limit, 10) || 50);
 
     // Search by transaction ID (e.g. CV-2026-000001) is handled as a
     // reference/txn filter; it narrows to the match so the audit record is
     // instantly retrievable.
-    let baseQuery = supabase.from('ledger_entries').select('*', { count: 'exact' });
-    if (req.query.profileId) baseQuery = baseQuery.eq('profile_id', req.query.profileId);
-    if (req.query.type) baseQuery = baseQuery.eq('type', req.query.type);
-    if (req.query.id) baseQuery = baseQuery.or(`txn_no.eq.${req.query.id},reference.eq.${req.query.id}`);
-    if (req.query.reference) baseQuery = baseQuery.eq('reference', req.query.reference);
-    if (req.query.memberName) baseQuery = baseQuery.ilike('member_name', `%${req.query.memberName}%`);
-    if (req.query.organization) baseQuery = baseQuery.eq('organization', req.query.organization);
-    if (req.query.paymentMethod) baseQuery = baseQuery.eq('payment_method', req.query.paymentMethod);
-    if (req.query.amount) baseQuery = baseQuery.eq('amount', req.query.amount);
-    if (req.query.status) baseQuery = baseQuery.eq('status', req.query.status);
-    if (req.query.source) baseQuery = baseQuery.eq('source', req.query.source);
-    if (req.query.reconciled) baseQuery = baseQuery.eq('reconciled', req.query.reconciled === 'true');
-    if (req.query.from) baseQuery = baseQuery.gte('created_at', req.query.from);
-    if (req.query.to) baseQuery = baseQuery.lte('created_at', req.query.to);
-    const r1 = await baseQuery.order('created_at', { ascending: false }).range((p - 1) * l, p * l - 1);
-    if (r1.error && /relation .* does not exist|Could not find|PGRST/i.test(r1.error.message)) {
-      usedFallback = true;
-    } else {
-      data = r1.data; error = r1.error; count = r1.count || 0;
-    }
-
-    if (usedFallback) {
-      // Fallback: compute the ledger from the transactions table.
-      let tq = supabase.from('transactions').select('*, profile:profiles(id, user_id, name, email)', { count: 'exact' });
-      if (req.query.profileId) tq = tq.eq('profile_id', req.query.profileId);
-      if (req.query.type) tq = tq.eq('type', req.query.type);
-      if (req.query.reference) tq = tq.eq('reference', req.query.reference);
-      if (req.query.from) tq = tq.gte('created_at', req.query.from);
-      if (req.query.to) tq = tq.lte('created_at', req.query.to);
-      const r2 = await tq.order('created_at', { ascending: false }).range((p - 1) * l, p * l - 1);
-      data = (r2.data || []).map((t) => {
-        const amount = Number(t.amount || 0);
-        const isCredit = (t.category || '').toLowerCase() === 'credit';
-        return {
-          id: t.id, transactionId: t.id, profileId: t.profile_id,
-          memberName: t.profile?.name || t.profile?.email || null,
-          reference: t.reference || null, type: t.type || null,
-          description: t.description || t.type || null,
-          debit: isCredit ? 0 : amount, credit: isCredit ? amount : 0,
-          amount: isCredit ? amount : -amount,
-          source: t.source || 'system', status: t.status || 'completed',
-          reversed: false, reversalOf: null, createdAt: t.created_at,
-          fallback: true,
-        };
-      });
-      count = r2.count || 0;
-      error = null;
-    }
-
-    if (error) throw error;
-
-    // Enrich with member names when not already present.
-    let rows = data || [];
-    if (rows.length && !rows[0].memberName && !usedFallback) {
-      const names = await profileNameMap(rows.map((r) => r.profile_id));
-      rows = rows.map((r) => ({ ...r, memberName: names[r.profile_id] || null }));
-    }
+    const { rows: merged, ledgerTableMissing } = await getMergedLedgerRows(req.query);
+    const total = merged.length;
+    const rows = merged.slice((p - 1) * l, p * l);
 
     res.json({
       success: true,
       ledger: rows,
-      pagination: { page: p, limit: l, total: count },
-      fallback: usedFallback,
+      pagination: { page: p, limit: l, total },
+      fallback: ledgerTableMissing,
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -428,13 +448,11 @@ router.post(
 // Reconciliation Status summary.
 router.get('/ledger/dashboard', async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from('ledger_entries')
-      .select('type, amount, debit, credit, status, created_at')
-      .not('reversed', 'eq', true)
-      .order('created_at', { ascending: false });
-
-    if (error) throw error;
+    // Same merged source as GET /ledger: stored ledger_entries plus computed
+    // transaction rows, so totals reflect real activity even before any
+    // backfill/mirror of ledger_entries has run.
+    const { rows } = await getMergedLedgerRows(req.query);
+    const data = (rows || []).filter((e) => !e.reversed);
 
     // Apply date range if provided (created_at timestamps).
     const from = req.query.from ? new Date(req.query.from).getTime() : null;
@@ -454,10 +472,11 @@ router.get('/ledger/dashboard', async (req, res) => {
     let discrepancy = 0;
 
     (data || []).forEach((e) => {
-      const amount = Number(e.amount != null ? e.amount : (e.credit || 0));
       const credit = Number(e.credit || 0);
       const debit = Number(e.debit || 0);
-      const ts = e.created_at ? new Date(e.created_at).getTime() : null;
+      const amount = Number(e.amount != null ? e.amount : credit - debit);
+      const createdAt = e.created_at || e.createdAt;
+      const ts = createdAt ? new Date(createdAt).getTime() : null;
       if (from && ts && ts < from) return;
       if (to && ts && ts > to) return;
 
@@ -559,19 +578,10 @@ router.post('/ledger/adjust', [
 // CSV export with the current filters applied.
 router.get('/ledger/export.csv', async (req, res) => {
   try {
-    // Reuse the same filtering logic as GET /ledger against ledger_entries.
-    let q = supabase.from('ledger_entries').select('txn_no, created_at, member_name, membership_id, organization, type, amount, debit, credit, payment_method, bank_account, reference, description, status, source, reconciled, initiated_by, approved_by');
-    if (req.query.profileId) q = q.eq('profile_id', req.query.profileId);
-    if (req.query.type) q = q.eq('type', req.query.type);
-    if (req.query.reference) q = q.eq('reference', req.query.reference);
-    if (req.query.from) q = q.gte('created_at', req.query.from);
-    if (req.query.to) q = q.lte('created_at', req.query.to);
-    if (req.query.memberName) q = q.ilike('member_name', `%${req.query.memberName}%`);
-    if (req.query.organization) q = q.eq('organization', req.query.organization);
-    if (req.query.paymentMethod) q = q.eq('payment_method', req.query.paymentMethod);
-    if (req.query.status) q = q.eq('status', req.query.status);
-    const { data, error } = await q.order('created_at', { ascending: false }).limit(5000);
-    if (error) throw error;
+    // Same merged source as GET /ledger (stored ledger_entries ∪ transactions),
+    // so the export matches what the admin sees on screen.
+    const { rows } = await getMergedLedgerRows(req.query);
+    const data = (rows || []).slice(0, 5000);
 
     const esc = (v) => {
       const s = v == null ? '' : String(v);
@@ -579,10 +589,12 @@ router.get('/ledger/export.csv', async (req, res) => {
     };
     const header = ['Transaction ID', 'Date', 'Member', 'Membership ID', 'Organization', 'Type', 'Amount', 'Debit', 'Credit', 'Payment Method', 'Bank Account', 'Reference', 'Description', 'Status', 'Source', 'Reconciled', 'Initiated By', 'Approved By'];
     const lines = (data || []).map((r) => [
-      r.txn_no, r.created_at, r.member_name, r.membership_id, r.organization, r.type,
-      r.amount, r.debit, r.credit, r.payment_method, r.bank_account, r.reference,
+      r.txn_no || r.transactionId, r.created_at || r.createdAt,
+      r.member_name || r.memberName, r.membership_id || r.membershipId,
+      r.organization, r.type, r.amount, r.debit, r.credit,
+      r.payment_method || r.paymentMethod, r.bank_account, r.reference,
       r.description, r.status, r.source, r.reconciled,
-      r.initiated_by, r.approved_by,
+      r.initiated_by || r.initiatedBy, r.approved_by || r.approvedBy,
     ].map(esc).join(','));
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="coopvest-ledger.csv"');
@@ -900,7 +912,7 @@ router.get('/documents', async (req, res) => {
     const { page, limit } = req.query;
     const p = Math.max(1, parseInt(page, 10) || 1);
     const l = Math.min(100, parseInt(limit, 10) || 50);
-    let q = supabase.from('documents').select('*, profile:profiles(id, name, email)', { count: 'exact' });
+    let q = supabase.from('documents').select('*, profile:profiles!documents_profile_id_fkey(id, name, email)', { count: 'exact' });
     if (req.query.profileId) q = q.eq('profile_id', req.query.profileId);
     if (req.query.type) q = q.eq('document_type', req.query.type);
     if (req.query.status) q = q.eq('status', req.query.status);

@@ -70,6 +70,7 @@ router.use(adminPlatform);
 
 // Rollover Management in the admin dashboard calls /api/admin/rollovers*;
 // no such routes existed, so the page 404'd on mount and on every action.
+// Mounted after adminPlatform so its own /rollover paths are unaffected.
 router.use(adminRollovers);
 
 // All admin roles (requireAdmin accepts 'super_admin' but historic queries
@@ -512,8 +513,8 @@ router.get('/members/:id', async (req, res) => {
         nin: profile.nin || kycData?.nin || null,
         id_type: profile.id_type || kycData?.id_type || null,
         id_number: profile.id_number || kycData?.id_number || null,
-        selfie_url: profile.selfie_url || kycData?.selfie_url || kycData?.selfie || kycData?.personal_info?.selfie_url || kycData?.personal_info?.selfie || null,
-        id_document_url: profile.id_document_url || kycData?.id_document_url || kycData?.personal_info?.id_document_url || null,
+        selfie_url: profile.selfie_url || kycData?.selfie_url || kycData?.selfie || null,
+        id_document_url: profile.id_document_url || kycData?.id_document_url || null,
         kyc_status: profile.kyc_status || kycData?.status || null,
         // Contribution channel + when it was last switched (null = never)
         contribution_type: kycData?.personal_info?.contribution_type || null,
@@ -652,7 +653,7 @@ router.patch(
   [
     body('isActive').optional().isBoolean(),
     body('isFlagged').optional().isBoolean(),
-    body('role').optional().isIn(['member', 'admin']),
+    body('role').optional().isIn(['member', 'admin', 'super_admin']),
   ],
   validate,
   async (req, res) => {
@@ -664,6 +665,28 @@ router.patch(
       if (Object.keys(update).length === 0) {
         return res.status(400).json({ success: false, error: 'No fields to update' });
       }
+
+      const actorIsSuper = ['superadmin', 'super_admin'].includes(req.user?.role || '');
+
+      // Granting or revoking super_admin is itself a super-admin-only action.
+      if (update.role !== undefined) {
+        const { data: target } = await supabase
+          .from('profiles')
+          .select('id, email, role')
+          .eq('id', req.params.id)
+          .maybeSingle();
+        if (!target) return res.status(404).json({ success: false, error: 'Member not found' });
+
+        const targetIsSuper = ['superadmin', 'super_admin'].includes(target.role);
+        const touchesSuper = update.role === 'super_admin' || targetIsSuper;
+        if (touchesSuper && !actorIsSuper) {
+          return res.status(403).json({ success: false, error: 'Only a Super Admin can grant or revoke Super Admin access' });
+        }
+        if (targetIsSuper && req.params.id === req.user.id && update.role !== 'super_admin') {
+          return res.status(400).json({ success: false, error: 'You cannot remove your own Super Admin role' });
+        }
+      }
+
       const { data, error } = await supabase
         .from('profiles')
         .update(update)
@@ -672,13 +695,219 @@ router.patch(
         .maybeSingle();
       if (error) throw error;
       if (!data) return res.status(404).json({ success: false, error: 'Member not found' });
-      await logAdminAction('MEMBER_UPDATED', { model: 'Profile', id: data.id }, update);
+      await logAdminAction(
+        update.role === 'super_admin' ? 'SUPER_ADMIN_GRANTED' : 'MEMBER_UPDATED',
+        { model: 'Profile', id: data.id },
+        { ...update, actorEmail: req.user.email },
+        req,
+      );
       res.json({ success: true, member: data });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
     }
   }
 );
+
+// ─── Member deletion (super_admin only, two-step confirmation) ───────────────
+// The admin web app calls POST .../members/:id/confirm-delete to generate a
+// code, then DELETE .../members/:id with the code + admin password + the
+// phrase "DELETE". These endpoints previously did not exist, so the UI's
+// delete flow always failed with an endpoint error.
+
+const crypto = require('crypto');
+const pendingMemberDeletions = new Map(); // memberId -> { code, expiresAt, requestedBy }
+const MEMBER_DELETE_CODE_TTL_MS = 30 * 60 * 1000;
+
+function checkSuperAdmin(req, res) {
+  if (!['superadmin', 'super_admin'].includes(req.user?.role || '')) {
+    res.status(403).json({ success: false, error: 'Only the Super Admin can delete members' });
+    return false;
+  }
+  return true;
+}
+
+// Tables that reference profiles and must be cleaned before the profile row
+// (and auth user) can be removed. Ordered children-first. Column names match
+// the current schema; per-table errors are collected and reported.
+const MEMBER_DATA_TABLES = [
+  ['ticket_messages', 'profile_id'],
+  ['tickets', 'profile_id'],
+  ['loan_qrs', 'profile_id'],
+  ['loan_guarantors', 'guarantor_id'],
+  ['loan_guarantors', 'profile_id'],
+  ['loan_repayments', 'profile_id'],
+  ['loans', 'profile_id'],
+  ['transactions', 'profile_id'],
+  ['deposit_requests', 'profile_id'],
+  ['payment_proofs', 'profile_id'],
+  ['wallets', 'profile_id'],
+  ['savings', 'profile_id'],
+  ['contributions', 'profile_id'],
+  ['contribution_plan_reductions', 'profile_id'],
+  ['contribution_plans', 'profile_id'],
+  ['kyc_documents', 'profile_id'],
+  ['kyc', 'profile_id'],
+  ['notifications', 'profile_id'],
+  ['login_history', 'profile_id'],
+  ['security_sessions', 'profile_id'],
+  ['user_settings', 'profile_id'],
+  ['user_devices', 'profile_id'],
+  ['referrals', 'referrer_id'],
+  ['referrals', 'referred_id'],
+  ['investments', 'profile_id'],
+  ['withdrawal_requests', 'profile_id'],
+  ['bank_accounts', 'profile_id'],
+  ['audit_logs', 'actor_id'],
+  ['audit_logs', 'target_profile_id'],
+];
+
+/**
+ * POST /api/admin/members/:id/confirm-delete
+ * Step 1: validate the target and issue a one-time confirmation code.
+ */
+router.post('/members/:id/confirm-delete', async (req, res) => {
+  try {
+    if (!checkSuperAdmin(req, res)) return;
+    const { id } = req.params;
+
+    if (id === req.user.id) {
+      return res.status(400).json({ success: false, error: 'You cannot delete your own account' });
+    }
+
+    const { data: member, error } = await supabase
+      .from('profiles')
+      .select('id, email, name, role')
+      .eq('id', id)
+      .maybeSingle();
+    if (error) throw error;
+    if (!member) return res.status(404).json({ success: false, error: 'Member not found' });
+    if (['superadmin', 'super_admin'].includes(member.role)) {
+      return res.status(400).json({ success: false, error: 'Super Admin accounts cannot be deleted' });
+    }
+
+    const code = crypto.randomBytes(3).toString('hex').toUpperCase(); // e.g. "A1B2C3"
+    const expiresAt = new Date(Date.now() + MEMBER_DELETE_CODE_TTL_MS);
+    pendingMemberDeletions.set(id, { code, expiresAt, requestedBy: req.user.id });
+
+    await logAdminAction('MEMBER_DELETE_INITIATED', { model: 'Profile', id }, {
+      memberEmail: member.email,
+    }, req);
+
+    res.json({
+      success: true,
+      confirmationCode: code,
+      memberName: member.name || member.email,
+      memberEmail: member.email,
+      expiresAt: expiresAt.toISOString(),
+      message: 'Confirmation code generated. It expires in 30 minutes.',
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * DELETE /api/admin/members/:id
+ * Step 2: verify code + admin password + "DELETE" phrase, then remove the
+ * member's data rows, profile, and Supabase auth user.
+ */
+router.delete('/members/:id', async (req, res) => {
+  try {
+    if (!checkSuperAdmin(req, res)) return;
+    const { id } = req.params;
+    const { confirmationCode, password, confirmPhrase } = req.body || {};
+
+    if ((confirmPhrase || '').toUpperCase() !== 'DELETE') {
+      return res.status(400).json({ success: false, error: 'Type DELETE to confirm' });
+    }
+    if (!password) {
+      return res.status(400).json({ success: false, error: 'Password is required' });
+    }
+
+    const pending = pendingMemberDeletions.get(id);
+    if (!pending || pending.expiresAt < new Date()) {
+      pendingMemberDeletions.delete(id);
+      return res.status(400).json({ success: false, error: 'Confirmation code expired or not requested. Start again.' });
+    }
+    if ((confirmationCode || '').toUpperCase() !== pending.code) {
+      return res.status(400).json({ success: false, error: 'Invalid confirmation code' });
+    }
+
+    // Verify the acting admin's password against Supabase auth. Must use a
+    // throwaway client — signInWithPassword on the shared client would
+    // attach the user session and downgrade all later service-role calls.
+    const { createClient } = require('@supabase/supabase-js');
+    const { error: authError } = await createClient(
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY,
+      { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } }
+    ).auth.signInWithPassword({
+      email: req.user.email,
+      password,
+    });
+    if (authError) {
+      return res.status(401).json({ success: false, error: 'Password verification failed' });
+    }
+
+    const { data: member, error: memberErr } = await supabase
+      .from('profiles')
+      .select('id, email, name, role')
+      .eq('id', id)
+      .maybeSingle();
+    if (memberErr) throw memberErr;
+    if (!member) return res.status(404).json({ success: false, error: 'Member not found' });
+    if (['superadmin', 'super_admin'].includes(member.role)) {
+      return res.status(400).json({ success: false, error: 'Super Admin accounts cannot be deleted' });
+    }
+
+    // Null out non-blocking references that would FK-fail the profile delete.
+    await supabase.from('loans').update({ approved_by: null }).eq('approved_by', id);
+
+    // Delete dependent rows. audit_logs is immutable by trigger; if a delete
+    // is blocked, collect it and continue with the rest.
+    const failures = [];
+    for (const [table, column] of MEMBER_DATA_TABLES) {
+      const { error } = await supabase.from(table).delete().eq(column, id);
+      if (error) {
+        if (/immutable|not permitted/i.test(error.message)) {
+          failures.push(`${table}: ${error.message}`);
+        } else if (!/does not exist|Could not find/i.test(error.message)) {
+          failures.push(`${table}: ${error.message}`);
+        }
+      }
+    }
+
+    const { error: profileErr } = await supabase.from('profiles').delete().eq('id', id);
+    if (profileErr) {
+      return res.status(500).json({
+        success: false,
+        error: `Failed to delete profile: ${profileErr.message}`,
+        cleanupFailures: failures,
+      });
+    }
+
+    const { error: authDelErr } = await supabase.auth.admin.deleteUser(id, false);
+    if (authDelErr) {
+      logger.warn(`auth user delete failed for ${id}:`, authDelErr.message);
+    }
+
+    pendingMemberDeletions.delete(id);
+    await logAdminAction('MEMBER_DELETED', { model: 'Profile', id }, {
+      memberEmail: member.email,
+      memberName: member.name,
+      cleanupFailures: failures.length ? failures : undefined,
+    }, req);
+
+    res.json({
+      success: true,
+      message: `${member.name || member.email} has been permanently deleted.`,
+      deletedAt: new Date().toISOString(),
+      warnings: failures.length ? failures : undefined,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 /**
  * POST /api/v1/admin/members/:id/reset-password
@@ -1066,7 +1295,7 @@ router.get('/wallets', async (req, res) => {
     const { page, limit, from, to } = paging(req);
     let q = supabase
       .from('wallets')
-      .select('*, profile:profiles(id, user_id, name, email)', { count: 'exact' })
+      .select('*, profile:profiles!transactions_profile_id_fkey(id, user_id, name, email)', { count: 'exact' })
       .order('updated_at', { ascending: false })
       .range(from, to);
 
@@ -1091,12 +1320,16 @@ router.get('/transactions', async (req, res) => {
     const { page, limit, from, to } = paging(req);
     let q = supabase
       .from('transactions')
-      .select('*, profile:profiles(id, user_id, name, email)', { count: 'exact' })
+      .select('*, profile:profiles!transactions_profile_id_fkey(id, user_id, name, email)', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(from, to);
     if (req.query.type) q = q.eq('type', req.query.type);
     if (req.query.profileId) q = q.eq('profile_id', req.query.profileId);
     if (req.query.status) q = q.eq('status', req.query.status);
+    // Optional date range (YYYY-MM-DD) used by the Accounting Spreadsheet
+    // report generator.
+    if (req.query.dateFrom) q = q.gte('created_at', req.query.dateFrom);
+    if (req.query.dateTo) q = q.lte('created_at', `${req.query.dateTo}T23:59:59.999Z`);
     const { data, error, count } = await q;
     if (error) throw error;
     res.json({ success: true, transactions: data || [], pagination: { page, limit, total: count || 0 } });
@@ -1113,7 +1346,7 @@ router.get('/savings', async (req, res) => {
     const { page, limit, from, to } = paging(req);
     const { data, error, count } = await supabase
       .from('savings')
-      .select('*, profile:profiles(id, user_id, name, email)', { count: 'exact' })
+      .select('*, profile:profiles!transactions_profile_id_fkey(id, user_id, name, email)', { count: 'exact' })
       .order('updated_at', { ascending: false })
       .range(from, to);
     if (error) throw error;
@@ -1197,7 +1430,7 @@ router.get('/notifications', async (req, res) => {
     const { page, limit, from, to } = paging(req);
     const { data, error, count } = await supabase
       .from('notifications')
-      .select('*, profile:profiles(id, user_id, name, email)', { count: 'exact' })
+      .select('*, profile:profiles!transactions_profile_id_fkey(id, user_id, name, email)', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(from, to);
     if (error) throw error;
@@ -1918,14 +2151,29 @@ router.get('/compliance/summary', async (req, res) => {
       supabase.from('kyc_documents').select('id', { count: 'exact', head: true }).eq('status', 'rejected')
     ]);
 
+    // The admin dashboard reads the flat alias keys (pending/approved/...);
+    // the kyc* keys are kept for any other consumers. Both derive from the
+    // same counts so the KPI cards and table always agree.
+    const verified = kycVerified.count || 0;
+    const pending = kycPending.count || 0;
+    const rejected = kycRejected.count || 0;
     const summary = {
       totalMembers: totalMembers.count || 0,
-      kycVerified: kycVerified.count || 0,
-      kycPending: kycPending.count || 0,
-      kycRejected: kycRejected.count || 0,
-      complianceRate: totalMembers.count > 0 
-        ? Math.round((kycVerified.count / totalMembers.count) * 10000) / 100 
-        : 0
+      kycVerified: verified,
+      kycPending: pending,
+      kycRejected: rejected,
+      complianceRate: totalMembers.count > 0
+        ? Math.round((verified / totalMembers.count) * 10000) / 100
+        : 0,
+      // Aliases consumed by the dashboard's ComplianceSummary type
+      pending,
+      approved: verified,
+      rejected,
+      flagged: 0,
+      totalThisMonth: 0,
+      approvalRate: totalMembers.count > 0
+        ? Math.round((verified / totalMembers.count) * 10000) / 100
+        : 0,
     };
 
     res.json({ success: true, data: summary });
@@ -2391,7 +2639,7 @@ router.get('/login-history/log', async (req, res) => {
     const { page, limit, from, to } = paging(req);
     const { data, error, count } = await supabase
       .from('audit_logs')
-      .select('*, profile:profiles(id, user_id, name, email)', { count: 'exact' })
+      .select('*, profile:profiles!transactions_profile_id_fkey(id, user_id, name, email)', { count: 'exact' })
       .eq('action', 'LOGIN')
       .order('created_at', { ascending: false })
       .range(from, to);
@@ -2704,7 +2952,7 @@ router.get('/dashboard/recent-activity', async (req, res) => {
     // Get recent transactions
     const { data: transactions } = await supabase
       .from('transactions')
-      .select('*, profile:profiles(id, user_id, name, email)')
+      .select('*, profile:profiles!transactions_profile_id_fkey(id, user_id, name, email)')
       .order('created_at', { ascending: false })
       .limit(limit);
 
@@ -2718,7 +2966,7 @@ router.get('/dashboard/recent-activity', async (req, res) => {
     // Get recent loans
     const { data: recentLoans } = await supabase
       .from('loans')
-      .select('id, amount, status, created_at, profile:profiles(id, user_id, name, email)')
+      .select('id, amount, status, created_at, profile:profiles!loans_profile_id_fkey(id, user_id, name, email)')
       .order('created_at', { ascending: false })
       .limit(5);
 
@@ -3048,7 +3296,7 @@ router.get('/investments/:id', async (req, res) => {
     if (!pool) return res.status(404).json({ success: false, error: 'Pool not found' });
     const { data: participants } = await supabase
       .from('investment_participations')
-      .select('*, profile:profiles(id, user_id, name, email)')
+      .select('*, profile:profiles!transactions_profile_id_fkey(id, user_id, name, email)')
       .eq('pool_id', pool.id)
       .order('created_at', { ascending: false });
     res.json({ success: true, pool, participants: participants || [] });
@@ -3170,7 +3418,7 @@ router.get('/investments/:id/participants', async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('investment_participations')
-      .select('*, profile:profiles(id, user_id, name, email)')
+      .select('*, profile:profiles!transactions_profile_id_fkey(id, user_id, name, email)')
       .eq('pool_id', req.params.id)
       .order('joined_at', { ascending: false });
     if (error) throw error;
@@ -3928,32 +4176,45 @@ router.get('/sessions/stats', async (req, res) => {
 });
 
 /**
- * Revoke every active session for a profile.
+ * Terminate a session.
  *
- * The three session DELETE routes previously only wrote an audit-log row and
- * returned `{ success: true }` — they revoked nothing. The dashboard told the
- * admin "Logged out from other devices", recorded that it had done so, and left
- * every device signed in.
+ * These three routes previously only wrote an audit-log row and returned
+ * `{ success: true }` — they revoked nothing. The dashboard told the admin
+ * "Logged out from other devices", recorded that it had done so, and left every
+ * device signed in. Anyone relying on that to evict a compromised session was
+ * still exposed.
  *
- * Revocation is enforced through `profiles.active_session_id`: middleware/auth.js
+ * Revocation is enforced through `profiles.active_session_id`: `middleware/auth.js`
  * rejects any token whose session id does not match the claimed one
  * (`SESSION_REPLACED`). Clearing it locks the account out until the next
- * `/auth/sync`, which is the effect the button promises. `security_sessions` is
- * flipped too so the live view reflects reality.
+ * `/auth/sync`, which is exactly the effect the button promises. We also flip
+ * `security_sessions.is_current` so the live view reflects reality.
+ *
+ * Ambiguity is reported rather than guessed at: if more than one `login_history`
+ * row maps to the same user we cannot tell which device a caller meant, so the
+ * single-session route refuses instead of revoking everything.
  */
+
+/** Revoke every active session for a profile, and report what was cleared. */
 async function revokeSessionsForProfile(profileId) {
   const now = new Date().toISOString();
 
+  // Clear the claimed session so in-flight tokens stop matching — this is what
+  // actually signs the devices out.
   const { error: profileErr } = await supabase
     .from('profiles')
     .update({ active_session_id: null, updated_at: now })
     .eq('id', profileId);
   if (profileErr) throw profileErr;
 
+  // Mark the live-session rows stale so the Sessions screen stops showing them
+  // as connected.
   const { error: sessErr } = await supabase
     .from('security_sessions')
     .update({ is_current: false })
     .eq('user_id', profileId);
+  // security_sessions is optional (it exists, but tolerate its absence rather
+  // than failing a logout because an auxiliary table is missing).
   if (sessErr && !/relation .* does not exist|Could not find/i.test(sessErr.message || '')) {
     throw sessErr;
   }
@@ -4008,9 +4269,9 @@ router.delete('/sessions/user/:userId', async (req, res) => {
  * DELETE /api/admin/sessions/terminate-others
  * Sign the calling admin out of every device except this one.
  *
- * The UI promises "this device stays signed in", so the current session is
- * re-claimed straight after clearing — otherwise the admin would be logged out
- * of the device they are using.
+ * "Except this one" is the promise in the UI, so we re-claim the current session
+ * immediately after clearing it — otherwise the admin would be logged out of the
+ * device they are using, which is the opposite of what the button says.
  */
 router.delete('/sessions/terminate-others', async (req, res) => {
   try {
@@ -4021,6 +4282,7 @@ router.delete('/sessions/terminate-others', async (req, res) => {
 
     const result = await revokeSessionsForProfile(adminId);
 
+    // Re-claim this device so the admin stays signed in here.
     if (currentSessionId) {
       await supabase
         .from('profiles')
@@ -4051,9 +4313,10 @@ router.delete('/sessions/terminate-others', async (req, res) => {
 /**
  * DELETE /api/admin/sessions/:id
  *
- * Terminate one session by its `login_history` id. A login row cannot be mapped
- * back to a single device with confidence, so the member is signed out
- * everywhere and the response says so rather than implying a targeted revoke.
+ * Terminate one session by its `login_history` id. Because a session id cannot
+ * be mapped back to a single device with confidence, this refuses when the row
+ * does not identify exactly one user's active session rather than revoking
+ * everything under that user.
  */
 router.delete('/sessions/:id', async (req, res) => {
   try {
@@ -4081,6 +4344,8 @@ router.delete('/sessions/:id', async (req, res) => {
     logger.info(`Session ${req.params.id} terminated (all sessions for ${row.profile_id} revoked)`);
     res.json({
       success: true,
+      // Say what actually happened. A single login row cannot be revoked in
+      // isolation, so the member is signed out everywhere.
       message: 'Signed the user out of all devices (sessions cannot be revoked individually).',
       clearedSessions: result.clearedSessions,
     });
@@ -4089,6 +4354,238 @@ router.delete('/sessions/:id', async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
+
+/**
+ * POST /api/admin/logout-events
+ *
+ * The dashboard fires this immediately before `supabase.auth.signOut()`. The
+ * route did not exist, so every logout produced a 404 (swallowed by the
+ * caller's `.catch()`, meaning nobody noticed).
+ *
+ * `login_history` records successful logins only and has no logout column, so
+ * the event is recorded in `audit_logs`, which is where admin session actions
+ * already live (`SESSION_TERMINATE*`). That keeps a single query able to
+ * reconstruct a session's life: login rows plus the logout event.
+ */
+router.post('/logout-events', async (req, res) => {
+  try {
+    const profileId = req.body?.profileId || req.user?.id;
+
+    // An admin may only record their own logout; recording someone else's would
+    // let a caller forge audit history for another user.
+    if (profileId && profileId !== req.user?.id) {
+      return res.status(403).json({
+        success: false,
+        error: 'You can only record your own logout',
+      });
+    }
+
+    await logAdminAction(
+      'LOGOUT',
+      { model: 'Profile', id: profileId },
+      { reason: req.body?.reason || 'user-initiated' },
+      req,
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('logout-events error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET/POST /api/admin/excel-uploads
+ *
+ * Upload history for the Excel Manager. The page calls this on mount and on
+ * upload; neither route existed, so the history table never populated and an
+ * upload appeared to do nothing.
+ *
+ * The manager also has `POST /bulk/import-members` and
+ * `POST /bulk/import-contributions` for the actual data, so this endpoint's job
+ * is to record that an upload happened and what came of it — the audit half of
+ * the workflow.
+ */
+router.get('/excel-uploads', async (req, res) => {
+  try {
+    const { page, limit, from, to } = paging(req);
+    let q = supabase
+      .from('excel_uploads')
+      .select('*', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(from, to);
+
+    if (req.query.type) q = q.eq('type', req.query.type);
+    if (req.query.status) q = q.eq('status', req.query.status);
+
+    const { data, error, count } = await q;
+
+    if (error) {
+      // The table is created by migration 037. Until it exists, report an empty
+      // history rather than a 500, so the page renders instead of erroring.
+      if (error.code === '42P01' || /relation .* does not exist|Could not find/i.test(error.message)) {
+        logger.warn('excel_uploads table missing — run migration 037');
+        return res.json({ success: true, uploads: [], data: [], pagination: { page, limit, total: 0 }, migrationPending: true });
+      }
+      throw error;
+    }
+
+    const uploads = data || [];
+    res.json({
+      success: true,
+      uploads,
+      data: uploads,
+      pagination: { page, limit, total: count || uploads.length },
+    });
+  } catch (err) {
+    logger.error('excel-uploads list error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/excel-uploads', async (req, res) => {
+  try {
+    const { filename, type, record_count, status } = req.body || {};
+
+    if (!filename) {
+      return res.status(400).json({ success: false, error: 'filename is required' });
+    }
+
+    const { data, error } = await supabase
+      .from('excel_uploads')
+      .insert({
+        filename,
+        type: type || 'bulk_contributions',
+        record_count: Number(record_count) || 0,
+        status: status || 'reviewing',
+        // `excel_uploads` has no uploaded_by_email column; the actor is resolved
+        // from `uploaded_by` against profiles by the list query's caller.
+        uploaded_by: req.user.id,
+      })
+      .select('*')
+      .single();
+
+    if (error) {
+      if (error.code === '42P01' || /relation .* does not exist|Could not find/i.test(error.message)) {
+        logger.warn('excel_uploads table missing — run migration 037');
+        return res.status(503).json({
+          success: false,
+          error: 'Upload history is unavailable until migration 037 is applied.',
+        });
+      }
+      throw error;
+    }
+
+    await logAdminAction(
+      'EXCEL_UPLOAD_RECORDED',
+      { model: 'ExcelUpload', id: data.id },
+      { filename, type, record_count },
+      req,
+    );
+
+    res.status(201).json({ success: true, upload: data, data });
+  } catch (err) {
+    logger.error('excel-uploads create error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/admin/accounting/journal-entry
+ *
+ * Post a manual double-entry journal entry.
+ *
+ * This is the write-side counterpart to the Accounting reports. Those reports
+ * derive from the ledger (the `/accounting` router is not deployed), so this
+ * endpoint must write somewhere the reports actually read. It posts into
+ * `ledger_entries`, which `/api/admin/ledger` unions with transactions — so a
+ * journal entry appears in the trial balance, general ledger and balance sheet
+ * immediately.
+ *
+ * Enforces the one rule that makes double-entry meaningful: debits must equal
+ * credits, and there must be at least one of each.
+ */
+router.post(
+  '/accounting/journal-entry',
+  [
+    body('txn_date').isISO8601().withMessage('A valid transaction date is required'),
+    body('description').isString().trim().isLength({ min: 3 }).withMessage('A description is required'),
+    body('lines').isArray({ min: 2 }).withMessage('At least two lines are required'),
+    body('lines.*.account_code').isString().notEmpty().withMessage('Every line needs an account code'),
+    body('lines.*.debit').optional().isFloat({ min: 0 }),
+    body('lines.*.credit').optional().isFloat({ min: 0 }),
+  ],
+  validate,
+  async (req, res) => {
+    try {
+      const { txn_date, description, lines } = req.body;
+
+      const totalDebit = lines.reduce((s, l) => s + (Number(l.debit) || 0), 0);
+      const totalCredit = lines.reduce((s, l) => s + (Number(l.credit) || 0), 0);
+
+      // Refuse an unbalanced entry rather than posting one that would break the
+      // trial balance for every subsequent report.
+      if (Math.abs(totalDebit - totalCredit) > 0.01) {
+        return res.status(400).json({
+          success: false,
+          error: `Entry is unbalanced: debits ${totalDebit.toFixed(2)} do not equal credits ${totalCredit.toFixed(2)}.`,
+          totalDebit,
+          totalCredit,
+        });
+      }
+      if (totalDebit <= 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'A journal entry must move a non-zero amount.',
+        });
+      }
+
+      // Every line must go one way or the other; a line with both is ambiguous
+      // and would double the amount in the trial balance.
+      const ambiguous = lines.find(
+        (l) => (Number(l.debit) || 0) > 0 && (Number(l.credit) || 0) > 0,
+      );
+      if (ambiguous) {
+        return res.status(400).json({
+          success: false,
+          error: `Line for account ${ambiguous.account_code} has both a debit and a credit.`,
+        });
+      }
+
+      const { data, error } = await supabase.rpc('post_journal_entry', {
+        p_txn_date: txn_date,
+        p_description: description,
+        // Pass the array itself, NOT JSON.stringify(lines). Stringifying sends a
+        // JSON *string* to a jsonb parameter, so `jsonb_typeof(p_lines)` is
+        // 'string' rather than 'array' and the function rejects a valid entry as
+        // "needs at least two lines".
+        p_lines: lines,
+        p_admin_id: req.user.id,
+      });
+
+      if (error) {
+        const message = error.message || 'Failed to post journal entry';
+        if (error.code === '42883' || /function .*post_journal_entry.* does not exist/i.test(message)) {
+          logger.error('post_journal_entry missing — run migration 036');
+          return res.status(503).json({
+            success: false,
+            error: 'Journal entries are unavailable until migration 036 is applied.',
+          });
+        }
+        if (error.code === '22023' || /unbalanced|must move|ambiguous/i.test(message)) {
+          return res.status(400).json({ success: false, error: message });
+        }
+        throw error;
+      }
+
+      logger.info(`Journal entry posted by ${req.user.id}: ${data?.txn_no}`);
+      res.status(201).json({ success: true, ...(data || {}) });
+    } catch (err) {
+      logger.error('accounting journal-entry error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  },
+);
 
 /**
  * Login history
@@ -5000,573 +5497,6 @@ router.patch('/member-fees/:id', async (req, res) => {
     if (error) throw error;
     await logAdminAction('MEMBER_FEE_UPDATED', { model: 'member_fees', id: req.params.id }, { status }, req);
     res.json({ success: true, member_fee: data });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// ---------------------------------------------------------------------------
-// Utility endpoints used by the Admin Dashboard frontend
-// ---------------------------------------------------------------------------
-
-/**
- * POST /api/v1/admin/logout-events
- * Record a logout event for the current admin (used by the dashboard header).
- */
-router.post('/logout-events', [
-  body('profileId').isUUID().withMessage('profileId must be a valid UUID'),
-], validate, async (req, res) => {
-  try {
-    const { profileId } = req.body;
-    await logAdminAction('LOGOUT', { model: 'Profile', id: profileId }, { page: 'admin-dashboard' }, req);
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-/**
- * POST /api/v1/admin/activity
- * Generic activity tracking endpoint for the admin dashboard.
- */
-router.post('/activity', [
-  body('page').isString().notEmpty(),
-  body('module').isString().notEmpty(),
-  body('action').isString().notEmpty(),
-], validate, async (req, res) => {
-  try {
-    const { page, module, action } = req.body;
-    await logAdminAction(`PAGE_${action.toUpperCase()}`, null, { page, module }, req);
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-/**
- * GET /api/v1/admin/wallets
- * Returns all member wallets with member profile data.
- */
-router.get('/wallets', async (req, res) => {
-  try {
-    const { page, limit, from, to } = paging(req);
-    const { status, search } = req.query;
-
-    let q = supabase
-      .from('wallets')
-      .select('*, profile:profiles(id, user_id, name, email)', { count: 'exact' })
-      .order('updated_at', { ascending: false })
-      .range(from, to);
-
-    if (status === 'active') q = q.eq('is_active', true);
-    if (status === 'frozen') q = q.eq('is_frozen', true);
-    if (status === 'suspended') q = q.eq('is_suspended', true);
-    if (search) {
-      // Search by member name or email via the profiles relation
-      q = q.or(`profiles.name.ilike.%${search}%,profiles.email.ilike.%${search}%`);
-    }
-
-    const { data, error, count } = await q;
-    if (error) throw error;
-
-    const wallets = (data || []).map(w => ({
-      id: w.id,
-      userId: w.profile_id,
-      userName: w.profile?.name || w.profile?.email || 'Unknown',
-      userEmail: w.profile?.email || '',
-      balance: w.balance || 0,
-      status: w.is_frozen ? 'frozen' : w.is_suspended ? 'suspended' : 'active',
-      lastTransactionAt: w.last_transaction_at || w.updated_at,
-      lastTransactionAmount: w.last_transaction_amount || 0,
-    }));
-
-    // Summary stats across all wallets
-    const { data: allWallets } = await supabase
-      .from('wallets')
-      .select('balance, is_active, is_frozen, is_suspended');
-
-    const totalBalance = (allWallets || []).reduce((s, w) => s + (w.balance || 0), 0);
-    const frozenCount = (allWallets || []).filter(w => w.is_frozen || w.is_suspended).length;
-
-    res.json({
-      success: true,
-      data: wallets,
-      total: count || 0,
-      totalBalance,
-      frozenCount,
-      pendingTransfers: 0,
-      todayVolume: 0,
-      pagination: { page, limit, total: count || 0 },
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-/**
- * PATCH /api/v1/admin/wallets/:id/status
- * Update wallet status (active, frozen, suspended).
- */
-router.patch('/wallets/:id/status', [
-  body('status').isIn(['active', 'frozen', 'suspended']).withMessage('status must be active|frozen|suspended'),
-], validate, async (req, res) => {
-  try {
-    const { status } = req.body;
-    const updates = {
-      is_active: status === 'active',
-      is_frozen: status === 'frozen',
-      is_suspended: status === 'suspended',
-      updated_at: new Date().toISOString(),
-    };
-    const { data, error } = await supabase
-      .from('wallets')
-      .update(updates)
-      .eq('id', req.params.id)
-      .select()
-      .single();
-    if (error) throw error;
-    await logAdminAction('WALLET_STATUS_UPDATED', { model: 'wallets', id: req.params.id }, { status }, req);
-    res.json({ success: true, wallet: data });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-/**
- * POST /api/v1/admin/wallets/:id/adjust
- * Manually adjust a member's wallet balance.
- */
-router.post('/wallets/:id/adjust', [
-  body('amount').isNumeric().withMessage('amount must be numeric'),
-  body('note').isString().notEmpty().withMessage('note is required'),
-], validate, async (req, res) => {
-  try {
-    const { amount, note } = req.body;
-    const { data: wallet, error: walletErr } = await supabase
-      .from('wallets')
-      .select('balance, profile_id')
-      .eq('id', req.params.id)
-      .single();
-    if (walletErr || !wallet) throw new Error('Wallet not found');
-
-    const newBalance = Number(wallet.balance) + Number(amount);
-    const { data, error } = await supabase
-      .from('wallets')
-      .update({ balance: newBalance, updated_at: new Date().toISOString() })
-      .eq('id', req.params.id)
-      .select()
-      .single();
-    if (error) throw error;
-
-    await logAdminAction('WALLET_BALANCE_ADJUSTED', { model: 'wallets', id: req.params.id }, {
-      amount, note, previousBalance: wallet.balance, newBalance,
-    }, req);
-    res.json({ success: true, wallet: data });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-/**
- * GET /api/v1/admin/excel-uploads
- * Returns recent bulk-upload / import history.
- */
-router.get('/excel-uploads', async (req, res) => {
-  try {
-    const { page, limit, from, to } = paging(req);
-    const { data, error, count } = await supabase
-      // `bulk_imports` has never existed in production (probed: no such table),
-    // so this endpoint 500'd and the Excel Manager's history never loaded.
-    // `excel_uploads` is the real table.
-      .from('excel_uploads')
-      .select('*', { count: 'exact' })
-      .order('created_at', { ascending: false })
-      .range(from, to);
-    if (error) throw error;
-    res.json({ success: true, uploads: data || [], pagination: { page, limit, total: count || 0 } });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-/**
- * POST /api/v1/admin/excel-uploads
- * Registers a new bulk-upload record after the file is stored client-side.
- */
-router.post('/excel-uploads', [
-  body('filename').isString().notEmpty(),
-  body('type').isString().notEmpty(),
-  body('record_count').isNumeric().optional(),
-  body('status').isIn(['pending','reviewing','processed','failed']).optional(),
-], validate, async (req, res) => {
-  try {
-    const { filename, type, record_count = 0, status = 'reviewing' } = req.body;
-    const { data, error } = await supabase
-      .from('bulk_imports')
-      .insert({
-        filename,
-        type,
-        uploaded_by: req.user?.id || null,
-        record_count: Number(record_count),
-        status,
-      })
-      .select()
-      .single();
-    if (error) throw error;
-    await logAdminAction('BULK_IMPORT_UPLOADED', { model: 'bulk_imports', id: data.id }, { filename, type }, req);
-    res.json({ success: true, id: data.id, filename: data.filename, type: data.type, status: data.status, record_count: data.record_count, uploadedAt: data.created_at });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-/**
- * PATCH /api/v1/admin/excel-uploads/:id
- * Update the status of a bulk-upload record (e.g. mark processed/failed).
- */
-router.patch('/excel-uploads/:id', [
-  body('status').isIn(['pending','reviewing','processed','failed']).withMessage('Invalid status'),
-], validate, async (req, res) => {
-  try {
-    const { status, error_count = 0 } = req.body;
-    const { data, error } = await supabase
-      .from('bulk_imports')
-      .update({ status, error_count: Number(error_count), updated_at: new Date().toISOString() })
-      .eq('id', req.params.id)
-      .select()
-      .single();
-    if (error) throw error;
-    res.json({ success: true, upload: data });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// ---------------------------------------------------------------------------
-// Enterprise Accounting — chart of accounts, journal entries, trial balance,
-// P&L, balance sheet, and general-ledger report
-// ---------------------------------------------------------------------------
-
-// Standard cooperative chart of accounts used as fallback when no custom
-// accounts exist. account_code is the stable key; account_type drives the
-// trial-balance and P&L classification.
-const DEFAULT_CHART_OF_ACCOUNTS = [
-  { code: '1000', name: 'Cash & Bank', type: 'asset', normal: 'debit' },
-  { code: '1010', name: 'Member Savings', type: 'asset', normal: 'debit' },
-  { code: '1020', name: 'Loans Receivable', type: 'asset', normal: 'debit' },
-  { code: '1030', name: 'Interest Receivable', type: 'asset', normal: 'debit' },
-  { code: '2000', name: 'Member Deposits Payable', type: 'liability', normal: 'credit' },
-  { code: '2010', name: 'Withdrawals Payable', type: 'liability', normal: 'credit' },
-  { code: '2020', name: 'Guarantor Obligations', type: 'liability', normal: 'credit' },
-  { code: '3000', name: 'Share Capital', type: 'equity', normal: 'credit' },
-  { code: '3010', name: 'Retained Earnings', type: 'equity', normal: 'credit' },
-  { code: '4000', name: 'Interest Income', type: 'revenue', normal: 'credit' },
-  { code: '4010', name: 'Fee Income', type: 'revenue', normal: 'credit' },
-  { code: '4020', name: 'Penalty Income', type: 'revenue', normal: 'credit' },
-  { code: '5000', name: 'Loan Loss Provision', type: 'expense', normal: 'debit' },
-  { code: '5010', name: 'Operating Expenses', type: 'expense', normal: 'debit' },
-  { code: '5020', name: 'Interest Expense', type: 'expense', normal: 'debit' },
-];
-
-/**
- * GET /api/v1/admin/accounting/chart-of-accounts
- * Returns the chart of accounts (custom + default).
- */
-router.get('/accounting/chart-of-accounts', async (_req, res) => {
-  try {
-    // Try to load custom accounts from the settings table.
-    let customAccounts = [];
-    try {
-      const { data } = await supabase
-        .from('settings')
-        .select('value')
-        .eq('key', 'chart_of_accounts')
-        .maybeSingle();
-      if (data?.value?.accounts) customAccounts = data.value.accounts;
-    } catch (_) { /* settings table may not exist yet */ }
-
-    res.json({
-      success: true,
-      accounts: [...DEFAULT_CHART_OF_ACCOUNTS, ...customAccounts],
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-/**
- * GET /api/v1/admin/accounting/trial-balance
- * Computes a trial balance from ledger_entries.
- * Groups entries by account_code and sums debit/credit.
- */
-router.get('/accounting/trial-balance', async (req, res) => {
-  try {
-    const { from: fromDate, to: toDate } = req.query;
-
-    let q = supabase
-      .from('ledger_entries')
-      .select('account_code, account_name, debit, credit, txn_date');
-    if (fromDate) q = q.gte('txn_date', fromDate);
-    if (toDate) q = q.lte('txn_date', toDate);
-
-    const { data, error } = await q;
-    if (error) throw error;
-
-    const byAccount = {};
-    for (const e of (data || [])) {
-      const code = e.account_code || '0000';
-      const name = e.account_name || 'Unclassified';
-      if (!byAccount[code]) {
-        byAccount[code] = { account_code: code, account_name: name, debit: 0, credit: 0 };
-      }
-      byAccount[code].debit += Number(e.debit || 0);
-      byAccount[code].credit += Number(e.credit || 0);
-    }
-
-    // Merge with default chart so accounts with no entries still show.
-    for (const acct of DEFAULT_CHART_OF_ACCOUNTS) {
-      if (!byAccount[acct.code]) {
-        byAccount[acct.code] = {
-          account_code: acct.code,
-          account_name: acct.name,
-          account_type: acct.type,
-          debit: 0,
-          credit: 0,
-        };
-      } else {
-        byAccount[acct.code].account_type = acct.type;
-      }
-    }
-
-    const rows = Object.values(byAccount).sort((a, b) => a.account_code.localeCompare(b.account_code));
-    const totalDebit = rows.reduce((s, r) => s + r.debit, 0);
-    const totalCredit = rows.reduce((s, r) => s + r.credit, 0);
-
-    res.json({
-      success: true,
-      trial_balance: rows,
-      totals: { debit: totalDebit, credit: totalCredit, balanced: Math.abs(totalDebit - totalCredit) < 0.01 },
-      period: { from: fromDate || null, to: toDate || null },
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-/**
- * GET /api/v1/admin/accounting/profit-loss
- * Computes P&L from ledger entries in a date range.
- */
-router.get('/accounting/profit-loss', async (req, res) => {
-  try {
-    const { from: fromDate, to: toDate } = req.query;
-
-    let q = supabase
-      .from('ledger_entries')
-      .select('account_code, account_name, debit, credit, txn_date');
-    if (fromDate) q = q.gte('txn_date', fromDate);
-    if (toDate) q = q.lte('txn_date', toDate);
-
-    const { data, error } = await q;
-    if (error) throw error;
-
-    // Classify entries using the default chart + any known revenue/expense codes.
-    const revenue = [];
-    const expenses = [];
-    const byAccount = {};
-
-    for (const e of (data || [])) {
-      const code = e.account_code || '0000';
-      if (!byAccount[code]) {
-        byAccount[code] = { account_code: code, account_name: e.account_name || 'Unclassified', debit: 0, credit: 0 };
-      }
-      byAccount[code].debit += Number(e.debit || 0);
-      byAccount[code].credit += Number(e.credit || 0);
-    }
-
-    for (const acct of DEFAULT_CHART_OF_ACCOUNTS) {
-      const entry = byAccount[acct.code];
-      if (!entry) continue;
-      if (acct.type === 'revenue') {
-        revenue.push({ ...entry, net: entry.credit - entry.debit });
-      } else if (acct.type === 'expense') {
-        expenses.push({ ...entry, net: entry.debit - entry.credit });
-      }
-    }
-
-    const totalRevenue = revenue.reduce((s, r) => s + r.net, 0);
-    const totalExpenses = expenses.reduce((s, r) => s + r.net, 0);
-    const netIncome = totalRevenue - totalExpenses;
-
-    res.json({
-      success: true,
-      profit_loss: {
-        revenue,
-        expenses,
-        total_revenue: totalRevenue,
-        total_expenses: totalExpenses,
-        net_income: netIncome,
-      },
-      period: { from: fromDate || null, to: toDate || null },
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-/**
- * GET /api/v1/admin/accounting/balance-sheet
- * Computes a balance sheet from ledger entries as at a date.
- */
-router.get('/accounting/balance-sheet', async (req, res) => {
-  try {
-    const { as_at: asAt } = req.query;
-
-    let q = supabase
-      .from('ledger_entries')
-      .select('account_code, account_name, debit, credit, txn_date');
-    if (asAt) q = q.lte('txn_date', asAt);
-
-    const { data, error } = await q;
-    if (error) throw error;
-
-    const byAccount = {};
-    for (const e of (data || [])) {
-      const code = e.account_code || '0000';
-      if (!byAccount[code]) {
-        byAccount[code] = { account_code: code, account_name: e.account_name || 'Unclassified', debit: 0, credit: 0 };
-      }
-      byAccount[code].debit += Number(e.debit || 0);
-      byAccount[code].credit += Number(e.credit || 0);
-    }
-
-    const assets = [];
-    const liabilities = [];
-    const equity = [];
-
-    for (const acct of DEFAULT_CHART_OF_ACCOUNTS) {
-      const entry = byAccount[acct.code];
-      if (!entry) continue;
-      const net = acct.normal === 'debit' ? entry.debit - entry.credit : entry.credit - entry.debit;
-      if (acct.type === 'asset') assets.push({ ...entry, net });
-      else if (acct.type === 'liability') liabilities.push({ ...entry, net });
-      else if (acct.type === 'equity') equity.push({ ...entry, net });
-    }
-
-    const totalAssets = assets.reduce((s, r) => s + r.net, 0);
-    const totalLiabilities = liabilities.reduce((s, r) => s + r.net, 0);
-    const totalEquity = equity.reduce((s, r) => s + r.net, 0);
-
-    res.json({
-      success: true,
-      balance_sheet: {
-        assets,
-        liabilities,
-        equity,
-        total_assets: totalAssets,
-        total_liabilities: totalLiabilities,
-        total_equity: totalEquity,
-        balanced: Math.abs(totalAssets - (totalLiabilities + totalEquity)) < 0.01,
-      },
-      as_at: asAt || new Date().toISOString(),
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-/**
- * POST /api/v1/admin/accounting/journal-entry
- * Creates a double-entry journal entry (one debit + one credit line).
- * Both lines are inserted as ledger_entries rows with the same txn_no group.
- */
-router.post('/accounting/journal-entry', [
-  body('txn_date').isISO8601().withMessage('txn_date must be ISO8601'),
-  body('description').isString().notEmpty(),
-  body('lines').isArray({ min: 2 }).withMessage('At least 2 lines required'),
-  body('lines.*.account_code').isString().notEmpty(),
-  body('lines.*.debit').isNumeric().optional(),
-  body('lines.*.credit').isNumeric().optional(),
-], validate, async (req, res) => {
-  try {
-    const { txn_date, description, lines } = req.body;
-
-    // Validate double-entry: total debits must equal total credits.
-    const totalDebit = lines.reduce((s, l) => s + Number(l.debit || 0), 0);
-    const totalCredit = lines.reduce((s, l) => s + Number(l.credit || 0), 0);
-    if (Math.abs(totalDebit - totalCredit) > 0.01) {
-      return res.status(400).json({
-        success: false,
-        error: `Journal entry is unbalanced: debits=${totalDebit}, credits=${totalCredit}`,
-      });
-    }
-
-    // Generate a shared transaction number.
-    const txnNo = `JE-${Date.now()}`;
-    const rows = lines.map((line, i) => ({
-      txn_no: `${txnNo}-${i + 1}`,
-      txn_date,
-      description: `${description} [${line.account_code}]`,
-      account_code: line.account_code,
-      account_name: line.account_name || '',
-      debit: Number(line.debit || 0),
-      credit: Number(line.credit || 0),
-      category: Number(line.debit || 0) > 0 ? 'debit' : 'credit',
-      amount: Number(line.debit || 0) > 0 ? Number(line.debit) : Number(line.credit),
-      initiated_by: req.user?.id || null,
-      approved_by: req.user?.id || null,
-      status: 'posted',
-    }));
-
-    const { data, error } = await supabase
-      .from('ledger_entries')
-      .insert(rows)
-      .select();
-    if (error) throw error;
-
-    await logAdminAction('JOURNAL_ENTRY_POSTED', { model: 'ledger_entries', id: txnNo }, { txn_date, description, lines }, req);
-    res.json({ success: true, journal_entry: data, txn_no: txnNo });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-/**
- * GET /api/v1/admin/accounting/general-ledger
- * Returns all ledger entries grouped by account with running balances.
- */
-router.get('/accounting/general-ledger', async (req, res) => {
-  try {
-    const { account_code, from: fromDate, to: toDate } = req.query;
-
-    let q = supabase
-      .from('ledger_entries')
-      .select('*')
-      .order('txn_date', { ascending: true });
-    if (account_code) q = q.eq('account_code', account_code);
-    if (fromDate) q = q.gte('txn_date', fromDate);
-    if (toDate) q = q.lte('txn_date', toDate);
-
-    const { data, error } = await q;
-    if (error) throw error;
-
-    // Group by account and compute running balance.
-    const byAccount = {};
-    for (const e of (data || [])) {
-      const code = e.account_code || '0000';
-      if (!byAccount[code]) {
-        byAccount[code] = { account_code: code, account_name: e.account_name || 'Unclassified', entries: [], balance: 0 };
-      }
-      const debit = Number(e.debit || 0);
-      const credit = Number(e.credit || 0);
-      byAccount[code].balance += debit - credit;
-      byAccount[code].entries.push({ ...e, running_balance: byAccount[code].balance });
-    }
-
-    res.json({
-      success: true,
-      general_ledger: Object.values(byAccount).sort((a, b) => a.account_code.localeCompare(b.account_code)),
-    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
