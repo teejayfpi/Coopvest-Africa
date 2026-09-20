@@ -81,7 +81,9 @@ class PrimaryButton extends StatelessWidget {
 /// Secondary Button Component
 class SecondaryButton extends StatelessWidget {
   final String label;
-  final FutureOr<void> Function() onPressed;
+  // Nullable so a caller can render a genuinely disabled button without
+  // juggling a separate isEnabled flag.
+  final FutureOr<void> Function()? onPressed;
   final bool isLoading;
   final bool isEnabled;
   final double? width;
@@ -111,18 +113,20 @@ class SecondaryButton extends StatelessWidget {
       width: width,
       height: height,
       child: OutlinedButton(
-        onPressed: isEnabled && !isLoading ? onPressed : null,
+        // A null onPressed disables the button in Flutter; keep isEnabled for
+        // existing callers.
+        onPressed: (isEnabled && !isLoading) ? onPressed : null,
         style: OutlinedButton.styleFrom(
           foregroundColor: CoopvestColors.primary,
           disabledForegroundColor: CoopvestColors.mediumGray,
           side: BorderSide(
-            color: isEnabled
+            color: (isEnabled && onPressed != null)
                 ? CoopvestColors.primary
                 : (Theme.of(context).brightness == Brightness.dark ? Colors.white10 : CoopvestColors.lightGray),
           ),
           padding: padding,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(CoopvestShape.buttonRadius),
           ),
         ),
         child: isLoading

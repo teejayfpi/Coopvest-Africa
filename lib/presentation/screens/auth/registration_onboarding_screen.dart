@@ -9,10 +9,13 @@ import '../../../core/utils/payment_date_utils.dart';
 import '../../../core/utils/utils.dart';
 import '../../widgets/common/buttons.dart';
 import '../../widgets/common/inputs.dart';
+import '../../providers/kyc_provider.dart';
+import '../../widgets/common/selfie_capture_field.dart';
 import '../../widgets/common/preferred_payment_date_picker.dart';
 import '../../../core/network/api_client.dart';
 import '../../../data/models/bank_directory.dart';
 import '../../../data/models/kyc_models.dart';
+import '../../../data/models/nigeria_locations.dart';
 import '../../../data/models/terms_content.dart';
 import '../../../data/repositories/kyc_repository.dart';
 import '../../../data/services/bank_verification_service.dart';
@@ -28,6 +31,13 @@ enum _ContributionType { directDeposit, salaryDeduction }
 // Data collected across all onboarding steps
 // ---------------------------------------------------------------------------
 class _OnboardingData {
+  /// Local path to the member's selfie, captured during onboarding.
+  ///
+  /// Held locally here and uploaded at submit time: `KYCCubit.submitKYC`
+  /// swaps local device paths for server URLs before writing the KYC record,
+  /// so nothing downstream sees a `/data/user/0/...` path.
+  String selfiePhotoPath = '';
+
   // Contribution Type (set from navigation arguments)
   _ContributionType contributionType = _ContributionType.directDeposit;
 
@@ -183,7 +193,7 @@ class _RegistrationOnboardingScreenState
   bool _isSubmitting = false;
   bool _isCheckingStatus = true;
 
-  static const int _totalSteps = 8;
+  static const int _totalSteps = 9;
 
   final _stepTitles = [
     'Welcome',
@@ -193,6 +203,7 @@ class _RegistrationOnboardingScreenState
     'Contribution',
     'Next of Kin',
     'Bank Info',
+    'Selfie',
     'Terms',
   ];
 
@@ -880,6 +891,7 @@ class _RegistrationOnboardingScreenState
                     onAccountTypeChanged: (type) => setState(() => _selectedAccountType = type),
                     onVerifyAccount: _isVerifyingAccountName ? null : _verifyAccountName,
                 ),
+                _SelfieStep(data: _data),
                 _TermsStep(
                     data: _data,
                     onAcceptAll: () => setState(() {})),
@@ -1194,14 +1206,9 @@ class _PersonalInfoStepState extends State<_PersonalInfoStep> {
   late TextEditingController _dobCtrl;
   final _genders = ['Male', 'Female', 'Other', 'Prefer not to say'];
 
-  final _nigerianStates = [
-    'Abia', 'Adamawa', 'Akwa Ibom', 'Anambra', 'Bauchi', 'Bayelsa',
-    'Benue', 'Borno', 'Cross River', 'Delta', 'Ebonyi', 'Edo', 'Ekiti',
-    'Enugu', 'FCT - Abuja', 'Gombe', 'Imo', 'Jigawa', 'Kaduna', 'Kano',
-    'Katsina', 'Kebbi', 'Kogi', 'Kwara', 'Lagos', 'Nasarawa', 'Niger',
-    'Ogun', 'Ondo', 'Osun', 'Oyo', 'Plateau', 'Rivers', 'Sokoto',
-    'Taraba', 'Yobe', 'Zamfara',
-  ];
+  // Superseded by NigeriaLocations — this list used display names
+  // ('FCT - Abuja') while the backend stores lower_snake_case values, so the
+  // saved state did not match the canonical key.
 
   @override
   void initState() {
@@ -1296,18 +1303,45 @@ class _PersonalInfoStepState extends State<_PersonalInfoStep> {
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             ),
-            items: _nigerianStates
-                .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+            items: NigeriaLocations.states
+                .map((s) => DropdownMenuItem(
+                      value: s['value'],
+                      child: Text(s['label'] ?? ''),
+                    ))
                 .toList(),
-            onChanged: (v) => setState(() => widget.data.state = v ?? ''),
+            onChanged: (v) => setState(() {
+              widget.data.state = v ?? '';
+              // A new state invalidates the LGA chosen under the old one.
+              widget.data.lga = '';
+            }),
           ),
           const SizedBox(height: 20),
 
-          // LGA
-          AppTextField(
-            label: 'Local Government Area (LGA) *',
-            hint: 'Enter your LGA',
-            controller: widget.lgaCtrl,
+          // LGA — narrowed to the selected state's own LGAs.
+          DropdownButtonFormField<String>(
+            value: (widget.data.lga.isEmpty ||
+                    !NigeriaLocations.lgasFor(widget.data.state).any(
+                        (l) => l['value'] == widget.data.lga))
+                ? null
+                : widget.data.lga,
+            hint: Text(widget.data.state.isEmpty
+                ? 'Select your state first'
+                : 'Select LGA'),
+            decoration: InputDecoration(
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10)),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            ),
+            items: NigeriaLocations.lgasFor(widget.data.state)
+                .map((l) => DropdownMenuItem(
+                      value: l['value'],
+                      child: Text(l['label'] ?? ''),
+                    ))
+                .toList(),
+            onChanged: widget.data.state.isEmpty
+                ? null
+                : (v) => setState(() => widget.data.lga = v ?? ''),
           ),
           const SizedBox(height: 8),
         ],
@@ -2092,6 +2126,153 @@ class _BankInfoStep extends StatelessWidget {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Selfie capture, collected during onboarding.
+///
+/// The selfie used to be the last gate inside the KYC flow, which meant a
+/// member only supplied it when they came back to apply for a loan. Asking
+/// here means verification is started at sign-up, when the member is already
+/// uploading documents, and KYC no longer needs to re-ask for it.
+class _SelfieStep extends ConsumerStatefulWidget {
+  final _OnboardingData data;
+  const _SelfieStep({required this.data});
+
+  @override
+  ConsumerState<_SelfieStep> createState() => _SelfieStepState();
+}
+
+class _SelfieStepState extends ConsumerState<_SelfieStep> {
+  File? _file;
+  bool _uploading = false;
+  bool _uploaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final existing = widget.data.selfiePhotoPath;
+    if (existing.isNotEmpty) {
+      _file = File(existing);
+    }
+  }
+
+  /// Upload straight through the KYC upload endpoint rather than carrying a
+  /// local path forward.
+  ///
+  /// `/kyc/upload` writes the resulting URL onto the `kyc.selfie` JSONB column
+  /// (and syncs the member's profile picture). The registration endpoint does
+  /// NOT persist a selfie, so a local device path passed to it would be
+  /// silently dropped — and local paths like `/data/user/0/...` are meaningless
+  /// to the backend anyway.
+  Future<void> _upload(File file) async {
+    setState(() {
+      _uploading = true;
+      _uploaded = false;
+    });
+    try {
+      await ref.read(kycProvider.notifier).uploadSelfie(file.path);
+      if (!mounted) return;
+      setState(() => _uploaded = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Selfie uploaded'),
+          backgroundColor: CoopvestColors.success,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not upload your selfie: $e'),
+          backgroundColor: CoopvestColors.error,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Take a selfie',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w500,
+              color: context.textPrimary,
+            ),
+          ),
+          const SizedBox(height: CoopvestShape.gapSm),
+          Text(
+            'This helps us confirm it is really you. It is only used for your '
+            'account verification and never shared.',
+            style: TextStyle(
+              fontSize: 13,
+              height: 1.4,
+              color: context.textSecondary,
+            ),
+          ),
+          const SizedBox(height: CoopvestShape.gapXl),
+          SelfieCaptureField(
+            file: _file,
+            onCaptured: (f) {
+              setState(() => _file = f);
+              _upload(f);
+            },
+            onCleared: () => setState(() {
+              _file = null;
+              _uploaded = false;
+              widget.data.selfiePhotoPath = '';
+            }),
+          ),
+          if (_uploading) ...[
+            const SizedBox(height: CoopvestShape.gapMd),
+            Row(
+              children: [
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                const SizedBox(width: CoopvestShape.gapSm),
+                Text(
+                  'Uploading your selfie…',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: context.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ] else if (_uploaded) ...[
+            const SizedBox(height: CoopvestShape.gapMd),
+            Row(
+              children: [
+                const Icon(
+                  Icons.check_circle_outline,
+                  size: 16,
+                  color: CoopvestColors.successText,
+                ),
+                const SizedBox(width: CoopvestShape.gapSm),
+                Text(
+                  'Selfie uploaded',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: CoopvestColors.successText,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );

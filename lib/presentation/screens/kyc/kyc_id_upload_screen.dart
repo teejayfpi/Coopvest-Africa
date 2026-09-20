@@ -253,7 +253,9 @@ class _KYCIDUploadScreenState extends ConsumerState<KYCIDUploadScreen> {
         return;
       }
     }
-    if (mounted) Navigator.of(context).pushNamed('/kyc-selfie');
+    // Straight to next of kin: the selfie is now captured during
+    // registration, so KYC no longer stops here to ask for it again.
+    if (mounted) Navigator.of(context).pushNamed('/kyc-next-of-kin');
   }
 
   void _goBack() {

@@ -4,6 +4,7 @@ import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/utils/utils.dart';
 import '../../../data/models/kyc_models.dart';
+import '../../../data/models/nigeria_locations.dart';
 import '../../../presentation/providers/kyc_provider.dart';
 import '../../../presentation/widgets/common/buttons.dart';
 import '../../../presentation/widgets/common/inputs.dart';
@@ -33,7 +34,6 @@ class _KYCEmploymentDetailsScreenState
   late TextEditingController _employerNameController;
   late TextEditingController _workAddressController;
   late TextEditingController _yearsOfEmploymentController;
-  late TextEditingController _lgaController;
 
   String? _selectedEmploymentType;
   String? _selectedOrganization;
@@ -41,15 +41,17 @@ class _KYCEmploymentDetailsScreenState
   String? _selectedGender;
   String? _selectedCity;
   String? _selectedState;
+  // Selected LGA value, driven by the state above it. Was a free-text field.
+  String? _selectedLga;
   
   final List<String> _employmentTypes = EmploymentTypes.types;
   // Male / Female only. 'Other' and 'Prefer not to say' were removed so the
   // field records a binary value the KYC review can act on.
   final List<String> _genders = ['Male', 'Female'];
   final List<String> _cities = ['Lagos', 'Abuja', 'Port Harcourt', 'Ibadan', 'Kano', 'Other'];
-  final List<String> _states = [
-    'Lagos', 'Abuja FCT', 'Rivers', 'Oyo', 'Kano', 'Enugu', 'Delta', 'Other'
-  ];
+  // Superseded by NigeriaLocations.states — the list here was only eight
+  // states ('Other' for everyone else), so most members could not pick their
+  // real state and the LGA field next to it was free text.
 
   // Partner organisations are fetched from the backend so a new employer can be
   // added without an app release. This replaced a hardcoded list of ~18 generic
@@ -76,7 +78,6 @@ class _KYCEmploymentDetailsScreenState
     _employerNameController = TextEditingController();
     _workAddressController = TextEditingController();
     _yearsOfEmploymentController = TextEditingController();
-    _lgaController = TextEditingController();
     _organizationSearchController.addListener(_onOrganizationSearch);
     _loadOrganizations();
 
@@ -125,12 +126,12 @@ class _KYCEmploymentDetailsScreenState
       _addressController.text = sub.residentialAddress;
       _selectedCity = sub.city;
       _selectedState = sub.state;
+      _selectedLga = sub.lga;
       // New aligned fields
       _occupationController.text = sub.occupation ?? '';
       _employerNameController.text = sub.employerName ?? '';
       _workAddressController.text = sub.workAddress ?? '';
       _yearsOfEmploymentController.text = sub.yearsOfEmployment ?? '';
-      _lgaController.text = sub.lga ?? '';
     });
 
     // If this whole step is already complete, skip forward to the first
@@ -181,7 +182,6 @@ class _KYCEmploymentDetailsScreenState
     _employerNameController.dispose();
     _workAddressController.dispose();
     _yearsOfEmploymentController.dispose();
-    _lgaController.dispose();
     super.dispose();
   }
 
@@ -292,6 +292,12 @@ class _KYCEmploymentDetailsScreenState
     if (_addressController.text.isEmpty) {
       errors.add('Residential address is required');
     }
+    if (_selectedState == null || _selectedState!.isEmpty) {
+      errors.add('State is required');
+    }
+    if (_selectedLga == null || _selectedLga!.isEmpty) {
+      errors.add('Local Government Area is required');
+    }
 
     if (errors.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -339,7 +345,7 @@ class _KYCEmploymentDetailsScreenState
       residentialAddress: _addressController.text,
       city: _selectedCity,
       stateValue: _selectedState,
-      lga: _lgaController.text.trim().isEmpty ? null : _lgaController.text.trim(),
+      lga: _selectedLga,
     );
 
     // Navigate to next step
@@ -552,34 +558,55 @@ class _KYCEmploymentDetailsScreenState
               ),
               const SizedBox(height: 20),
 
-              // LGA (aligned with registration)
-              AppTextField(
-                label: 'LGA',
-                hint: 'Enter your Local Government Area',
-                controller: _lgaController,
+              // State, then LGA driven by that state.
+              //
+              // Order matters to the member: pick the state first and the LGA
+              // list narrows to that state's own LGAs. Previously this was a
+              // free-text "LGA" box above an eight-state dropdown, so a member
+              // outside those eight had no valid state to choose and the LGA
+              // they typed could never match a canonical value.
+              AppDropdown<String>(
+                label: 'State *',
+                value: _selectedState,
+                items: NigeriaLocations.states
+                    .map((state) => DropdownMenuItem(
+                          value: state['value'],
+                          child: Text(state['label'] ?? ''),
+                        ))
+                    .toList(),
+                onChanged: (value) {
+                  setState(() {
+                    _selectedState = value;
+                    // The previous LGA belongs to the previous state, so clear
+                    // it rather than silently persisting a mismatched pair.
+                    _selectedLga = null;
+                  });
+                },
+                hint: 'Select your state',
               ),
               const SizedBox(height: 20),
 
-              // State & City
+              AppDropdown<String>(
+                label: 'Local Government Area *',
+                value: _selectedLga,
+                items: NigeriaLocations.lgasFor(_selectedState)
+                    .map((lga) => DropdownMenuItem(
+                          value: lga['value'],
+                          child: Text(lga['label'] ?? ''),
+                        ))
+                    .toList(),
+                onChanged: _selectedState == null
+                    ? null
+                    : (value) => setState(() => _selectedLga = value),
+                hint: _selectedState == null
+                    ? 'Select your state first'
+                    : 'Select your LGA',
+              ),
+              const SizedBox(height: 20),
+
+              // City
               Row(
                 children: [
-                  Expanded(
-                    child: AppDropdown<String>(
-                      label: 'State *',
-                      value: _selectedState,
-                      items: _states.map((state) => DropdownMenuItem(
-                        value: state,
-                        child: Text(state),
-                      )).toList(),
-                      onChanged: (value) {
-                        setState(() {
-                          _selectedState = value;
-                        });
-                      },
-                      hint: 'State',
-                    ),
-                  ),
-                  const SizedBox(width: 16),
                   Expanded(
                     child: AppDropdown<String>(
                       label: 'City *',
