@@ -73,6 +73,9 @@ router.post(
   '/contribution-type',
   [
     body('contribution_type').isIn(['direct_deposit', 'salary_deduction']),
+    // Optional policy acceptance, forwarded from the sign-up screen.
+    body('terms_version').optional().isString().isLength({ max: 40 }),
+    body('terms_accepted_at').optional().isString().isLength({ max: 40 }),
   ],
   validate,
   async (req, res) => {
@@ -99,10 +102,18 @@ router.post(
       }
 
       const now = new Date().toISOString();
+      // `terms_version` and `terms_accepted_at` are recorded here because the
+      // app's signup goes straight to Supabase and never calls
+      // POST /auth/register — so the policy acceptance the member gives on the
+      // sign-up screen has no other durable place to land on the shortened
+      // onboarding path. Accepting only when actually supplied.
+      const { terms_version, terms_accepted_at } = req.body || {};
       const mergedPersonal = {
         ...(kyc.personal_info || {}),
         contribution_type,
         contribution_type_updated_at: now,
+        ...(terms_version ? { terms_version } : {}),
+        ...(terms_accepted_at ? { terms_accepted_at } : {}),
       };
 
       const { data, error } = await supabase

@@ -7,6 +7,9 @@ import '../../../config/theme_extension.dart';
 import '../../../core/utils/error_handler.dart';
 import '../../../core/utils/utils.dart';
 import '../../../data/models/auth_models.dart';
+import '../../../core/services/terms_acceptance_store.dart';
+import '../../../data/models/terms_content.dart';
+import 'terms_section_screen.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/common/buttons.dart';
 import '../../widgets/common/inputs.dart';
@@ -30,6 +33,11 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _agreeToTerms = false;
+  // When and against which version the member accepted. Recorded at the moment
+  // they tick the box so acceptance is provable, then carried through the flow
+  // and persisted with the rest of registration.
+  DateTime? _termsAcceptedAt;
+  String _termsVersion = TermsContent.version;
   bool _isLoading = false;
 
   String? _nameError;
@@ -91,10 +99,12 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
 
     if (!_agreeToTerms) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Please accept Terms & Privacy Policy'),
+          content: Text(
+              'Please read and accept the policies, including the Registration Fee Policy'),
           backgroundColor: CoopvestColors.error));
       return;
     }
+    _termsAcceptedAt ??= DateTime.now();
 
     setState(() => _isLoading = true);
     try {
@@ -106,10 +116,25 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
           );
 
       if (mounted) {
+        // Persist acceptance locally BEFORE navigation.
+        //
+        // The signup itself goes through Supabase auth, and the shortened
+        // onboarding (verify -> contribution type -> pay) never calls
+        // /auth/complete-registration, so there is no request that carries the
+        // acceptance at this moment. Stashing it here lets the contribution
+        // step attach it to a request that does reach the backend, and it
+        // survives the email round-trip.
+        await TermsAcceptanceStore.save(
+          version: _termsVersion,
+          acceptedAt: _termsAcceptedAt ?? DateTime.now(),
+        );
+
         final regArgs = {
           'name': _nameController.text.trim(),
           'phone': _phoneController.text.trim(),
           'email': _emailController.text.trim().toLowerCase(),
+          'terms_version': _termsVersion,
+          'terms_accepted_at': _termsAcceptedAt?.toIso8601String() ?? '',
         };
 
         // Email verification: with Supabase "Confirm email" ON, a fresh signup
@@ -407,35 +432,86 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
               ),
               const SizedBox(height: 24),
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Checkbox(
                       value: _agreeToTerms,
-                      onChanged: (v) =>
-                          setState(() => _agreeToTerms = v ?? false),
+                      onChanged: (v) => setState(() {
+                        _agreeToTerms = v ?? false;
+                        // Stamp only on the transition to accepted, so the
+                        // timestamp reflects the real acceptance moment.
+                        _termsAcceptedAt =
+                            _agreeToTerms ? (_termsAcceptedAt ?? DateTime.now()) : null;
+                      }),
                       activeColor: CoopvestColors.primary),
                   Expanded(
-                    child: RichText(
-                      text: TextSpan(
-                        text: 'I agree to the ',
-                        style: TextStyle(color: context.textSecondary),
-                        children: [
-                          TextSpan(
-                              text: 'Terms of Service',
-                              style: const TextStyle(
-                                  color: CoopvestColors.primary,
-                                  fontWeight: FontWeight.bold)),
-                          const TextSpan(text: ' and '),
-                          TextSpan(
-                              text: 'Privacy Policy',
-                              style: const TextStyle(
-                                  color: CoopvestColors.primary,
-                                  fontWeight: FontWeight.bold)),
-                        ],
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Text(
+                        'I have read and accept all the policies below, '
+                        'including the Registration Fee Policy.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          height: 1.4,
+                          color: context.textSecondary,
+                        ),
                       ),
                     ),
                   ),
                 ],
               ),
+              const SizedBox(height: CoopvestShape.gapSm),
+              // Each policy is individually tappable and opens the real text.
+              //
+              // Before this, "Terms of Service" and "Privacy Policy" were plain
+              // bold text with no tap handler, and the other five policies
+              // (including the Registration Fee Policy) were not surfaced at
+              // all — so a member could tick "I agree" without being able to
+              // read anything. Acceptance is now recorded with a timestamp and
+              // the document version.
+              ...TermsContent.sections.map(
+                (section) => InkWell(
+                  borderRadius:
+                      BorderRadius.circular(CoopvestShape.chipRadius),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => TermsSectionScreen(section: section),
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 8,
+                      horizontal: 4,
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.description_outlined,
+                          size: 16,
+                          color: CoopvestColors.primary,
+                        ),
+                        const SizedBox(width: CoopvestShape.gapSm),
+                        Expanded(
+                          child: Text(
+                            section.title,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: CoopvestColors.primary,
+                            ),
+                          ),
+                        ),
+                        Icon(
+                          Icons.chevron_right,
+                          size: 18,
+                          color: context.textSecondary,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: CoopvestShape.gapSm),
               const SizedBox(height: 32),
               PrimaryButton(
                   label: 'Continue',

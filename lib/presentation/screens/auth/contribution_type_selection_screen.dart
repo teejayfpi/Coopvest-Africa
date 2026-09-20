@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/services/terms_acceptance_store.dart';
 import '../../widgets/common/buttons.dart';
 
 /// Contribution type selection before KYC registration
@@ -86,9 +87,21 @@ class _ContributionTypeSelectionScreenState
   Future<void> _persistContributionType(String contributionType) async {
     try {
       final apiClient = ref.read(apiClientProvider);
+
+      // Attach the policy acceptance the member gave at sign-up. This request
+      // is the first authenticated, non-Supabase call on the shortened
+      // onboarding path, so it is where that acceptance can actually be
+      // recorded (the backend writes it onto the KYC record).
+      final acceptance = await TermsAcceptanceStore.load();
+
       await apiClient.post('/kyc/contribution-type', data: {
         'contribution_type': contributionType,
+        if (acceptance != null) 'terms_version': acceptance.version,
+        if (acceptance != null) 'terms_accepted_at': acceptance.acceptedAt,
       });
+
+      // Recorded — drop the local hand-off so it is not forwarded twice.
+      if (acceptance != null) await TermsAcceptanceStore.clear();
     } catch (_) {
       // Non-fatal: the choice is re-applied when the member completes KYC.
     }
