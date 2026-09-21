@@ -24,6 +24,7 @@ class TermsAcceptanceStore {
 
   static const String _versionKey = 'terms_accepted_version';
   static const String _atKey = 'terms_accepted_at';
+  static const String _monthlyKey = 'pending_monthly_savings';
 
   /// Remember that this device's member accepted [version] at [acceptedAt].
   static Future<void> save({
@@ -52,6 +53,42 @@ class TermsAcceptanceStore {
     }
   }
 
+  /// Remember the member's chosen monthly savings until a request can carry it.
+  ///
+  /// Chosen on the sign-up details step, but the write that seeds
+  /// `contribution_plans.current_monthly_amount` happens at KYC submit or when
+  /// the member completes registration — neither of which is the same request.
+  /// Holding it here keeps the figure the member actually picked.
+  static Future<void> saveMonthlyAmount(double amount) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_monthlyKey, amount.toStringAsFixed(0));
+    } catch (_) {
+      // Non-fatal: the backend defaults the plan when it has no amount.
+    }
+  }
+
+  /// The pending monthly savings amount, or null when none was chosen.
+  static Future<String?> loadMonthlyAmount() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final v = prefs.getString(_monthlyKey);
+      if (v == null || v.isEmpty) return null;
+      return v;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> clearMonthlyAmount() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_monthlyKey);
+    } catch (_) {
+      // Ignore.
+    }
+  }
+
   /// Clear the hand-off once the backend has recorded it, so a later member on
   /// the same device does not inherit the previous acceptance.
   static Future<void> clear() async {
@@ -59,6 +96,9 @@ class TermsAcceptanceStore {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_versionKey);
       await prefs.remove(_atKey);
+      // NOTE: deliberately does NOT clear the monthly amount — the two are
+      // forwarded by different requests, so clearing this hop must not drop a
+      // choice the member has already made.
     } catch (_) {
       // Ignore.
     }
