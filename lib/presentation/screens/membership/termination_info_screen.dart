@@ -32,11 +32,11 @@ class TerminationInfoScreen extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Warning Header
-            _buildWarningHeader(),
+            _buildWarningHeader(context),
             const SizedBox(height: 24),
 
             // Important Notice
-            _buildImportantNotice(),
+            _buildImportantNotice(context),
             const SizedBox(height: 24),
 
             // Eligibility Conditions
@@ -46,15 +46,15 @@ class TerminationInfoScreen extends ConsumerWidget {
             ],
 
             // Eligibility Requirements
-            _buildEligibilityRequirements(),
+            _buildEligibilityRequirements(context),
             const SizedBox(height: 24),
 
             // Implications Section
-            _buildImplicationsSection(),
+            _buildImplicationsSection(context),
             const SizedBox(height: 24),
 
             // Backend Authority Notice
-            _buildBackendAuthorityNotice(),
+            _buildBackendAuthorityNotice(context),
             const SizedBox(height: 32),
 
             // Continue Button
@@ -83,7 +83,7 @@ class TerminationInfoScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildWarningHeader() {
+  Widget _buildWarningHeader(BuildContext context) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -129,20 +129,10 @@ class TerminationInfoScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildImportantNotice() {
+  Widget _buildImportantNotice(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+      decoration: CoopvestShape.cardDecoration(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -247,20 +237,10 @@ class TerminationInfoScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildEligibilityRequirements() {
+  Widget _buildEligibilityRequirements(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+      decoration: CoopvestShape.cardDecoration(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -350,20 +330,10 @@ class TerminationInfoScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildImplicationsSection() {
+  Widget _buildImplicationsSection(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+      decoration: CoopvestShape.cardDecoration(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -472,7 +442,7 @@ class TerminationInfoScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildBackendAuthorityNotice() {
+  Widget _buildBackendAuthorityNotice(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
