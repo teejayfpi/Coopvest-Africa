@@ -141,23 +141,38 @@ class ContributionReminderService {
     }
   }
 
+  /// The contribution that settles THIS calendar month, if any.
+  ///
+  /// Two bugs here made the "your contribution is due" notification keep
+  /// firing for months after a member had actually paid:
+  ///
+  /// 1. It matched on `createdAt` (when the row was written) instead of
+  ///    `contributionMonth` (the month being paid for). A payment made in June
+  ///    for May has createdAt in June, so it counted against June and May still
+  ///    looked unpaid — and the reminder repeated every month thereafter.
+  ///
+  /// 2. It ignored status, so a failed, reversed or still-processing row
+  ///    counted as paid.
   MonthlyContribution? _getThisMonthContribution(List<MonthlyContribution> contributions) {
     final now = DateTime.now();
-    final thisMonth = DateTime(now.year, now.month);
-    
+    final thisMonth = _monthKey(now.year, now.month);
     for (final contribution in contributions) {
-      if (contribution.createdAt != null) {
-        final contributionMonth = DateTime(
-          contribution.createdAt!.year,
-          contribution.createdAt!.month,
-        );
-        if (contributionMonth == thisMonth) {
-          return contribution;
-        }
-      }
+      if (!_isSettled(contribution.status)) continue;
+      if (contribution.contributionMonth.trim() == thisMonth) return contribution;
     }
     return null;
   }
+
+  String _monthKey(int year, int month) =>
+      '$year-${month.toString().padLeft(2, '0')}';
+
+  /// True when a contribution is actually paid for its month.
+  ///
+  /// 'pending' / 'processing' are excluded on purpose: a payment in flight has
+  /// not settled, so the month is still due and the reminder is correct.
+  bool _isSettled(ContributionStatus status) =>
+      status == ContributionStatus.successful ||
+      status == ContributionStatus.adjusted;
 
   int _calculateContributionStreak(List<MonthlyContribution> contributions) {
     if (contributions.isEmpty) return 0;
