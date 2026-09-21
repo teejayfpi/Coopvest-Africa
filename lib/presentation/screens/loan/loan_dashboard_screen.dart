@@ -12,6 +12,7 @@ import '../../../presentation/navigation/rollover_routes.dart';
 import '../../../presentation/providers/wallet_provider.dart';
 import '../../../presentation/widgets/common/buttons.dart';
 import '../../../presentation/widgets/common/cards.dart';
+import '../wallet/deposit_screen.dart';
 import 'loan_application_screen.dart';
 import '../../widgets/loan/loan_eligibility_card.dart';
 import '../../widgets/obligations_card.dart';
@@ -458,6 +459,36 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
                   ],
                 ),
               ),
+
+              // Next instalment date, from the backend's `loans.next_due_date`
+              // (trigger-maintained, advances with each repayment).
+              if (loan.nextRepaymentDate != null) ...[
+                const SizedBox(height: CoopvestShape.gapSm),
+                _buildNextDueRow(context, loan),
+              ],
+
+              const SizedBox(height: CoopvestShape.gapMd),
+              // Pay ahead of schedule. Opens the deposit screen already
+              // allocated to this loan with the instalment pre-filled.
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => _payAhead(context, loan),
+                  icon: const Icon(Icons.bolt, size: 16),
+                  label: const Text('Pay in advance'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: CoopvestColors.primary,
+                    side: BorderSide(
+                      color: CoopvestColors.primary.withOpacity(0.4),
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.circular(CoopvestShape.chipRadius),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                  ),
+                ),
+              ),
             ],
             if (isGatheringGuarantors) ...[
               const SizedBox(height: 16),
@@ -626,6 +657,109 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
       default:
         return status;
     }
+  }
+
+  /// "Next due" line for an active loan.
+  ///
+  /// Shows whether the instalment is already overdue, so the member is not left
+  /// to work that out from a bare date.
+  Widget _buildNextDueRow(BuildContext context, Loan loan) {
+    final due = loan.nextRepaymentDate!;
+    final now = DateTime.now();
+    final daysUntil = due.difference(DateTime(now.year, now.month, now.day)).inDays;
+    final overdue = daysUntil < 0;
+
+    String label;
+    if (overdue) {
+      final d = daysUntil.abs();
+      label = d == 1 ? 'Overdue by 1 day' : 'Overdue by $d days';
+    } else if (daysUntil == 0) {
+      label = 'Due today';
+    } else if (daysUntil == 1) {
+      label = 'Due tomorrow';
+    } else {
+      label = 'Due in $daysUntil days';
+    }
+
+    final statusColor =
+        overdue ? CoopvestColors.errorText : CoopvestColors.pendingText;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: CoopvestShape.gapMd,
+        vertical: CoopvestShape.gapSm,
+      ),
+      decoration: BoxDecoration(
+        // Tinted status wash, paired with an icon and a label so the state is
+        // never conveyed by colour alone.
+        color: overdue
+            ? CoopvestColors.errorSurface
+            : CoopvestColors.pendingSurface,
+        borderRadius: BorderRadius.circular(CoopvestShape.chipRadius),
+        border: Border.all(color: statusColor.withOpacity(0.35)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            overdue ? Icons.error_outline : Icons.event_outlined,
+            size: 16,
+            color: statusColor,
+          ),
+          const SizedBox(width: CoopvestShape.gapSm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Next repayment due',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: context.textSecondary,
+                  ),
+                ),
+                Text(
+                  '${_formatDate(due)}  ·  $label',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: context.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDate(DateTime d) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    return '${d.day} ${months[d.month - 1]} ${d.year}';
+  }
+
+  /// Open the deposit screen pre-set to repay this loan.
+  ///
+  /// Members asked to be able to pay an instalment (or several) ahead of
+  /// schedule. No new backend path is needed: the existing Paystack flow already
+  /// accepts a targeted `loan_id` and reduces that loan's balance, so paying
+  /// early is simply a repayment the member chooses to make sooner. The amount
+  /// is pre-filled with one instalment and stays editable, so they can clear
+  /// several months in one go.
+  void _payAhead(BuildContext context, Loan loan) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DepositScreen(
+          initialAllocationType: 'loan_repayment',
+          initialLoanId: loan.id,
+          initialAmount: loan.monthlyRepayment > 0 ? loan.monthlyRepayment : null,
+        ),
+      ),
+    );
   }
 
   Future<void> _cancelLoan(Loan loan) async {

@@ -55,6 +55,65 @@ async function notifyBorrowerOfDecision(loan, approve, reason) {
   }
 }
 
+/**
+ * Tell the guarantors that a loan they backed has been approved.
+ *
+ * WHY
+ * ---
+ * Guarantors were only ever contacted at the point they were invited to
+ * consent. Once the loan was approved nothing was sent, so a member could find
+ * out they were on the hook for someone else's loan only when the borrower
+ * stopped paying. That is the worst possible moment to learn about it.
+ *
+ * Guarantor rows carry two id columns: `guarantor_profile_id` (the member
+ * account) and `guarantor_id` (a legacy reference). Notify the profile id, and
+ * fall back to the legacy column, skipping anything unset so a malformed row
+ * cannot throw.
+ *
+ * Best-effort: a failed notification must never fail the approval itself.
+ */
+async function notifyGuarantorsOfApproval(loan) {
+  try {
+    const loanId = loan.id;
+    if (!loanId) return;
+
+    const { data: guarantors, error } = await supabase
+      .from('loan_guarantors')
+      .select('guarantor_profile_id, guarantor_id, guarantor_name, status')
+      .eq('loan_id', loanId);
+    if (error) {
+      logger.warn('notifyGuarantorsOfApproval: could not load guarantors:', error.message);
+      return;
+    }
+    if (!guarantors || guarantors.length === 0) return;
+
+    const amount = Number(loan.amount || 0);
+    const fmt = amount ? `₦${amount.toLocaleString()}` : 'a loan';
+    // Only consenting guarantors are actually on the hook.
+    const consenting = guarantors.filter(
+      (g) => !g.status || String(g.status).toLowerCase() === 'consented' ||
+             String(g.status).toLowerCase() === 'accepted'
+    );
+    const targets = (consenting.length ? consenting : guarantors)
+      .map((g) => g.guarantor_profile_id || g.guarantor_id)
+      .filter((id) => typeof id === 'string' && id.length > 0);
+
+    for (const profileId of new Set(targets)) {
+      await notifyService.sendInApp({
+        profileId,
+        title: 'Loan you guaranteed was approved',
+        body: `A loan of ${fmt} that you guaranteed has been approved. `
+            + 'You will be notified if a repayment is missed.',
+        type: 'loan',
+        category: 'info',
+      });
+    }
+    logger.info(`notifyGuarantorsOfApproval: notified ${new Set(targets).size} guarantor(s) for loan ${loanId}`);
+  } catch (e) {
+    logger.warn('notifyGuarantorsOfApproval failed:', e.message);
+  }
+}
+
 // Apply requireAdmin to ALL routes in this router since they all require authentication
 router.use(requireAdmin);
 
@@ -1256,6 +1315,9 @@ router.post('/loans/:id/approve', async (req, res) => {
     if (!data) return res.status(404).json({ success: false, error: 'Loan not found' });
     await logAdminAction('LOAN_APPROVED', { model: 'Loan', id: data.id }, { adminId });
     await notifyBorrowerOfDecision(data, true, null);
+    // Guarantors are on the hook for this loan, so they are told it went
+    // through rather than finding out only if a repayment is missed.
+    await notifyGuarantorsOfApproval(data);
     res.json({ success: true, loan: data, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
