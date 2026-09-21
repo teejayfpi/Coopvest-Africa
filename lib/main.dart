@@ -25,6 +25,7 @@ import 'presentation/screens/auth/register_step1_screen.dart';
 import 'presentation/screens/auth/register_step2_screen.dart';
 import 'presentation/screens/auth/registration_onboarding_screen.dart';
 import 'presentation/screens/auth/contribution_type_selection_screen.dart';
+import 'presentation/screens/auth/signup_details_screen.dart';
 import 'presentation/screens/auth/google_complete_screen.dart';
 import 'presentation/screens/auth/salary_deduction_consent_screen.dart';
 import 'presentation/screens/membership/account_activation_screen.dart'
@@ -449,6 +450,14 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
           return SalaryDeductionConsentScreen(
             registrationData: args ?? {},
           );
+        },
+        // Selfie + preferred monthly savings, immediately before payment.
+        // Both used to live in the 8-step wizard, which the email sign-up path
+        // never reaches, so members were never asked for either.
+        '/signup-details': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments
+              as Map<String, String>?;
+          return SignupDetailsScreen(registrationData: args ?? {});
         },
         '/account-activation': (context) =>
             const membership.AccountActivationScreen(),

@@ -76,8 +76,11 @@ class _ContributionTypeSelectionScreenState
     // as part of KYC, which is deferred to the point of applying for a loan
     // (see LoanApplicationScreen's KYC gate), so the member goes straight to
     // paying and then into the app.
+    // Selfie + monthly savings come next, then payment. They must be collected
+    // before the member pays, and this is the first screen after verification
+    // on the shortened path.
     Navigator.of(context).pushNamed(
-      '/account-activation',
+      '/signup-details',
       arguments: updatedData,
     );
   }
@@ -94,10 +97,15 @@ class _ContributionTypeSelectionScreenState
       // recorded (the backend writes it onto the KYC record).
       final acceptance = await TermsAcceptanceStore.load();
 
+      // The chosen monthly savings is picked on the next screen, so pass it
+      // only when a previous attempt already stored one.
+      final monthly = await TermsAcceptanceStore.loadMonthlyAmount();
+
       await apiClient.post('/kyc/contribution-type', data: {
         'contribution_type': contributionType,
         if (acceptance != null) 'terms_version': acceptance.version,
         if (acceptance != null) 'terms_accepted_at': acceptance.acceptedAt,
+        if (monthly != null) 'monthly_amount': monthly,
       });
 
       // Recorded — drop the local hand-off so it is not forwarded twice.

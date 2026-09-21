@@ -19,6 +19,42 @@ const { ageInYears, normalizeDateOfBirth, MIN_AGE_YEARS } = require('../services
 
 // In-memory file upload (10 MB max) — the file is streamed straight into
 // Supabase Storage, never touching the disk.
+
+/**
+ * Create or raise the member's monthly contribution plan.
+ *
+ * Mirrors `syncMonthlyContributionPlan` in routes/auth.js: the plan is the
+ * source of truth for obligations, and it must never be LOWERED here, so a
+ * resumed or repeated sign-up cannot undo a later increase.
+ */
+async function syncMonthlyContributionPlan(profileId, monthlyAmount) {
+  const amount = Number(monthlyAmount);
+  if (!Number.isFinite(amount) || amount <= 0) return;
+
+  const { data: existing } = await supabase
+    .from('contribution_plans')
+    .select('id, current_monthly_amount')
+    .eq('profile_id', profileId)
+    .maybeSingle();
+
+  if (existing && Number(existing.current_monthly_amount) >= amount) return;
+
+  const now = new Date().toISOString();
+  if (existing) {
+    await supabase
+      .from('contribution_plans')
+      .update({ current_monthly_amount: amount, updated_at: now })
+      .eq('id', existing.id);
+  } else {
+    await supabase.from('contribution_plans').insert({
+      profile_id: profileId,
+      current_monthly_amount: amount,
+      created_at: now,
+      updated_at: now,
+    });
+  }
+}
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
@@ -76,6 +112,8 @@ router.post(
     // Optional policy acceptance, forwarded from the sign-up screen.
     body('terms_version').optional().isString().isLength({ max: 40 }),
     body('terms_accepted_at').optional().isString().isLength({ max: 40 }),
+    // Preferred monthly savings, chosen just before payment.
+    body('monthly_amount').optional().isFloat({ min: 0 }),
   ],
   validate,
   async (req, res) => {
@@ -107,13 +145,14 @@ router.post(
       // POST /auth/register — so the policy acceptance the member gives on the
       // sign-up screen has no other durable place to land on the shortened
       // onboarding path. Accepting only when actually supplied.
-      const { terms_version, terms_accepted_at } = req.body || {};
+      const { terms_version, terms_accepted_at, monthly_amount } = req.body || {};
       const mergedPersonal = {
         ...(kyc.personal_info || {}),
         contribution_type,
         contribution_type_updated_at: now,
         ...(terms_version ? { terms_version } : {}),
         ...(terms_accepted_at ? { terms_accepted_at } : {}),
+        ...(monthly_amount ? { monthly_amount: String(monthly_amount) } : {}),
       };
 
       const { data, error } = await supabase
@@ -133,6 +172,22 @@ router.post(
         .select('*')
         .single();
       if (error) throw error;
+
+      // Seed the member's contribution plan from the amount they chose.
+      //
+      // `contribution_plans.current_monthly_amount` is the single source of
+      // truth for "Your obligations this month" (see AGENTS.md), and the plan
+      // is otherwise only created by complete-registration — which the
+      // shortened sign-up path never reaches. Without this the member's chosen
+      // monthly savings was stored on the KYC row but never drove obligations.
+      if (monthly_amount) {
+        try {
+          await syncMonthlyContributionPlan(req.user.id, monthly_amount);
+        } catch (planErr) {
+          // Non-fatal: registration must not fail on a plan seed.
+          logger.warn('contribution-type: plan sync failed:', planErr.message);
+        }
+      }
 
       logger.info(`contribution type set to ${contribution_type} for ${req.user.id}`);
       res.json({ success: true, kyc: data, contribution_type });

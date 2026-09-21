@@ -107,18 +107,24 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
   bool _isSubmitting = false;
   final ScrollController _scrollController = ScrollController();
 
-  // Calculate monthly repayment
+  // Calculate monthly repayment.
+  //
+  // Derived FROM the total so the Loan Summary reconciles. This used to
+  // compute a reducing-balance EMI while the total used simple interest, and
+  // the two disagree badly: at N900,000 / 5% / 12 months the summary showed
+  // N77,046.73 a month against a N945,000 total, yet 12 x N77,046.73 is only
+  // N924,560.80 — N20,439 short. A member reading that cannot tell which
+  // figure they would actually be charged.
+  //
+  // The total is authoritative: it is what loans.total_repayment holds and
+  // what remaining_balance is drawn down against. So the instalment is
+  // total / tenure and the two always agree.
   double _calculateMonthlyRepayment(double amount, double interestRate, int tenure) {
-    final principal = amount;
-    final rate = interestRate / 100 / 12;
-    final months = tenure;
-    
-    // EMI = P * r * (1 + r)^n / ((1 + r)^n - 1)
-    final emi = principal * rate * pow(1 + rate, months) / (pow(1 + rate, months) - 1);
-    return emi;
+    if (tenure <= 0) return 0;
+    return _calculateTotalRepayment(amount, interestRate) / tenure;
   }
 
-  // Calculate total repayment
+  // Calculate total repayment (simple interest).
   double _calculateTotalRepayment(double amount, double interestRate) {
     return amount + (amount * interestRate / 100);
   }
@@ -1184,8 +1190,18 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
           _buildSummaryRow('Requested Amount', '\u20a6${amount.toStringAsFixed(2)}'),
           _buildSummaryRow('Interest Rate', '${interestRate}%'),
           _buildSummaryRow('Tenure', '${tenure} Months'),
-          _buildSummaryRow('Monthly Repayment', '\u20a6${monthlyRepayment.toStringAsFixed(2)}', isBold: true),
-          _buildSummaryRow('Total Repayment', '\u20a6${totalRepayment.toStringAsFixed(2)}'),
+          _buildSummaryRow('Total Repayment', '\u20a6${totalRepayment.toStringAsFixed(2)}', isBold: true),
+          _buildSummaryRow('Monthly Repayment', '\u20a6${monthlyRepayment.toStringAsFixed(2)}'),
+          // Spell the arithmetic out so the member can check it rather than
+          // having to take two unrelated-looking figures on trust.
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              '\u20a6${monthlyRepayment.toStringAsFixed(2)} \u00d7 ${tenure} months = '
+              '\u20a6${totalRepayment.toStringAsFixed(2)}',
+              style: TextStyle(fontSize: 11, color: context.textSecondary),
+            ),
+          ),
         ],
       ),
     );
