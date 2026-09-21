@@ -308,17 +308,7 @@ class MembershipScreen extends ConsumerWidget {
         ),
         const SizedBox(height: 12),
         Container(
-          decoration: BoxDecoration(
-            color: context.cardBackground,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
+          decoration: CoopvestShape.cardDecoration(context),
           child: Column(
             children: [
               _buildInfoRow(
@@ -408,17 +398,7 @@ class MembershipScreen extends ConsumerWidget {
         ),
         const SizedBox(height: 12),
         Container(
-          decoration: BoxDecoration(
-            color: context.cardBackground,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
+          decoration: CoopvestShape.cardDecoration(context),
           child: Column(
             children: [
               ListTile(

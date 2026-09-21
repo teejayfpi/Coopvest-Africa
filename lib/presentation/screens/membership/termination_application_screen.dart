@@ -36,11 +36,11 @@ class TerminationApplicationScreen extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Member Info
-            _buildMemberInfo(user),
+            _buildMemberInfo(context, user),
             const SizedBox(height: 24),
 
             // Reason Selection
-            _buildReasonSection(terminationNotifier),
+            _buildReasonSection(context, terminationNotifier),
             const SizedBox(height: 24),
 
             // Exit Type Selection
@@ -48,11 +48,11 @@ class TerminationApplicationScreen extends ConsumerWidget {
             const SizedBox(height: 24),
 
             // Additional Details
-            _buildDetailsSection(terminationNotifier),
+            _buildDetailsSection(context, terminationNotifier),
             const SizedBox(height: 24),
 
             // Acknowledgments
-            _buildAcknowledgmentsSection(terminationNotifier),
+            _buildAcknowledgmentsSection(context, terminationNotifier),
             const SizedBox(height: 32),
 
             // Submit Button
@@ -65,20 +65,10 @@ class TerminationApplicationScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildMemberInfo(user) {
+  Widget _buildMemberInfo(BuildContext context, user) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+      decoration: CoopvestShape.cardDecoration(context),
       child: Row(
         children: [
           Container(
@@ -149,7 +139,7 @@ class TerminationApplicationScreen extends ConsumerWidget {
     TerminationReason.other,
   ];
 
-  Widget _buildReasonSection(TerminationNotifier notifier) {
+  Widget _buildReasonSection(BuildContext context, TerminationNotifier notifier) {
     final formData = notifier.state.formData;
     final selectedReason = formData?.reason ?? TerminationReason.other;
 
@@ -174,17 +164,7 @@ class TerminationApplicationScreen extends ConsumerWidget {
         ),
         const SizedBox(height: 12),
         Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
+          decoration: CoopvestShape.cardDecoration(context),
           child: Column(
             children: _reasons.asMap().entries.map((entry) {
               final reason = entry.value;
@@ -354,7 +334,7 @@ class TerminationApplicationScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildDetailsSection(TerminationNotifier notifier) {
+  Widget _buildDetailsSection(BuildContext context, TerminationNotifier notifier) {
     final formData = notifier.state.formData;
     final reasonController = TextEditingController();
 
@@ -378,17 +358,7 @@ class TerminationApplicationScreen extends ConsumerWidget {
         ),
         const SizedBox(height: 12),
         Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
+          decoration: CoopvestShape.cardDecoration(context),
           child: TextFormField(
             controller: reasonController,
             maxLines: 4,
@@ -415,7 +385,7 @@ class TerminationApplicationScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildAcknowledgmentsSection(TerminationNotifier notifier) {
+  Widget _buildAcknowledgmentsSection(BuildContext context, TerminationNotifier notifier) {
     final formData = notifier.state.formData;
 
     return Column(
@@ -444,17 +414,7 @@ class TerminationApplicationScreen extends ConsumerWidget {
         ),
         const SizedBox(height: 12),
         Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
+          decoration: CoopvestShape.cardDecoration(context),
           child: Column(
             children: [
               _buildAcknowledgmentCheckbox(
