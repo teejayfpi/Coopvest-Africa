@@ -1295,7 +1295,7 @@ router.get('/wallets', async (req, res) => {
     const { page, limit, from, to } = paging(req);
     let q = supabase
       .from('wallets')
-      .select('*, profile:profiles!transactions_profile_id_fkey(id, user_id, name, email)', { count: 'exact' })
+      .select('*, profile:profiles!wallets_profile_id_fkey(id, user_id, name, email)', { count: 'exact' })
       .order('updated_at', { ascending: false })
       .range(from, to);
 
@@ -1346,7 +1346,7 @@ router.get('/savings', async (req, res) => {
     const { page, limit, from, to } = paging(req);
     const { data, error, count } = await supabase
       .from('savings')
-      .select('*, profile:profiles!transactions_profile_id_fkey(id, user_id, name, email)', { count: 'exact' })
+      .select('*, profile:profiles!savings_profile_id_fkey(id, user_id, name, email)', { count: 'exact' })
       .order('updated_at', { ascending: false })
       .range(from, to);
     if (error) throw error;
@@ -1430,7 +1430,7 @@ router.get('/notifications', async (req, res) => {
     const { page, limit, from, to } = paging(req);
     const { data, error, count } = await supabase
       .from('notifications')
-      .select('*, profile:profiles!transactions_profile_id_fkey(id, user_id, name, email)', { count: 'exact' })
+      .select('*, profile:profiles!notifications_profile_id_fkey(id, user_id, name, email)', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(from, to);
     if (error) throw error;
@@ -2637,9 +2637,13 @@ router.get('/analytics/defaulter-trend', async (req, res) => {
 router.get('/login-history/log', async (req, res) => {
   try {
     const { page, limit, from, to } = paging(req);
+    // audit_logs has NO profile_id column — the member link is actor_id, and
+    // that FK is ON DELETE SET NULL (see migration 045), so an embed here is
+    // the wrong shape entirely. Selecting the actor's identity via an explicit
+    // FK name on actor_id keeps the log rows readable.
     const { data, error, count } = await supabase
       .from('audit_logs')
-      .select('*, profile:profiles!transactions_profile_id_fkey(id, user_id, name, email)', { count: 'exact' })
+      .select('*, actor:profiles!audit_logs_actor_id_fkey(id, user_id, name, email)', { count: 'exact' })
       .eq('action', 'LOGIN')
       .order('created_at', { ascending: false })
       .range(from, to);
@@ -3296,7 +3300,7 @@ router.get('/investments/:id', async (req, res) => {
     if (!pool) return res.status(404).json({ success: false, error: 'Pool not found' });
     const { data: participants } = await supabase
       .from('investment_participations')
-      .select('*, profile:profiles!transactions_profile_id_fkey(id, user_id, name, email)')
+      .select('*, profile:profiles!investment_participations_profile_id_fkey(id, user_id, name, email)')
       .eq('pool_id', pool.id)
       .order('created_at', { ascending: false });
     res.json({ success: true, pool, participants: participants || [] });
@@ -3418,7 +3422,7 @@ router.get('/investments/:id/participants', async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('investment_participations')
-      .select('*, profile:profiles!transactions_profile_id_fkey(id, user_id, name, email)')
+      .select('*, profile:profiles!investment_participations_profile_id_fkey(id, user_id, name, email)')
       .eq('pool_id', req.params.id)
       .order('joined_at', { ascending: false });
     if (error) throw error;
