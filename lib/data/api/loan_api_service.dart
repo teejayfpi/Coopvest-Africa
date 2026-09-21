@@ -168,6 +168,10 @@ class LoanData {
   final int guarantorsRequired;
   final DateTime createdAt;
 
+  /// Next instalment due date from the backend (`loans.next_due_date`), which
+  /// database triggers keep current as repayments land.
+  final DateTime? nextDueDate;
+
   LoanData({
     required this.id,
     required this.userId,
@@ -188,6 +192,7 @@ class LoanData {
     this.guarantorsAccepted = 0,
     this.guarantorsRequired = 3,
     required this.createdAt,
+    this.nextDueDate,
   });
 
   factory LoanData.fromJson(Map<String, dynamic> json) {
@@ -220,6 +225,10 @@ class LoanData {
       remainingBalance: (json['remaining_balance'] as num?)?.toDouble() ??
           (json['remainingBalance'] as num?)?.toDouble() ??
           0.0,
+      // Trigger-maintained on the backend; drives 'next due' in the app.
+      nextDueDate: _parseDate(
+        json['next_due_date'] ?? json['nextDueDate'] ?? json['due_date'],
+      ),
       status: (json['status'] ?? '').toString(),
       purpose: (json['purpose'] ?? '').toString(),
       qrId: (json['qr_id'] ?? json['qrId'])?.toString(),
@@ -243,6 +252,17 @@ int _asInt(dynamic v) {
   if (v is int) return v;
   if (v is num) return v.toInt();
   return int.tryParse(v.toString()) ?? 0;
+}
+
+/// Parse an ISO date from the backend, or null when absent/unparseable.
+///
+/// Returns null rather than throwing so a malformed date degrades to "no date
+/// shown" instead of breaking the whole loan list.
+DateTime? _parseDate(dynamic v) {
+  if (v == null) return null;
+  final s = v.toString().trim();
+  if (s.isEmpty) return null;
+  return DateTime.tryParse(s);
 }
 
 class LoansListResponse {

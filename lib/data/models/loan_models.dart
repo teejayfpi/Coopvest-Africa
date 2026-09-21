@@ -26,6 +26,14 @@ class Loan extends Equatable {
   final DateTime? disbursedAt;
   final double remainingBalance;
 
+  /// The next instalment due date, as maintained by the backend.
+  ///
+  /// `loans.next_due_date` is kept current by database triggers (migration 041)
+  /// and advances as repayments land, so this is authoritative. The app
+  /// previously DERIVED a date as `disbursedAt + 30 days`, which never moved:
+  /// a member three months into a loan was still shown a date in the past.
+  final DateTime? nextDueDate;
+
   const Loan({
     required this.id,
     required this.userId,
@@ -49,6 +57,7 @@ class Loan extends Equatable {
     this.approvedAt,
     this.disbursedAt,
     this.remainingBalance = 0.0,
+    this.nextDueDate,
   });
 
   /// True when this loan still has a shareable QR (saved on the backend) that
@@ -166,13 +175,20 @@ class Loan extends Equatable {
       approvedAt: approvedAt ?? this.approvedAt,
       disbursedAt: disbursedAt ?? this.disbursedAt,
       remainingBalance: remainingBalance ?? this.remainingBalance,
+      nextDueDate: nextDueDate ?? this.nextDueDate,
     );
   }
 
+  /// The next instalment date.
+  ///
+  /// Prefers the backend's `next_due_date`, which is trigger-maintained and
+  /// advances with repayments. Falls back to a date derived from disbursement
+  /// only when the backend has not supplied one (e.g. an older payload), so the
+  /// loan summary never shows a stale date.
   DateTime? get nextRepaymentDate {
+    if (nextDueDate != null) return nextDueDate;
     if (disbursedAt == null) return null;
-    final nextPayment = disbursedAt!.add(Duration(days: 30 * 1));
-    return nextPayment;
+    return disbursedAt!.add(const Duration(days: 30));
   }
 
   /// True for loans the member is actively repaying or has been approved and
@@ -214,6 +230,7 @@ class Loan extends Equatable {
     approvedAt,
     disbursedAt,
     remainingBalance,
+    nextDueDate,
   ];
 }
 
