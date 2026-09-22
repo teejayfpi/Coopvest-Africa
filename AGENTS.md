@@ -1,5 +1,34 @@
 # Coopvest-Africa (Flutter mobile app + Node backend)
 
+## ⚠️ TWO REPOS, NOT ONE — read before editing anything
+This application exists as **two separate repositories that must be kept in
+lockstep**:
+
+| Repo | Contents |
+|---|---|
+| `teejayfpi/Coopvest-Africa` | this one — Flutter app + `backend/` |
+| `coopvestafrica-ops/Latest-Coopvest` | the same app and backend, different git history |
+
+They are **byte-identical** across `lib/`, `android/`, `assets/`, `ios/` and
+`backend/` (they diverged into 27 differing files once; do not let that happen
+again). They have different histories — a shared initial commit, then separate
+commits — so **cherry-picking between them is unreliable. Copy files.**
+
+**Every change must land in both.** A one-sided change ships different behaviour
+for the same product, which has already happened twice:
+- the LGA fix landed only in a screen so dead it never ran, and
+- a branding refresh landed only HERE, giving the two apps different splash
+  screens and icons.
+
+**Before starting work:** `git fetch` both repos. Someone else pushes to these
+regularly, and `Latest-Coopvest` gained 6+ commits mid-session more than once.
+
+**After finishing work:** confirm parity with
+`diff -rq Coopvest-Africa/lib Latest-Coopvest/lib` (expect zero output) and
+`diff -rq Coopvest-Africa/backend/src Latest-Coopvest/backend/src`.
+
+**One-sided changes are the single most common source of bugs in this project.**
+
 ## Authentication — gotrue 2.15.0 API constraints
 The lockfile pins `gotrue 2.15.0` (via `supabase_flutter ^2.3.0`). Its
 `GoTrueClient` API differs from newer gotrue releases:
