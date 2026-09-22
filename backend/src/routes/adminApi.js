@@ -25,6 +25,7 @@ const approvalMatrix = require('../lib/approvalMatrix');
 const approvalRequests = require('../lib/approvalRequests');
 const riskScoring = require('../lib/riskScoring');
 const manualDeposit = require('../lib/manualDeposit');
+const { classifyChannels, normalizeAudience, AUDIENCE_TYPES } = require('../lib/notificationBroadcast');
 
 /** Notify the loan's borrower of an approve/reject decision. Never throws. */
 async function notifyBorrowerOfDecision(loan, approve, reason) {
@@ -2728,15 +2729,73 @@ router.get('/login-history/log', async (req, res) => {
 
 
 /**
+ * Resolve the dashboard's audience selection to a list of active profile ids.
+ *
+ * The dashboard offers All / Active / Defaulters / Organization Admins /
+ * Members with Pending Loans. The route previously ignored the selection and
+ * always fanned out to every active profile, so picking a narrower audience had
+ * no effect (and members outside it got the message).
+ *
+ * Bucket definitions reuse the same rules as GET /dashboard/summary:
+ *   active       — is_active && !is_flagged
+ *   defaulters   — loans in active/disbursed past next_due_date
+ *   organizations— members attached to an organization_id
+ *   loans_pending— loans awaiting review (pending / under_review)
+ */
+async function resolveAudienceProfileIds(audience) {
+  const activeProfiles = () => supabase.from('profiles').select('id').eq('is_active', true);
+
+  const profileIdsFrom = async (query) => {
+    const { data, error } = await query;
+    if (error) throw error;
+    return (data || []).map((p) => p.id);
+  };
+
+  const loanProfileIdsFrom = async (query) => {
+    const { data, error } = await query;
+    if (error) throw error;
+    return [...new Set((data || []).map((l) => l.profile_id).filter(Boolean))];
+  };
+
+  switch (audience) {
+    case 'active':
+      return profileIdsFrom(activeProfiles().eq('is_flagged', false));
+    case 'organizations':
+      return profileIdsFrom(activeProfiles().not('organization_id', 'is', null));
+    case 'defaulters':
+      return loanProfileIdsFrom(
+        supabase
+          .from('loans')
+          .select('profile_id')
+          .in('status', ['active', 'disbursed'])
+          .lt('next_due_date', new Date().toISOString()),
+      );
+    case 'loans_pending':
+      return loanProfileIdsFrom(
+        supabase.from('loans').select('profile_id').in('status', ['pending', 'under_review']),
+      );
+    default:
+      // 'all' (and any unrecognised value) → every active member.
+      return profileIdsFrom(activeProfiles());
+  }
+}
+
+/**
  * POST /api/v1/admin/notifications/broadcast
  */
 router.post(
   '/notifications/broadcast',
-  [body('title').isString(), body('message').isString(), body('type').optional().isString()],
+  [
+    body('title').isString(),
+    body('message').isString(),
+    body('type').optional().isString(),
+    body('audience').optional().isIn(AUDIENCE_TYPES),
+    body('channels').optional().isArray(),
+  ],
   validate,
   async (req, res) => {
     try {
-      const { title, message, type, category, profileIds } = req.body;
+      const { title, message, type, category, profileIds, channels, audience } = req.body;
 
       // The notifications.type column has a CHECK constraint that only allows
       // specific values (announcement/transaction/loan/system/reminder/...).
@@ -2749,13 +2808,19 @@ router.post(
       const uiType = String(type || '').toLowerCase();
       const dbType = ALLOWED_TYPES.includes(uiType) ? uiType : 'system';
       const dbCategory = category || uiType || 'info';
+      const { delivered, notImplemented } = classifyChannels(channels);
 
       let targetIds = profileIds;
       if (!Array.isArray(targetIds) || targetIds.length === 0) {
-        const { data } = await supabase.from('profiles').select('id').eq('is_active', true);
-        targetIds = (data || []).map((p) => p.id);
+        targetIds = await resolveAudienceProfileIds(audience);
       }
-      if (targetIds.length === 0) return res.json({ success: true, sent: 0 });
+      const targetGroup = normalizeAudience(audience);
+      if (targetIds.length === 0) {
+        return res.json({
+          success: true, sent: 0, audience: targetGroup, channels: delivered,
+          notImplemented, push: { targeted: 0, errors: 0 },
+        });
+      }
 
       const rows = targetIds.map((pid) => ({
         profile_id: pid,
@@ -2767,8 +2832,42 @@ router.post(
       }));
       const { error } = await supabase.from('notifications').insert(rows);
       if (error) throw error;
-      await logAdminAction('NOTIFICATION_BROADCAST', { model: 'Notification' }, { count: rows.length, title });
-      res.status(201).json({ success: true, sent: rows.length });
+
+      // Deliver a real FCM push to the targeted members' devices. Without this
+      // the dashboard's "push" channel only wrote in-app rows and reported
+      // success, so members never received a device notification.
+      let push = { targeted: 0, errors: 0 };
+      if (delivered.includes('push')) {
+        const { data: deviceRows, error: tokenErr } = await supabase
+          .from('device_tokens')
+          .select('profile_id, token')
+          .eq('active', true)
+          .in('profile_id', targetIds);
+        if (tokenErr) {
+          logger.warn('broadcast: device_tokens lookup failed:', tokenErr.message);
+        } else if (deviceRows && deviceRows.length > 0) {
+          const tokens = deviceRows.map((t) => t.token);
+          const result = await notifyService.sendPush({
+            tokens,
+            title,
+            body: message,
+            type: dbType,
+            data: { type: dbType },
+          });
+          push = {
+            targeted: tokens.length,
+            // A skipped send (no FCM credentials) has no failureCount, so report
+            // the reason instead of a misleading "0 failed".
+            errors: Number.isFinite(result.failureCount) ? result.failureCount : 0,
+            status: result.status,
+            reason: result.reason || null,
+            error: result.error || null,
+          };
+        }
+      }
+
+      await logAdminAction('NOTIFICATION_BROADCAST', { model: 'Notification' }, { count: rows.length, title, audience: targetGroup, channels: delivered, notImplemented, push });
+      res.status(201).json({ success: true, sent: rows.length, audience: targetGroup, channels: delivered, notImplemented, push });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
     }
