@@ -49,6 +49,7 @@ const settingsRoutes = require('./routes/settings');
 const watchlistRoutes = require('./routes/watchlist');
 const analyticsRoutes = require('./routes/analytics');
 const adminApiRoutes = require('./routes/adminApi');
+const reportsRoutes = require('./routes/reports');
 const kycAdminRoutes = require('./routes/kycAdmin');
 const memberDetailRoutes = require('./routes/memberDetail');
 const paymentProofRoutes = require('./routes/paymentProofs');
@@ -322,6 +323,9 @@ app.use('/api', featuresRoutes);
 app.use('/api/mobile-features', featuresRoutes);
 // Admin API routes mounted at /api/admin AFTER other routes to avoid conflicts
 // Provides /api/admin/dashboard/*, /api/admin/contributions/monthly, /api/admin/loans/status-breakdown
+// Ad-hoc reporting suite (catalog / run / export). Mounted before adminApi so
+// these paths resolve here; it applies its own requireAdmin guard.
+app.use('/api/admin/reports', require('./middleware/auth').requireAdmin, reportsRoutes);
 app.use('/api/admin', adminApiRoutes);
 // Root-level alias in case Dio resolves absolute paths from host root
 app.use('/guarantor', guarantorRoutes);
@@ -350,6 +354,9 @@ app.get('/api/auth/kyc/status', (req, res, next) => {
 // Cross-backend service-token endpoints used by the Admin Dashboard API
 // server. Authentication is via a shared secret (X-Service-Token) rather than
 // IP whitelisting, so the admin backend can be deployed anywhere.
+// Ad-hoc reporting suite, mounted before the adminApi router for the same
+// reason as the /api/admin mount above.
+app.use('/api/v2/admin/reports', require('./middleware/auth').requireAdmin, reportsRoutes);
 app.use('/api/v2/admin', adminApiRoutes);
 app.use('/api/v2/admin/kyc', kycAdminRoutes);
 app.use('/api/v2/admin/members', memberDetailRoutes);
