@@ -51,6 +51,7 @@ const analyticsRoutes = require('./routes/analytics');
 const adminApiRoutes = require('./routes/adminApi');
 const reportsRoutes = require('./routes/reports');
 const comparativeRoutes = require('./routes/comparative');
+const organizationFinanceRoutes = require('./routes/organizationFinance');
 const kycAdminRoutes = require('./routes/kycAdmin');
 const memberDetailRoutes = require('./routes/memberDetail');
 const paymentProofRoutes = require('./routes/paymentProofs');
@@ -329,6 +330,10 @@ app.use('/api/mobile-features', featuresRoutes);
 app.use('/api/admin/reports', require('./middleware/auth').requireAdmin, reportsRoutes);
 // Comparative analytics — period-over-period comparison and drill-down.
 app.use('/api/admin/comparative', require('./middleware/auth').requireAdmin, comparativeRoutes);
+// Organization finance + member↔organization linkage. Mounted before adminApi
+// so its /organizations/* sub-paths win; adminApi has no catch-all and keeps
+// serving its own GET/POST /organizations list+create.
+app.use('/api/admin/organizations', require('./middleware/auth').requireAdmin, organizationFinanceRoutes);
 app.use('/api/admin', adminApiRoutes);
 // Root-level alias in case Dio resolves absolute paths from host root
 app.use('/guarantor', guarantorRoutes);
@@ -361,6 +366,7 @@ app.get('/api/auth/kyc/status', (req, res, next) => {
 // reason as the /api/admin mount above.
 app.use('/api/v2/admin/reports', require('./middleware/auth').requireAdmin, reportsRoutes);
 app.use('/api/v2/admin/comparative', require('./middleware/auth').requireAdmin, comparativeRoutes);
+app.use('/api/v2/admin/organizations', require('./middleware/auth').requireAdmin, organizationFinanceRoutes);
 app.use('/api/v2/admin', adminApiRoutes);
 app.use('/api/v2/admin/kyc', kycAdminRoutes);
 app.use('/api/v2/admin/members', memberDetailRoutes);
