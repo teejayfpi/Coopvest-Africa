@@ -317,3 +317,34 @@ so `applied` is safe.
 `₦100150000.00` next to the header's `₦100,150,000`. Use the shared formatter —
 import it with `show Formatters` in files that also need string extensions, to
 avoid an ambiguous-extension clash with `capitalize`.
+
+## Loans table has NO `disbursed_at` column
+Only `disbursed_by` exists. Selecting `disbursed_at` makes PostgREST reject
+the ENTIRE query, so a report silently reads zero rows and looks like it
+worked. `approved_at` is the populated timestamp marking when a loan became
+live (see `loanRecoveryWorker.js`, which documents the same trap). This has
+bitten twice — check `approved_at` first, and never trust a "0 rows" result
+without confirming the query did not 400.
+
+## Reports come from the transaction ledger, not derived tables
+`transactions` is the central ledger. `contributions` is derived and has
+drifted in production: it holds a ₦100,000,000 row that no transaction
+supports. Comparative/reporting code uses the ledger and returns a
+`dataQuality` warning naming the discrepancy. Do NOT "switch back" to
+`contributions` — a headline figure must be traceable to real transactions.
+The stray rows still need deleting from the DB.
+
+## Comparative analytics module
+`src/lib/reportPeriods.js` (UTC periods, ISO weeks), `comparativeMetrics.js`
+(ledger-backed flow vs stock metrics), `comparisonEngine.js` (abs + % change,
+insights), `src/routes/comparative.js` (compare / export / drilldown).
+Rules that are easy to regress: a zero base yields `percent: null` (never
+Infinity%); rates compare in percentage POINTS; `higherIsBetter` per metric so
+a falling default rate is not coloured as a decline; stock metrics
+(outstanding, overdue) are rewound to the period END by adding back later
+repayments, because `loans.remaining_balance` is live-only. ISO week 1 can
+start in the previous calendar year — enumerate by ISO week-year or you get
+zero weeks. `ledger_entries` is NOT summed alongside `transactions`; they
+overlap and unioning them double-counts.
+
+Reporting branches stack: `feat/reporting-suite` → `feat/comparative-analytics`.
