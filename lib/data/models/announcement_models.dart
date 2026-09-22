@@ -1,4 +1,10 @@
-/// Announcement Model - For admin broadcasts to all members
+/// Announcement Model - For admin broadcasts to members
+///
+/// The API returns `content` (translated from the table's `body`), `type`
+/// (translated from `category`) and camelCase dates. This model previously read
+/// only those camelCase names while the API returned snake_case, so an
+/// announcement rendered blank even when a row existed. Both spellings are
+/// accepted here so either contract works.
 class Announcement {
   final String id;
   final String title;
@@ -9,6 +15,19 @@ class Announcement {
   final bool isRead;
   final bool isPinned;
 
+  /// How the app should surface it: 'banner', 'popup', 'marquee' or 'all'.
+  final String displayMode;
+
+  /// 'low' | 'normal' | 'high' | 'critical'.
+  final String priority;
+
+  /// A popup the member must dismiss, versus one they can close.
+  final bool dismissible;
+
+  /// Optional call-to-action on the banner/popup.
+  final String? actionLabel;
+  final String? actionUrl;
+
   Announcement({
     required this.id,
     required this.title,
@@ -18,22 +37,60 @@ class Announcement {
     this.expiresAt,
     this.isRead = false,
     this.isPinned = false,
+    this.displayMode = 'banner',
+    this.priority = 'normal',
+    this.dismissible = true,
+    this.actionLabel,
+    this.actionUrl,
   });
 
+  /// True when this announcement should be shown as a scrolling ticker.
+  bool get showInMarquee => displayMode == 'marquee' || displayMode == 'all';
+
+  /// True when this announcement should be shown as a card in the list.
+  bool get showAsBanner => displayMode == 'banner' || displayMode == 'all';
+
+  /// True when this announcement should pop up as a dialog.
+  bool get showAsPopup => displayMode == 'popup' || displayMode == 'all';
+
   factory Announcement.fromJson(Map<String, dynamic> json) {
+    // Accept both the camelCase the API now returns and the snake_case the
+    // table uses, so a future contract change cannot blank the UI again.
+    String pick(List<String> keys) {
+      for (final k in keys) {
+        final v = json[k];
+        if (v != null && v.toString().isNotEmpty) return v.toString();
+      }
+      return '';
+    }
+
+    DateTime? parseDate(List<String> keys) {
+      for (final k in keys) {
+        final v = json[k];
+        if (v != null && v.toString().isNotEmpty) {
+          final parsed = DateTime.tryParse(v.toString());
+          if (parsed != null) return parsed;
+        }
+      }
+      return null;
+    }
+
     return Announcement(
-      id: json['id'] ?? '',
-      title: json['title'] ?? '',
-      content: json['content'] ?? '',
-      type: json['type'] ?? 'general',
-      createdAt: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'])
-          : DateTime.now(),
-      expiresAt: json['expiresAt'] != null
-          ? DateTime.parse(json['expiresAt'])
-          : null,
-      isRead: json['isRead'] ?? false,
-      isPinned: json['isPinned'] ?? false,
+      id: pick(['id']),
+      title: pick(['title']),
+      content: pick(['content', 'body', 'message']),
+      type: pick(['type', 'category']),
+      createdAt: parseDate(['createdAt', 'created_at', 'publishedAt', 'published_at']) ?? DateTime.now(),
+      expiresAt: parseDate(['expiresAt', 'expires_at']),
+      isRead: json['isRead'] ?? json['is_read'] ?? false,
+      isPinned: json['isPinned'] ?? json['is_pinned'] ?? false,
+      displayMode: pick(['displayMode', 'display_mode']).isEmpty
+          ? 'banner'
+          : pick(['displayMode', 'display_mode']),
+      priority: pick(['priority']).isEmpty ? 'normal' : pick(['priority']),
+      dismissible: json['dismissible'] ?? true,
+      actionLabel: json['actionLabel'] ?? json['action_label'],
+      actionUrl: json['actionUrl'] ?? json['action_url'],
     );
   }
 
@@ -47,6 +104,11 @@ class Announcement {
       'expiresAt': expiresAt?.toIso8601String(),
       'isRead': isRead,
       'isPinned': isPinned,
+      'displayMode': displayMode,
+      'priority': priority,
+      'dismissible': dismissible,
+      'actionLabel': actionLabel,
+      'actionUrl': actionUrl,
     };
   }
 
@@ -64,6 +126,11 @@ class Announcement {
     DateTime? expiresAt,
     bool? isRead,
     bool? isPinned,
+    String? displayMode,
+    String? priority,
+    bool? dismissible,
+    String? actionLabel,
+    String? actionUrl,
   }) {
     return Announcement(
       id: id ?? this.id,
@@ -74,6 +141,11 @@ class Announcement {
       expiresAt: expiresAt ?? this.expiresAt,
       isRead: isRead ?? this.isRead,
       isPinned: isPinned ?? this.isPinned,
+      displayMode: displayMode ?? this.displayMode,
+      priority: priority ?? this.priority,
+      dismissible: dismissible ?? this.dismissible,
+      actionLabel: actionLabel ?? this.actionLabel,
+      actionUrl: actionUrl ?? this.actionUrl,
     );
   }
 }
