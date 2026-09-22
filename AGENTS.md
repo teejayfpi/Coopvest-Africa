@@ -404,6 +404,44 @@ writes go to `audit_logs` with before/after values.
 Branch chain: `feat/reporting-suite` → `feat/comparative-analytics` →
 `feat/organization-finance`.
 
+## The anon key is PUBLIC — RLS is the only boundary (migration 047)
+The Supabase anon key is embedded in the mobile app bundle AND in the admin
+dashboard's shipped JS, so treat it as public. Anything without RLS is readable
+by anyone who extracts it, bypassing the app and the API entirely.
+
+This was not theoretical: device_tokens (13 FCM push tokens), profiles (BVN,
+NIN, bank numbers), contributions, member_fees and organizations (411
+remittance account numbers) were all readable with the anon key and no login.
+
+Root causes worth remembering:
+* `device_tokens`, `contributions`, `member_fees` had RLS **disabled entirely**
+  (relrowsecurity = false) — a table with no RLS is world-readable.
+* `profiles` had **three permissive `USING (true)` policies**. Postgres ORs
+  permissive policies, so ONE such policy defeats every restrictive policy
+  beside it. When adding a targeted policy, first DROP the broad ones — this
+  bit twice (also on `announcements`).
+* `organizations` had a single `FOR ALL USING (true)`.
+
+The API is unaffected by RLS because it connects with the service role, which
+bypasses RLS. So "the API works" proves nothing about exposure — probe with the
+anon key directly (`/rest/v1/<table>?select=id`) to check.
+
+Also note `req.path` vs route mounting, and that probing a table returning `[]`
+can mean RLS-filtered OR genuinely empty; check `relrowsecurity` in pg_class to
+tell them apart.
+
+## Beware PRs whose title understates their scope
+`fix/artifact-storage-quota-fix` presented as a small CI workflow change but was
+318 files, +52,865/-30,011. It committed `backend/.env`, `android/keystore/
+release-keystore.jks`, `android/key.properties` and OAuth client secrets into a
+PUBLIC repo, and — being based on a stale commit — would have DELETED the
+reporting suite, RBAC, comparative analytics, org finance and AGENTS.md.
+
+Before merging someone else's PR here: check `changed_files` and `additions`,
+list the files, and look for `.env`, `*.jks`, `*keystore*`, `*client_secret*`,
+`google-services.json`. A `.gitignore` diff that REDUCES ignore coverage is a
+red flag.
+
 ## RBAC: server-side permissions (feat/rbac-permissions)
 `src/lib/permissions.js` (role + permission catalog, resolution) and
 `src/middleware/requirePermission.js` (ordered path→permission table + guard),
