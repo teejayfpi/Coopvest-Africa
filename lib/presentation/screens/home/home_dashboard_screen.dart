@@ -32,6 +32,8 @@ import '../../../presentation/screens/referral/referral_dashboard_screen.dart';
 import '../../../presentation/screens/contributions/monthly_contributions_screen.dart';
 import '../../../presentation/screens/transactions/transactions_history_screen.dart';
 import '../../../presentation/screens/announcements/announcements_screen.dart';
+import '../../../presentation/widgets/common/announcement_marquee.dart';
+import '../../../presentation/widgets/common/announcement_popup.dart';
 import '../../../presentation/screens/guarantor/guarantor_dashboard_screen.dart';
 import '../../../presentation/screens/documents/document_upload_screen.dart';
 import '../../../presentation/screens/profile/profile_settings_screen.dart';
@@ -136,7 +138,16 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
         ref.read(loanProvider.notifier).getLoans(),
         ref.read(contributionProvider.notifier).loadContributions(),
         ref.read(notificationsProvider.notifier).loadNotifications(),
+        // Announcements drive both the news ticker and the popups, so load them
+        // with the rest rather than making the marquee fetch separately.
+        ref.read(announcementProvider.notifier).loadAnnouncements(),
       ]);
+
+      // Surface any popup announcements now that they are loaded. Runs after the
+      // fetch so a popup never appears for content the member cannot see.
+      if (mounted) {
+        unawaited(AnnouncementPopupHost.checkAndShow(context, ref));
+      }
 
       // Re-fetch obligations. The obligations card reads a FutureProvider that
       // is otherwise cached forever, so without this the "Monthly Savings"
@@ -220,6 +231,15 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
           child: Column(
             children: [
               _buildHeader(context, userName, membershipId, user?.name ?? 'User', user?.id ?? '', loansState),
+
+              // Scrolling admin news. Renders nothing when no announcement is
+              // configured as a marquee, so the layout is unchanged otherwise.
+              const SizedBox(height: 8),
+              AnnouncementMarquee(
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const AnnouncementsScreen()),
+                ),
+              ),
               
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
