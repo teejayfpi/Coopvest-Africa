@@ -348,3 +348,34 @@ zero weeks. `ledger_entries` is NOT summed alongside `transactions`; they
 overlap and unioning them double-counts.
 
 Reporting branches stack: `feat/reporting-suite` → `feat/comparative-analytics`.
+
+## Organization finance + member linkage
+`src/lib/organizationFinance.js` (expected/remitted/outstanding per org),
+`src/routes/organizationFinance.js` (positions, pending requests, assign,
+detail, trend), mounted at `/api/admin/organizations` BEFORE adminApi so its
+sub-paths win (adminApi keeps its own GET/POST /organizations and has no
+catch-all).
+
+Money model: **Expected** = Σ linked members' `monthly_amount`; **Remitted** =
+Σ `payroll_batches.total_contribution_amount` for the month; **Outstanding** =
+Expected − Remitted. Remittance is read from `payroll_batches`, NOT from member
+transactions — summing transactions double-counts a direct payment made
+alongside a payroll deduction and cannot represent a remittance that arrived
+before members were allocated.
+
+Rules pinned by tests: over-remittance reports NEGATIVE outstanding (a surplus
+must be reconciled, not clamped); a member with no `monthly_amount` is
+`no_expectation`, not `lapsed`; unlinked members are counted and surfaced (the
+live project has 0 of 6 linked against 411 organizations, so a report built
+only from linked members reads zero and looks broken);
+`organizations.member_count` is a stale counter (0 for every org) — use the
+live count and report the drift; rows sort by what is owed.
+
+The member app could always request an employer
+(`POST /organizations/request-approval`) but nothing could APPROVE it and set
+`profiles.organization_id`. That linkage is now
+`POST /pending-requests/:id/approve` plus `POST /assign|/unassign`. All linkage
+writes go to `audit_logs` with before/after values.
+
+Branch chain: `feat/reporting-suite` → `feat/comparative-analytics` →
+`feat/organization-finance`.
