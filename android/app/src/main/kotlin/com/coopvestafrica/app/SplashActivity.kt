@@ -8,9 +8,8 @@ import android.os.Looper
 import android.view.View
 
 /**
- * Full-logo handoff screen shown after Android's mandatory system splash.
- * Android 12's system slot is icon-shaped, so the complete wordmark and tagline
- * are displayed here before MainActivity/Flutter takes over.
+ * Branded handoff screen shown after Android's mandatory system splash before
+ * MainActivity/Flutter takes over.
  */
 class SplashActivity : Activity() {
     private val handler = Handler(Looper.getMainLooper())
