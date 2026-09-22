@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Android 12+ uses a system splash screen before Flutter starts. Use a
-         dedicated transparent launch icon instead of the adaptive app icon. -->
+    <!-- Android 12+ uses a system splash screen before Flutter starts. Keep its
+         icon slot transparent so no logo is shown during startup. -->
     <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
         <item name="android:windowSplashScreenBackground">@color/splash_background</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_launch_icon</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_empty</item>
         <item name="android:windowBackground">@drawable/launch_background</item>
         <item name="android:statusBarColor">@color/splash_background</item>
         <item name="android:navigationBarColor">@color/splash_background</item>

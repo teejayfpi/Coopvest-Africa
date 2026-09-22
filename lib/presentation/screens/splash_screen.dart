@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
-import '../../config/theme_config.dart';
 
-/// Professional Coopvest Splash Screen with Animation and Sound
+/// Branded splash screen with the transparent Coopvest logo over a mint gradient.
 class SplashScreen extends StatefulWidget {
   final bool isReady;
   final Widget child;
@@ -19,25 +18,18 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen> {
   late final AudioPlayer _audioPlayer;
-  
+
   bool _showSplash = true;
   bool _dismissed = false;
   bool _soundPlayed = false;
   int _elapsedSeconds = 0;
-  
+
   static const int splashDurationSeconds = 6;
 
   @override
   void initState() {
     super.initState();
-    
-    // Initialize audio player
     _audioPlayer = AudioPlayer();
-    
-    // The splash is intentionally static. Audio and timing remain active,
-    // but the logo and interface do not move.
-    
-    // Play sound and start timer
     _playStartupSound();
     _startSplashTimer();
   }
@@ -47,8 +39,6 @@ class _SplashScreenState extends State<SplashScreen> {
     _soundPlayed = true;
 
     try {
-      // Play one short local branded cue. Keeping this local avoids network
-      // delays and prevents multiple remote sounds from overlapping.
       await _audioPlayer.play(
         AssetSource('audio/coopvest_startup.mp3'),
         volume: 0.65,
@@ -62,23 +52,21 @@ class _SplashScreenState extends State<SplashScreen> {
     Future.doWhile(() async {
       await Future.delayed(const Duration(seconds: 1));
       if (!mounted || _dismissed) return false;
-      
+
       setState(() {
         _elapsedSeconds++;
       });
-      
-      // Auto-dismiss after the configured maximum duration
+
       if (_elapsedSeconds >= splashDurationSeconds) {
         _dismissSplash();
         return false;
       }
-      
-      // Also dismiss if app is ready
+
       if (widget.isReady && !_dismissed) {
         _dismissSplash();
         return false;
       }
-      
+
       return _showSplash;
     });
   }
@@ -112,19 +100,10 @@ class _SplashScreenState extends State<SplashScreen> {
     if (!_showSplash) return widget.child;
 
     final screenSize = MediaQuery.sizeOf(context);
-    final compactLayout = screenSize.height < 500;
-    final calculatedLogoSize = (screenSize.height *
-            (compactLayout ? 0.62 : 0.55))
-        .clamp(180.0, 320.0)
-        .toDouble();
-    final logoSize = calculatedLogoSize > screenSize.width * 0.86
-        ? screenSize.width * 0.86
-        : calculatedLogoSize;
+    final logoSize = (screenSize.width * 0.78).clamp(220.0, 360.0).toDouble();
 
     return Container(
       decoration: const BoxDecoration(
-        // Soft mint tones complement the supplied navy and green logo without
-        // competing with the wordmark or tagline.
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
@@ -138,69 +117,18 @@ class _SplashScreenState extends State<SplashScreen> {
       ),
       child: SafeArea(
         child: Center(
-          child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            SizedBox(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Image.asset(
+              'assets/images/splash-logo-transparent.png',
               width: logoSize,
               height: logoSize,
-              child: Image.asset(
-                'assets/images/splash-logo-transparent.png',
-                fit: BoxFit.contain,
-                errorBuilder: (context, error, stackTrace) {
-                  return const _LogoFallback();
-                },
-              ),
+              fit: BoxFit.contain,
+              filterQuality: FilterQuality.high,
             ),
-            // (Timer removed — it rendered an empty-looking rounded chip and
-            // added no value to the user.)
-            ],
           ),
         ),
       ),
     );
   }
 }
-
-/// Branded fallback shown while the logo asset decodes or if it fails to load.
-/// A gradient medallion with a savings glyph and the "CV" monogram — far more
-/// polished than a bare white tile, so the splash never looks like "just a
-/// green screen" even before the image is ready.
-class _LogoFallback extends StatelessWidget {
-  const _LogoFallback();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            CoopvestColors.primary,
-            CoopvestColors.primaryDark,
-          ],
-        ),
-      ),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          const Icon(Icons.savings_outlined, color: Colors.white, size: 54),
-          Positioned(
-            bottom: 26,
-            child: Text(
-              'CV',
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.9),
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 2,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
