@@ -31,6 +31,40 @@ if (keystorePropertiesFile.exists()) {
     }
 }
 
+// Signing secrets for release builds come from the ENVIRONMENT, never the repo.
+//
+// `android/keystore/release-keystore.jks` and `android/key.properties` were
+// previously committed. This repo is PUBLIC, so the release signing key and its
+// passwords were world-readable — anyone holding them can publish an update
+// that appears to come from Coopvest. They are now gitignored and removed from
+// the tree; CI supplies them instead.
+//
+// Expected environment variables (set as CI secrets):
+//   COOPVEST_KEYSTORE_BASE64  base64 of the .jks
+//   COOPVEST_STORE_PASSWORD
+//   COOPVEST_KEY_ALIAS
+//   COOPVEST_KEY_PASSWORD
+//
+// A local developer can still use a key.properties file (gitignored); if
+// neither is present the release config falls back to debug signing so the
+// build still succeeds.
+def envKeystoreBase64 = System.getenv('COOPVEST_KEYSTORE_BASE64')
+def envStorePassword  = System.getenv('COOPVEST_STORE_PASSWORD')
+def envKeyAlias       = System.getenv('COOPVEST_KEY_ALIAS')
+def envKeyPassword    = System.getenv('COOPVEST_KEY_PASSWORD')
+def hasEnvSigning = envKeystoreBase64 && envStorePassword && envKeyAlias && envKeyPassword
+
+// Materialise the keystore from the env var into the build dir (which is not
+// tracked), so the credential never lands in the working tree.
+def envKeystoreFile = null
+if (hasEnvSigning) {
+    envKeystoreFile = new File(buildDir, 'release-from-env.jks')
+    if (!envKeystoreFile.exists()) {
+        envKeystoreFile.parentFile.mkdirs()
+        envKeystoreFile.bytes = envKeystoreBase64.decodeBase64()
+    }
+}
+
 def projectDir = project.rootProject.projectDir
 
 android {
@@ -79,13 +113,23 @@ android {
             keyPassword "android"
         }
         release {
-            if (keystorePropertiesFile.exists() && keystoreProperties['storeFile'] != null) {
+            if (hasEnvSigning) {
+                // Preferred: secrets injected by CI, never in the repo.
+                storeFile envKeystoreFile
+                storePassword envStorePassword
+                keyAlias envKeyAlias
+                keyPassword envKeyPassword
+            } else if (keystorePropertiesFile.exists() && keystoreProperties['storeFile'] != null) {
+                // A local developer's gitignored key.properties.
                 storeFile rootProject.file(keystoreProperties['storeFile'])
                 storePassword keystoreProperties['storePassword']
                 keyAlias keystoreProperties['keyAlias']
                 keyPassword keystoreProperties['keyPassword']
             } else {
-                // Fallback to debug signing for now to allow builds to pass without key.properties
+                // Neither present: fall back to debug signing so the build still
+                // succeeds. Such an APK is NOT publishable — Play will reject it
+                // — which is the correct failure mode: better a build that
+                // cannot be shipped than a signing key sitting in a public repo.
                 signingConfig signingConfigs.debug
             }
         }

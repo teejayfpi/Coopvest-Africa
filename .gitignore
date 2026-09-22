@@ -108,3 +108,27 @@ uploads/
 
 # Node.js
 node_modules/
+
+# ── Secrets — never commit ───────────────────────────────────────────────────
+# This repository is PUBLIC. Anything listed here is world-readable the moment
+# it is committed, and git history keeps it even after deletion.
+#
+# Android signing material. The release keystore IS the app's identity: with it
+# and its passwords, anyone can publish an update that appears to come from
+# Coopvest.
+android/keystore/
+android/key.properties
+*.jks
+!android/app/debug.keystore
+
+# Live credential files.
+.env
+.env.*
+!.env.example
+backend/.env
+
+# OAuth client secrets and service-account keys.
+client_secret*.json
+**/client_secret*.json
+*-firebase-adminsdk-*.json
+service-account*.json
