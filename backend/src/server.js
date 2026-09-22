@@ -51,6 +51,9 @@ const analyticsRoutes = require('./routes/analytics');
 const adminApiRoutes = require('./routes/adminApi');
 const adminAnnouncementRoutes = require('./routes/adminAnnouncements');
 const directMessageRoutes = require('./routes/directMessages');
+const reportsRoutes = require('./routes/reports');
+const comparativeRoutes = require('./routes/comparative');
+const organizationFinanceRoutes = require('./routes/organizationFinance');
 const kycAdminRoutes = require('./routes/kycAdmin');
 const memberDetailRoutes = require('./routes/memberDetail');
 const paymentProofRoutes = require('./routes/paymentProofs');
@@ -403,12 +406,25 @@ app.post('/api/admin/login-history/log', async (req, res) => {
 // Admin API routes mounted at /api/admin AFTER other routes to avoid conflicts
 // Provides /api/admin/dashboard/*, /api/admin/contributions/monthly, /api/admin/loans/status-breakdown
 //
-// Announcement publishing and direct messaging. Mounted before adminApi (which
-// has no catch-all) and guarded with requireAdmin, matching how the rest of the
-// admin surface is protected on this branch. Once the RBAC branch lands these
-// narrow to notification.send / notification.read.
-app.use('/api/admin/announcements', require('./middleware/auth').requireAdmin, adminAnnouncementRoutes);
-app.use('/api/admin/direct-messages', require('./middleware/auth').requireAdmin, directMessageRoutes);
+// Server-side authorisation for EVERY admin request runs first. It is mounted at
+// the prefix (not per-router) so `req.path` is the full sub-path and one rule
+// table covers all of them, including the specialised routers below. Ordering
+// matters: this must come before any router that should be guarded — an
+// announcement mount placed above it would bypass the permission check.
+app.use('/api/admin', require('./middleware/requirePermission').requirePermission);
+// Announcement publishing and direct messaging. Guarded by the requirePermission
+// mount above; their paths map to notification.send / notification.read.
+app.use('/api/admin/announcements', adminAnnouncementRoutes);
+app.use('/api/admin/direct-messages', directMessageRoutes);
+// Ad-hoc reporting suite (catalog / run / export). Mounted before adminApi so
+// these paths resolve here.
+app.use('/api/admin/reports', reportsRoutes);
+// Comparative analytics — period-over-period comparison and drill-down.
+app.use('/api/admin/comparative', comparativeRoutes);
+// Organization finance + member↔organization linkage. Mounted before adminApi
+// so its /organizations/* sub-paths win; adminApi has no catch-all and keeps
+// serving its own GET/POST /organizations list+create.
+app.use('/api/admin/organizations', organizationFinanceRoutes);
 app.use('/api/admin', adminApiRoutes);
 
 // Security & Access page routes (consumed by /pages/security-access). Mounted
@@ -460,8 +476,13 @@ app.get('/api/auth/kyc/status', (req, res, next) => {
 // Cross-backend service-token endpoints used by the Admin Dashboard API
 // server. Authentication is via a shared secret (X-Service-Token) rather than
 // IP whitelisting, so the admin backend can be deployed anywhere.
-app.use('/api/v2/admin/announcements', require('./middleware/auth').requireAdmin, adminAnnouncementRoutes);
-app.use('/api/v2/admin/direct-messages', require('./middleware/auth').requireAdmin, directMessageRoutes);
+// Server-side authorisation first, for the same reason as the /api/admin block.
+app.use('/api/v2/admin', require('./middleware/requirePermission').requirePermission);
+app.use('/api/v2/admin/announcements', adminAnnouncementRoutes);
+app.use('/api/v2/admin/direct-messages', directMessageRoutes);
+app.use('/api/v2/admin/reports', reportsRoutes);
+app.use('/api/v2/admin/comparative', comparativeRoutes);
+app.use('/api/v2/admin/organizations', organizationFinanceRoutes);
 app.use('/api/v2/admin', adminApiRoutes);
 app.use('/api/v2/admin/kyc', kycAdminRoutes);
 app.use('/api/v2/admin/members', memberDetailRoutes);

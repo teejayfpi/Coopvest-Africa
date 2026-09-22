@@ -26,6 +26,7 @@ const approvalRequests = require('../lib/approvalRequests');
 const riskScoring = require('../lib/riskScoring');
 const manualDeposit = require('../lib/manualDeposit');
 const { classifyChannels, normalizeAudience, AUDIENCE_TYPES } = require('../lib/notificationBroadcast');
+const rbac = require('../lib/permissions');
 
 /** Notify the loan's borrower of an approve/reject decision. Never throws. */
 async function notifyBorrowerOfDecision(loan, approve, reason) {
@@ -4007,6 +4008,45 @@ router.get('/roles', async (req, res) => {
   }
 });
 
+/**
+ * RBAC catalogue — the permission set the server actually enforces.
+ *
+ * Served at /rbac/catalog rather than /permissions because `router.use(governance)`
+ * above already owns `/permissions` (a legacy, display-only list keyed
+ * `view_contributions` etc). Mounting this at the same path would make it
+ * unreachable, and replacing the legacy route would break the existing
+ * Role Management screen. Both are served; this one is authoritative.
+ */
+async function serveRbacCatalog(req, res) {
+  try {
+    const { resolveRole, roleDefinition, permissionsFor } = rbac;
+    const roleKey = resolveRole(req.user?.role);
+    const effective = permissionsFor(req.user?.role, {
+      permissions: req.user?.permissions,
+      custom_permissions: req.user?.custom_permissions,
+    });
+    res.json({
+      success: true,
+      roles: rbac.listRoles(),
+      permissions: rbac.listPermissions(),
+      current: roleKey
+        ? {
+            role: roleKey,
+            storedAs: req.user?.role || null,
+            label: roleDefinition(req.user?.role)?.label || null,
+            permissions: effective,
+          }
+        : null,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+router.get('/rbac/catalog', serveRbacCatalog);
+// Convenience alias for callers that expect it under /permissions/rbac.
+router.get('/permissions/rbac', serveRbacCatalog);
+
 // Update admin role (superadmin only)
 router.patch('/admins/:id/role', async (req, res) => {
   try {
@@ -4016,11 +4056,13 @@ router.patch('/admins/:id/role', async (req, res) => {
     const { id } = req.params;
     const { role, is_active } = req.body;
 
-    const validRoles = ['admin', 'superadmin', 'super_admin', 'staff', 'member'];
+    // Accepted spellings come from the RBAC catalog so a new role is assignable
+    // the moment it is defined, instead of drifting from a hardcoded list here.
+    const validRoles = rbac.assignableRoleValues();
     if (!validRoles.includes(role)) {
       return res.status(400).json({
         success: false,
-        error: 'Invalid role. Must be one of: admin, superadmin, super_admin, staff'
+        error: `Invalid role. Must be one of: ${validRoles.join(', ')}`,
       });
     }
 

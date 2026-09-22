@@ -342,3 +342,105 @@ is skipped as `no_firebase_credentials` and now says so in the UI.
 The single-device session policy means an admin API token is rejected with
 `SESSION_REPLACED` until `POST /api/auth/sync` is called; the dashboard does
 this after login.
+## Loans table has NO `disbursed_at` column
+Only `disbursed_by` exists. Selecting `disbursed_at` makes PostgREST reject
+the ENTIRE query, so a report silently reads zero rows and looks like it
+worked. `approved_at` is the populated timestamp marking when a loan became
+live (see `loanRecoveryWorker.js`, which documents the same trap). This has
+bitten twice — check `approved_at` first, and never trust a "0 rows" result
+without confirming the query did not 400.
+
+## Reports come from the transaction ledger, not derived tables
+`transactions` is the central ledger. `contributions` is derived and has
+drifted in production: it holds a ₦100,000,000 row that no transaction
+supports. Comparative/reporting code uses the ledger and returns a
+`dataQuality` warning naming the discrepancy. Do NOT "switch back" to
+`contributions` — a headline figure must be traceable to real transactions.
+The stray rows still need deleting from the DB.
+
+## Comparative analytics module
+`src/lib/reportPeriods.js` (UTC periods, ISO weeks), `comparativeMetrics.js`
+(ledger-backed flow vs stock metrics), `comparisonEngine.js` (abs + % change,
+insights), `src/routes/comparative.js` (compare / export / drilldown).
+Rules that are easy to regress: a zero base yields `percent: null` (never
+Infinity%); rates compare in percentage POINTS; `higherIsBetter` per metric so
+a falling default rate is not coloured as a decline; stock metrics
+(outstanding, overdue) are rewound to the period END by adding back later
+repayments, because `loans.remaining_balance` is live-only. ISO week 1 can
+start in the previous calendar year — enumerate by ISO week-year or you get
+zero weeks. `ledger_entries` is NOT summed alongside `transactions`; they
+overlap and unioning them double-counts.
+
+Reporting branches stack: `feat/reporting-suite` → `feat/comparative-analytics`.
+
+## Organization finance + member linkage
+`src/lib/organizationFinance.js` (expected/remitted/outstanding per org),
+`src/routes/organizationFinance.js` (positions, pending requests, assign,
+detail, trend), mounted at `/api/admin/organizations` BEFORE adminApi so its
+sub-paths win (adminApi keeps its own GET/POST /organizations and has no
+catch-all).
+
+Money model: **Expected** = Σ linked members' `monthly_amount`; **Remitted** =
+Σ `payroll_batches.total_contribution_amount` for the month; **Outstanding** =
+Expected − Remitted. Remittance is read from `payroll_batches`, NOT from member
+transactions — summing transactions double-counts a direct payment made
+alongside a payroll deduction and cannot represent a remittance that arrived
+before members were allocated.
+
+Rules pinned by tests: over-remittance reports NEGATIVE outstanding (a surplus
+must be reconciled, not clamped); a member with no `monthly_amount` is
+`no_expectation`, not `lapsed`; unlinked members are counted and surfaced (the
+live project has 0 of 6 linked against 411 organizations, so a report built
+only from linked members reads zero and looks broken);
+`organizations.member_count` is a stale counter (0 for every org) — use the
+live count and report the drift; rows sort by what is owed.
+
+The member app could always request an employer
+(`POST /organizations/request-approval`) but nothing could APPROVE it and set
+`profiles.organization_id`. That linkage is now
+`POST /pending-requests/:id/approve` plus `POST /assign|/unassign`. All linkage
+writes go to `audit_logs` with before/after values.
+
+Branch chain: `feat/reporting-suite` → `feat/comparative-analytics` →
+`feat/organization-finance`.
+
+## RBAC: server-side permissions (feat/rbac-permissions)
+`src/lib/permissions.js` (role + permission catalog, resolution) and
+`src/middleware/requirePermission.js` (ordered path→permission table + guard),
+mounted ONCE at the `/api/admin` prefix before every router so `req.path` is
+the full sub-path and one table covers all admin routes.
+
+Before this, `requireAdmin` admitted admin/superadmin/staff alike and only 8 of
+67 write endpoints had a further check — a `staff` token could delete
+contributions and reset member passwords. The dashboard's permission map is
+frontend-only; never treat it as the boundary.
+
+Rules: unclassified WRITE fails closed to `settings.write`; unclassified READ
+needs only `dashboard.read` (so tightening writes cannot lock anyone out);
+unknown role = no permissions; unknown permission name = denied even for the
+apex role; row-level grants are additive and validated against the catalog.
+
+`superadmin`/`super_admin` MUST resolve to `ceo` — mapping them anywhere lower
+strips access from the only admin account in production. Dropping a role's
+tier must take the MOST RESTRICTIVE limit, never the highest, or collapsing
+`staff`+`admin` into `manager` would hand a staff approver admin's ceiling.
+
+`approvalMatrix` had to become role-aware for the same reason: it compared raw
+strings, so a user stored as `ceo`/`manager` matched no level and got a limit
+of ZERO (the apex account would route its own loans to the Approval Center).
+Every role holding `loan.approve` needs a configured limit or all its loans
+get routed — a silent operational break caught by a test.
+
+**Path trap:** the RBAC catalog is at `/rbac/catalog`, NOT `/permissions`.
+`adminApi` does `router.use(governance)` and governance owns `/permissions`
+with a legacy display-only list, so a new route at that path is unreachable.
+
+Branch chain: `feat/reporting-suite` → `feat/comparative-analytics` →
+`feat/organization-finance` → `feat/rbac-permissions`.
+
+## Copying files between the two repos
+`backend/src/server.js` DIFFERS between Latest-Coopvest and Coopvest-Africa by
+~142 lines of legitimate divergence. NEVER `cp` it across repos — that silently
+destroyed Coopvest-Africa's `requireActivated` guards and public login-recorder
+once. Apply the specific edit with an editor and verify with
+`git diff | grep "^-"` that only intended lines were removed.
