@@ -1,5 +1,34 @@
 # Coopvest — Latest-Coopvest backend
 
+## ⚠️ TWO REPOS, NOT ONE — read before editing anything
+This application exists as **two separate repositories that must be kept in
+lockstep**:
+
+| Repo | Contents |
+|---|---|
+| `coopvestafrica-ops/Latest-Coopvest` | this one — Flutter app + `backend/` |
+| `teejayfpi/Coopvest-Africa` | the same app and backend, different git history |
+
+They are **byte-identical** across `lib/`, `android/`, `assets/`, `ios/` and
+`backend/` (they diverged into 27 differing files once; do not let that happen
+again). They have different histories — a shared initial commit, then separate
+commits — so **cherry-picking between them is unreliable. Copy files.**
+
+**Every change must land in both.** A one-sided change ships different behaviour
+for the same product, which has already happened twice:
+- the LGA fix landed only in a screen so dead it never ran, and
+- a branding refresh landed only here, giving the two apps different splash
+  screens and icons.
+
+**Before starting work:** `git fetch` both repos. Someone else pushes to these
+regularly, and this repo has gained 6+ commits mid-session more than once.
+
+**After finishing work:** confirm parity with
+`diff -rq Latest-Coopvest/lib Coopvest-Africa/lib` (expect zero output) and
+`diff -rq Latest-Coopvest/backend/src Coopvest-Africa/backend/src`.
+
+**One-sided changes are the single most common source of bugs in this project.**
+
 ## Interest calculation (mobile-aligned)
 The backend interest logic in `src/services/referralService.js` MUST mirror the
 mobile app (`lib/presentation/screens/loan/loan_application_screen.dart`):
