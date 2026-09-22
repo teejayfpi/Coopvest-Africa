@@ -379,3 +379,44 @@ writes go to `audit_logs` with before/after values.
 
 Branch chain: `feat/reporting-suite` → `feat/comparative-analytics` →
 `feat/organization-finance`.
+
+## RBAC: server-side permissions (feat/rbac-permissions)
+`src/lib/permissions.js` (role + permission catalog, resolution) and
+`src/middleware/requirePermission.js` (ordered path→permission table + guard),
+mounted ONCE at the `/api/admin` prefix before every router so `req.path` is
+the full sub-path and one table covers all admin routes.
+
+Before this, `requireAdmin` admitted admin/superadmin/staff alike and only 8 of
+67 write endpoints had a further check — a `staff` token could delete
+contributions and reset member passwords. The dashboard's permission map is
+frontend-only; never treat it as the boundary.
+
+Rules: unclassified WRITE fails closed to `settings.write`; unclassified READ
+needs only `dashboard.read` (so tightening writes cannot lock anyone out);
+unknown role = no permissions; unknown permission name = denied even for the
+apex role; row-level grants are additive and validated against the catalog.
+
+`superadmin`/`super_admin` MUST resolve to `ceo` — mapping them anywhere lower
+strips access from the only admin account in production. Dropping a role's
+tier must take the MOST RESTRICTIVE limit, never the highest, or collapsing
+`staff`+`admin` into `manager` would hand a staff approver admin's ceiling.
+
+`approvalMatrix` had to become role-aware for the same reason: it compared raw
+strings, so a user stored as `ceo`/`manager` matched no level and got a limit
+of ZERO (the apex account would route its own loans to the Approval Center).
+Every role holding `loan.approve` needs a configured limit or all its loans
+get routed — a silent operational break caught by a test.
+
+**Path trap:** the RBAC catalog is at `/rbac/catalog`, NOT `/permissions`.
+`adminApi` does `router.use(governance)` and governance owns `/permissions`
+with a legacy display-only list, so a new route at that path is unreachable.
+
+Branch chain: `feat/reporting-suite` → `feat/comparative-analytics` →
+`feat/organization-finance` → `feat/rbac-permissions`.
+
+## Copying files between the two repos
+`backend/src/server.js` DIFFERS between Latest-Coopvest and Coopvest-Africa by
+~142 lines of legitimate divergence. NEVER `cp` it across repos — that silently
+destroyed Coopvest-Africa's `requireActivated` guards and public login-recorder
+once. Apply the specific edit with an editor and verify with
+`git diff | grep "^-"` that only intended lines were removed.
