@@ -49,6 +49,8 @@ const settingsRoutes = require('./routes/settings');
 const watchlistRoutes = require('./routes/watchlist');
 const analyticsRoutes = require('./routes/analytics');
 const adminApiRoutes = require('./routes/adminApi');
+const adminAnnouncementRoutes = require('./routes/adminAnnouncements');
+const directMessageRoutes = require('./routes/directMessages');
 const kycAdminRoutes = require('./routes/kycAdmin');
 const memberDetailRoutes = require('./routes/memberDetail');
 const paymentProofRoutes = require('./routes/paymentProofs');
@@ -322,6 +324,13 @@ app.use('/api', featuresRoutes);
 app.use('/api/mobile-features', featuresRoutes);
 // Admin API routes mounted at /api/admin AFTER other routes to avoid conflicts
 // Provides /api/admin/dashboard/*, /api/admin/contributions/monthly, /api/admin/loans/status-breakdown
+//
+// Announcement publishing and direct messaging. Mounted before adminApi (which
+// has no catch-all) and guarded with requireAdmin, matching how the rest of the
+// admin surface is protected on this branch. Once the RBAC branch lands these
+// narrow to notification.send / notification.read.
+app.use('/api/admin/announcements', require('./middleware/auth').requireAdmin, adminAnnouncementRoutes);
+app.use('/api/admin/direct-messages', require('./middleware/auth').requireAdmin, directMessageRoutes);
 app.use('/api/admin', adminApiRoutes);
 // Root-level alias in case Dio resolves absolute paths from host root
 app.use('/guarantor', guarantorRoutes);
@@ -350,6 +359,8 @@ app.get('/api/auth/kyc/status', (req, res, next) => {
 // Cross-backend service-token endpoints used by the Admin Dashboard API
 // server. Authentication is via a shared secret (X-Service-Token) rather than
 // IP whitelisting, so the admin backend can be deployed anywhere.
+app.use('/api/v2/admin/announcements', require('./middleware/auth').requireAdmin, adminAnnouncementRoutes);
+app.use('/api/v2/admin/direct-messages', require('./middleware/auth').requireAdmin, directMessageRoutes);
 app.use('/api/v2/admin', adminApiRoutes);
 app.use('/api/v2/admin/kyc', kycAdminRoutes);
 app.use('/api/v2/admin/members', memberDetailRoutes);
