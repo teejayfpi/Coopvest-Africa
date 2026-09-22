@@ -317,3 +317,28 @@ so `applied` is safe.
 `₦100150000.00` next to the header's `₦100,150,000`. Use the shared formatter —
 import it with `show Formatters` in files that also need string extensions, to
 avoid an ambiguous-extension clash with `capitalize`.
+
+## Admin notification broadcast actually sends push now
+`POST /api/admin/notifications/broadcast` (adminApi.js) used to only insert
+`notifications` rows and return `{success, sent}` — it never called FCM, so
+the admin dashboard's "push" channel delivered nothing to devices while the
+UI reported success. The response had no `push` field, so the dashboard toast
+always rendered "Push was not delivered — no registered devices or Firebase is
+not configured", which was also factually wrong (13 active device_tokens
+existed). The route now sends FCM via `notifyService.sendPush({tokens, ...})`
+(one batched multicast), returns
+`push: {targeted, errors, status, reason}`, and honours the `audience` and
+`channels` it is sent. Only `push`/`in_app` are deliverable — `sendEmail`/
+`sendSms` are stubs with no provider, so they come back in `notImplemented`
+rather than being counted as sent. Audience/channel mapping lives in
+`src/lib/notificationBroadcast.js` (unit tested) and reuses the same bucket
+definitions as `GET /dashboard/summary`. Push needs
+FIREBASE_PROJECT_ID/CLIENT_EMAIL/PRIVATE_KEY on Render; without them the send
+is skipped as `no_firebase_credentials` and now says so in the UI.
+
+## Sandbox notes for this backend
+`npm install` then `npx jest --coverage=false` runs in ~1s. Do NOT delete
+`backend/package-lock.json` while cleaning build artifacts — it is tracked.
+The single-device session policy means an admin API token is rejected with
+`SESSION_REPLACED` until `POST /api/auth/sync` is called; the dashboard does
+this after login.
