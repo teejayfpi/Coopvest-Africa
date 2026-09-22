@@ -108,3 +108,22 @@ uploads/
 
 # Node.js
 node_modules/
+
+# ── Secrets — never commit ───────────────────────────────────────────────────
+# Committed signing material is a liability even in a private repo: it survives
+# a visibility change, a fork, or a collaborator's clone, and git history keeps
+# it after deletion. The release keystore IS the app's identity.
+android/keystore/
+android/key.properties
+*.jks
+!android/app/debug.keystore
+
+.env
+.env.*
+!.env.example
+backend/.env
+
+client_secret*.json
+**/client_secret*.json
+*-firebase-adminsdk-*.json
+service-account*.json
