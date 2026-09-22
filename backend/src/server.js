@@ -50,6 +50,7 @@ const watchlistRoutes = require('./routes/watchlist');
 const analyticsRoutes = require('./routes/analytics');
 const adminApiRoutes = require('./routes/adminApi');
 const reportsRoutes = require('./routes/reports');
+const comparativeRoutes = require('./routes/comparative');
 const kycAdminRoutes = require('./routes/kycAdmin');
 const memberDetailRoutes = require('./routes/memberDetail');
 const paymentProofRoutes = require('./routes/paymentProofs');
@@ -326,6 +327,8 @@ app.use('/api/mobile-features', featuresRoutes);
 // Ad-hoc reporting suite (catalog / run / export). Mounted before adminApi so
 // these paths resolve here; it applies its own requireAdmin guard.
 app.use('/api/admin/reports', require('./middleware/auth').requireAdmin, reportsRoutes);
+// Comparative analytics — period-over-period comparison and drill-down.
+app.use('/api/admin/comparative', require('./middleware/auth').requireAdmin, comparativeRoutes);
 app.use('/api/admin', adminApiRoutes);
 // Root-level alias in case Dio resolves absolute paths from host root
 app.use('/guarantor', guarantorRoutes);
@@ -357,6 +360,7 @@ app.get('/api/auth/kyc/status', (req, res, next) => {
 // Ad-hoc reporting suite, mounted before the adminApi router for the same
 // reason as the /api/admin mount above.
 app.use('/api/v2/admin/reports', require('./middleware/auth').requireAdmin, reportsRoutes);
+app.use('/api/v2/admin/comparative', require('./middleware/auth').requireAdmin, comparativeRoutes);
 app.use('/api/v2/admin', adminApiRoutes);
 app.use('/api/v2/admin/kyc', kycAdminRoutes);
 app.use('/api/v2/admin/members', memberDetailRoutes);
