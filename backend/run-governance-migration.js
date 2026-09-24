@@ -13,10 +13,23 @@ const { Client } = require('pg');
 const fs = require('fs');
 const path = require('path');
 
-// Reuse the same connection as pg_migrate.js (project pooler + service role).
-const connectionString =
-  process.env.SUPABASE_DB_URL ||
-  'postgresql://postgres.eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im55b2F1enFlenB4ZW9ubXJ4eGdpIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NDI4MjczNSwiZXhwIjoyMDg5ODU4NzM1fQ.zCX5ZMW42kwjszRmT6HREZOCjTs5z7ZlXidK4BM-coM@db.nyoauzqezpxeonmrxxgi.supabase.co:5432/postgres';
+// Reuse the same connection as pg_migrate.js (project pooler + database
+// password), supplied by the environment.
+//
+// A live connection string containing the service-role key used to be the
+// fallback here, which committed the project's master credential to git in
+// plain text. There is no fallback now: a migration that cannot find its
+// connection string should stop, not silently use a hardcoded one.
+const connectionString = process.env.SUPABASE_DB_URL || process.env.DATABASE_URL;
+
+if (!connectionString) {
+  console.error(
+    'Missing SUPABASE_DB_URL.\n'
+    + 'Set it to the Supabase pooler connection string before running migrations.\n'
+    + 'Never hardcode credentials here — this repository is tracked in git.',
+  );
+  process.exit(1);
+}
 
 async function run() {
   const sqlPath = path.join(__dirname, 'migrations', '012_super_admin_governance.sql');

@@ -145,8 +145,11 @@ jobs:
           fi
           printf 'storeFile=keystore/release-keystore.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
             "$STORE_PASS" "$ALIAS_NAME" "$KEY_PASS_VAL" > android/key.properties
-          echo "key.properties written:"
-          cat android/key.properties
+          # Do NOT echo this file. It contains the keystore passwords and the
+          # previous version ran `cat android/key.properties`, writing them into
+          # the (retained) GitHub Actions build log. Confirm only that it exists.
+          echo "key.properties written ($(wc -l < android/key.properties) lines)."
+          echo "Contents withheld — it holds signing passwords."
 
       - name: Build debug APK
         if: ${{ github.event.inputs.build_type == 'debug' }}
