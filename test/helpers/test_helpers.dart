@@ -4,19 +4,25 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// Mock provider container for testing
 class TestProviderScope {
+  /// `overrides` is a `List<Override>` — that is the type Riverpod actually
+  /// accepts. It was previously declared as `Map<Provider, ProviderOverride>`,
+  /// which is neither: `ProviderOverride` is not a Riverpod type (the type is
+  /// `Override`), and a Map is not assignable to the `List<Override>` both
+  /// `ProviderContainer` and `ProviderScope` require. That made this helper
+  /// fail to compile, so any test importing it could not run.
   static ProviderContainer create({
-    Map<Provider, ProviderOverride>? overrides,
+    List<Override>? overrides,
   }) {
-    return ProviderContainer(overrides: overrides ?? {});
+    return ProviderContainer(overrides: overrides ?? const []);
   }
 
   static Widget wrapWithProvider({
     required Widget child,
-    Map<Provider, ProviderOverride>? overrides,
+    List<Override>? overrides,
   }) {
     return ProviderScope(
+      overrides: overrides ?? const [],
       child: child,
-      overrides: overrides ?? {},
     );
   }
 }
