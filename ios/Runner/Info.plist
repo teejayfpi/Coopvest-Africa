@@ -2,93 +2,134 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleDevelopmentRegion</key>
-    <string>$(DEVELOPMENT_LANGUAGE)</string>
-    <key>CFBundleExecutable</key>
-    <string>$(EXECUTABLE_NAME)</string>
-    <key>CFBundleIdentifier</key>
-    <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
-    <key>CFBundleInfoDictionaryVersion</key>
-    <string>6.0</string>
-    <key>CFBundleName</key>
-    <string>Coopvest Africa</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>CFBundleShortVersionString</key>
-    <string>$(FLUTTER_BUILD_NAME)</string>
-    <key>CFBundleSignature</key>
-    <string>????</string>
-    <key>CFBundleVersion</key>
-    <string>$(FLUTTER_BUILD_NUMBER)</string>
-    <key>LSRequiresIPhoneOS</key>
-    <true/>
-    <key>UILaunchStoryboardName</key>
-    <string>LaunchScreen</string>
-    <key>UIMainStoryboardFile</key>
-    <string>Main</string>
-    <key>UISupportedInterfaceOrientations</key>
-    <array>
-        <string>UIInterfaceOrientationPortrait</string>
-        <string>UIInterfaceOrientationLandscapeLeft</string>
-        <string>UIInterfaceOrientationLandscapeRight</string>
-    </array>
-    <key>UISupportedInterfaceOrientations~ipad</key>
-    <array>
-        <string>UIInterfaceOrientationPortrait</string>
-        <string>UIInterfaceOrientationPortraitUpsideDown</string>
-        <string>UIInterfaceOrientationLandscapeLeft</string>
-        <string>UIInterfaceOrientationLandscapeRight</string>
-    </array>
-    <key>CADisableMinimumFrameDurationOnPhone</key>
-    <true/>
-    <key>UIApplicationSupportsIndirectInputEvents</key>
-    <true/>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>Coopvest Mobile</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>coopvest_mobile</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(FLUTTER_BUILD_NAME)</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleVersion</key>
+	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>UIWindowScene</string>
+					<key>UISceneConfigurationName</key>
+					<string>flutter</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+					<key>UISceneStoryboardFile</key>
+					<string>Main</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIMainStoryboardFile</key>
+	<string>Main</string>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
 
-    <!-- Camera / photo library access for KYC selfie + ID document capture.
-         Missing these keys crashes the app on iOS the moment the user taps
-         Camera or Gallery in the image source picker. -->
-    <key>NSCameraUsageDescription</key>
-    <string>Coopvest needs camera access to capture your selfie and ID document for KYC verification.</string>
-    <key>NSPhotoLibraryUsageDescription</key>
-    <string>Coopvest needs photo library access so you can upload your ID and selfie.</string>
+	<!-- ── Permission usage descriptions ──────────────────────────────────
+	     iOS terminates the app the instant a plugin requests a permission
+	     whose usage string is absent. These cover the plugins this app ships:
+	     camera and image_picker (KYC selfie + ID capture), local_auth
+	     (Face ID), and firebase_messaging (push). -->
+	<key>NSCameraUsageDescription</key>
+	<string>Coopvest needs camera access to capture your selfie and ID document for KYC verification.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Coopvest needs photo library access so you can upload your ID and selfie.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Coopvest needs permission to save receipts and statements to your photo library.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Coopvest uses Face ID so you can sign in securely without typing your password.</string>
 
-    <!-- Google Sign-In Configuration -->
-    <key>CFBundleURLTypes</key>
-    <array>
-        <dict>
-            <key>CFBundleURLSchemes</key>
-            <array>
-                <string>com.googleusercontent.apps.1040576298736-.apps.googleusercontent.com</string>
-            </array>
-        </dict>
-    </array>
+	<!-- ── URL schemes ────────────────────────────────────────────────────
+	     A SINGLE CFBundleURLTypes array. The previous file declared this key
+	     twice; a plist dictionary cannot hold a duplicate key, so the parser
+	     kept only the last entry, which meant the Google Sign-In scheme was
+	     silently discarded in favour of a placeholder Facebook scheme. Google
+	     Sign-In on iOS was broken by a copy-paste error. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>Google Sign-In</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.1040576298736-991ja94slls4f6csarfheerlkg7bfpon</string>
+			</array>
+		</dict>
+	</array>
 
-    <!-- Google Sign-In URL Schemes -->
-    <key>LSApplicationQueriesSchemes</key>
-    <array>
-        <string>googleusercontent</string>
-        <string>gmail</string>
-        <string>com.google.android.gms</string>
-    </array>
+	<!-- Schemes the app may open. url_launcher's canLaunchUrl consults this
+	     list on iOS, so a missing entry makes it silently report "cannot
+	     open" rather than failing loudly. -->
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>googleusercontent</string>
+		<string>gmail</string>
+		<string>google</string>
+		<string>https</string>
+		<string>http</string>
+		<string>tel</string>
+		<string>mailto</string>
+		<string>whatsapp</string>
+	</array>
 
-    <!-- Firebase Configuration -->
-    <key>FirebaseAppDelegateProxyEnabled</key>
-    <true/>
-
-    <!-- Facebook URL Scheme (if needed) -->
-    <key>FacebookAppID</key>
-    <string>YOUR_FACEBOOK_APP_ID</string>
-    <key>FacebookDisplayName</key>
-    <string>Coopvest Africa</string>
-    <key>CFBundleURLTypes</key>
-    <array>
-        <dict>
-            <key>CFBundleURLSchemes</key>
-            <array>
-                <string>fbYOUR_FACEBOOK_APP_ID</string>
-            </array>
-        </dict>
-    </array>
-
+	<!-- ── Firebase / push ────────────────────────────────────────────────
+	     Declared ONCE. Keep the proxy enabled unless AppDelegate.swift is
+	     changed to forward APNs tokens manually — the default FCM plugin
+	     behaviour depends on it. -->
+	<key>FirebaseAppDelegateProxyEnabled</key>
+	<true/>
+	<!-- Background FCM delivery. Without this, data-only pushes are dropped
+	     while the app is backgrounded. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+		<string>fetch</string>
+	</array>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>
