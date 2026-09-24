@@ -1,12 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/theme_config.dart';
-import '../../../core/services/logger_service.dart';
 import '../../../data/models/termination_models.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/termination_provider.dart';
-import '../../widgets/common/buttons.dart';
-import '../auth/login_screen.dart';
 
 /// Termination Application Screen
 /// Allows users to submit a termination request with reason and acknowledgments
@@ -40,7 +37,7 @@ class TerminationApplicationScreen extends ConsumerWidget {
             const SizedBox(height: 24),
 
             // Reason Selection
-            _buildReasonSection(context, terminationNotifier),
+            _buildReasonSection(context, ref, terminationNotifier),
             const SizedBox(height: 24),
 
             // Exit Type Selection
@@ -48,11 +45,11 @@ class TerminationApplicationScreen extends ConsumerWidget {
             const SizedBox(height: 24),
 
             // Additional Details
-            _buildDetailsSection(context, terminationNotifier),
+            _buildDetailsSection(context, ref, terminationNotifier),
             const SizedBox(height: 24),
 
             // Acknowledgments
-            _buildAcknowledgmentsSection(context, terminationNotifier),
+            _buildAcknowledgmentsSection(context, ref, terminationNotifier),
             const SizedBox(height: 32),
 
             // Submit Button
@@ -139,8 +136,8 @@ class TerminationApplicationScreen extends ConsumerWidget {
     TerminationReason.other,
   ];
 
-  Widget _buildReasonSection(BuildContext context, TerminationNotifier notifier) {
-    final formData = notifier.state.formData;
+  Widget _buildReasonSection(BuildContext context, WidgetRef ref, TerminationNotifier notifier) {
+    final formData = ref.read(terminationProvider).formData;
     final selectedReason = formData?.reason ?? TerminationReason.other;
 
     return Column(
@@ -178,7 +175,7 @@ class TerminationApplicationScreen extends ConsumerWidget {
                     groupValue: selectedReason,
                     onChanged: (value) {
                       if (value != null) {
-                        final currentFormData = notifier.state.formData;
+                        final currentFormData = ref.read(terminationProvider).formData;
                         if (currentFormData != null) {
                           notifier.updateFormData(
                             currentFormData.copyWith(reason: value),
@@ -334,8 +331,8 @@ class TerminationApplicationScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildDetailsSection(BuildContext context, TerminationNotifier notifier) {
-    final formData = notifier.state.formData;
+  Widget _buildDetailsSection(BuildContext context, WidgetRef ref, TerminationNotifier notifier) {
+    final formData = ref.read(terminationProvider).formData;
     final reasonController = TextEditingController();
 
     return Column(
@@ -372,7 +369,7 @@ class TerminationApplicationScreen extends ConsumerWidget {
               border: InputBorder.none,
             ),
             onChanged: (value) {
-              final currentFormData = notifier.state.formData;
+              final currentFormData = ref.read(terminationProvider).formData;
               if (currentFormData != null) {
                 notifier.updateFormData(
                   currentFormData.copyWith(reasonDetails: value),
@@ -385,8 +382,8 @@ class TerminationApplicationScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildAcknowledgmentsSection(BuildContext context, TerminationNotifier notifier) {
-    final formData = notifier.state.formData;
+  Widget _buildAcknowledgmentsSection(BuildContext context, WidgetRef ref, TerminationNotifier notifier) {
+    final formData = ref.read(terminationProvider).formData;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -424,6 +421,7 @@ class TerminationApplicationScreen extends ConsumerWidget {
                 isChecked: formData?.acknowledgedFinancialObligations ?? false,
                 onChanged: (value) {
                   _updateAcknowledgment(
+                    ref,
                     notifier,
                     'financial',
                     value ?? false,
@@ -438,6 +436,7 @@ class TerminationApplicationScreen extends ConsumerWidget {
                 isChecked: formData?.acknowledgedServiceTermination ?? false,
                 onChanged: (value) {
                   _updateAcknowledgment(
+                    ref,
                     notifier,
                     'service',
                     value ?? false,
@@ -452,6 +451,7 @@ class TerminationApplicationScreen extends ConsumerWidget {
                 isChecked: formData?.acknowledgedGuarantorObligations ?? false,
                 onChanged: (value) {
                   _updateAcknowledgment(
+                    ref,
                     notifier,
                     'guarantor',
                     value ?? false,
@@ -495,11 +495,12 @@ class TerminationApplicationScreen extends ConsumerWidget {
   }
 
   void _updateAcknowledgment(
+    WidgetRef ref,
     TerminationNotifier notifier,
     String type,
     bool value,
   ) {
-    final currentFormData = notifier.state.formData;
+    final currentFormData = ref.read(terminationProvider).formData;
     if (currentFormData != null) {
       switch (type) {
         case 'financial':
@@ -527,7 +528,7 @@ class TerminationApplicationScreen extends ConsumerWidget {
     TerminationNotifier notifier,
     bool isSubmitting,
   ) {
-    final formData = notifier.state.formData;
+    final formData = ref.read(terminationProvider).formData;
     final isValid = formData?.isValid ?? false;
 
     return SizedBox(

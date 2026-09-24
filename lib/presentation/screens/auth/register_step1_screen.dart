@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/utils/error_handler.dart';
 import '../../../core/utils/utils.dart';
-import '../../../data/models/auth_models.dart';
 import '../../../core/services/terms_acceptance_store.dart';
 import '../../../data/models/terms_content.dart';
 import 'terms_section_screen.dart';

@@ -3,9 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../presentation/providers/auth_provider.dart';
-import '../../../presentation/providers/kyc_provider.dart';
 import '../../../presentation/widgets/common/buttons.dart';
-import '../../../presentation/widgets/common/cards.dart';
 import '../../../presentation/widgets/common/inputs.dart';
 
 /// KYC Basic Info Screen

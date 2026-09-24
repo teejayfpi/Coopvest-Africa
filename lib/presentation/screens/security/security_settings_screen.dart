@@ -4,8 +4,6 @@ import 'package:local_auth/local_auth.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/services/security_service.dart';
-import '../../../presentation/providers/auth_provider.dart';
-import '../../../presentation/providers/theme_provider.dart';
 import 'login_history_screen.dart';
 
 /// Security Settings Screen

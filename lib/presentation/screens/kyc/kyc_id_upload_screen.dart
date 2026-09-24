@@ -7,7 +7,6 @@ import '../../../config/theme_extension.dart';
 import '../../../data/models/kyc_models.dart';
 import '../../../presentation/providers/kyc_provider.dart';
 import '../../../presentation/widgets/common/buttons.dart';
-import '../../../presentation/widgets/common/cards.dart';
 import '../../../presentation/widgets/common/inputs.dart';
 
 /// KYC ID Upload Screen

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../config/theme_config.dart';
-import '../../config/theme_extension.dart';
 import '../providers/auth_provider.dart';
 import 'home/home_dashboard_screen.dart';
 import 'wallet/wallet_dashboard_screen.dart';
