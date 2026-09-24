@@ -476,7 +476,21 @@ class ErrorInterceptor extends Interceptor {
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
-    if (err.response?.statusCode == 401 && !_isRefreshing) {
+    // A 401 has two very different causes, and only one is fixable by refresh.
+    //
+    //  * An expired/invalid token: refreshing and retrying is correct.
+    //  * SESSION_REPLACED: the member signed in elsewhere, so the server has
+    //    bound the session to the other device. Refreshing issues a token with
+    //    the SAME session_id, which the server still rejects — so the retry
+    //    always fails and, worse, the retry's failure was what surfaced to the
+    //    member as a raw "you have been signed in on another device" error
+    //    mid-payment. Refreshing cannot help; the member must sign in again.
+    final serverCode = err.response?.data is Map
+        ? (err.response!.data as Map)['code']
+        : null;
+    final isSessionReplaced = serverCode == 'SESSION_REPLACED';
+
+    if (err.response?.statusCode == 401 && !isSessionReplaced && !_isRefreshing) {
       _isRefreshing = true;
       try {
         final authRepo = AuthRepository(_apiClient);
@@ -501,6 +515,12 @@ class ErrorInterceptor extends Interceptor {
       } finally {
         _isRefreshing = false;
       }
+    } else if (isSessionReplaced) {
+      // Clear the local session for the same reason: keeping a token the server
+      // no longer honours means every later call fails the same way.
+      logger.w('Session replaced on another device — clearing local session');
+      await TokenStorage.clearTokens();
+      _apiClient.clearAuthToken();
     }
     handler.next(err);
   }

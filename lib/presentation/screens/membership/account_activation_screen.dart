@@ -37,6 +37,23 @@ class _AccountActivationScreenState
     extends ConsumerState<AccountActivationScreen> {
   bool _paying = false;
 
+  /// Whether the backend reports KYC as approved for this member.
+  ///
+  /// Read from the live user rather than assumed: the screen previously showed
+  /// a hardcoded "✅ Verified" regardless of the member's real KYC state, which
+  /// told members awaiting review that they were already verified.
+  bool get _kycApproved {
+    final user = ref.watch(authProvider).user;
+    if (user == null) return false;
+    // `User` exposes a single `kycStatus` string (pending/approved/rejected);
+    // `User.fromJson` already folds a `kycVerified: true` payload into it.
+    return user.kycStatus == 'approved';
+  }
+
+  /// Whether the registration fee is settled (paid, or exempt via payroll).
+  bool get _feeSettled =>
+      ref.watch(authProvider).user?.hasSettledRegistrationFee ?? false;
+
   /// Instant ₦5,000 activation via Paystack — on success the backend flips
   /// the registration-fee flag automatically, no proof upload needed.
   Future<void> _payWithPaystack() async {
@@ -99,13 +116,27 @@ class _AccountActivationScreenState
       }
     } catch (e) {
       if (!mounted) return;
-      final detail = e is DioException
-          ? (e.response?.data?['error'] ?? e.message)
-          : e;
+      // Translate the session-replaced case into something the member can act
+      // on. The raw server text ("you have been signed in on another device")
+      // appeared mid-payment with no guidance, and it is not a payment failure
+      // — nothing was charged.
+      final serverCode = e is DioException && e.response?.data is Map
+          ? (e.response!.data as Map)['code']
+          : null;
+      final String detail;
+      if (serverCode == 'SESSION_REPLACED') {
+        detail = 'Your session ended because you signed in on another device. '
+            'Please log in again and retry the payment — you have not been charged.';
+      } else if (e is DioException) {
+        detail = '${e.response?.data?['error'] ?? e.message}';
+      } else {
+        detail = '$e';
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Online payment failed: $detail'),
           backgroundColor: CoopvestColors.error,
+          duration: const Duration(seconds: 8),
         ),
       );
     } finally {
@@ -218,7 +249,7 @@ class _AccountActivationScreenState
               ),
               const SizedBox(height: 24),
 
-              // Account status breakdown
+              // Account status breakdown.
               Text(
                 'Account Status',
                 style: theme.textTheme.titleMedium?.copyWith(
@@ -226,18 +257,26 @@ class _AccountActivationScreenState
                 ),
               ),
               const SizedBox(height: 12),
-              const _StatusRow(
-                icon: Icons.verified,
-                iconColor: CoopvestColors.success,
+              // KYC is derived from the member's real state, not hardcoded.
+              // This row previously read `value: '✅ Verified'` as a literal, so
+              // it claimed KYC was verified even for a member whose kyc_verified
+              // was still false and whose documents were awaiting review.
+              _StatusRow(
+                icon: _kycApproved ? Icons.verified : Icons.hourglass_empty,
+                iconColor: _kycApproved
+                    ? CoopvestColors.success
+                    : CoopvestColors.warning,
                 label: 'KYC',
-                value: '✅ Verified',
+                value: _kycApproved ? '✅ Verified' : '🟡 Pending review',
               ),
-              const _StatusRow(
-                icon: Icons.payment,
-                iconColor: CoopvestColors.warning,
+              _StatusRow(
+                icon: _feeSettled ? Icons.check_circle : Icons.payment,
+                iconColor: _feeSettled
+                    ? CoopvestColors.success
+                    : CoopvestColors.warning,
                 label: 'Registration',
-                value: '🟡 Payment Required',
-                highlight: true,
+                value: _feeSettled ? '✅ Paid' : '🟡 Payment Required',
+                highlight: !_feeSettled,
               ),
               const _StatusRow(
                 icon: Icons.lock_outline,

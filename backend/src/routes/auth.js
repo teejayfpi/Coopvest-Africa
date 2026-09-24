@@ -292,7 +292,7 @@ router.post('/refresh', [
     const authUser = data.user;
     const { data: profile } = await supabase
       .from('profiles')
-      .select('id, user_id, email, name, phone, role, kyc_verified, is_active, registration_fee_paid, profile_picture, created_at, updated_at, organization_id, contribution_method, contribution_type')
+      .select('id, user_id, email, name, phone, role, kyc_verified, is_active, registration_fee_paid, registration_completed, profile_picture, created_at, updated_at, organization_id, contribution_method, contribution_type')
       .eq('id', authUser.id)
       .maybeSingle();
 
@@ -781,7 +781,7 @@ router.post('/sync', (req, res, next) => { req.skipSingleSessionCheck = true; ne
       .from('profiles')
       .update(updateData)
       .eq('id', profileId)
-      .select('id, user_id, email, name, phone, role, kyc_verified, is_active, registration_fee_paid, profile_picture, created_at, updated_at, organization_id, contribution_method, contribution_type')
+      .select('id, user_id, email, name, phone, role, kyc_verified, is_active, registration_fee_paid, registration_completed, profile_picture, created_at, updated_at, organization_id, contribution_method, contribution_type')
       .maybeSingle();
 
     if (error) {
@@ -802,6 +802,26 @@ router.post('/sync', (req, res, next) => { req.skipSingleSessionCheck = true; ne
       emailVerified: true,
       created_at: profile?.created_at,
       updated_at: profile?.updated_at,
+
+      // The registration-fee gate, and the fields the mobile app's activation
+      // gate reads.
+      //
+      // These were MISSING here, even though the query above selects them. The
+      // app treats an absent `registration_fee_paid` as false, so
+      // `User.hasSettledRegistrationFee` evaluated false on every launch and a
+      // member who had already paid was sent back to the payment screen each
+      // time they reopened the app. The flag was in the database the whole
+      // time — only the response omitted it.
+      registration_fee_paid: profile?.registration_fee_paid === true,
+      registration_completed: profile?.registration_completed === true,
+      contribution_method: profile?.contribution_method || profile?.contribution_type || null,
+      organization_id: profile?.organization_id || null,
+      kyc_verified: profile?.kyc_verified === true,
+      is_active: profile?.is_active !== false,
+      // Built from the same shared helper the rest of the API uses, so the app
+      // routes on exactly the decision the server enforces rather than a
+      // second, client-side rule.
+      activation_gate: activationGate.gateStatusFor(profile),
     };
 
     return res.json({ success: true, user: userPayload, token: req.token });
