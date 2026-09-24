@@ -23,12 +23,21 @@ class KYCCubit extends StateNotifier<KYCState> {
   KYCCubit(this._repository) : super(const KYCState());
 
   /// Persist the current submission draft locally (fire-and-forget).
+  ///
+  /// `logger.w(...)` returns `void`, so using it directly as the `catchError`
+  /// callback did not satisfy the required `FutureOr<bool>` return type — the
+  /// analyzer flagged it and, more importantly, the handler's return value was
+  /// passed back into the chain. Discarding it explicitly keeps this a genuine
+  /// fire-and-forget without changing the value flowing through the chain.
   void _persistDraft() {
     final submission = state.submission;
     if (submission == null) return;
     SharedPreferences.getInstance()
         .then((prefs) => prefs.setString(_draftKey, jsonEncode(submission.toJson())))
-        .catchError((Object e) => logger.w('KYC draft save failed: $e'));
+        .catchError((Object e) {
+      logger.w('KYC draft save failed: $e');
+      return false;
+    });
   }
 
   /// Restore a locally saved draft, if any. Returns null when none exists or

@@ -10,7 +10,6 @@ import '../../../data/models/loan_models.dart';
 import '../../../presentation/providers/wallet_provider.dart';
 import '../../../presentation/providers/loan_provider.dart';
 import '../../../presentation/widgets/common/buttons.dart';
-import '../../../presentation/widgets/common/cards.dart';
 import '../savings/savings_goals_screen.dart';
 import '../transactions/transactions_history_screen.dart';
 import 'deposit_screen.dart';

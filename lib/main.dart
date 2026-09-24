@@ -11,13 +11,11 @@ import 'core/services/logger_service.dart';
 import 'core/services/deep_link_service.dart';
 import 'config/app_config.dart';
 import 'config/theme_config.dart';
-import 'config/theme_enhanced.dart';
 import 'core/services/feature_service.dart';
 import 'core/services/security_service.dart';
 import 'core/services/notification_service.dart';
 import 'data/models/auth_models.dart';
 import 'data/models/loan_models.dart';
-import 'data/repositories/auth_repository.dart';
 import 'presentation/providers/auth_provider.dart';
 import 'presentation/screens/auth/welcome_screen.dart';
 import 'presentation/screens/auth/login_screen.dart';
@@ -39,7 +37,6 @@ import 'presentation/screens/support/support_home_screen.dart';
 import 'presentation/screens/support/ticket_creation_screen.dart';
 import 'presentation/screens/support/ticket_list_screen.dart';
 import 'presentation/screens/support/ticket_detail_screen.dart';
-import 'presentation/screens/home/home_dashboard_screen.dart';
 import 'presentation/screens/main_container.dart';
 import 'presentation/screens/kyc/kyc_deduction_type_screen.dart';
 import 'presentation/screens/kyc/kyc_employment_details_screen.dart';
@@ -55,15 +52,12 @@ import 'presentation/screens/loan/loan_details_screen.dart';
 import 'presentation/screens/profile/profile_settings_screen.dart';
 import 'presentation/screens/security/security_settings_screen.dart';
 import 'presentation/screens/savings/savings_goals_screen.dart';
-import 'presentation/screens/wallet/wallet_dashboard_screen.dart';
-import 'presentation/screens/wallet/deposit_screen.dart';
 // MANUAL DEPOSIT DISABLED — the manual 'My Deposits' tracker screen is retired.
 // import 'presentation/screens/wallet/deposit_status_screen.dart';
 // MANUAL DEPOSIT DISABLED — proof-of-payment upload / status screens are
 // retired; members pay instantly via Paystack.
 // import 'presentation/screens/contributions/payment_proof_upload_screen.dart';
 // import 'presentation/screens/contributions/payment_proofs_status_screen.dart';
-import 'presentation/screens/wallet/withdrawal_screen.dart';
 import 'presentation/screens/search/global_search_screen.dart';
 import 'config/env_config.dart';
 import 'presentation/providers/theme_provider.dart';
@@ -75,7 +69,6 @@ import 'presentation/screens/rollover/guarantor_response_screen.dart';
 import 'presentation/screens/rollover/rollover_status_screen.dart';
 import 'presentation/widgets/auth_guard.dart';
 import 'core/services/connectivity_service.dart';
-import 'presentation/widgets/error_widgets.dart';
 
 // Supabase project credentials (anon key is safe to embed in client code)
 const _supabaseUrl = 'https://nyoauzqezpxeonmrxxgi.supabase.co';

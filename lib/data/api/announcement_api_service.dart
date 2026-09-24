@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import '../../core/network/api_client.dart';
+import '../../core/services/logger_service.dart';
 import '../models/announcement_models.dart';
 
 /// API Service for Announcements - Admin broadcasts to all members
@@ -79,6 +80,9 @@ class AnnouncementApiService {
       );
       return response.data['count'] ?? 0;
     } on DioException catch (e) {
+      // Log before returning the safe default: silently returning 0 made a
+      // failed request indistinguishable from "no unread announcements".
+      logger.warning('Announcement unread-count failed: ${e.message}');
       return 0;
     }
   }

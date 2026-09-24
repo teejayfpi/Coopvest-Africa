@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
-import '../../core/network/api_client.dart';
 import '../models/payment_proof_model.dart';
 
 /// API Service for Payment Proof Operations

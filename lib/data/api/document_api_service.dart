@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'dart:io';
 import '../../core/network/api_client.dart';
+import '../../core/services/logger_service.dart';
 import '../models/document_models.dart';
 
 /// API Service for Document Upload - KYC document submission
@@ -121,6 +122,7 @@ class DocumentApiService {
       );
       return List<String>.from(response.data['types'] ?? []);
     } on DioException catch (e) {
+      logger.warning('Required document types failed: ${e.message}');
       return [];
     }
   }

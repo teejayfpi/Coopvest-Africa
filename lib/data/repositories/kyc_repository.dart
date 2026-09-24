@@ -193,7 +193,13 @@ class KYCRepository {
       );
       // Refresh from the authoritative status endpoint so the caller gets
       // the fully-mapped submission (same shape as getKYCStatus).
-      return getKYCStatus();
+      //
+      // This MUST be awaited. Returning the Future directly from inside the
+      // try block meant the try/catch had already exited by the time the
+      // request completed, so any failure from getKYCStatus() bypassed the
+      // catch below entirely and surfaced to the caller as an unhandled
+      // error with no log line. Awaiting makes the catch actually catch it.
+      return await getKYCStatus();
     } catch (e) {
       logger.e('Set contribution type error: $e');
       rethrow;

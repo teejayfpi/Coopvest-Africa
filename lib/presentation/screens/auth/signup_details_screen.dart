@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
-import '../../../core/network/api_client.dart';
 import '../../../core/services/terms_acceptance_store.dart';
 import '../../providers/kyc_provider.dart';
 import '../../widgets/common/buttons.dart';

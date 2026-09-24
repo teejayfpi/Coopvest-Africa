@@ -2,7 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/utils/utils.dart';
 import '../../../data/api/contributions/contribution_plan_api_service.dart';
-import '../../../data/models/loan_models.dart';
 import '../loan_provider.dart';
 
 /// Contribution plan state
