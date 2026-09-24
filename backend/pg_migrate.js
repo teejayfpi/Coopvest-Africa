@@ -1,9 +1,31 @@
 const { Client } = require('pg');
 
-// Supabase connection using service role key as password
+// Supabase connection for migrations.
+//
+// This file previously embedded a live connection string containing the
+// service-role key as the password — committing the project's master credential
+// to source control in plain text. Anyone with the repository could read and
+// write every row in the database.
+//
+// The connection is now supplied by the environment. Set SUPABASE_DB_URL
+// (or DATABASE_URL) to the pooler connection string, e.g.
+//   postgresql://postgres.<project-ref>:<PASSWORD>@<host>:6543/postgres
+// Use the database password from Supabase → Settings → Database, not the
+// service-role JWT.
+const connectionString = process.env.SUPABASE_DB_URL || process.env.DATABASE_URL;
+
+if (!connectionString) {
+  console.error(
+    'Missing SUPABASE_DB_URL.\n'
+    + 'Set it to the Supabase pooler connection string before running migrations.\n'
+    + 'Never hardcode credentials here — this repository is tracked in git.',
+  );
+  process.exit(1);
+}
+
 const client = new Client({
-  connectionString: 'postgresql://postgres.eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im55b2F1enFlenB4ZW9ubXJ4eGdpIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NDI4MjczNSwiZXhwIjoyMDg5ODU4NzM1fQ.zCX5ZMW42kwjszRmT6HREZOCjTs5z7ZlXidK4BM-coM@aws-0-us-east-1-975937489815.pooler.supabase.com:6543/postgres',
-  ssl: { rejectUnauthorized: false }
+  connectionString,
+  ssl: { rejectUnauthorized: false },
 });
 
 const createTableSQL = `

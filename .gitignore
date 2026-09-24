@@ -88,13 +88,40 @@ lib/generated_plugin_registrant.dart
 .env
 .env.local
 .env.*.local
+# Templates are meant to be committed.
+!.env.example
 
-# Allow keystore files to be committed (user choice)
-# *.jks
-# *.keystore
+# ── Secrets — never commit ───────────────────────────────────────────────────
+# Committed signing material is a liability: it survives a visibility change, a
+# fork, or a collaborator's clone, and git history keeps it after deletion. The
+# RELEASE keystore is the app's identity — with it and its passwords anyone can
+# publish an update appearing to come from Coopvest.
+#
+# The previous file said `# Allow keystore files to be committed (user choice)`
+# with the patterns commented out, which is how the release keystore ended up in
+# a PUBLIC repository. The rules are active now.
+android/keystore/
+android/key.properties
+*.jks
+*.keystore
 
-# Allow debug keystore for CI builds
-!android/app/debug.keystore
+# The Android DEBUG keystore is deliberately NOT tracked but also deliberately
+# NOT a secret: the SDK generates it with the same well-known alias and password
+# for every developer, so it grants no authority. It is excluded because it is a
+# build artifact that regenerates on demand, not because it is sensitive.
+android/app/debug.keystore
+
+# Live credential files.
+.env
+.env.*
+!.env.example
+backend/.env
+
+# OAuth client secrets, Firebase admin service accounts, GCP keys.
+client_secret*.json
+**/client_secret*.json
+*-firebase-adminsdk-*.json
+service-account*.json
 
 # Generated files
 *.g.dart
@@ -108,27 +135,3 @@ uploads/
 
 # Node.js
 node_modules/
-
-# ── Secrets — never commit ───────────────────────────────────────────────────
-# This repository is PUBLIC. Anything listed here is world-readable the moment
-# it is committed, and git history keeps it even after deletion.
-#
-# Android signing material. The release keystore IS the app's identity: with it
-# and its passwords, anyone can publish an update that appears to come from
-# Coopvest.
-android/keystore/
-android/key.properties
-*.jks
-!android/app/debug.keystore
-
-# Live credential files.
-.env
-.env.*
-!.env.example
-backend/.env
-
-# OAuth client secrets and service-account keys.
-client_secret*.json
-**/client_secret*.json
-*-firebase-adminsdk-*.json
-service-account*.json
