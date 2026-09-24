@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Push notifications (Firebase Cloud Messaging).
+	     Without `aps-environment`, iOS refuses to issue an APNs device token,
+	     so the app registers with FCM, receives no token, and every broadcast
+	     silently reaches nobody on iOS.
+
+	     `development` is correct for Debug/profile builds. When archiving for
+	     the App Store, Xcode rewrites this to `production` automatically via
+	     the Release configuration — do not change it by hand here, or debug
+	     builds will fail to receive pushes. -->
+	<key>aps-environment</key>
+	<string>development</string>
+</dict>
+</plist>
