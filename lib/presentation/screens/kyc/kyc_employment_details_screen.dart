@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
-import '../../../core/utils/utils.dart';
 import '../../../data/models/kyc_models.dart';
 import '../../../data/models/nigeria_locations.dart';
 import '../../../presentation/providers/kyc_provider.dart';

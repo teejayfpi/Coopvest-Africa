@@ -10,7 +10,6 @@ import '../../../presentation/providers/auth_provider.dart';
 import '../../../presentation/providers/kyc_provider.dart';
 import '../../../presentation/widgets/common/bank_selector_field.dart';
 import '../../../presentation/widgets/common/buttons.dart';
-import '../../../presentation/widgets/common/cards.dart';
 import '../../../presentation/widgets/common/inputs.dart';
 
 /// KYC Bank Info Screen

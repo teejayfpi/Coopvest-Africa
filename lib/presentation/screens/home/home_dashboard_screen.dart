@@ -9,9 +9,6 @@ import '../../../core/services/contribution_reminder_service.dart';
 // contributionReminderService is a singleton, no Provider needed
 import '../../../data/models/wallet_models.dart';
 import '../../../data/models/loan_models.dart';
-import '../../../data/models/announcement_models.dart';
-import '../../../data/models/guarantor_models.dart';
-import '../../../data/models/document_models.dart';
 import '../../../presentation/providers/auth_provider.dart';
 import '../../../presentation/providers/wallet_provider.dart';
 import '../../../presentation/providers/loan_provider.dart';
@@ -22,18 +19,15 @@ import '../../../core/services/realtime_notification_service.dart';
 import '../../../data/models/notification_models.dart';
 import '../../../presentation/providers/deposit_history_provider.dart';
 import '../../../presentation/providers/announcement_provider.dart';
-import '../../../presentation/providers/guarantor_provider.dart';
-import '../../../presentation/providers/document_provider.dart';
 import '../../../presentation/screens/wallet/deposit_screen.dart';
 import '../../../presentation/screens/wallet/withdrawal_screen.dart';
 import '../../../presentation/screens/loan/loan_dashboard_screen.dart';
 import '../../../presentation/screens/wallet/wallet_dashboard_screen.dart';
-import '../../../presentation/screens/referral/referral_dashboard_screen.dart';
 import '../../../presentation/screens/contributions/monthly_contributions_screen.dart';
 import '../../../presentation/screens/transactions/transactions_history_screen.dart';
 import '../../../presentation/screens/announcements/announcements_screen.dart';
-import '../../../presentation/screens/guarantor/guarantor_dashboard_screen.dart';
-import '../../../presentation/screens/documents/document_upload_screen.dart';
+import '../../../presentation/widgets/common/announcement_marquee.dart';
+import '../../../presentation/widgets/common/announcement_popup.dart';
 import '../../../presentation/screens/profile/profile_settings_screen.dart';
 
 import '../../../presentation/widgets/loan/loan_eligibility_card.dart';
@@ -136,7 +130,16 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
         ref.read(loanProvider.notifier).getLoans(),
         ref.read(contributionProvider.notifier).loadContributions(),
         ref.read(notificationsProvider.notifier).loadNotifications(),
+        // Announcements drive both the news ticker and the popups, so load them
+        // with the rest rather than making the marquee fetch separately.
+        ref.read(announcementProvider.notifier).loadAnnouncements(),
       ]);
+
+      // Surface any popup announcements now that they are loaded. Runs after the
+      // fetch so a popup never appears for content the member cannot see.
+      if (mounted) {
+        unawaited(AnnouncementPopupHost.checkAndShow(context, ref));
+      }
 
       // Re-fetch obligations. The obligations card reads a FutureProvider that
       // is otherwise cached forever, so without this the "Monthly Savings"
@@ -220,6 +223,15 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
           child: Column(
             children: [
               _buildHeader(context, userName, membershipId, user?.name ?? 'User', user?.id ?? '', loansState),
+
+              // Scrolling admin news. Renders nothing when no announcement is
+              // configured as a marquee, so the layout is unchanged otherwise.
+              const SizedBox(height: 8),
+              AnnouncementMarquee(
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const AnnouncementsScreen()),
+                ),
+              ),
               
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),

@@ -7,7 +7,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../../config/theme_config.dart';
-import '../../../config/theme_extension.dart';
 import '../../../core/network/api_client.dart';
 import '../../../presentation/providers/auth_provider.dart';
 import '../../../presentation/widgets/common/cards.dart';
