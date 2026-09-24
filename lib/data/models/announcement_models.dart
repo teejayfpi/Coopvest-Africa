@@ -48,7 +48,23 @@ class Announcement {
   bool get showInMarquee => displayMode == 'marquee' || displayMode == 'all';
 
   /// True when this announcement should be shown as a card in the list.
-  bool get showAsBanner => displayMode == 'banner' || displayMode == 'all';
+  ///
+  /// This is the DEFAULT surface, so it also covers any display mode the client
+  /// does not recognise. An unrecognised value must not make an announcement
+  /// invisible: a newer server sending `displayMode: 'fullscreen'` should still
+  /// reach the member through the list, not silently disappear. The two
+  /// specialised surfaces stay exact matches, so an unknown value cannot
+  /// accidentally hijack the ticker or throw a dialog in the member's face.
+  bool get showAsBanner =>
+      displayMode == 'banner' ||
+      displayMode == 'all' ||
+      !_isKnownDisplayMode;
+
+  bool get _isKnownDisplayMode =>
+      displayMode == 'banner' ||
+      displayMode == 'popup' ||
+      displayMode == 'marquee' ||
+      displayMode == 'all';
 
   /// True when this announcement should pop up as a dialog.
   bool get showAsPopup => displayMode == 'popup' || displayMode == 'all';
