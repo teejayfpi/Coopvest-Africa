@@ -504,3 +504,33 @@ Email bodies live in the Supabase dashboard, not this repo, so template changes
 Actions have been billing-blocked since 2026-09-24 (jobs never start, so a red
 check there means nothing about the code), so use the public repo's `build-apk`
 job to verify Dart changes actually compile.
+
+## Registration-fee exemption (salary deduction)
+
+The ₦5,000 registration fee is waived only for a member whose channel is
+payroll/salary deduction **and** who has an employer on file. The rule lives in
+three places and they must agree:
+
+- `backend/src/lib/activationGate.js` → `isRegistrationFeeSettled` (what the API
+  enforces; dependency-free so it can be unit tested standalone)
+- `member_registration_fee_settled()` in the SQL migrations
+- `User.hasSettledRegistrationFee` in `lib/data/models/auth_models.dart`, which
+  reads the server's `activation_gate` flags rather than re-deriving the rule
+
+An employer counts if it is linked (`organization_id`) or only requested
+(`pending_organization_name`); the second case matters because withholding the
+exemption until an admin approves the enrolment request locks the member out
+over admin latency.
+
+`profiles.contribution_method` / `contribution_type` are read by the gate, the
+middleware and several routes but were created by no migration, so a fresh
+environment fails the gate query. Migration 048 creates them and backfills the
+channel from `kyc.personal_info`.
+
+## Deployment
+
+`coopvest-api` on Render auto-deploys on every commit to `main`
+(`autoDeployTrigger: commit`), so merging is deploying — the failing
+`deploy-backend.yml` job is not what ships the backend. Migrations in this repo
+are not run by CI, so a backend change goes live without anyone applying them:
+check whether a new migration is load-bearing before relying on it.
