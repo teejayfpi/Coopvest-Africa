@@ -23,6 +23,7 @@ import 'presentation/screens/auth/register_step1_screen.dart';
 import 'presentation/screens/auth/register_step2_screen.dart';
 import 'presentation/screens/auth/registration_onboarding_screen.dart';
 import 'presentation/screens/auth/contribution_type_selection_screen.dart';
+import 'presentation/screens/auth/salary_deduction_employer_screen.dart';
 import 'presentation/screens/auth/signup_details_screen.dart';
 import 'presentation/screens/auth/google_complete_screen.dart';
 import 'presentation/screens/auth/salary_deduction_consent_screen.dart';
@@ -452,6 +453,17 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
           final args = ModalRoute.of(context)?.settings.arguments
               as Map<String, String>?;
           return SignupDetailsScreen(registrationData: args ?? {});
+        },
+        // Employer selection for salary deduction, reached immediately after
+        // the contribution choice. Collecting the employer before payment is
+        // what lets the registration-fee exemption fire, so the member is not
+        // asked to pay a fee that payroll will deduct from their salary.
+        '/salary-deduction-employer': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments
+              as Map<String, String>?;
+          return SalaryDeductionEmployerScreen(
+            registrationData: args ?? {},
+          );
         },
         '/account-activation': (context) =>
             const membership.AccountActivationScreen(),

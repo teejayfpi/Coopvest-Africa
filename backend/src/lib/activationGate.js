@@ -34,10 +34,20 @@ function isRegistrationFeeSettled(profile) {
   if (profile.registration_fee_paid === true) return true;
 
   // The app writes `contribution_method` from the settings screen and
-  // `contribution_type` from the KYC screen; either identifies the member.
+  // `contribution_type` from the KYC/sign-up screens; either identifies the
+  // member.
   const method = profile.contribution_method || profile.contribution_type;
   const onPayroll = PAYROLL_METHODS.includes(method);
-  return onPayroll && Boolean(profile.organization_id);
+  if (!onPayroll) return false;
+
+  // An employer must be on file, because that is the mechanism the fee is
+  // recovered through. A linked organisation is the normal case; a pending
+  // enrolment request also counts, since the member has committed to payroll
+  // deduction and named the employer, and the fee is recovered once that
+  // employer is enrolled and the next remittance posts. Withholding the
+  // exemption until an admin approves the request would lock the member out of
+  // the app over admin latency — the same failure the KYC-approval gate had.
+  return Boolean(profile.organization_id || profile.pending_organization_name);
 }
 
 /** True when the fee is waived rather than paid — used for member-facing copy. */

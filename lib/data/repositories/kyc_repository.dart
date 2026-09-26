@@ -179,9 +179,16 @@ class KYCRepository {
   /// Set or switch the member's contribution channel
   /// ('direct_deposit' | 'salary_deduction'). Switching to salary deduction
   /// requires employment details and re-submits the KYC for admin review.
+  ///
+  /// `termsVersion`/`termsAcceptedAt` are forwarded when supplied so the
+  /// policy acceptance given at sign-up is recorded on this, the first
+  /// authenticated non-Supabase call of the shortened onboarding path.
   Future<KYCSubmission> setContributionType(
     String contributionType, {
     Map<String, dynamic>? employmentInfo,
+    String? termsVersion,
+    String? termsAcceptedAt,
+    double? monthlyAmount,
   }) async {
     try {
       await _apiClient.post(
@@ -189,6 +196,9 @@ class KYCRepository {
         data: {
           'contribution_type': contributionType,
           if (employmentInfo != null) 'employmentInfo': employmentInfo,
+          if (termsVersion != null) 'terms_version': termsVersion,
+          if (termsAcceptedAt != null) 'terms_accepted_at': termsAcceptedAt,
+          if (monthlyAmount != null) 'monthly_amount': monthlyAmount,
         },
       );
       // Refresh from the authoritative status endpoint so the caller gets

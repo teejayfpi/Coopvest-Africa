@@ -147,6 +147,42 @@ class _AccountActivationScreenState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+
+    // An exempt member must never be asked to pay.
+    //
+    // This screen is reachable from several paths that do not check the fee
+    // first (KYC success, bank-info completion, the consent screen), so the
+    // guard lives here rather than only at the call sites. A salary-deduction
+    // member's fee is recovered from salary, so showing them a ₦5,000 payment
+    // button demands money they have already committed to have deducted.
+    //
+    // Scheduled after the frame so the redirect does not run during build.
+    if (_feeSettled) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        Navigator.of(context).pushReplacementNamed('/home');
+      });
+      return Scaffold(
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(color: CoopvestColors.primary),
+              const SizedBox(height: 16),
+              Text(
+                'Your fee is covered by salary deduction.\nTaking you to your dashboard…',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: CoopvestColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
