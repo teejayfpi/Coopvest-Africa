@@ -421,6 +421,7 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
             autoVerifyToken: args?['token'],
             autoVerifyType: args?['type'],
             autoVerifyFragment: args?['fragment'],
+            emailAlreadySent: args?['email_already_sent'] == 'true',
           );
         },
         '/contribution-type-selection': (context) {
