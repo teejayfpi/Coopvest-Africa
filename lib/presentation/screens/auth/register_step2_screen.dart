@@ -20,6 +20,14 @@ class RegisterStep2Screen extends ConsumerStatefulWidget {
   final String? autoVerifyType;
   final String? autoVerifyFragment;
 
+  /// True when the caller has already triggered a verification email (sign-up
+  /// sends one, and the existing-account path resends explicitly). Supabase
+  /// mints a NEW code on every send, so auto-resending here would deliver two
+  /// emails holding two different codes and leave the user guessing which one
+  /// to type. Only the login path, where no email is in flight, wants the
+  /// automatic send.
+  final bool emailAlreadySent;
+
   const RegisterStep2Screen({
     Key? key,
     required this.email,
@@ -27,6 +35,7 @@ class RegisterStep2Screen extends ConsumerStatefulWidget {
     this.autoVerifyToken,
     this.autoVerifyType,
     this.autoVerifyFragment,
+    this.emailAlreadySent = false,
   }) : super(key: key);
 
   @override
@@ -48,19 +57,20 @@ class _RegisterStep2ScreenState extends ConsumerState<RegisterStep2Screen> {
   void initState() {
     super.initState();
     _startTimer();
-    // When reached from the login screen (unverified account), no email is
-    // in flight yet — send one immediately. From registration the sign-up
-    // email already went out; a second send is rate-limited by Supabase
-    // anyway, so this stays harmless.
     // When opened by the email deep link (coopvest://verify-email or
     // https app link) we auto-verify instead (no resend / no manual tap).
+    //
+    // Otherwise only send when the caller has not already sent one. Sign-up
+    // and the existing-account path both send before navigating here, and
+    // Supabase issues a fresh code per send, so an unconditional resend here
+    // produced two emails with two different codes.
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final hasLink = widget.autoVerifyFragment != null &&
           widget.autoVerifyFragment!.isNotEmpty ||
           widget.autoVerifyToken != null && widget.autoVerifyToken!.isNotEmpty;
       if (hasLink) {
-        // Prefill the code field from the link whenthe raw OTP came via ?code=. Only
+        // Prefill the code field from the link when the raw OTP came via ?code=. Only
         // prefill when the token looks like a plain OTP (digits only, 6-12 chars) —
         // a token_hash link param is not formatted like that, so leave the field blank
         // for hashes (the user types the 6+ digit code shown in the email.)
@@ -72,7 +82,7 @@ class _RegisterStep2ScreenState extends ConsumerState<RegisterStep2Screen> {
 
         }
         _verifyFromLink();
-      } else {
+      } else if (!widget.emailAlreadySent) {
         _resendVerificationEmail();
       }
     });
@@ -307,7 +317,7 @@ Future<void> _verifyFromLink() async {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text(
-                'Email not yet verified. Please check your inbox and click the verification link.'),
+                'Email not yet verified. Please check your inbox for the verification code.'),
             backgroundColor: CoopvestColors.warning,
           ));
         }
@@ -335,14 +345,14 @@ Future<void> _verifyFromLink() async {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('We sent a verification link to:\n${widget.email}'),
+            Text('We sent a verification code to:\n${widget.email}'),
             const SizedBox(height: 16),
             const Text(
               'Please:\n'
               '1. Open your email app\n'
               '2. Find the email from Coopvest\n'
-              '3. Click the verification link\n'
-              '4. Return here and tap "I\'ve Verified"',
+              '3. Type the 6-digit code into the boxes above\n'
+              '4. Tap "Verify Email"',
               style: TextStyle(fontSize: 14),
             ),
           ],
@@ -432,7 +442,7 @@ Future<void> _verifyFromLink() async {
               ),
               const SizedBox(height: 12),
               Center(
-                child: Text('We sent a verification link to:',
+                child: Text('We sent a verification code to:',
                     style: TextStyle(color: context.textSecondary),
                     textAlign: TextAlign.center),
               ),
@@ -472,7 +482,7 @@ Future<void> _verifyFromLink() async {
                     const SizedBox(height: 12),
                     _buildStep('1', 'Open your email app'),
                     _buildStep('2', 'Find the email from Coopvest'),
-                    _buildStep('3', 'Click the verification link'),
+                    _buildStep('3', 'Type the 6-digit code from the email'),
                     _buildStep('4', 'Return here and tap the button below'),
                   ],
                 ),
@@ -525,7 +535,7 @@ Future<void> _verifyFromLink() async {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'Can\'t tap the link? Type the verification code shown in the email below.',
+                      'Enter the verification code shown in the email below.',
                       style: TextStyle(color: context.textSecondary, fontSize: 13),
                     ),
                     const SizedBox(height: 12),
