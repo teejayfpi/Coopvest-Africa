@@ -55,16 +55,24 @@ class _ContributionTypeSelectionScreenState
             ? 'direct_deposit'
             : 'salary_deduction';
 
+    // Salary deduction needs the employer on file before payment, because the
+    // fee is recovered from salary rather than paid in-app. Collecting it here
+    // is what lets the registration-fee exemption fire — without it the member
+    // reached the payment screen with no channel and no employer on their
+    // profile and was asked to pay the ₦5,000 that payroll was going to deduct.
+    //
+    // Direct deposit has no employer to collect, so it keeps the direct route.
+    if (_selectedType == ContributionType.salaryDeduction) {
+      Navigator.of(context).pushNamed(
+        '/salary-deduction-employer',
+        arguments: updatedData,
+      );
+      return;
+    }
+
     // Persist the choice. Best-effort and non-blocking: the member is already
     // authenticated here, and the channel decides whether employment details
     // are collected at KYC time (salary deduction) or skipped (direct deposit).
-    // A failure must not stop them reaching the payment screen, so this is
-    // fired without awaiting the result.
-    //
-    // Salary deduction needs the employer on file before the backend accepts
-    // it (and before the registration-fee exemption can apply), so a 422 here
-    // is expected until KYC collects the employer — that is why the call is
-    // deliberately ignored on error rather than surfaced.
     _persistContributionType(updatedData['contribution_type']!);
 
     // The critical path is now: sign up -> verify email -> pick contribution
@@ -86,7 +94,12 @@ class _ContributionTypeSelectionScreenState
   }
 
   /// Record the chosen contribution channel on the member's KYC record.
-  /// Errors are swallowed on purpose — see the call site.
+  ///
+  /// Only reached for direct deposit: salary deduction collects the employer
+  /// first (see SalaryDeductionEmployerScreen) and records both together, so it
+  /// cannot be rejected for missing employment details. Errors here are
+  /// swallowed because a failure must not block the member from paying, and the
+  /// channel is re-applied when they complete KYC.
   Future<void> _persistContributionType(String contributionType) async {
     try {
       final apiClient = ref.read(apiClientProvider);

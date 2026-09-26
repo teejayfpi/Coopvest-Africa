@@ -104,6 +104,14 @@ router.get('/status', async (req, res) => {
  * re-flags the KYC as 'submitted' so an admin re-reviews the new employment
  * information. The choice is stored in kyc.personal_info.contribution_type
  * (JSONB — no schema change needed).
+ *
+ * It is ALSO mirrored onto `profiles.contribution_method` / `contribution_type`
+ * and the employer onto `profiles.organization_id` (or
+ * `pending_organization_name`). Those profile columns are what the
+ * registration-fee exemption reads, and writing them only to `kyc` left the
+ * exemption unable to fire: a salary-deduction member reached the payment
+ * screen with a NULL channel on their profile and was asked to pay a fee that
+ * was already going to be deducted from their salary.
  */
 router.post(
   '/contribution-type',
@@ -114,6 +122,10 @@ router.post(
     body('terms_accepted_at').optional().isString().isLength({ max: 40 }),
     // Preferred monthly savings, chosen just before payment.
     body('monthly_amount').optional().isFloat({ min: 0 }),
+    // Employer, when the member has already picked one. `organization_id` is
+    // the enrolled employer; `employer_name` is the free-text fallback for an
+    // employer that is not enrolled yet.
+    body('employmentInfo').optional().isObject(),
   ],
   validate,
   async (req, res) => {
@@ -187,6 +199,75 @@ router.post(
           // Non-fatal: registration must not fail on a plan seed.
           logger.warn('contribution-type: plan sync failed:', planErr.message);
         }
+      }
+
+      // Mirror the channel and the employer onto the profile.
+      //
+      // This is what makes the registration-fee exemption fire. The exemption
+      // is derived from `profiles.contribution_method`/`contribution_type` plus
+      // an employer on file, and nothing on the shortened sign-up path ever
+      // wrote those: the choice lived only on the KYC row, so a salary-deduction
+      // member was still asked to pay the fee in-app.
+      //
+      // `organization_id` is only accepted when it matches a real, active
+      // organisation — a stale or spoofed id must not grant the exemption. An
+      // employer that is not enrolled yet is recorded as a pending request
+      // instead, which also counts as an employer on file (the fee is recovered
+      // once they are enrolled and payroll runs).
+      try {
+        const profileUpdate = {
+          contribution_method:
+            contribution_type === 'salary_deduction' ? 'payroll' : 'manual',
+          contribution_type,
+          updated_at: now,
+        };
+
+        if (contribution_type === 'salary_deduction') {
+          const requestedOrgId = employmentInfo?.organization_id ?? null;
+          const employerName =
+            (employmentInfo?.employer_name || mergedEmployment.employer_name || '')
+              .toString()
+              .trim();
+
+          if (requestedOrgId) {
+            const { data: org } = await supabase
+              .from('organizations')
+              .select('id')
+              .eq('id', requestedOrgId)
+              .eq('status', 'active')
+              .maybeSingle();
+
+            if (org) {
+              profileUpdate.organization_id = org.id;
+              profileUpdate.pending_organization_name = null;
+            } else {
+              logger.warn(
+                `contribution-type: organisation ${requestedOrgId} not found or inactive; not linking profile ${req.user.id}`,
+              );
+              if (employerName) profileUpdate.pending_organization_name = employerName;
+            }
+          } else if (employerName) {
+            profileUpdate.pending_organization_name = employerName;
+          }
+        } else {
+          // Switching back to self-paid clears the employer linkage so the
+          // exemption cannot linger on a member who is no longer on payroll.
+          profileUpdate.organization_id = null;
+          profileUpdate.pending_organization_name = null;
+        }
+
+        const { error: profileErr } = await supabase
+          .from('profiles')
+          .update(profileUpdate)
+          .eq('id', req.user.id);
+        if (profileErr) throw profileErr;
+      } catch (profileErr) {
+        // The KYC row is already saved, so the member's choice is not lost.
+        // Log loudly: this failing is exactly what leaves them wrongly gated.
+        logger.error(
+          'contribution-type: profile channel update failed:',
+          profileErr.message,
+        );
       }
 
       logger.info(`contribution type set to ${contribution_type} for ${req.user.id}`);

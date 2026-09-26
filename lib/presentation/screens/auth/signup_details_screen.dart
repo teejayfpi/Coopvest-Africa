@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/services/terms_acceptance_store.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/kyc_provider.dart';
 import '../../widgets/common/buttons.dart';
 import '../../widgets/common/selfie_capture_field.dart';
@@ -121,9 +122,39 @@ class _SignupDetailsScreenState extends ConsumerState<SignupDetailsScreen> {
       ..['monthly_amount'] = _monthlyAmount.toStringAsFixed(0);
 
     if (!mounted) return;
+    _continueFromPaymentStep(updated);
+  }
+
+  /// Route on whether there is actually a fee to pay.
+  ///
+  /// A salary-deduction member's fee is recovered from salary, so there is
+  /// nothing to pay in-app and they go straight into the app. Sending them to
+  /// the payment screen is the bug this guards against: it demands ₦5,000 they
+  /// have already committed to have deducted.
+  ///
+  /// Read from the live profile, which the employer screen refreshes before
+  /// routing here, and which AuthGuard also gates on — so the client decision
+  /// matches what the server will allow.
+  void _continueFromPaymentStep(Map<String, String> registrationData) {
+    final exempt =
+        ref.read(authProvider).user?.hasSettledRegistrationFee ?? false;
+
+    if (exempt) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              'Your registration fee will be deducted from your salary. Welcome to Coopvest Africa! 🎉'),
+          backgroundColor: CoopvestColors.success,
+          duration: Duration(seconds: 5),
+        ),
+      );
+      Navigator.of(context).pushReplacementNamed('/home');
+      return;
+    }
+
     Navigator.of(context).pushReplacementNamed(
       '/account-activation',
-      arguments: updated,
+      arguments: registrationData,
     );
   }
 
