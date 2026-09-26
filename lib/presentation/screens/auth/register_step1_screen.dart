@@ -133,6 +133,8 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
           'email': _emailController.text.trim().toLowerCase(),
           'terms_version': _termsVersion,
           'terms_accepted_at': _termsAcceptedAt?.toIso8601String() ?? '',
+          // signUp() above already sent the verification email.
+          'email_already_sent': 'true',
         };
 
         // Email verification: with Supabase "Confirm email" ON, a fresh signup
@@ -204,6 +206,8 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
               'name': _nameController.text.trim(),
               'phone': _phoneController.text.trim(),
               'email': _emailController.text.trim().toLowerCase(),
+              // resend() above already sent a fresh code.
+              'email_already_sent': 'true',
             });
           }
         } else {
