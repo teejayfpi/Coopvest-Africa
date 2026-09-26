@@ -94,7 +94,7 @@ const ensureProfile = async (authUser, extra = {}) => {
   const userId = extra.userId || `USR-${Date.now().toString(36).toUpperCase()}`;
   const { data: existing } = await supabase
     .from('profiles')
-    .select('id, user_id, email, name, phone, role, kyc_verified, is_active, registration_fee_paid, registration_completed, completed_at, profile_picture, created_at, updated_at, organization_id, contribution_method, contribution_type')
+    .select('id, user_id, email, name, phone, role, kyc_verified, is_active, registration_fee_paid, registration_completed, completed_at, profile_picture, created_at, updated_at, organization_id, contribution_method, contribution_type, pending_organization_name')
     .eq('id', authUser.id)
     .maybeSingle();
 
@@ -118,7 +118,7 @@ const ensureProfile = async (authUser, extra = {}) => {
       role: 'member',
       is_active: true,
     })
-    .select('id, user_id, email, name, phone, role, kyc_verified, is_active, registration_fee_paid, registration_completed, completed_at, profile_picture, created_at, updated_at, organization_id, contribution_method, contribution_type')
+    .select('id, user_id, email, name, phone, role, kyc_verified, is_active, registration_fee_paid, registration_completed, completed_at, profile_picture, created_at, updated_at, organization_id, contribution_method, contribution_type, pending_organization_name')
     .single();
 
   if (error) {
@@ -292,7 +292,7 @@ router.post('/refresh', [
     const authUser = data.user;
     const { data: profile } = await supabase
       .from('profiles')
-      .select('id, user_id, email, name, phone, role, kyc_verified, is_active, registration_fee_paid, registration_completed, profile_picture, created_at, updated_at, organization_id, contribution_method, contribution_type')
+      .select('id, user_id, email, name, phone, role, kyc_verified, is_active, registration_fee_paid, registration_completed, profile_picture, created_at, updated_at, organization_id, contribution_method, contribution_type, pending_organization_name')
       .eq('id', authUser.id)
       .maybeSingle();
 
@@ -781,7 +781,7 @@ router.post('/sync', (req, res, next) => { req.skipSingleSessionCheck = true; ne
       .from('profiles')
       .update(updateData)
       .eq('id', profileId)
-      .select('id, user_id, email, name, phone, role, kyc_verified, is_active, registration_fee_paid, registration_completed, profile_picture, created_at, updated_at, organization_id, contribution_method, contribution_type')
+      .select('id, user_id, email, name, phone, role, kyc_verified, is_active, registration_fee_paid, registration_completed, profile_picture, created_at, updated_at, organization_id, contribution_method, contribution_type, pending_organization_name')
       .maybeSingle();
 
     if (error) {

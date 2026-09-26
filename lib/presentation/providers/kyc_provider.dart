@@ -129,10 +129,16 @@ class KYCCubit extends StateNotifier<KYCState> {
   Future<KYCSubmission> switchContributionType(
     String contributionType, {
     Map<String, dynamic>? employmentInfo,
+    String? termsVersion,
+    String? termsAcceptedAt,
+    double? monthlyAmount,
   }) async {
     final updated = await _repository.setContributionType(
       contributionType,
       employmentInfo: employmentInfo,
+      termsVersion: termsVersion,
+      termsAcceptedAt: termsAcceptedAt,
+      monthlyAmount: monthlyAmount,
     );
     state = state.copyWith(status: KYCStatus.loaded, submission: updated);
     return updated;

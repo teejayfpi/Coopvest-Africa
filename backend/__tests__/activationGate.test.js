@@ -17,6 +17,7 @@ describe('registration fee settlement and exemption', () => {
     is_active: true,
     is_flagged: false,
     organization_id: null,
+    pending_organization_name: null,
     contribution_method: null,
     contribution_type: null,
   };
@@ -42,6 +43,21 @@ describe('registration fee settlement and exemption', () => {
       expect(isRegistrationFeeSettled(p)).toBe(true);
     });
 
+    test('a pending employer request counts as an employer on file', () => {
+      // The employer is not enrolled yet, but the member has committed to
+      // payroll deduction and named them, and the fee is recovered once that
+      // employer is enrolled and payroll runs. Blocking until an admin approves
+      // the request would lock the member out over admin latency.
+      const p = {
+        ...base,
+        contribution_type: 'salary_deduction',
+        pending_organization_name: 'Lagos State Ministry of Finance',
+      };
+      expect(isRegistrationFeeSettled(p)).toBe(true);
+      expect(isRegistrationFeeExempt(p)).toBe(true);
+      expect(gateStatusFor(p).activated).toBe(true);
+    });
+
     test('exempt is reported separately from paid', () => {
       const p = { ...base, contribution_method: 'payroll', organization_id: 'org-1' };
       const gate = gateStatusFor(p);
@@ -52,7 +68,7 @@ describe('registration fee settlement and exemption', () => {
   });
 
   describe('exemption does not leak', () => {
-    test('payroll member with no organisation on file is not exempt', () => {
+    test('payroll member with no employer at all is not exempt', () => {
       // Without an employer we have no mechanism to recover the fee, so the
       // member must still settle it. This is the guard against the exemption
       // being granted on the strength of the method alone.
@@ -63,6 +79,19 @@ describe('registration fee settlement and exemption', () => {
 
     test('self-paying member with an organisation is not exempt', () => {
       const p = { ...base, contribution_method: 'manual', organization_id: 'org-1' };
+      expect(isRegistrationFeeSettled(p)).toBe(false);
+      expect(gateStatusFor(p).activated).toBe(false);
+    });
+
+    test('a pending employer does not exempt a self-paying member', () => {
+      // The employer on file is only half the rule; the channel must also be
+      // payroll. Otherwise a direct-deposit member who once requested an
+      // employer would be exempt without any deduction in place.
+      const p = {
+        ...base,
+        contribution_type: 'direct_deposit',
+        pending_organization_name: 'Some Employer',
+      };
       expect(isRegistrationFeeSettled(p)).toBe(false);
       expect(gateStatusFor(p).activated).toBe(false);
     });

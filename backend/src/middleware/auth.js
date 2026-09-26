@@ -262,8 +262,9 @@ async function loadGateProfile(profileId) {
     // organization_id, contribution_method and contribution_type are read so
     // the registration-fee exemption can be derived: a salary-deduction member
     // with an employer on file is exempt because their fee is recovered from
-    // salary and remitted with their contributions.
-    .select('id, kyc_verified, registration_fee_paid, is_active, is_flagged, organization_id, contribution_method, contribution_type')
+    // salary and remitted with their contributions. `pending_organization_name`
+    // counts as an employer on file — see isRegistrationFeeSettled.
+    .select('id, kyc_verified, registration_fee_paid, is_active, is_flagged, organization_id, contribution_method, contribution_type, pending_organization_name')
     .eq('id', profileId)
     .maybeSingle();
   return data;
