@@ -482,3 +482,25 @@ Branch chain: `feat/reporting-suite` → `feat/comparative-analytics` →
 destroyed Coopvest-Africa's `requireActivated` guards and public login-recorder
 once. Apply the specific edit with an editor and verify with
 `git diff | grep "^-"` that only intended lines were removed.
+
+## Verification email / OTP flow
+
+Supabase mints a **new OTP on every send**, and the older code is not removed
+from the inbox. So any path that sends twice leaves the user with two emails
+holding two different codes, and no way to tell which to use.
+
+`RegisterStep2Screen` used to resend on open whenever it was reached without a
+deep link. Every sign-up path arrives there straight from a step that already
+sent (signUp, or an explicit resend), so registration produced exactly that
+duplicate. The screen now takes `emailAlreadySent`, passed through the
+`/register-step2` route args as `email_already_sent: 'true'` by the callers
+that have already sent. Only the login `EMAIL_NOT_VERIFIED` path, where nothing
+is in flight, auto-sends.
+
+Email bodies live in the Supabase dashboard, not this repo, so template changes
+(keeping the mail code-only, with no links) cannot be made from here.
+
+`teejayfpi/Coopvest-Africa` Actions can run; `coopvestafrica-ops/Latest-Coopvest`
+Actions have been billing-blocked since 2026-09-24 (jobs never start, so a red
+check there means nothing about the code), so use the public repo's `build-apk`
+job to verify Dart changes actually compile.
