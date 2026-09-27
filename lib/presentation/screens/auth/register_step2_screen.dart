@@ -351,7 +351,7 @@ Future<void> _verifyFromLink() async {
               'Please:\n'
               '1. Open your email app\n'
               '2. Find the email from Coopvest\n'
-              '3. Type the 6-digit code into the boxes above\n'
+              '3. Enter that code in the app\n'
               '4. Tap "Verify Email"',
               style: TextStyle(fontSize: 14),
             ),
@@ -482,7 +482,7 @@ Future<void> _verifyFromLink() async {
                     const SizedBox(height: 12),
                     _buildStep('1', 'Open your email app'),
                     _buildStep('2', 'Find the email from Coopvest'),
-                    _buildStep('3', 'Type the 6-digit code from the email'),
+                    _buildStep('3', 'Type the code from the email'),
                     _buildStep('4', 'Return here and tap the button below'),
                   ],
                 ),
