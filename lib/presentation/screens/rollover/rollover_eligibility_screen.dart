@@ -120,7 +120,10 @@ class _RolloverEligibilityScreenState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(children: [const Icon(Icons.account_balance, color: CoopvestColors.primary), const SizedBox(width: 8), Text(loan.id, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: CoopvestColors.primary))]),
+            // Was `loan.id`, the raw 36-character UUID, in an unconstrained Row:
+            // it overflowed the card. The backend's LN-… reference is the
+            // member-facing identifier and fits.
+            Row(children: [const Icon(Icons.account_balance, color: CoopvestColors.primary), const SizedBox(width: 8), Expanded(child: Text(loan.displayReference, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: CoopvestColors.primary)))]),
             const SizedBox(height: 16),
             // Principal figures, not a derived guess. The previous version
             // computed "outstanding" as amount - totalRepayment x 0.65, which is
