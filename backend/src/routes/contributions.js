@@ -24,6 +24,7 @@ const supabase = require('../config/supabase');
 const { authenticate } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const loanPolicy = require('../lib/loanPolicy');
+const { resolveSeedAmount: resolveSeedAmountFrom } = require('../lib/monthlyContribution');
 const logger = require('../utils/logger');
 
 router.use(authenticate);
@@ -53,13 +54,32 @@ async function getOrCreatePlan(profileId) {
     .from('contribution_plans')
     .insert({
       profile_id: profileId,
-      current_monthly_amount: MINIMUM_MONTHLY_AMOUNT,
+      current_monthly_amount: await resolveSeedAmount(profileId),
       minimum_amount: MINIMUM_MONTHLY_AMOUNT,
     })
     .select('*')
     .single();
   if (error) throw error;
   return created;
+}
+
+/**
+ * The amount a brand-new plan should start at, read from the member's KYC
+ * record. Falls back to the platform minimum when no choice is recorded.
+ */
+async function resolveSeedAmount(profileId) {
+  let kycAmount;
+  try {
+    const { data } = await supabase
+      .from('kyc')
+      .select('personal_info')
+      .eq('profile_id', profileId)
+      .maybeSingle();
+    kycAmount = data?.personal_info?.monthly_amount;
+  } catch (err) {
+    logger.warn('plan seed: kyc lookup failed:', err.message);
+  }
+  return resolveSeedAmountFrom({ kycAmount, minimum: MINIMUM_MONTHLY_AMOUNT });
 }
 
 /**
