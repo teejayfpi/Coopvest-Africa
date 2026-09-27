@@ -197,7 +197,17 @@ class _SavingsGoalsScreenState extends ConsumerState<SavingsGoalsScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(goal.name, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: context.textPrimary)),
+                // `goal.name` is member-entered, so it can be arbitrarily long.
+                // Expanded keeps the percentage chip on screen and ellipsizes
+                // the name instead of overflowing the card.
+                Expanded(
+                  child: Text(
+                    goal.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: context.textPrimary),
+                  ),
+                ),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(color: CoopvestColors.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),

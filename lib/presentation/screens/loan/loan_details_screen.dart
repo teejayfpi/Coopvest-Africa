@@ -109,10 +109,17 @@ class LoanDetailsScreen extends ConsumerWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          loan.type,
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: context.textPrimary),
+                        // The loan type is data-driven and the status chip takes
+                        // its natural width, so the type must be able to shrink.
+                        Expanded(
+                          child: Text(
+                            loan.type,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: context.textPrimary),
+                          ),
                         ),
+                        const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                           decoration: BoxDecoration(
@@ -129,10 +136,21 @@ class LoanDetailsScreen extends ConsumerWidget {
                     const SizedBox(height: 16),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildDetailItem(context, 'Loan ID', loan.id),
-                        _buildDetailItem(context, 'Amount', '\u20a6${loan.amount.formatNumber()}'),
-                        _buildDetailItem(context, 'Tenure', '${loan.tenure} months'),
+                        // Each item is Expanded so one long value can never push
+                        // its neighbours off-screen. The reference is short by
+                        // construction (see Loan.displayReference), but the
+                        // constraint is what actually guarantees the layout.
+                        Expanded(
+                          child: _buildDetailItem(context, 'Ref', loan.displayReference),
+                        ),
+                        Expanded(
+                          child: _buildDetailItem(context, 'Amount', '\u20a6${loan.amount.formatNumber()}'),
+                        ),
+                        Expanded(
+                          child: _buildDetailItem(context, 'Tenure', '${loan.tenure} months'),
+                        ),
                       ],
                     ),
                   ],
@@ -333,9 +351,21 @@ class LoanDetailsScreen extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(fontSize: 12, color: context.textSecondary)),
+        // Both lines truncate rather than overflow, so an unexpectedly long
+        // label or value degrades to an ellipsis instead of a layout error.
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: 12, color: context.textSecondary),
+        ),
         const SizedBox(height: 4),
-        Text(value, style: TextStyle(fontWeight: FontWeight.bold, color: context.textPrimary)),
+        Text(
+          value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontWeight: FontWeight.bold, color: context.textPrimary),
+        ),
       ],
     );
   }
@@ -344,8 +374,26 @@ class LoanDetailsScreen extends ConsumerWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: TextStyle(color: context.textSecondary)),
-        Text(value, style: TextStyle(fontWeight: FontWeight.bold, color: context.textPrimary)),
+        // Both sides are unbounded by default. Give each a flex so a long label
+        // and a long amount share the row instead of overflowing it.
+        Expanded(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: context.textSecondary),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.end,
+            style: TextStyle(fontWeight: FontWeight.bold, color: context.textPrimary),
+          ),
+        ),
       ],
     );
   }

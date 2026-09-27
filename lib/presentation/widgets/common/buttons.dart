@@ -67,9 +67,20 @@ class PrimaryButton extends StatelessWidget {
                     icon!,
                     const SizedBox(width: 8),
                   ],
-                  Text(
-                    label,
-                    style: textStyle ?? CoopvestTypography.labelLarge,
+                  // Flexible so a long label shrinks to the width the parent
+                  // actually allots instead of painting past the button edge.
+                  // The row stays MainAxisSize.min on purpose: a caller that
+                  // passes no `width` (and no Expanded wrapper) expects a
+                  // hugged button, and MainAxisSize.max would stretch it. The
+                  // constraints arriving here are bounded, so Flexible still
+                  // has a real width to ellipsize against.
+                  Flexible(
+                    child: Text(
+                      label,
+                      style: textStyle ?? CoopvestTypography.labelLarge,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ],
               ),
@@ -148,9 +159,20 @@ class SecondaryButton extends StatelessWidget {
                     icon!,
                     const SizedBox(width: 8),
                   ],
-                  Text(
-                    label,
-                    style: textStyle ?? CoopvestTypography.labelLarge,
+                  // Flexible so a long label shrinks to the width the parent
+                  // actually allots instead of painting past the button edge.
+                  // The row stays MainAxisSize.min on purpose: a caller that
+                  // passes no `width` (and no Expanded wrapper) expects a
+                  // hugged button, and MainAxisSize.max would stretch it. The
+                  // constraints arriving here are bounded, so Flexible still
+                  // has a real width to ellipsize against.
+                  Flexible(
+                    child: Text(
+                      label,
+                      style: textStyle ?? CoopvestTypography.labelLarge,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ],
               ),
@@ -217,9 +239,20 @@ class TertiaryButton extends StatelessWidget {
                     icon!,
                     const SizedBox(width: 8),
                   ],
-                  Text(
-                    label,
-                    style: textStyle ?? CoopvestTypography.labelLarge,
+                  // Flexible so a long label shrinks to the width the parent
+                  // actually allots instead of painting past the button edge.
+                  // The row stays MainAxisSize.min on purpose: a caller that
+                  // passes no `width` (and no Expanded wrapper) expects a
+                  // hugged button, and MainAxisSize.max would stretch it. The
+                  // constraints arriving here are bounded, so Flexible still
+                  // has a real width to ellipsize against.
+                  Flexible(
+                    child: Text(
+                      label,
+                      style: textStyle ?? CoopvestTypography.labelLarge,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ],
               ),

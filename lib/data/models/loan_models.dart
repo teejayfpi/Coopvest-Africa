@@ -4,6 +4,15 @@ import '../../config/app_config.dart';
 /// Loan Model
 class Loan extends Equatable {
   final String id;
+
+  /// The human-readable loan reference (`loans.loan_id`, e.g. "LN-1789968194496-582").
+  ///
+  /// Distinct from [id], which is the internal UUID primary key. The backend
+  /// generates this for members to quote to support, so it is what the app
+  /// should show — the raw UUID is 36 characters and overflows any inline row.
+  /// Empty when the API payload predates this field.
+  final String reference;
+
   final String userId;
   final String type;
   final double amount;
@@ -36,6 +45,7 @@ class Loan extends Equatable {
 
   const Loan({
     required this.id,
+    this.reference = '',
     required this.userId,
     required this.type,
     required this.amount,
@@ -69,6 +79,7 @@ class Loan extends Equatable {
   factory Loan.fromJson(Map<String, dynamic> json) {
     return Loan(
       id: json['id'] as String? ?? '',
+      reference: (json['loan_id'] ?? json['loanId'] ?? json['reference'] ?? '').toString(),
       userId: json['user_id'] as String? ?? '',
       type: json['type'] as String? ?? json['loanType'] as String? ?? 'Personal Loan',
       amount: (json['amount'] as num?)?.toDouble() ?? 0.0,
@@ -104,6 +115,7 @@ class Loan extends Equatable {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      'loan_id': reference,
       'user_id': userId,
       'type': type,
       'amount': amount,
@@ -130,6 +142,7 @@ class Loan extends Equatable {
 
   Loan copyWith({
     String? id,
+    String? reference,
     String? userId,
     String? type,
     double? amount,
@@ -154,6 +167,7 @@ class Loan extends Equatable {
   }) {
     return Loan(
       id: id ?? this.id,
+      reference: reference ?? this.reference,
       userId: userId ?? this.userId,
       type: type ?? this.type,
       amount: amount ?? this.amount,
@@ -177,6 +191,17 @@ class Loan extends Equatable {
       remainingBalance: remainingBalance ?? this.remainingBalance,
       nextDueDate: nextDueDate ?? this.nextDueDate,
     );
+  }
+
+  /// The short reference to display where space is tight.
+  ///
+  /// Prefers the backend's `LN-…` reference. Falls back to the first 8
+  /// characters of the UUID, uppercased, for payloads that predate
+  /// [reference] — a full UUID cannot fit an inline row without truncating.
+  String get displayReference {
+    if (reference.isNotEmpty) return reference;
+    if (id.isEmpty) return '—';
+    return id.substring(0, id.length < 8 ? id.length : 8).toUpperCase();
   }
 
   /// The next instalment date.
@@ -209,6 +234,7 @@ class Loan extends Equatable {
   @override
   List<Object?> get props => [
     id,
+    reference,
     userId,
     type,
     amount,

@@ -80,9 +80,15 @@ class ReferralDashboardScreen extends ConsumerWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              SecondaryButton(label: 'Copy', onPressed: () {}, icon: const Icon(Icons.copy)),
+              // Both buttons in an unbounded Row: wrap them so a long label or
+              // a large text scale cannot overflow the row.
+              Expanded(
+                child: SecondaryButton(label: 'Copy', onPressed: () {}, icon: const Icon(Icons.copy)),
+              ),
               const SizedBox(width: 12),
-              SecondaryButton(label: 'Share QR', onPressed: () {}, icon: const Icon(Icons.qr_code)),
+              Expanded(
+                child: SecondaryButton(label: 'Share QR', onPressed: () {}, icon: const Icon(Icons.qr_code)),
+              ),
             ],
           ),
         ],
