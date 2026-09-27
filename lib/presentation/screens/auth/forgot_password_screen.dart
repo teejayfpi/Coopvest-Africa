@@ -218,7 +218,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen>
           ),
           const SizedBox(height: 8),
           Text(
-            'Enter your registered email address. We\'ll send you a 6-digit code to reset your password.',
+            'Enter your registered email address. We\'ll send you a code to reset your password.',
             style: TextStyle(color: context.textSecondary, height: 1.5),
           ),
           const SizedBox(height: 32),
@@ -322,7 +322,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen>
                       height: 1.6,
                     ),
                     children: [
-                      const TextSpan(text: 'We sent a 6-digit reset code to\n'),
+                      const TextSpan(text: 'We sent a reset code to\n'),
                       TextSpan(
                         text: _sentEmail,
                         style: const TextStyle(

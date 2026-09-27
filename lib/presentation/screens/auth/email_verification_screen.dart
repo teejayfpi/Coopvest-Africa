@@ -102,7 +102,7 @@ class _EmailVerificationScreenState extends ConsumerState<EmailVerificationScree
       return;
     }
     if (_otpController.text.length < 6) {
-      setState(() => _errorMessage = 'Please enter a valid 6-digit code');
+      setState(() => _errorMessage = 'Please enter the code from your email');
       return;
     }
     setState(() { _isVerifying = true; _errorMessage = null; _successMessage = null; });
@@ -169,7 +169,7 @@ class _EmailVerificationScreenState extends ConsumerState<EmailVerificationScree
               Text(
                 _isVerified
                     ? 'Your email has been verified.'
-                    : 'Please enter the 6-digit code sent to your email.',
+                    : 'Please enter the code sent to your email.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: context.textSecondary),
               ),
@@ -184,10 +184,10 @@ class _EmailVerificationScreenState extends ConsumerState<EmailVerificationScree
                 const SizedBox(height: 16),
                 AppTextField(
                   label: 'Verification Code (OTP)',
-                  hint: 'Enter 6-digit code',
+                  hint: 'Enter the code from your email',
                   controller: _otpController,
                   keyboardType: TextInputType.number,
-                  maxLength: 6,
+                  maxLength: 12,
                 ),
                 const SizedBox(height: 16),
                 if (_errorMessage != null)
