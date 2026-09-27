@@ -75,6 +75,26 @@ Providers → Email if you also want 6-digit codes.
 
 
 
+## Monthly savings amount — write it AFTER it is chosen
+
+`contribution_plans.current_monthly_amount` is the single source of truth for
+"Your obligations this month". Two ways to get it wrong, both of which showed
+members the platform minimum instead of the amount they picked:
+
+1. **Ordering.** `/kyc/contribution-type` runs on the contribution-type screen,
+   which is *before* `SignupDetailsScreen` collects the amount. Posting the
+   amount only from there can never carry the real value — it is read from the
+   local hand-off before anything has been stored. The amount must be sent from
+   the screen that actually collects it.
+
+2. **Seeding.** A brand-new plan must not default to `MINIMUM_MONTHLY_AMOUNT`.
+   A missing row then looks identical to a member who genuinely chose the
+   minimum. Seed from `kyc.personal_info.monthly_amount` via `resolveSeedAmount`
+   (`backend/src/lib/monthlyContribution.js`), clamped to the minimum floor.
+
+A member with no plan row self-heals on the next `GET /contributions/plan`,
+which calls `getOrCreatePlan`.
+
 ## Contribution method — no duplicate prompt
 - `ContributionTypeSelectionScreen` (right after email verification) asks
   direct_deposit vs salary_deduction once. The onboarding `_ContributionStep`
