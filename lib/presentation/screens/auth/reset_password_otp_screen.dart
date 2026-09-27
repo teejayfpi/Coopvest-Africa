@@ -18,8 +18,7 @@ class ResetPasswordOtpScreen extends ConsumerStatefulWidget {
 }
 
 class _ResetPasswordOtpScreenState extends ConsumerState<ResetPasswordOtpScreen> {
-  late List<TextEditingController> _otpControllers;
-  late List<FocusNode> _otpFocusNodes;
+  final TextEditingController _otpController = TextEditingController();
   late TextEditingController _passwordController;
   late TextEditingController _confirmPasswordController;
 
@@ -36,8 +35,6 @@ class _ResetPasswordOtpScreenState extends ConsumerState<ResetPasswordOtpScreen>
   @override
   void initState() {
     super.initState();
-    _otpControllers = List.generate(6, (_) => TextEditingController());
-    _otpFocusNodes = List.generate(6, (_) => FocusNode());
     _passwordController = TextEditingController();
     _confirmPasswordController = TextEditingController();
     _startTimer();
@@ -45,8 +42,7 @@ class _ResetPasswordOtpScreenState extends ConsumerState<ResetPasswordOtpScreen>
 
   @override
   void dispose() {
-    for (final c in _otpControllers) c.dispose();
-    for (final f in _otpFocusNodes) f.dispose();
+    _otpController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
@@ -66,17 +62,6 @@ class _ResetPasswordOtpScreenState extends ConsumerState<ResetPasswordOtpScreen>
     });
   }
 
-  void _onOtpChanged(String value, int index) {
-    if (value.length == 1 && index < 5) {
-      _otpFocusNodes[index + 1].requestFocus();
-    } else if (value.isEmpty && index > 0) {
-      _otpFocusNodes[index - 1].requestFocus();
-    }
-    if (index == 5 && value.isNotEmpty) {
-      _otpFocusNodes[index].unfocus();
-    }
-  }
-
   Future<void> _resendOtp() async {
     setState(() { _isResending = true; _remainingSeconds = 120; _canResend = false; });
     _startTimer();
@@ -86,8 +71,7 @@ class _ResetPasswordOtpScreenState extends ConsumerState<ResetPasswordOtpScreen>
         'email': widget.email,
       });
       if (mounted) {
-        for (final c in _otpControllers) c.clear();
-        _otpFocusNodes[0].requestFocus();
+        _otpController.clear();
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Reset code resent'), backgroundColor: CoopvestColors.success));
       }
     } catch (_) {
@@ -102,9 +86,11 @@ class _ResetPasswordOtpScreenState extends ConsumerState<ResetPasswordOtpScreen>
   }
 
   Future<void> _resetPassword() async {
-    final otp = _otpControllers.map((c) => c.text).join();
-    if (otp.length != 6) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter all 6 digits'), backgroundColor: CoopvestColors.error));
+    // Supabase issues 6-10 digit codes depending on the project's OTP length
+    // setting, so never require exactly 6 here — the server is the authority.
+    final otp = _otpController.text.trim();
+    if (otp.length < 6) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter the code from your email'), backgroundColor: CoopvestColors.error));
       return;
     }
     setState(() {
@@ -195,41 +181,21 @@ class _ResetPasswordOtpScreenState extends ConsumerState<ResetPasswordOtpScreen>
               const SizedBox(height: 8),
               RichText(
                 text: TextSpan(
-                  text: 'We sent a 6-digit code to ',
+                  text: 'We sent a code to ',
                   style: TextStyle(color: context.textSecondary, height: 1.5),
                   children: [
                     TextSpan(text: widget.email, style: const TextStyle(fontWeight: FontWeight.w600, color: CoopvestColors.primary)),
                   ],
                 ),
               ),
-              const SizedBox(height: 32),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: List.generate(6, (index) => Flexible(
-                  child: Container(
-                    margin: EdgeInsets.only(right: index == 5 ? 0 : 8),
-                    height: 58,
-                    child: TextField(
-                      controller: _otpControllers[index],
-                      focusNode: _otpFocusNodes[index],
-                      keyboardType: TextInputType.number,
-                      textAlign: TextAlign.center,
-                      maxLength: 1,
-                      onChanged: (v) => _onOtpChanged(v, index),
-                      decoration: InputDecoration(
-                        counterText: '',
-                        filled: true,
-                        fillColor: context.cardBackground,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: context.dividerColor)),
-                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: context.dividerColor)),
-                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: CoopvestColors.primary, width: 2)),
-                      ),
-                      style: TextStyle(color: context.textPrimary, fontSize: 20, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                )),
+              const SizedBox(height: 24),
+              AppTextField(
+                label: 'Reset code',
+                hint: 'Enter the code from your email',
+                controller: _otpController,
+                keyboardType: TextInputType.number,
+                maxLength: 12,
               ),
-              const SizedBox(height: 16),
               Center(
                 child: _canResend
                     ? GestureDetector(
