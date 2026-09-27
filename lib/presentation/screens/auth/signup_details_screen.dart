@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/services/terms_acceptance_store.dart';
+import '../../../data/repositories/kyc_repository.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/kyc_provider.dart';
 import '../../widgets/common/buttons.dart';
@@ -121,8 +122,35 @@ class _SignupDetailsScreenState extends ConsumerState<SignupDetailsScreen> {
     final updated = Map<String, String>.from(widget.registrationData)
       ..['monthly_amount'] = _monthlyAmount.toStringAsFixed(0);
 
+    await _persistMonthlyAmount(updated['contribution_type']);
+
     if (!mounted) return;
     _continueFromPaymentStep(updated);
+  }
+
+  /// Send the amount chosen here to the plan that drives obligations.
+  ///
+  /// The `/kyc/contribution-type` call was made on the *previous* screen, which
+  /// is before this one has collected anything, so it could only ever forward a
+  /// stale amount. Nothing sent the real one afterwards, leaving
+  /// `contribution_plans.current_monthly_amount` at its ₦5,000 default while the
+  /// member's actual choice sat in local storage — so "Your obligations this
+  /// month" showed ₦5,000 to everyone, however much they had pledged.
+  ///
+  /// Best-effort: a failure must not block payment, and the amount is re-applied
+  /// when the member completes registration or KYC.
+  Future<void> _persistMonthlyAmount(String? contributionType) async {
+    if (contributionType == null) return;
+    try {
+      await ref.read(kycRepositoryProvider).setContributionType(
+            contributionType,
+            monthlyAmount: _monthlyAmount,
+          );
+      // The plan now holds the amount durably, so the hand-off is done with.
+      await TermsAcceptanceStore.clearMonthlyAmount();
+    } catch (_) {
+      // Non-fatal: see doc comment.
+    }
   }
 
   /// Route on whether there is actually a fee to pay.

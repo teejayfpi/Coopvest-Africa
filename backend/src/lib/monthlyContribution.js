@@ -22,4 +22,20 @@ function resolveMonthlyContribution({ planAmount, savingsAmount } = {}) {
   return 0;
 }
 
-module.exports = { resolveMonthlyContribution };
+/**
+ * The amount a brand-new contribution plan should start at.
+ *
+ * Seeding the bare minimum made "Monthly Savings" read ₦5,000 for every member
+ * who had pledged more, because a missing plan row was indistinguishable from a
+ * member who had actively chosen the minimum. `kyc.personal_info.monthly_amount`
+ * holds the figure picked at sign-up, so it is the honest starting point, never
+ * below the platform minimum.
+ */
+function resolveSeedAmount({ kycAmount, minimum = 0 } = {}) {
+  const chosen = Number(kycAmount);
+  const floor = Number(minimum) > 0 ? Number(minimum) : 0;
+  if (Number.isFinite(chosen) && chosen > 0) return Math.max(chosen, floor);
+  return floor;
+}
+
+module.exports = { resolveMonthlyContribution, resolveSeedAmount };
