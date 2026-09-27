@@ -47,6 +47,15 @@ The lockfile pins `gotrue 2.15.0` (via `supabase_flutter ^2.3.0`). Its
   `setSession(refreshToken)` + `refreshSession()`. A bare token param goes
   through `verifyOTP`.
 
+### OTP codes are not 6 digits
+`GOTRUE_MAILER_OTP_LENGTH` is a **server setting**, not a constant. This
+project issues **8-digit** codes, so never hardcode `6` in a client length
+check or a fixed-size OTP box. A screen that requires exactly 6 digits
+silently rejects every valid code — the user cannot even type one in. Use a
+single flexible field (12 chars) and a `>= 6` guard; `verifyOTP` is the
+authority. Only change the length in Dashboard → Authentication → Sign In /
+Providers → Email if you also want 6-digit codes.
+
 ## Supabase project
 - Project ref: `nyoauzqezpxeonmrxxgi` (region eu-west-1.
 - Management API SQL endpoint (no DB password needed):
