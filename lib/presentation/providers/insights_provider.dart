@@ -61,7 +61,7 @@ class InsightsRepository {
     } catch (e) {
       logger.e('Get insights error: $e');
       // Mock data for development
-      return InsightsData(
+      return const InsightsData(
         monthlyContributions: [20000, 40000, 30000, 50000, 45000, 70000],
         months: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
         totalContributions: 255000,

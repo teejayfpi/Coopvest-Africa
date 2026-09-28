@@ -140,9 +140,9 @@ class KycStatusBanner extends StatelessWidget {
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: _getBannerColor().withOpacity(0.1),
+        color: _getBannerColor().withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _getBannerColor().withOpacity(0.3)),
+        border: Border.all(color: _getBannerColor().withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
@@ -234,7 +234,7 @@ class ProgressStepIndicator extends StatelessWidget {
                 color: isCompleted
                     ? CoopvestColors.primary
                     : isCurrent
-                        ? CoopvestColors.primary.withOpacity(0.2)
+                        ? CoopvestColors.primary.withValues(alpha: 0.2)
                         : Colors.grey.shade300,
                 border: isCurrent
                     ? Border.all(color: CoopvestColors.primary, width: 2)

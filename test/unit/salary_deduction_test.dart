@@ -129,7 +129,7 @@ void main() {
 
   group('Organization model matches the selectable endpoint', () {
     test('parses the camelCase payload the API returns', () {
-      final org = Organization.fromJson({
+      final org = Organization.fromJson(const {
         'id': 'org-1',
         'name': 'Ministry of Finance',
         'code': 'MOF',
@@ -145,7 +145,7 @@ void main() {
     });
 
     test('tolerates a missing code and missing type', () {
-      final org = Organization.fromJson({'id': 'org-2', 'name': 'Acme Ltd'});
+      final org = Organization.fromJson(const {'id': 'org-2', 'name': 'Acme Ltd'});
       expect(org.code, isNull);
       expect(org.type, isNull);
       expect(org.remittanceCycle, 'monthly', reason: 'sensible default');
@@ -153,7 +153,7 @@ void main() {
     });
 
     test('accepts snake_case if a raw row is passed through', () {
-      final org = Organization.fromJson({
+      final org = Organization.fromJson(const {
         'id': 'org-3',
         'name': 'Acme Ltd',
         'remittance_cycle': 'biweekly',

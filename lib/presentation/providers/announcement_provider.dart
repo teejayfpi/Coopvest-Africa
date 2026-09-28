@@ -88,7 +88,7 @@ class AnnouncementProvider extends StateNotifier<AnnouncementState> {
             return announcement.copyWith(isRead: true);
           }
           return announcement;
-        }).toList() as List<Announcement>,
+        }).toList(),
         unreadCount: state.unreadCount > 0 ? state.unreadCount - 1 : 0,
       );
     } catch (e) {
@@ -102,7 +102,7 @@ class AnnouncementProvider extends StateNotifier<AnnouncementState> {
       state = state.copyWith(
         announcements: state.announcements.map((announcement) {
           return announcement.copyWith(isRead: true);
-        }).toList() as List<Announcement>,
+        }).toList(),
         unreadCount: 0,
       );
     } catch (e) {

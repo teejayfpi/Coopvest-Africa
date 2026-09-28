@@ -20,7 +20,7 @@ class HelpTooltip extends StatelessWidget {
       message: message,
       preferBelow: position == TooltipPosition.bottom,
       decoration: BoxDecoration(
-        color: CoopvestColors.primary.withOpacity(0.9),
+        color: CoopvestColors.primary.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(8),
       ),
       textStyle: const TextStyle(
@@ -30,7 +30,7 @@ class HelpTooltip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: child ?? Icon(
         Icons.help_outline,
-        color: CoopvestColors.primary.withOpacity(0.7),
+        color: CoopvestColors.primary.withValues(alpha: 0.7),
         size: 20,
       ),
     );
@@ -103,9 +103,9 @@ class FeatureHighlight extends StatelessWidget {
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: CoopvestColors.primary.withOpacity(0.1),
+        color: CoopvestColors.primary.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: CoopvestColors.primary.withOpacity(0.3)),
+        border: Border.all(color: CoopvestColors.primary.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -113,12 +113,12 @@ class FeatureHighlight extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.lightbulb, color: CoopvestColors.primary),
+              const Icon(Icons.lightbulb, color: CoopvestColors.primary),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   title,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     color: CoopvestColors.primary,
                   ),

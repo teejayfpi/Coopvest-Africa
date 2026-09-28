@@ -220,12 +220,14 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
       setState(() {
         _profileImage = null;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error updating profile picture: $e'),
-          backgroundColor: CoopvestColors.error,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error updating profile picture: $e'),
+            backgroundColor: CoopvestColors.error,
+          ),
+        );
+      }
     } finally {
       setState(() {
         _isLoading = false;
@@ -302,7 +304,7 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: CoopvestColors.primary.withOpacity(0.1),
+          color: CoopvestColors.primary.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(16),
         ),
         child: Column(
@@ -388,7 +390,7 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: CoopvestColors.primary.withOpacity(0.3),
+                      color: CoopvestColors.primary.withValues(alpha: 0.3),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -475,7 +477,7 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
           padding: const EdgeInsets.only(left: 8, top: 24, bottom: 12),
           child: Text(
             section['title'] as String,
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.bold,
               color: CoopvestColors.primary,
@@ -506,7 +508,7 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
           leading: Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: CoopvestColors.primary.withOpacity(0.1),
+              color: CoopvestColors.primary.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(item['icon'] as IconData, color: CoopvestColors.primary, size: 20),
@@ -525,7 +527,7 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
                   onChanged: (value) {
                     ref.read(themeModeProvider.notifier).toggleTheme();
                   },
-                  activeColor: CoopvestColors.primary,
+                  activeThumbColor: CoopvestColors.primary,
                 )
               : (item['trailing'] != null
                   ? Text(item['trailing'] as String, style: TextStyle(color: context.textSecondary))
@@ -692,9 +694,9 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: context.cardBackground,
-        title: Row(
+        title: const Row(
           children: [
-            const Text('About '),
+            Text('About '),
             Text('Coopvest Africa', style: TextStyle(color: CoopvestColors.primary)),
           ],
         ),
@@ -706,7 +708,7 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
                 width: 80,
                 height: 80,
                 decoration: BoxDecoration(
-                  color: CoopvestColors.primary.withOpacity(0.1),
+                  color: CoopvestColors.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: const Icon(Icons.savings, size: 40, color: CoopvestColors.primary),
@@ -757,14 +759,14 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: CoopvestColors.primary.withOpacity(0.1),
+          color: CoopvestColors.primary.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Row(
           children: [
             Icon(icon, size: 16, color: CoopvestColors.primary),
             const SizedBox(width: 8),
-            Text(label, style: TextStyle(color: CoopvestColors.primary)),
+            Text(label, style: const TextStyle(color: CoopvestColors.primary)),
           ],
         ),
       ),
@@ -822,7 +824,7 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: CoopvestColors.warning.withOpacity(0.2),
+                color: CoopvestColors.warning.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Icon(Icons.warning_amber_rounded, color: CoopvestColors.warning, size: 24),
@@ -874,14 +876,14 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: CoopvestColors.error.withOpacity(0.1),
+                  color: CoopvestColors.error.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: CoopvestColors.error.withOpacity(0.3)),
+                  border: Border.all(color: CoopvestColors.error.withValues(alpha: 0.3)),
                 ),
-                child: Row(
+                child: const Row(
                   children: [
-                    const Icon(Icons.info_outline, color: CoopvestColors.error, size: 20),
-                    const SizedBox(width: 8),
+                    Icon(Icons.info_outline, color: CoopvestColors.error, size: 20),
+                    SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         'Only proceed if you fully understand and accept these responsibilities.',
@@ -927,7 +929,7 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
         Container(
           padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
-            color: CoopvestColors.primary.withOpacity(0.1),
+            color: CoopvestColors.primary.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(6),
           ),
           child: Icon(icon, color: CoopvestColors.primary, size: 16),

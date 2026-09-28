@@ -103,7 +103,7 @@ class LoanDetailsScreen extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               AppCard(
-                backgroundColor: statusColor.withOpacity(0.1),
+                backgroundColor: statusColor.withValues(alpha: 0.1),
                 child: Column(
                   children: [
                     Row(
@@ -273,21 +273,21 @@ class LoanDetailsScreen extends ConsumerWidget {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: CoopvestColors.error.withOpacity(0.08),
+                    color: CoopvestColors.error.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: CoopvestColors.error.withOpacity(0.4)),
+                    border: Border.all(color: CoopvestColors.error.withValues(alpha: 0.4)),
                   ),
-                  child: Column(
+                  child: const Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
-                          const Icon(Icons.warning_amber_rounded, color: CoopvestColors.error, size: 20),
-                          const SizedBox(width: 8),
+                          Icon(Icons.warning_amber_rounded, color: CoopvestColors.error, size: 20),
+                          SizedBox(width: 8),
                           Text('Overdue Status', style: TextStyle(fontWeight: FontWeight.bold, color: CoopvestColors.error, fontSize: 15)),
                         ],
                       ),
-                      const SizedBox(height: 10),
+                      SizedBox(height: 10),
                       Text(
                         'Late loan repayments may attract a ₦3,000 penalty fee after repeated default notices. '
                         'Continued non-payment beyond three months may trigger guarantor recovery procedures '
@@ -302,15 +302,15 @@ class LoanDetailsScreen extends ConsumerWidget {
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: CoopvestColors.warning.withOpacity(0.07),
+                    color: CoopvestColors.warning.withValues(alpha: 0.07),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: CoopvestColors.warning.withOpacity(0.25)),
+                    border: Border.all(color: CoopvestColors.warning.withValues(alpha: 0.25)),
                   ),
-                  child: Row(
+                  child: const Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.info_outline, color: CoopvestColors.warning, size: 16),
-                      const SizedBox(width: 8),
+                      Icon(Icons.info_outline, color: CoopvestColors.warning, size: 16),
+                      SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'Late loan repayments may attract a ₦3,000 penalty fee after repeated default notices. '
@@ -412,7 +412,7 @@ class LoanDetailsScreen extends ConsumerWidget {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: statusColor.withOpacity(0.1),
+                color: statusColor.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Center(
@@ -435,7 +435,7 @@ class LoanDetailsScreen extends ConsumerWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: statusColor.withOpacity(0.1),
+                color: statusColor.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
@@ -459,7 +459,7 @@ class LoanDetailsScreen extends ConsumerWidget {
         child: Row(
           children: [
             CircleAvatar(
-              backgroundColor: CoopvestColors.primary.withOpacity(0.1),
+              backgroundColor: CoopvestColors.primary.withValues(alpha: 0.1),
               child: const Icon(Icons.person, color: CoopvestColors.primary),
             ),
             const SizedBox(width: 16),

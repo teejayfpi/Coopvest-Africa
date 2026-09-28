@@ -171,7 +171,7 @@ class _TicketListScreenState extends ConsumerState<TicketListScreen> {
                       Text(ticket['ticketId'] ?? '', style: TextStyle(fontSize: 12, color: context.textSecondary)),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(color: CoopvestColors.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                        decoration: BoxDecoration(color: CoopvestColors.primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
                         child: Text(ticket['status']?.toUpperCase() ?? '', style: const TextStyle(color: CoopvestColors.primary, fontSize: 10, fontWeight: FontWeight.bold)),
                       ),
                     ],

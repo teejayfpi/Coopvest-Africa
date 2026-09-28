@@ -77,31 +77,37 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
           setState(() {
             _isBiometricEnabled = true;
           });
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Biometric login enabled successfully'),
-              backgroundColor: CoopvestColors.success,
-            ),
-          );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Biometric login enabled successfully'),
+                backgroundColor: CoopvestColors.success,
+              ),
+            );
+          }
         }
       } else {
         await SecurityService().setBiometricEnabled(false);
         setState(() {
           _isBiometricEnabled = false;
         });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Biometric login disabled'),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Biometric login disabled'),
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: CoopvestColors.error,
           ),
         );
       }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: $e'),
-          backgroundColor: CoopvestColors.error,
-        ),
-      );
     } finally {
       setState(() {
         _isLoading = false;
@@ -312,7 +318,7 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
                   ? Switch(
                       value: _isBiometricEnabled,
                       onChanged: _isLoading ? null : _toggleBiometric,
-                      activeColor: CoopvestColors.primary,
+                      activeThumbColor: CoopvestColors.primary,
                     )
                   : Icon(Icons.not_interested, color: context.textSecondary),
             ),
@@ -356,7 +362,7 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
               trailing: Switch(
                 value: true,
                 onChanged: (val) {},
-                activeColor: CoopvestColors.primary,
+                activeThumbColor: CoopvestColors.primary,
               ),
             ),
             
@@ -379,7 +385,7 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
   Widget _buildSectionHeader(String title) {
     return Text(
       title,
-      style: TextStyle(
+      style: const TextStyle(
         fontSize: 14,
         fontWeight: FontWeight.bold,
         color: CoopvestColors.primary,
@@ -403,7 +409,7 @@ class _SecuritySettingsScreenState extends ConsumerState<SecuritySettingsScreen>
       leading: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: CoopvestColors.primary.withOpacity(0.1),
+          color: CoopvestColors.primary.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Icon(icon, color: CoopvestColors.primary),

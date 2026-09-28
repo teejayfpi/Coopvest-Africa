@@ -236,34 +236,34 @@ class CoopvestShadows {
 
   // Small shadow
   static List<BoxShadow> small = [
-    BoxShadow(
+    const BoxShadow(
       color: CoopvestColorsEnhanced.shadowSmall,
       blurRadius: 4,
-      offset: const Offset(0, 1),
+      offset: Offset(0, 1),
     ),
   ];
 
   // Medium shadow
   static List<BoxShadow> medium = [
-    BoxShadow(
+    const BoxShadow(
       color: CoopvestColorsEnhanced.shadowMedium,
       blurRadius: 8,
-      offset: const Offset(0, 2),
+      offset: Offset(0, 2),
     ),
   ];
 
   // Large shadow
   static List<BoxShadow> large = [
-    BoxShadow(
+    const BoxShadow(
       color: CoopvestColorsEnhanced.shadowLarge,
       blurRadius: 16,
-      offset: const Offset(0, 4),
+      offset: Offset(0, 4),
     ),
   ];
 
   // Inner shadow
   static List<BoxShadow> inner = [
-    BoxShadow(
+    const BoxShadow(
       color: CoopvestColorsEnhanced.shadowSmall,
       blurRadius: 2,
       offset: Offset(0, 2),
@@ -274,7 +274,7 @@ class CoopvestShadows {
   // Colored shadow for cards
   static List<BoxShadow> coloredPrimary = [
     BoxShadow(
-      color: CoopvestColorsEnhanced.primaryGradientStart.withOpacity(0.3),
+      color: CoopvestColorsEnhanced.primaryGradientStart.withValues(alpha: 0.3),
       blurRadius: 12,
       offset: const Offset(0, 4),
     ),
@@ -289,15 +289,15 @@ class GlassConfig {
     double blur = 10,
   }) {
     return BoxDecoration(
-      color: CoopvestColorsEnhanced.glassWhite.withOpacity(opacity),
+      color: CoopvestColorsEnhanced.glassWhite.withValues(alpha: opacity),
       borderRadius: BorderRadius.circular(16),
       border: Border.all(
-        color: CoopvestColorsEnhanced.glassWhite.withOpacity(0.3),
+        color: CoopvestColorsEnhanced.glassWhite.withValues(alpha: 0.3),
         width: 1,
       ),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withOpacity(0.05),
+          color: Colors.black.withValues(alpha: 0.05),
           blurRadius: blur,
           offset: const Offset(0, 4),
         ),
@@ -311,15 +311,15 @@ class GlassConfig {
     double blur = 10,
   }) {
     return BoxDecoration(
-      color: Colors.black.withOpacity(opacity),
+      color: Colors.black.withValues(alpha: opacity),
       borderRadius: BorderRadius.circular(16),
       border: Border.all(
-        color: Colors.white.withOpacity(0.1),
+        color: Colors.white.withValues(alpha: 0.1),
         width: 1,
       ),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withOpacity(0.3),
+          color: Colors.black.withValues(alpha: 0.3),
           blurRadius: blur,
           offset: const Offset(0, 4),
         ),
@@ -334,13 +334,13 @@ class GlassConfig {
   }) {
     return BoxDecoration(
       gradient: LinearGradient(
-        colors: colors.map((c) => c.withOpacity(opacity)).toList(),
+        colors: colors.map((c) => c.withValues(alpha: opacity)).toList(),
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       ),
       borderRadius: BorderRadius.circular(16),
       border: Border.all(
-        color: Colors.white.withOpacity(0.2),
+        color: Colors.white.withValues(alpha: 0.2),
         width: 1,
       ),
     );

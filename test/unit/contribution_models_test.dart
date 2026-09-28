@@ -104,7 +104,7 @@ void main() {
 
   group('ContributionFilter Tests', () {
     test('should create filter with query parameters', () {
-      final filter = ContributionFilter(
+      const filter = ContributionFilter(
         year: 2024,
         month: 1,
         status: ContributionStatus.successful,
@@ -120,7 +120,7 @@ void main() {
     });
 
     test('should create this month filter', () {
-      final filter = ContributionFilter().thisMonth();
+      final filter = const ContributionFilter().thisMonth();
       final now = DateTime.now();
 
       expect(filter.year, now.year);
@@ -130,7 +130,7 @@ void main() {
     });
 
     test('should create last 3 months filter', () {
-      final filter = ContributionFilter().last3Months();
+      final filter = const ContributionFilter().last3Months();
 
       expect(filter.startDate, isNotNull);
       expect(filter.endDate, isNotNull);
@@ -140,7 +140,7 @@ void main() {
     });
 
     test('should create this year filter', () {
-      final filter = ContributionFilter().thisYear();
+      final filter = const ContributionFilter().thisYear();
       final now = DateTime.now();
 
       expect(filter.year, now.year);
@@ -149,7 +149,7 @@ void main() {
     });
 
     test('should create all time filter', () {
-      final filter = ContributionFilter().allTime();
+      final filter = const ContributionFilter().allTime();
 
       expect(filter.year, isNull);
       expect(filter.month, isNull);
@@ -158,7 +158,7 @@ void main() {
     });
 
     test('should copy filter with modifications', () {
-      final original = ContributionFilter(year: 2024, month: 1);
+      const original = ContributionFilter(year: 2024, month: 1);
       final modified = original.copyWith(status: ContributionStatus.successful);
 
       expect(original.year, 2024);

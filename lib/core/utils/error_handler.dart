@@ -345,7 +345,7 @@ class Result<T> {
   /// Map the success data to another type
   Result<R> map<R>(R Function(T) mapper) {
     if (isSuccess && data != null) {
-      return Result.success(mapper(data!));
+      return Result.success(mapper(data as T));
     }
     return Result.failure(error!);
   }
@@ -353,7 +353,7 @@ class Result<T> {
   /// Execute callback on success
   Result<T> onSuccess(void Function(T) callback) {
     if (isSuccess && data != null) {
-      callback(data!);
+      callback(data as T);
     }
     return this;
   }

@@ -184,7 +184,7 @@ class _WithdrawalScreenState extends ConsumerState<WithdrawalScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: CoopvestColors.warning.withOpacity(0.1),
+                color: CoopvestColors.warning.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Text(
@@ -238,7 +238,7 @@ class _WithdrawalScreenState extends ConsumerState<WithdrawalScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   AppCard(
-                    backgroundColor: CoopvestColors.primary.withOpacity(0.08),
+                    backgroundColor: CoopvestColors.primary.withValues(alpha: 0.08),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -289,7 +289,7 @@ class _WithdrawalScreenState extends ConsumerState<WithdrawalScreen> {
 
                   const SizedBox(height: 24),
                   AppCard(
-                    backgroundColor: CoopvestColors.info.withOpacity(0.1),
+                    backgroundColor: CoopvestColors.info.withValues(alpha: 0.1),
                     child: Row(
                       children: [
                         const Icon(Icons.info, color: CoopvestColors.info),
@@ -352,9 +352,9 @@ class _WithdrawalScreenState extends ConsumerState<WithdrawalScreen> {
         width: double.infinity,
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: CoopvestColors.warning.withOpacity(0.1),
+          color: CoopvestColors.warning.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: CoopvestColors.warning.withOpacity(0.4)),
+          border: Border.all(color: CoopvestColors.warning.withValues(alpha: 0.4)),
         ),
         child: const Text(
           'No bank account on file. Add one from Profile → Bank Accounts, then come back to withdraw.',
@@ -373,7 +373,7 @@ class _WithdrawalScreenState extends ConsumerState<WithdrawalScreen> {
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: isSelected
-                  ? CoopvestColors.primary.withOpacity(0.1)
+                  ? CoopvestColors.primary.withValues(alpha: 0.1)
                   : context.cardBackground,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(

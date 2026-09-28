@@ -57,10 +57,10 @@ class _BiometricLockScreenState extends ConsumerState<BiometricLockScreen> {
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: CoopvestColors.primary.withOpacity(0.1),
+                    color: CoopvestColors.primary.withValues(alpha: 0.1),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(
+                  child: const Icon(
                     Icons.fingerprint,
                     size: 72,
                     color: CoopvestColors.primary,

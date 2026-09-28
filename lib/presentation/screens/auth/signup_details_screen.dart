@@ -259,14 +259,14 @@ class _SignupDetailsScreenState extends ConsumerState<SignupDetailsScreen> {
                 ),
               ] else if (_selfieUploaded) ...[
                 const SizedBox(height: CoopvestShape.gapSm),
-                Row(
+                const Row(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.check_circle_outline,
                       size: 15,
                       color: CoopvestColors.successText,
                     ),
-                    const SizedBox(width: CoopvestShape.gapSm),
+                    SizedBox(width: CoopvestShape.gapSm),
                     Text(
                       'Selfie uploaded',
                       style: TextStyle(

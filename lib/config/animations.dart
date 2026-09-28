@@ -9,9 +9,9 @@ class AppAnimations {
     Curve curve = Curves.easeInOut,
   }) {
     return AnimatedFadeIn(
-      child: child,
       duration: duration,
       curve: curve,
+      child: child,
     );
   }
 
@@ -23,10 +23,10 @@ class AppAnimations {
     Curve curve = Curves.easeOutCubic,
   }) {
     return AnimatedSlideInUp(
-      child: child,
       duration: duration,
       offset: offset,
       curve: curve,
+      child: child,
     );
   }
 
@@ -37,10 +37,10 @@ class AppAnimations {
     Curve curve = Curves.easeOutCubic,
   }) {
     return AnimatedSlideInLeft(
-      child: child,
       duration: duration,
       offset: offset,
       curve: curve,
+      child: child,
     );
   }
 
@@ -51,10 +51,10 @@ class AppAnimations {
     Curve curve = Curves.easeOutCubic,
   }) {
     return AnimatedSlideInRight(
-      child: child,
       duration: duration,
       offset: offset,
       curve: curve,
+      child: child,
     );
   }
 
@@ -65,9 +65,9 @@ class AppAnimations {
     Curve curve = Curves.easeOutBack,
   }) {
     return AnimatedScaleIn(
-      child: child,
       duration: duration,
       curve: curve,
+      child: child,
     );
   }
 
@@ -78,9 +78,9 @@ class AppAnimations {
     Duration staggerDelay = const Duration(milliseconds: 100),
   }) {
     return AnimatedStaggeredList(
-      children: children,
       duration: duration,
       staggerDelay: staggerDelay,
+      children: children,
     );
   }
 
@@ -90,8 +90,8 @@ class AppAnimations {
     Duration duration = const Duration(milliseconds: 1500),
   }) {
     return AnimatedPulse(
-      child: child,
       duration: duration,
+      child: child,
     );
   }
 
@@ -101,8 +101,8 @@ class AppAnimations {
     Duration duration = const Duration(milliseconds: 1500),
   }) {
     return ShimmerLoading(
-      child: child,
       duration: duration,
+      child: child,
     );
   }
 }
@@ -435,8 +435,8 @@ class _AnimatedStaggeredListState extends State<AnimatedStaggeredList> with Tick
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: widget.children.asMap().entries.map((entry) {
-        int index = entry.key;
-        Widget child = entry.value;
+        final int index = entry.key;
+        final Widget child = entry.value;
         return FadeTransition(
           opacity: _animations[index],
           child: SlideTransition(
@@ -561,7 +561,7 @@ class _ShimmerLoadingState extends State<ShimmerLoading> with SingleTickerProvid
 class _ShimmerGradientTransform extends GradientTransform {
   final Animation<double> _animation;
 
-  _ShimmerGradientTransform(this._animation);
+  const _ShimmerGradientTransform(this._animation);
 
   @override
   Matrix4? transform(Rect bounds, {TextDirection? textDirection}) {

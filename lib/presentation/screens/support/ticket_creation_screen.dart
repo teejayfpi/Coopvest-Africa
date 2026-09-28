@@ -118,13 +118,13 @@ class _TicketCreationScreenState extends ConsumerState<TicketCreationScreen> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: CoopvestColors.info.withOpacity(0.1),
+                    color: CoopvestColors.info.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: CoopvestColors.info.withOpacity(0.3)),
+                    border: Border.all(color: CoopvestColors.info.withValues(alpha: 0.3)),
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.info_outline, color: CoopvestColors.info),
+                      const Icon(Icons.info_outline, color: CoopvestColors.info),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
@@ -140,7 +140,7 @@ class _TicketCreationScreenState extends ConsumerState<TicketCreationScreen> {
                   Container(
                     padding: const EdgeInsets.all(12),
                     margin: const EdgeInsets.only(top: 16),
-                    decoration: BoxDecoration(color: CoopvestColors.error.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                    decoration: BoxDecoration(color: CoopvestColors.error.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
                     child: Row(children: [const Icon(Icons.error_outline, color: CoopvestColors.error), const SizedBox(width: 12), Expanded(child: Text(_errorMessage!, style: const TextStyle(color: CoopvestColors.error)))]),
                   ),
                 
@@ -159,7 +159,7 @@ class _TicketCreationScreenState extends ConsumerState<TicketCreationScreen> {
                       child: Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: isSelected ? CoopvestColors.primary.withOpacity(0.1) : context.cardBackground,
+                          color: isSelected ? CoopvestColors.primary.withValues(alpha: 0.1) : context.cardBackground,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
                             color: isSelected ? CoopvestColors.primary : context.dividerColor,

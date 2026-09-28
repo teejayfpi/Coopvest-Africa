@@ -61,8 +61,8 @@ class DeepLinkService {
     required String loanType,
     required int tenor,
   }) {
-    final baseUrl = 'https://coopvest-api.onrender.com';
-    final path = '/loan/guarantee';
+    const baseUrl = 'https://coopvest-api.onrender.com';
+    const path = '/loan/guarantee';
     final params = {
       'loan_id': loanId,
       'borrower': borrowerName,
@@ -80,8 +80,8 @@ class DeepLinkService {
     required String userId,
     required String userName,
   }) {
-    final baseUrl = 'https://coopvest-api.onrender.com';
-    final path = '/wallet/receive';
+    const baseUrl = 'https://coopvest-api.onrender.com';
+    const path = '/wallet/receive';
     final params = {
       'user_id': userId,
       'name': userName,
@@ -95,8 +95,8 @@ class DeepLinkService {
   static String generateProfileQR({
     required String userId,
   }) {
-    final baseUrl = 'https://coopvest-api.onrender.com';
-    final path = '/profile/view';
+    const baseUrl = 'https://coopvest-api.onrender.com';
+    const path = '/profile/view';
     final params = {
       'user_id': userId,
     };

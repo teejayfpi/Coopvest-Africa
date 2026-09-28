@@ -119,16 +119,16 @@ class _RolloverStatusScreenState extends ConsumerState<RolloverStatusScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: info.color.withOpacity(0.1),
+        color: info.color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: info.color.withOpacity(0.3)),
+        border: Border.all(color: info.color.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: info.color.withOpacity(0.15),
+              color: info.color.withValues(alpha: 0.15),
               shape: BoxShape.circle,
             ),
             child: Icon(info.icon, color: info.color, size: 22),
@@ -320,7 +320,7 @@ class _RolloverStatusScreenState extends ConsumerState<RolloverStatusScreen> {
         approved ? Icons.verified_outlined : Icons.cancel_outlined;
 
     return AppCard(
-      backgroundColor: color.withOpacity(0.07),
+      backgroundColor: color.withValues(alpha: 0.07),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -401,7 +401,7 @@ class _RolloverStatusScreenState extends ConsumerState<RolloverStatusScreen> {
       final success = await ref
           .read(rolloverProvider.notifier)
           .cancelRollover(rolloverId: rolloverId);
-      if (mounted) {
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(success
@@ -541,7 +541,7 @@ class _TimelineTile extends StatelessWidget {
                   width: 32,
                   height: 32,
                   decoration: BoxDecoration(
-                    color: dotColor.withOpacity(step.done || step.active || step.failed ? 1 : 0.15),
+                    color: dotColor.withValues(alpha: step.done || step.active || step.failed ? 1 : 0.15),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
@@ -560,7 +560,7 @@ class _TimelineTile extends StatelessWidget {
                   Expanded(
                     child: Container(
                       width: 2,
-                      color: step.done ? CoopvestColors.success.withOpacity(0.3) : Colors.grey.shade200,
+                      color: step.done ? CoopvestColors.success.withValues(alpha: 0.3) : Colors.grey.shade200,
                     ),
                   ),
               ],
@@ -620,7 +620,7 @@ class _GuarantorRow extends StatelessWidget {
       child: Row(
         children: [
           CircleAvatar(
-            backgroundColor: CoopvestColors.primary.withOpacity(0.1),
+            backgroundColor: CoopvestColors.primary.withValues(alpha: 0.1),
             radius: 18,
             child: Text(
               guarantor.guarantorName.isNotEmpty
@@ -655,7 +655,7 @@ class _GuarantorRow extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
-              color: statusColor.withOpacity(0.1),
+              color: statusColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(

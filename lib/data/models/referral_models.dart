@@ -317,7 +317,7 @@ class LoanInterestCalculation extends Equatable {
     final minimumFloor = minimumInterestFloors[loanType] ?? 5.0;
     
     // Check if bonus can be applied
-    bool bonusApplied = bonusAvailable && referralBonusPercent > 0;
+    final bool bonusApplied = bonusAvailable && referralBonusPercent > 0;
     String? reason = bonusNotAppliedReason;
     
     if (!bonusApplied && reason == null && !bonusAvailable) {

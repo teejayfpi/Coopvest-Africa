@@ -76,7 +76,7 @@ class EnhancedCard extends StatelessWidget {
     return BoxDecoration(
       color: backgroundColor ?? context.cardBackground,
       borderRadius: borderRadius ?? BorderRadius.circular(CoopvestRadius.card),
-      border: border ?? Border.all(color: context.dividerColor.withOpacity(0.5)),
+      border: border ?? Border.all(color: context.dividerColor.withValues(alpha: 0.5)),
       boxShadow: elevation != null
           ? [BoxShadow(color: isDarkMode ? Colors.black26 : CoopvestColorsEnhanced.shadowMedium, blurRadius: elevation! * 2)]
           : (isDarkMode ? CoopvestShadows.none : CoopvestShadows.medium),
@@ -118,7 +118,7 @@ class StatCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(CoopvestRadius.medium),
                 ),
                 child: Icon(icon, color: Colors.white, size: 24),
@@ -139,7 +139,7 @@ class StatCard extends StatelessWidget {
           Text(
             title,
             style: CoopvestTypography.bodyMedium.copyWith(
-              color: Colors.white.withOpacity(0.9),
+              color: Colors.white.withValues(alpha: 0.9),
             ),
           ),
           if (subtitle != null) ...[
@@ -147,7 +147,7 @@ class StatCard extends StatelessWidget {
             Text(
               subtitle!,
               style: CoopvestTypography.bodySmall.copyWith(
-                color: Colors.white.withOpacity(0.7),
+                color: Colors.white.withValues(alpha: 0.7),
               ),
             ),
           ],
@@ -187,7 +187,7 @@ class CompactStatCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.15),
+                  color: color.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(CoopvestRadius.small),
                 ),
                 child: Icon(icon, color: color, size: 20),
@@ -262,8 +262,8 @@ class QuickActionButton extends StatelessWidget {
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 color: gradientColors != null
-                    ? Colors.white.withOpacity(0.2)
-                    : CoopvestColorsEnhanced.primaryGradientStart.withOpacity(0.1),
+                    ? Colors.white.withValues(alpha: 0.2)
+                    : CoopvestColorsEnhanced.primaryGradientStart.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(CoopvestRadius.medium),
               ),
               child: Icon(

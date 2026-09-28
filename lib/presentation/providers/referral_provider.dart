@@ -182,7 +182,7 @@ class ReferralNotifier extends StateNotifier<ReferralState> {
         final linkResponse = result.data!;
         state = state.copyWith(
           shareLink: ShareLink(
-            shareLink: linkResponse.shareLink ?? '',
+            shareLink: linkResponse.shareLink,
             createdAt: DateTime.now(),
           ),
         );

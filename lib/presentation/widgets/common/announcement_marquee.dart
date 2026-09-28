@@ -62,7 +62,7 @@ class _AnnouncementMarqueeState extends ConsumerState<AnnouncementMarquee>
   /// Recalculate the scroll distance whenever the text or width changes.
   void _syncAnimation(List<Announcement> items) {
     final text = _tickerText(items);
-    final style = const TextStyle(fontSize: 13, fontWeight: FontWeight.w500);
+    const style = TextStyle(fontSize: 13, fontWeight: FontWeight.w500);
     final tp = TextPainter(
       text: TextSpan(text: text, style: style),
       textDirection: TextDirection.ltr,

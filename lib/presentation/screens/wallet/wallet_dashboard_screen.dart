@@ -191,7 +191,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: isDarkMode 
-              ? [context.cardBackground, context.cardBackground.withOpacity(0.8)]
+              ? [context.cardBackground, context.cardBackground.withValues(alpha: 0.8)]
               : [CoopvestColors.primary, const Color(0xFF0F7A5C)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -199,7 +199,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: (isDarkMode ? Colors.black : CoopvestColors.primary).withOpacity(0.3),
+            color: (isDarkMode ? Colors.black : CoopvestColors.primary).withValues(alpha: 0.3),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -218,7 +218,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
                     'Total Balance',
                     style: TextStyle(
                       fontSize: 14,
-                      color: isDarkMode ? context.textSecondary : Colors.white.withOpacity(0.8),
+                      color: isDarkMode ? context.textSecondary : Colors.white.withValues(alpha: 0.8),
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -241,7 +241,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: isDarkMode ? CoopvestColors.primary.withOpacity(0.2) : Colors.white.withOpacity(0.2),
+                    color: isDarkMode ? CoopvestColors.primary.withValues(alpha: 0.2) : Colors.white.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Row(
@@ -277,7 +277,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
                       'Available',
                       style: TextStyle(
                         fontSize: 12,
-                        color: isDarkMode ? context.textSecondary : Colors.white.withOpacity(0.8),
+                        color: isDarkMode ? context.textSecondary : Colors.white.withValues(alpha: 0.8),
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -292,7 +292,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
                   ],
                 ),
               ),
-              Container(width: 1, height: 40, color: isDarkMode ? context.dividerColor : Colors.white.withOpacity(0.2)),
+              Container(width: 1, height: 40, color: isDarkMode ? context.dividerColor : Colors.white.withValues(alpha: 0.2)),
               const SizedBox(width: 24),
               Expanded(
                 child: Column(
@@ -302,7 +302,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
                       'Pending',
                       style: TextStyle(
                         fontSize: 12,
-                        color: isDarkMode ? context.textSecondary : Colors.white.withOpacity(0.8),
+                        color: isDarkMode ? context.textSecondary : Colors.white.withValues(alpha: 0.8),
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -338,7 +338,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
             icon: Icons.account_balance_wallet_outlined,
             valueColor: outstandingLoan > 0
                 ? (isDarkMode ? const Color(0xFFFFCC80) : const Color(0xFFFFE0B2))
-                : (isDarkMode ? context.textSecondary : Colors.white.withOpacity(0.9)),
+                : (isDarkMode ? context.textSecondary : Colors.white.withValues(alpha: 0.9)),
           ),
           const SizedBox(height: 12),
           _buildWalletSummaryRow(
@@ -368,7 +368,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
           children: [
             Icon(
               icon,
-              color: isDarkMode ? context.textSecondary : Colors.white.withOpacity(0.7),
+              color: isDarkMode ? context.textSecondary : Colors.white.withValues(alpha: 0.7),
               size: 16,
             ),
             const SizedBox(width: 8),
@@ -376,7 +376,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
               label,
               style: TextStyle(
                 fontSize: 12,
-                color: isDarkMode ? context.textSecondary : Colors.white.withOpacity(0.8),
+                color: isDarkMode ? context.textSecondary : Colors.white.withValues(alpha: 0.8),
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -499,7 +499,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
             ),
             child: Column(
               children: [
-                Icon(Icons.savings_outlined, size: 48, color: context.textSecondary.withOpacity(0.5)),
+                Icon(Icons.savings_outlined, size: 48, color: context.textSecondary.withValues(alpha: 0.5)),
                 const SizedBox(height: 12),
                 Text(
                   'No savings goals yet',
@@ -534,7 +534,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.03),
+                        color: Colors.black.withValues(alpha: 0.03),
                         blurRadius: 10,
                         offset: const Offset(0, 4),
                       ),
@@ -632,7 +632,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
                 leading: Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: (isDeposit ? Colors.green : Colors.orange).withOpacity(0.1),
+                    color: (isDeposit ? Colors.green : Colors.orange).withValues(alpha: 0.1),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
