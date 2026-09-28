@@ -1,15 +1,22 @@
 /**
- * Outbound email via SMTP.
+ * Outbound email for admin replies and similar.
  *
- * Why this exists: `notifyService.sendEmail` only logs — it checks for
+ * Transport is chosen by configuration, in this order:
+ *
+ *   1. Resend HTTP API (RESEND_API_KEY) — plain HTTPS, no dependency.
+ *   2. SMTP (SMTP_HOST + SMTP_USER + SMTP_PASS) — nodemailer.
+ *
+ * Resend is preferred because the Render web services run on the free plan,
+ * which blocks outbound SMTP (25/465/587): an SMTP send there fails with
+ * "Connection timeout" no matter how correct the credentials are. Resend goes
+ * over 443, which is not blocked.
+ *
+ * `notifyService.sendEmail` is not used here: it only logs — it checks for
  * EMAIL_PROVIDER/EMAIL_API_KEY, then returns `{status:'sent'}` without sending
- * anything. That is fine for the transactional notifications nothing depends
- * on, but an admin reply to a website enquiry must actually reach the enquirer,
- * so it needs a transport that really sends.
+ * anything. An admin reply to a website enquiry must actually reach the
+ * enquirer, so it needs a transport that really sends.
  *
- * The configuration mirrors `alertService.js` and `render.yaml`: SMTP_HOST,
- * SMTP_PORT (default 465), SMTP_SECURE (default true on 465) and SMTP_USER /
- * SMTP_PASS (a Gmail app password). When SMTP is not configured, `send` returns
+ * When no transport is configured, `send` returns
  * `{sent:false, reason:'not_configured'}` so callers can tell the admin the
  * reply was recorded but not emailed, instead of claiming success.
  */
@@ -18,8 +25,47 @@ const logger = require('../utils/logger');
 
 let _transporter = null;
 
-function isConfigured() {
+function hasResend() {
+  return Boolean(process.env.RESEND_API_KEY);
+}
+
+function hasSmtp() {
   return Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+}
+
+function isConfigured() {
+  return hasResend() || hasSmtp();
+}
+
+function fromAddress() {
+  return (
+    process.env.CONTACT_FROM ||
+    process.env.SMTP_FROM ||
+    (hasSmtp() ? `Coopvest Africa <${process.env.SMTP_USER}>` : 'Coopvest Africa <onboarding@resend.dev>')
+  );
+}
+
+async function sendViaResend({ to, subject, text, html, replyTo }) {
+  const base = process.env.RESEND_BASE_URL || 'https://api.resend.com';
+  const response = await fetch(`${base}/emails`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: fromAddress(),
+      to: [to],
+      reply_to: replyTo,
+      subject,
+      text,
+      html,
+    }),
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new Error(`resend ${response.status} ${detail.slice(0, 300)}`);
+  }
 }
 
 function getTransporter() {
@@ -54,23 +100,24 @@ function escapeHtml(value) {
  */
 async function send({ to, subject, text, html, replyTo }) {
   if (!isConfigured()) {
-    logger.info(`mailer.send skipped (SMTP not configured): to=${to} subject="${subject}"`);
+    logger.info(`mailer.send skipped (no mail transport configured): to=${to} subject="${subject}"`);
     return { sent: false, reason: 'not_configured' };
   }
   try {
-    const from =
-      process.env.CONTACT_FROM ||
-      process.env.SMTP_FROM ||
-      `Coopvest Africa <${process.env.SMTP_USER}>`;
-    await getTransporter().sendMail({
-      from,
+    const body = {
       to,
-      replyTo,
       subject,
       text,
+      replyTo,
       html: html || `<pre style="font-family:sans-serif;white-space:pre-wrap">${escapeHtml(text || '')}</pre>`,
-    });
-    logger.info(`mailer.send sent via SMTP: to=${to} subject="${subject}"`);
+    };
+    if (hasResend()) {
+      await sendViaResend(body);
+      logger.info(`mailer.send sent via Resend: to=${to} subject="${subject}"`);
+    } else {
+      await getTransporter().sendMail({ from: fromAddress(), ...body });
+      logger.info(`mailer.send sent via SMTP: to=${to} subject="${subject}"`);
+    }
     return { sent: true };
   } catch (err) {
     logger.warn('mailer.send error:', err.message);
@@ -78,4 +125,4 @@ async function send({ to, subject, text, html, replyTo }) {
   }
 }
 
-module.exports = { send, isConfigured, escapeHtml };
+module.exports = { send, isConfigured, hasResend, hasSmtp, fromAddress, escapeHtml };
