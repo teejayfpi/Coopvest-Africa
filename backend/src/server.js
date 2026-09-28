@@ -49,6 +49,8 @@ const settingsRoutes = require('./routes/settings');
 const watchlistRoutes = require('./routes/watchlist');
 const analyticsRoutes = require('./routes/analytics');
 const adminApiRoutes = require('./routes/adminApi');
+const contactRoutes = require('./routes/contact');
+const adminContactRoutes = require('./routes/adminContact');
 const adminAnnouncementRoutes = require('./routes/adminAnnouncements');
 const directMessageRoutes = require('./routes/directMessages');
 const reportsRoutes = require('./routes/reports');
@@ -317,6 +319,9 @@ app.use('/api/watchlist', watchlistRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/guarantor', requireActivated, guarantorRoutes);
 app.use('/api/announcements', announcementRoutes);
+// Public website contact form (no auth by design — the visitor is anonymous).
+app.use('/api/contact', contactRoutes);
+app.use('/api/v1/contact', contactRoutes);
 app.use('/api/contributions', requireRegistrationPaid, contributionRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/termination', requireRegistrationPaid, terminationRoutes);
@@ -346,6 +351,9 @@ app.use('/api/admin/comparative', comparativeRoutes);
 // so its /organizations/* sub-paths win; adminApi has no catch-all and keeps
 // serving its own GET/POST /organizations list+create.
 app.use('/api/admin/organizations', organizationFinanceRoutes);
+// Website enquiry management. Mounted before adminApi so its
+// /contact-messages sub-paths resolve here first.
+app.use('/api/admin/contact-messages', adminContactRoutes);
 app.use('/api/admin', adminApiRoutes);
 // Root-level alias in case Dio resolves absolute paths from host root
 app.use('/guarantor', guarantorRoutes);
@@ -381,6 +389,7 @@ app.use('/api/v2/admin/direct-messages', directMessageRoutes);
 app.use('/api/v2/admin/reports', reportsRoutes);
 app.use('/api/v2/admin/comparative', comparativeRoutes);
 app.use('/api/v2/admin/organizations', organizationFinanceRoutes);
+app.use('/api/v2/admin/contact-messages', adminContactRoutes);
 app.use('/api/v2/admin', adminApiRoutes);
 app.use('/api/v2/admin/kyc', kycAdminRoutes);
 app.use('/api/v2/admin/members', memberDetailRoutes);
