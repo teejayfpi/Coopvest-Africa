@@ -141,6 +141,28 @@ which calls `getOrCreatePlan`.
   (INSERT on `notifications` with `profile_id = userId`) never fires.
   Migration `029_notifications_realtime.sql` does this (applied via Mgmt API).
 - `feature_flag.notifications` = `true` live (fail-open if missing) — not the issue.
+
+## Admin notifications are push-based now (mobile + website → dashboard)
+
+`notifyService.notifyAdmins()` is the single entry point for anything that
+should reach admins. It looks up every `profiles` row whose `role` is in
+`['admin','super_admin','superadmin','staff','operator']` (mirrors the
+`is_staff()` RLS helper) and fans out in-app + FCM push, with an optional
+email (via `alertService`, non-fatal). Never throws — callers have already
+persisted the underlying record, so a notification failure must not fail the
+request.
+
+Wired to: website contact form (`routes/contact.js` — the enquiry now lights
+the bell instead of waiting for the 30s Website-Enquiries poll), support
+tickets (`routes/tickets.js`), loan applications (`routes/loans.js`), KYC
+submissions (`routes/kyc.js`), and the existing org-approval request.
+
+`GET /api/admin/notifications` is scoped to admin profile_ids and returns a
+true `unreadCount`; `POST .../read-all` is scoped the same way. The admin
+dashboard (`Admin-Dashboard/src/hooks/use-admin-notifications.ts`) subscribes
+to `postgres_changes` on its own `profile_id` for instant bell updates, plays
+a sound, and shows an opt-in desktop notification.
+
 ## Monthly contribution is the obligations source of truth
 `contribution_plans.current_monthly_amount` is the single source of truth for
 a member's monthly savings. `savings.monthly_savings` is a denormalised mirror

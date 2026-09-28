@@ -22,6 +22,8 @@ const crypto = require('crypto');
 
 const supabase = require('../config/supabase');
 const logger = require('../utils/logger');
+const notifyService = require('../services/notifyService');
+const mailer = require('../services/mailer');
 const {
   validateContactSubmission,
   newContactReference,
@@ -83,46 +85,80 @@ function ingestTokenValid(req) {
 }
 
 /**
- * Best-effort heads-up email so an admin notices a new enquiry without watching
- * the dashboard. Never fatal: the row is already stored, and the dashboard is
- * the system of record. Skipped silently when SMTP is not configured.
+ * Alert every admin to a new website enquiry.
+ *
+ * The enquiry is already stored in `contact_messages` by the time this runs
+ * (the dashboard is the system of record), so every channel here is best-effort
+ * and must never fail the visitor's request:
+ *
+ *   1. In-app notifications row for every admin/staff profile — this is what
+ *      makes the enquiry light up the dashboard notification bell/feed. Without
+ *      it a new enquiry only appeared if an admin happened to open the Website
+ *      Enquiries page and waited for its 30s poll.
+ *   2. FCM push to admins with a registered device (skipped without credentials).
+ *   3. Heads-up email via `mailer` (Resend over HTTPS on Render; SMTP where
+ *      reachable). Sent to `CONTACT_NOTIFY_TO` when set.
  */
 async function notifyAdmins({ reference, enquiry }) {
+  const title = 'New Website Enquiry';
+  const body = `${enquiry.name} (${enquiry.email}) — ${enquiry.topic}`;
+
+  // 1 + 2: in-app row + FCM push to every admin/staff profile.
+  try {
+    await notifyService.notifyAdmins({
+      title,
+      body,
+      type: 'system',
+      category: 'action_required',
+      priority: 'high',
+    });
+  } catch (err) {
+    logger.warn('contact: admin in-app notification failed:', err.message);
+  }
+
+  // 3: heads-up email. Recipients are explicit — a member-facing address is not
+  // a substitute for knowing who the admins are.
   const recipients = (process.env.CONTACT_NOTIFY_TO || '')
     .split(',')
     .map((value) => value.trim())
     .filter(Boolean);
-  if (!recipients.length || !process.env.SMTP_HOST || !process.env.SMTP_USER) return;
+  if (!recipients.length || !mailer.isConfigured()) return;
 
-  try {
-    const nodemailer = require('nodemailer');
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: parseInt(process.env.SMTP_PORT || '465', 10),
-      secure: process.env.SMTP_SECURE ? process.env.SMTP_SECURE === 'true' : true,
-      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-    });
-    await transporter.sendMail({
-      from: process.env.CONTACT_FROM || process.env.SMTP_USER,
-      to: recipients,
-      replyTo: enquiry.email,
-      subject: `[Website] ${enquiry.topic}: ${enquiry.name} (${reference})`,
-      text: [
-        'New enquiry from the Coopvest Africa website',
-        `Reference: ${reference}`,
-        '',
-        `Name:    ${enquiry.name}`,
-        `Email:   ${enquiry.email}`,
-        enquiry.phone && `Phone:   ${enquiry.phone}`,
-        `Topic:   ${enquiry.topic}`,
-        '',
-        enquiry.message,
-      ]
-        .filter(Boolean)
-        .join('\n'),
-    });
-  } catch (err) {
-    logger.warn('contact: admin notification email failed:', err.message);
+  const text = [
+    'New enquiry from the Coopvest Africa website',
+    `Reference: ${reference}`,
+    '',
+    `Name:    ${enquiry.name}`,
+    `Email:   ${enquiry.email}`,
+    enquiry.phone && `Phone:   ${enquiry.phone}`,
+    `Topic:   ${enquiry.topic}`,
+    '',
+    enquiry.message,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const html = `
+    <h2 style="font-family:sans-serif">New website enquiry</h2>
+    <table cellpadding="6" style="font-family:sans-serif;font-size:14px;border-collapse:collapse">
+      <tr><td><strong>Reference</strong></td><td>${mailer.escapeHtml(reference)}</td></tr>
+      <tr><td><strong>Name</strong></td><td>${mailer.escapeHtml(enquiry.name)}</td></tr>
+      <tr><td><strong>Email</strong></td><td>${mailer.escapeHtml(enquiry.email)}</td></tr>
+      ${enquiry.phone ? `<tr><td><strong>Phone</strong></td><td>${mailer.escapeHtml(enquiry.phone)}</td></tr>` : ''}
+      <tr><td><strong>Topic</strong></td><td>${mailer.escapeHtml(enquiry.topic)}</td></tr>
+    </table>
+    <p style="font-family:sans-serif;font-size:14px;white-space:pre-wrap;margin-top:16px">${mailer.escapeHtml(enquiry.message)}</p>
+  `;
+
+  const result = await mailer.send({
+    to: recipients.join(','),
+    replyTo: enquiry.email,
+    subject: `[Website] ${enquiry.topic}: ${enquiry.name} (${reference})`,
+    text,
+    html,
+  });
+  if (!result.sent) {
+    logger.warn(`contact: admin notification email not sent (${result.reason || 'unknown'})`);
   }
 }
 
