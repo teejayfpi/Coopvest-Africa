@@ -14,25 +14,41 @@ import '../../data/models/wallet_models.dart';
 class StatementPdfService {
   /// Brand lockup (emblem, wordmark and strapline) and the bare emblem, both
   /// derived from the splash screen artwork so every surface shows one logo.
-  static const String lockupAsset = 'assets/images/statement-logo-lockup.png';
+  static const String lockupAsset =
+      'assets/images/statement-logo-lockup-white.png';
   static const String emblemAsset = 'assets/images/statement-emblem.png';
 
-  /// The `pdf` package's built-in fonts are Latin-1 only, and an unsupported
-  /// rune is replaced by a blank placeholder rather than rejected. A Naira sign
-  /// would therefore print as an empty box on exactly the figure a member cares
-  /// about, so money is written as `NGN`. [money] is asserted by
-  /// `test/unit/statement_pdf_service_test.dart` to stay inside Latin-1.
-  static const String currencyCode = 'NGN';
+  /// The Naira sign, U+20A6.
+  ///
+  /// The `pdf` package's built-in fonts encode text as Latin-1 and replace an
+  /// unsupported rune with a blank placeholder rather than rejecting it, which
+  /// is why an earlier revision of this service printed `NGN` instead. The
+  /// document now embeds Inter, whose Naira glyph is present, so the sign is
+  /// drawn and the statement matches the figures shown in the app.
+  static const String currencySign = '\u20A6';
 
-  /// U+00B7 and U+00A7 are inside Latin-1 and safe with the built-in fonts.
-  /// Em dashes and bullets are deliberately not used: they render blank.
-  static const String _dot = '\u00B7';
+  /// Section sign, used to number the notes.
   static const String _section = '\u00A7';
 
-  // Colours sampled from the splash logo artwork, so the statement and the app
-  // share one palette rather than the statement inventing its own greens.
-  static const PdfColor _navy = PdfColor.fromInt(0xFF022D63);
-  static const PdfColor _logoGreen = PdfColor.fromInt(0xFF56B241);
+  // The app's own palette, so the statement is unmistakably the same product.
+  // Every colour is read from [CoopvestColors] rather than typed here, so a
+  // brand change reaches the PDF without touching this file.
+  static final PdfColor _emerald =
+      PdfColor.fromInt(CoopvestColors.primary.toARGB32());
+  static final PdfColor _gold =
+      PdfColor.fromInt(CoopvestColors.accent.toARGB32());
+
+  /// `primaryDark`, used for the header band's lower edge so the band reads as
+  /// a deliberate two-tone brand surface instead of a flat block.
+  static final PdfColor _emeraldDeep =
+      PdfColor.fromInt(CoopvestColors.primaryDark.toARGB32());
+
+  /// `headerLabel` and `headerNudge`: the two text tints the app already uses
+  /// on an emerald header, and both are contrast-checked against it.
+  static final PdfColor _headerLabel =
+      PdfColor.fromInt(CoopvestColors.headerLabel.toARGB32());
+  static final PdfColor _headerNudge =
+      PdfColor.fromInt(CoopvestColors.headerNudge.toARGB32());
 
   static const PdfColor _ink = PdfColor.fromInt(0xFF101B16);
   static const PdfColor _muted = PdfColor.fromInt(0xFF5C6B64);
@@ -42,18 +58,22 @@ class StatementPdfService {
   static const PdfColor _debit = PdfColor.fromInt(0xFFB91C1C);
   static const PdfColor _white = PdfColors.white;
 
-  static final PdfColor _primary =
-      PdfColor.fromInt(CoopvestColors.primary.toARGB32());
+  /// Height of the full-bleed header band, reserved on every page.
+  static const double _bandHeight = 96.0;
+
+  /// Horizontal inset of the band's contents, matching the page margin so
+  /// the logo lines up with the body text.
+  static const double _bandInset = 36.0;
 
   static final NumberFormat _moneyFormat = NumberFormat('#,##0.00');
 
-  /// Renders a figure as `NGN 1,234.50`.
+  /// Renders a figure as `₦1,234.50`, matching `Utils.formatCurrency`.
   ///
-  /// Public and pure so the Latin-1 constraint can be tested directly.
+  /// Public and pure so the glyph coverage can be tested directly.
   static String money(double value) =>
-      '$currencyCode ${_moneyFormat.format(value)}';
+      '$currencySign${_moneyFormat.format(value)}';
 
-  /// Renders a signed figure, e.g. `+NGN 500.00` for a credit.
+  /// Renders a signed figure, e.g. `+20A6500.00` for a credit.
   static String signedMoney(double value) {
     final sign = value < 0 ? '-' : '+';
     return '$sign${money(value.abs())}';
@@ -135,11 +155,27 @@ class StatementPdfService {
       }
     }
 
+    // Real Inter, so the Naira sign and any diacritics in a member's name are
+    // drawn rather than blanked by the built-in Latin-1 fonts.
+    final regularData =
+        await rootBundle.load('assets/fonts/statement/Inter-Regular.ttf');
+    final boldData =
+        await rootBundle.load('assets/fonts/statement/Inter-Bold.ttf');
+    final fontRegular = pw.Font.ttf(regularData);
+    final fontBold = pw.Font.ttf(boldData);
+    final theme = pw.ThemeData.withFont(base: fontRegular, bold: fontBold);
+
+    // The header band's height. It is fixed so the band can be painted
+    // full-bleed in the background while the white logo lockup sits inside the
+    // page margins, and so the first page's content starts below it.
+    const margin = pw.EdgeInsets.fromLTRB(36, 34, 36, 40);
+
     final document = pw.Document(
       title: 'Coopvest Africa Member Account Statement',
       author: 'Coopvest Africa',
       creator: 'Coopvest Africa',
       subject: statementTypeLabel(statementType),
+      theme: theme,
     );
 
     document.addPage(
@@ -147,34 +183,66 @@ class StatementPdfService {
         // pageTheme carries everything, including the faint emblem behind the
         // text. It is the emblem alone on a transparent field, so it tints the
         // page rather than stamping a dark square over it (which is what the
-        // previous opaque watermark image did).
+        // previous opaque watermark image did). The font theme goes here rather
+        // than on MultiPage, which rejects both at once.
         pageTheme: pw.PageTheme(
           pageFormat: PdfPageFormat.a4,
-          margin: const pw.EdgeInsets.fromLTRB(36, 30, 36, 34),
+          margin: margin,
+          theme: theme,
           buildBackground: (context) => pw.FullPage(
             ignoreMargins: true,
-            child: pw.Center(
-              child: pw.Opacity(
-                opacity: 0.045,
-                child: pw.Image(
-                  emblem,
-                  width: 380,
-                  height: 380,
-                  fit: pw.BoxFit.contain,
+            child: pw.Stack(
+              children: [
+                // Watermark, first so it sits behind every other element.
+                pw.Positioned(
+                  left: 0,
+                  top: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: pw.Center(
+                    child: pw.Opacity(
+                      opacity: 0.05,
+                      child: pw.Image(
+                        emblem,
+                        width: 380,
+                        height: 380,
+                        fit: pw.BoxFit.contain,
+                      ),
+                    ),
+                  ),
                 ),
-              ),
+                // Brand header band, bled to the page edges. Painted here
+                // rather than as a page header so it can ignore the margins.
+                pw.Positioned(
+                  left: 0,
+                  top: 0,
+                  right: 0,
+                  child: pw.SizedBox(
+                    height: _bandHeight,
+                    child: _headerBand(lockup),
+                  ),
+                ),
+                // Footer band, likewise full-bleed.
+                pw.Positioned(
+                  left: 0,
+                  bottom: 0,
+                  right: 0,
+                  child: pw.SizedBox(
+                    height: margin.bottom,
+                    child: _footerBand(generatedAt),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
-        // Page one carries the full lockup in the content flow; continuation
-        // pages get a compact letterhead so a detached sheet is still
-        // identifiable.
-        header: (context) => context.pageNumber == 1
-            ? pw.SizedBox()
-            : _runningHeader(lockup, startDate, endDate),
-        footer: (context) => _footer(context, generatedAt),
+        // The band is painted full-bleed in the background on every page, so
+        // the in-flow header only reserves its height; the body then starts
+        // clear of the band and a detached sheet still carries the brand.
+        header: (context) => pw.SizedBox(height: _bandHeight),
+        footer: (context) => pw.SizedBox(height: 4),
         build: (context) => [
-          _hero(lockup, startDate, endDate, generatedAt),
+          _documentBar(startDate, endDate, generatedAt),
           pw.SizedBox(height: 16),
           _memberStrip(user),
           pw.SizedBox(height: 20),
@@ -184,7 +252,7 @@ class StatementPdfService {
             _Tile('Opening Balance', money(opening)),
             _Tile('Total Credits', money(credits), accent: _credit),
             _Tile('Total Debits', money(debits), accent: _debit),
-            _Tile('Closing Balance', money(closing), accent: _primary),
+            _Tile('Closing Balance', money(closing), accent: _emerald),
           ]),
           pw.SizedBox(height: 20),
           _sectionTitle('Account position'),
@@ -205,43 +273,72 @@ class StatementPdfService {
 
   // ── Page furniture ────────────────────────────────────────────────────────
 
-  pw.Widget _hero(
-    pw.MemoryImage lockup,
-    DateTime startDate,
-    DateTime endDate,
-    DateTime generatedAt,
-  ) {
+  /// Full-bleed emerald header band: the brand surface the page opens with.
+  ///
+  /// It is painted in [PageTheme.buildBackground] rather than as a page header
+  /// because only the background can ignore the page margins and bleed to the
+  /// paper edge. The content inside it is inset to [_bandInset] so the logo and
+  /// wordmark line up with the body text below.
+  pw.Widget _headerBand(pw.MemoryImage lockupWhite) {
     return pw.Container(
-      padding: const pw.EdgeInsets.only(bottom: 14),
-      decoration: const pw.BoxDecoration(
-        border: pw.Border(
-          bottom: pw.BorderSide(color: _hairline, width: 1.2),
+      decoration: pw.BoxDecoration(
+        gradient: pw.LinearGradient(
+          begin: pw.Alignment.topLeft,
+          end: pw.Alignment.bottomRight,
+          colors: [_emerald, _emeraldDeep],
         ),
       ),
-      child: pw.Row(
-        crossAxisAlignment: pw.CrossAxisAlignment.center,
+      child: pw.Stack(
+        alignment: pw.Alignment.center,
         children: [
-          pw.Image(lockup, width: 168, height: 132, fit: pw.BoxFit.contain),
-          pw.SizedBox(width: 20),
-          pw.Expanded(
-            child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.end,
+          // Gold accent rule along the bottom edge of the band.
+          pw.Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: pw.SizedBox(
+              height: 4,
+              child: pw.Container(color: _gold),
+            ),
+          ),
+          pw.Padding(
+            padding: const pw.EdgeInsets.fromLTRB(
+              _bandInset, 20, _bandInset, 20,
+            ),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: pw.CrossAxisAlignment.center,
               children: [
-                pw.Text(
-                  'MEMBER ACCOUNT STATEMENT',
-                  textAlign: pw.TextAlign.right,
-                  style: pw.TextStyle(
-                    fontSize: 14,
-                    fontWeight: pw.FontWeight.bold,
-                    color: _navy,
-                    letterSpacing: 1.1,
-                  ),
+                pw.Image(
+                  lockupWhite,
+                  height: 56,
+                  fit: pw.BoxFit.contain,
                 ),
-                pw.SizedBox(height: 8),
-                _labelledRight('Statement period',
-                    '${_date(startDate)}  to  ${_date(endDate)}'),
-                pw.SizedBox(height: 5),
-                _labelledRight('Generated', _dateTime(generatedAt)),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  mainAxisAlignment: pw.MainAxisAlignment.center,
+                  children: [
+                    pw.Text(
+                      'MEMBER ACCOUNT',
+                      style: pw.TextStyle(
+                        fontSize: 8.5,
+                        fontWeight: pw.FontWeight.bold,
+                        color: _headerNudge,
+                        letterSpacing: 1.6,
+                      ),
+                    ),
+                    pw.SizedBox(height: 3),
+                    pw.Text(
+                      'STATEMENT',
+                      style: pw.TextStyle(
+                        fontSize: 8.5,
+                        fontWeight: pw.FontWeight.bold,
+                        color: _headerNudge,
+                        letterSpacing: 1.6,
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -250,70 +347,80 @@ class StatementPdfService {
     );
   }
 
-  pw.Widget _runningHeader(
-    pw.MemoryImage lockup,
-    DateTime startDate,
-    DateTime endDate,
-  ) {
+  /// Full-bleed emerald footer band, mirroring the header so the page is
+  /// bookended by brand surfaces.
+  pw.Widget _footerBand(DateTime generatedAt) {
     return pw.Container(
-      margin: const pw.EdgeInsets.only(bottom: 14),
-      padding: const pw.EdgeInsets.only(bottom: 8),
-      decoration: const pw.BoxDecoration(
-        border: pw.Border(bottom: pw.BorderSide(color: _hairline, width: 1)),
-      ),
-      child: pw.Row(
-        crossAxisAlignment: pw.CrossAxisAlignment.center,
+      color: _emerald,
+      padding: const pw.EdgeInsets.fromLTRB(_bandInset, 7, _bandInset, 7),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        mainAxisAlignment: pw.MainAxisAlignment.center,
         children: [
-          pw.Image(lockup, width: 64, height: 50, fit: pw.BoxFit.contain),
-          pw.SizedBox(width: 10),
-          pw.Expanded(
-            child: pw.Text(
-              'Coopvest Africa $_dot Member Account Statement',
-              style: pw.TextStyle(
-                fontSize: 9,
-                fontWeight: pw.FontWeight.bold,
-                color: _navy,
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text(
+                'Coopvest Africa  \u00B7  coopvest.africa  \u00B7  support@coopvest.com',
+                style: pw.TextStyle(fontSize: 7.5, color: _headerLabel),
               ),
-            ),
+              pw.Text(
+                'Generated ${_dateTime(generatedAt)}',
+                style: pw.TextStyle(fontSize: 7.5, color: _headerLabel),
+              ),
+            ],
           ),
+          pw.SizedBox(height: 4),
           pw.Text(
-            '${_date(startDate)} to ${_date(endDate)}',
-            style: const pw.TextStyle(fontSize: 8, color: _muted),
+            'Computer-generated document. No signature is required. '
+            'Any query about this statement must be raised within 14 days.',
+            style: pw.TextStyle(fontSize: 6.5, color: _headerLabel),
           ),
         ],
       ),
     );
   }
 
-  pw.Widget _footer(pw.Context context, DateTime generatedAt) {
+  /// Statement identity bar: what this document is and the period it covers.
+  pw.Widget _documentBar(
+    DateTime startDate,
+    DateTime endDate,
+    DateTime generatedAt,
+  ) {
     return pw.Container(
-      margin: const pw.EdgeInsets.only(top: 12),
-      padding: const pw.EdgeInsets.only(top: 8),
-      decoration: const pw.BoxDecoration(
-        border: pw.Border(top: pw.BorderSide(color: _hairline, width: 1)),
+      padding: const pw.EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+      decoration: pw.BoxDecoration(
+        color: _surface,
+        borderRadius: pw.BorderRadius.circular(6),
+        border: pw.Border.all(color: _hairline, width: 1),
       ),
-      child: pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
+      child: pw.Row(
+        crossAxisAlignment: pw.CrossAxisAlignment.center,
         children: [
-          pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              pw.Text(
-                'Coopvest Africa $_dot Cooperative Financial Services $_dot coopvest.africa',
-                style: const pw.TextStyle(fontSize: 7.5, color: _muted),
-              ),
-              pw.Text(
-                'Page ${context.pageNumber} of ${context.pagesCount}',
-                style: const pw.TextStyle(fontSize: 7.5, color: _muted),
-              ),
-            ],
+          pw.Container(width: 3, height: 24, color: _gold),
+          pw.SizedBox(width: 10),
+          pw.Expanded(
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(
+                  'MEMBER ACCOUNT STATEMENT',
+                  style: pw.TextStyle(
+                    fontSize: 11,
+                    fontWeight: pw.FontWeight.bold,
+                    color: _emerald,
+                    letterSpacing: 1,
+                  ),
+                ),
+                pw.SizedBox(height: 4),
+                pw.Text(
+                  '${_date(startDate)}  to  ${_date(endDate)}',
+                  style: const pw.TextStyle(fontSize: 8.5, color: _muted),
+                ),
+              ],
+            ),
           ),
-          pw.SizedBox(height: 3),
-          pw.Text(
-            'Computer-generated document, issued ${_dateTime(generatedAt)}. '
-            'No signature is required. Queries: support@coopvest.com',
-            style: const pw.TextStyle(fontSize: 7, color: _muted),
-          ),
+          _labelledRight('Generated', _dateTime(generatedAt)),
         ],
       ),
     );
@@ -322,6 +429,15 @@ class StatementPdfService {
   // ── Content blocks ────────────────────────────────────────────────────────
 
   pw.Widget _memberStrip(User? user) {
+    // Two columns rather than four: a quarter-width column clipped real email
+    // addresses mid-string, and the strip is the member's own identification.
+    final fields = <List<String>>[
+      ['Member', user?.name ?? 'Member'],
+      ['Email', user?.email ?? '-'],
+      ['Phone', user?.phone ?? '-'],
+      ['Status', _statusLabel(user?.membershipStatus)],
+    ];
+
     return pw.Container(
       padding: const pw.EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: pw.BoxDecoration(
@@ -329,16 +445,19 @@ class StatementPdfService {
         borderRadius: pw.BorderRadius.circular(6),
         border: pw.Border.all(color: _hairline, width: 1),
       ),
-      child: pw.Row(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
+      child: pw.Column(
         children: [
-          _detail('Member', user?.name ?? 'Member'),
-          _divider(),
-          _detail('Email', user?.email ?? '-'),
-          _divider(),
-          _detail('Phone', user?.phone ?? '-'),
-          _divider(),
-          _detail('Status', _statusLabel(user?.membershipStatus)),
+          for (var i = 0; i < fields.length; i += 2) ...[
+            if (i > 0) pw.SizedBox(height: 10),
+            pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                _detail(fields[i][0], fields[i][1]),
+                _divider(),
+                _detail(fields[i + 1][0], fields[i + 1][1]),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -392,7 +511,7 @@ class StatementPdfService {
                     style: pw.TextStyle(
                       fontSize: 9,
                       fontWeight: i == 3 ? pw.FontWeight.bold : pw.FontWeight.normal,
-                      color: i == 3 ? _primary : _ink,
+                      color: i == 3 ? _emerald : _ink,
                     ),
                   ),
                 ],
@@ -460,7 +579,7 @@ class StatementPdfService {
       children: [
         pw.TableRow(
           repeat: true,
-          decoration: const pw.BoxDecoration(color: _navy),
+          decoration: pw.BoxDecoration(color: _emerald),
           children: [
             _headCell('Date', headerStyle, cell),
             _headCell('Description', headerStyle, cell),
@@ -527,7 +646,7 @@ class StatementPdfService {
             style: pw.TextStyle(
               fontSize: 9,
               fontWeight: pw.FontWeight.bold,
-              color: _navy,
+              color: _emerald,
             ),
           ),
           pw.SizedBox(height: 5),
@@ -538,7 +657,7 @@ class StatementPdfService {
           ),
           pw.SizedBox(height: 2),
           pw.Text(
-            '$_section 2  Balances are stated in Nigerian Naira ($currencyCode). '
+            '$_section 2  Balances are stated in Nigerian Naira ($currencySign). '
             'The opening balance is the closing balance less credits plus debits '
             'for the period shown.',
             style: const pw.TextStyle(fontSize: 8, color: _muted),
@@ -560,14 +679,14 @@ class StatementPdfService {
     return pw.Row(
       crossAxisAlignment: pw.CrossAxisAlignment.center,
       children: [
-        pw.Container(width: 3, height: 12, color: _logoGreen),
+        pw.Container(width: 3, height: 12, color: _gold),
         pw.SizedBox(width: 7),
         pw.Text(
           text.toUpperCase(),
           style: pw.TextStyle(
             fontSize: 9.5,
             fontWeight: pw.FontWeight.bold,
-            color: _navy,
+            color: _emerald,
             letterSpacing: 0.9,
           ),
         ),

@@ -1,6 +1,6 @@
-import 'dart:convert';
-
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pdf/pdf.dart' show TtfParser;
 import 'package:coopvest_mobile/core/services/statement_pdf_service.dart';
 import 'package:coopvest_mobile/data/models/auth_models.dart';
 import 'package:coopvest_mobile/data/models/wallet_models.dart';
@@ -10,9 +10,12 @@ import 'package:coopvest_mobile/data/models/wallet_models.dart';
 /// the PDF.
 ///
 /// The `pdf` package's built-in fonts encode text as Latin-1 and silently draw
-/// a blank placeholder for anything outside it. A Naira sign therefore prints
-/// as an empty gap on the most important figure in the document, so the service
-/// writes `NGN`. The assertions below are what stop that regressing.
+/// a blank placeholder for anything outside it. An earlier revision therefore
+/// wrote `NGN`, which never matched the `₦` figures shown in the app. The
+/// document now embeds a subset of Inter, and the assertions below read that
+/// subset's character map directly, so a font that cannot draw the Naira sign
+/// or a Yoruba diacritic in a member's name fails here rather than in a
+/// member's hands.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -51,38 +54,48 @@ void main() {
       );
 
   group('currency is written in a glyph the PDF font can draw', () {
-    test('money() uses the NGN code and stays inside Latin-1', () {
-      expect(StatementPdfService.money(1234.5), 'NGN 1,234.50');
-      expect(StatementPdfService.money(0), 'NGN 0.00');
-      expect(StatementPdfService.money(1234567.89), 'NGN 1,234,567.89');
-
-      // The whole point: every character must be encodable, or the built-in
-      // font replaces it with blank space.
-      expect(() => latin1.encode(StatementPdfService.money(1234.5)),
-          returnsNormally);
+    test('money() writes the Naira sign, matching the app', () {
+      expect(StatementPdfService.money(1234.5), '\u20A61,234.50');
+      expect(StatementPdfService.money(0), '\u20A60.00');
+      expect(StatementPdfService.money(1234567.89), '\u20A61,234,567.89');
     });
 
-    test('the Naira sign itself is NOT drawable, which is why NGN is used', () {
-      // 0x20A6 is outside Latin-1. If this ever starts passing, the constraint
-      // has changed and the currency code could be revisited.
-      expect(() => latin1.encode('\u20A6'), throwsA(isA<ArgumentError>()));
-      expect(StatementPdfService.money(10), isNot(contains('\u20A6')));
+    test('the embedded font really draws the Naira sign', () async {
+      // The sign is outside Latin-1, so this is exactly the glyph the built-in
+      // fonts blanked. Reading the embedded subset's cmap is what proves the
+      // figure a member cares about most will not print as an empty gap.
+      final data = await rootBundle
+          .load('assets/fonts/statement/Inter-Regular.ttf');
+      final parser = TtfParser(data);
+
+      expect(parser.charToGlyphIndexMap.containsKey(0x20A6), isTrue,
+          reason: 'the Naira sign must be in the embedded subset');
+    });
+
+    test('the embedded font draws the diacritics Nigerian names carry',
+        () async {
+      // Names are printed verbatim, so a subset that stopped at Latin-1 would
+      // blank the Yoruba o-dot, e-dot and s-dot.
+      final data = await rootBundle
+          .load('assets/fonts/statement/Inter-Regular.ttf');
+      final parser = TtfParser(data);
+
+      for (final rune in [0x1ECD, 0x1EB9, 0x1E63]) {
+        expect(parser.charToGlyphIndexMap.containsKey(rune), isTrue,
+            reason: 'U+${rune.toRadixString(16)} must be in the subset');
+      }
     });
 
     test('signedMoney() marks credits and debits', () {
-      expect(StatementPdfService.signedMoney(500), '+NGN 500.00');
-      expect(StatementPdfService.signedMoney(-500), '-NGN 500.00');
+      expect(StatementPdfService.signedMoney(500), '+\u20A6500.00');
+      expect(StatementPdfService.signedMoney(-500), '-\u20A6500.00');
     });
 
-    test('type labels are human readable and Latin-1 safe', () {
+    test('type labels are human readable', () {
       expect(StatementPdfService.typeLabel('loan_repayment'), 'Loan Repayment');
       expect(StatementPdfService.typeLabel('transfer_in'), 'Transfer In');
       expect(StatementPdfService.typeLabel('deposit'), 'Deposit');
       expect(StatementPdfService.typeLabel(''), 'Transaction');
-      expect(
-        () => latin1.encode(StatementPdfService.typeLabel('loan_repayment')),
-        returnsNormally,
-      );
     });
 
     test('statement type labels cover each selection', () {
