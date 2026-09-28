@@ -148,7 +148,7 @@ class RolloverRequestScreen extends ConsumerWidget {
   Widget _buildImportantNotes(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: CoopvestColors.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(8), border: Border.all(color: CoopvestColors.primary.withOpacity(0.3))),
+      decoration: BoxDecoration(color: CoopvestColors.primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8), border: Border.all(color: CoopvestColors.primary.withValues(alpha: 0.3))),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -194,7 +194,7 @@ class RolloverRequestScreen extends ConsumerWidget {
               const SizedBox(height: 12),
               ...terms.errors.map((e) => Padding(
                     padding: const EdgeInsets.symmetric(vertical: 2),
-                    child: Text('• $e', style: TextStyle(fontSize: 12, color: CoopvestColors.error)),
+                    child: Text('• $e', style: const TextStyle(fontSize: 12, color: CoopvestColors.error)),
                   )),
             ],
           ],
@@ -261,7 +261,7 @@ class RolloverRequestScreen extends ConsumerWidget {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
+            const Text(
               'All three guarantors must give fresh consent for this rollover.',
               style: TextStyle(fontSize: 13, color: CoopvestColors.textSecondary),
             ),

@@ -387,7 +387,7 @@ class _KYCSelfieScreenState extends ConsumerState<KYCSelfieScreen> {
       );
 
   Widget _buildGuidelinesOverlay() => Container(
-        color: Colors.black.withOpacity(0.7),
+        color: Colors.black.withValues(alpha: 0.7),
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -430,7 +430,7 @@ class _KYCSelfieScreenState extends ConsumerState<KYCSelfieScreen> {
           width: 280,
           height: 380,
           decoration: BoxDecoration(
-            border: Border.all(color: Colors.white.withOpacity(0.5), width: 2),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.5), width: 2),
             borderRadius: BorderRadius.circular(140),
           ),
         ),

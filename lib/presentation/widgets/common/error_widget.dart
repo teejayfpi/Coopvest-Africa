@@ -27,7 +27,7 @@ class ErrorRetryWidget extends StatelessWidget {
             Icon(
               icon,
               size: 64,
-              color: CoopvestColors.error.withOpacity(0.7),
+              color: CoopvestColors.error.withValues(alpha: 0.7),
             ),
             const SizedBox(height: 16),
             Text(
@@ -89,7 +89,7 @@ class EmptyStateWidget extends StatelessWidget {
             Icon(
               icon,
               size: 80,
-              color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.5),
+              color: Theme.of(context).textTheme.bodyMedium?.color?.withValues(alpha: 0.5),
             ),
             const SizedBox(height: 24),
             Text(
@@ -144,12 +144,12 @@ class OfflineBanner extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       color: CoopvestColors.warning,
-      child: Row(
+      child: const Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.wifi_off, color: Colors.white, size: 18),
-          const SizedBox(width: 8),
-          const Text(
+          Icon(Icons.wifi_off, color: Colors.white, size: 18),
+          SizedBox(width: 8),
+          Text(
             'No internet connection',
             style: TextStyle(
               color: Colors.white,

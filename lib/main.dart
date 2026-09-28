@@ -256,12 +256,10 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
       });
     } else {
       final deepLinkData = DeepLinkService.parseDeepLink(uri.toString());
-      if (deepLinkData != null) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          final ctx = navigatorKey.currentContext;
-          if (ctx != null) DeepLinkNavigator.navigateToScreen(ctx, deepLinkData);
-        });
-      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final ctx = navigatorKey.currentContext;
+        if (ctx != null) DeepLinkNavigator.navigateToScreen(ctx, deepLinkData);
+      });
     }
   }
 

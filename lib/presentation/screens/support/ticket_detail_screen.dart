@@ -71,7 +71,9 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
       final response = await ApiClient().getDio().post('/tickets/${widget.ticketId}/messages', data: {'content': _replyController.text.trim()});
       if (response.data['success'] == true) { _replyController.clear(); _loadTicketDetails(); }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to send reply'), backgroundColor: CoopvestColors.error));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to send reply'), backgroundColor: CoopvestColors.error));
+      }
     } finally {
       if (mounted) setState(() => _isReplying = false);
     }
@@ -131,7 +133,7 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(color: CoopvestColors.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                decoration: BoxDecoration(color: CoopvestColors.primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
                 child: Text(_ticket!['status']?.toUpperCase() ?? '', style: const TextStyle(color: CoopvestColors.primary, fontSize: 10, fontWeight: FontWeight.bold)),
               ),
               Text(_ticket!['category'] ?? '', style: TextStyle(fontSize: 12, color: context.textSecondary)),
@@ -188,7 +190,7 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
               style: TextStyle(color: context.textPrimary),
             ),
           ),
-          IconButton(icon: Icon(Icons.send, color: CoopvestColors.primary), onPressed: _isReplying ? null : _sendReply),
+          IconButton(icon: const Icon(Icons.send, color: CoopvestColors.primary), onPressed: _isReplying ? null : _sendReply),
         ],
       ),
     );

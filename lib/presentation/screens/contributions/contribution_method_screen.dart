@@ -251,7 +251,7 @@ class _ContributionMethodScreenState
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: isSelected
-              ? CoopvestColors.primary.withOpacity(0.07)
+              ? CoopvestColors.primary.withValues(alpha: 0.07)
               : context.cardBackground,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
@@ -261,7 +261,7 @@ class _ContributionMethodScreenState
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: CoopvestColors.primary.withOpacity(0.12),
+                    color: CoopvestColors.primary.withValues(alpha: 0.12),
                     blurRadius: 12,
                     offset: const Offset(0, 4),
                   )
@@ -277,8 +277,8 @@ class _ContributionMethodScreenState
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? CoopvestColors.primary.withOpacity(0.15)
-                        : context.dividerColor.withOpacity(0.5),
+                        ? CoopvestColors.primary.withValues(alpha: 0.15)
+                        : context.dividerColor.withValues(alpha: 0.5),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(
@@ -311,7 +311,7 @@ class _ContributionMethodScreenState
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 8, vertical: 3),
                               decoration: BoxDecoration(
-                                color: CoopvestColors.info.withOpacity(0.12),
+                                color: CoopvestColors.info.withValues(alpha: 0.12),
                                 borderRadius: BorderRadius.circular(20),
                               ),
                               child: Text(
@@ -446,7 +446,7 @@ class _ContributionMethodScreenState
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: CoopvestColors.info.withOpacity(0.08),
+              color: CoopvestColors.info.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
@@ -456,7 +456,7 @@ class _ContributionMethodScreenState
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'You will receive a reminder on the ${_contributionDay}${_ordinalSuffix(_contributionDay)} of ${PaymentDateUtils.monthNames[_contributionMonth - 1]} to make your contribution of ₦${_contributionAmount.toStringAsFixed(0)}.'
+                    'You will receive a reminder on the $_contributionDay${_ordinalSuffix(_contributionDay)} of ${PaymentDateUtils.monthNames[_contributionMonth - 1]} to make your contribution of ₦${_contributionAmount.toStringAsFixed(0)}.'
                     '${_contributionDay >= 29 ? ' ${PaymentDateUtils.endOfMonthFallbackHint}' : ''}',
                     style:
                         const TextStyle(color: CoopvestColors.info, fontSize: 11),
@@ -474,9 +474,9 @@ class _ContributionMethodScreenState
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: CoopvestColors.info.withOpacity(0.06),
+        color: CoopvestColors.info.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: CoopvestColors.info.withOpacity(0.25)),
+        border: Border.all(color: CoopvestColors.info.withValues(alpha: 0.25)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -507,7 +507,7 @@ class _ContributionMethodScreenState
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: CoopvestColors.warning.withOpacity(0.1),
+              color: CoopvestColors.warning.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Text(

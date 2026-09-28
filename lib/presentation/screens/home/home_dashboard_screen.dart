@@ -42,7 +42,6 @@ class HomeDashboardScreen extends ConsumerStatefulWidget {
 
 class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
     with WidgetsBindingObserver {
-  late Future<void> _refreshFuture;
   Timer? _refreshTimer;
   bool _appInForeground = true;
 
@@ -55,7 +54,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _refreshFuture = _loadData();
+    _loadData();
     _startPeriodicRefresh();
     WidgetsBinding.instance.addPostFrameCallback((_) => _subscribeToNotifications());
   }
@@ -206,7 +205,6 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
     final membershipId = user?.id.substring(0, 6) ?? 'N/A';
     
     final walletBalance = wallet?.balance ?? 0.0;
-    final totalContributions = wallet?.totalContributions ?? 0.0;
     final activeLoans = loansState.loans
         .where((l) => isLoanActive(l.status))
         .fold(0.0, (sum, l) => sum + l.amount);
@@ -357,8 +355,8 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
                             'Investment Pool',
                             Icons.trending_up_outlined,
                             () => ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: const Text('Investment Pool coming soon'),
+                              const SnackBar(
+                                content: Text('Investment Pool coming soon'),
                                 backgroundColor: CoopvestColors.primary,
                               ),
                             ),
@@ -467,7 +465,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
                   Text(
                     'Welcome back,',
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.8),
+                      color: Colors.white.withValues(alpha: 0.8),
                       fontSize: 14,
                       fontWeight: FontWeight.w400,
                       letterSpacing: 0.3,
@@ -493,7 +491,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
                     child: Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.15),
+                        color: Colors.white.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Icon(
@@ -511,7 +509,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
                       padding: const EdgeInsets.all(3),
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white.withOpacity(0.3), width: 2),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 2),
                       ),
                       child: ref.watch(currentUserProvider)?.profilePicture != null && ref.watch(currentUserProvider)!.profilePicture!.isNotEmpty
                           ? ClipOval(
@@ -523,7 +521,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
                                 errorBuilder: (context, error, stackTrace) {
                                   return CircleAvatar(
                                     radius: 22,
-                                    backgroundColor: Colors.white.withOpacity(0.2),
+                                    backgroundColor: Colors.white.withValues(alpha: 0.2),
                                     child: Text(
                                       _getInitials(fullName),
                                       style: const TextStyle(
@@ -538,7 +536,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
                             )
                           : CircleAvatar(
                               radius: 22,
-                              backgroundColor: Colors.white.withOpacity(0.2),
+                              backgroundColor: Colors.white.withValues(alpha: 0.2),
                               child: Text(
                                 _getInitials(fullName),
                                 style: const TextStyle(
@@ -561,9 +559,9 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.12),
+              color: Colors.white.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.white.withOpacity(0.1)),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -574,7 +572,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
                     Text(
                       'Total Balance',
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.8),
+                        color: Colors.white.withValues(alpha: 0.8),
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
                         letterSpacing: 0.5,
@@ -981,7 +979,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
                   builder: (context) => TransactionsHistoryScreen(userId: userId),
                 ),
               ),
-              child: Text(
+              child: const Text(
                 'See all',
                 style: TextStyle(
                   fontSize: 13,
@@ -999,17 +997,17 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
             decoration: BoxDecoration(
               color: context.cardBackground,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: context.dividerColor.withOpacity(0.5)),
+              border: Border.all(color: context.dividerColor.withValues(alpha: 0.5)),
             ),
             child: Row(
               children: [
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: CoopvestColors.primary.withOpacity(0.1),
+                    color: CoopvestColors.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(
+                  child: const Icon(
                     Icons.receipt_long_outlined,
                     color: CoopvestColors.primary,
                     size: 22,
@@ -1049,12 +1047,12 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.03),
+                  color: Colors.black.withValues(alpha: 0.03),
                   blurRadius: 10,
                   offset: const Offset(0, 3),
                 ),
               ],
-              border: Border.all(color: Colors.grey.withOpacity(0.06)),
+              border: Border.all(color: Colors.grey.withValues(alpha: 0.06)),
             ),
             child: Column(
               children: [
@@ -1064,7 +1062,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
                     Divider(
                       height: 1,
                       indent: 16,
-                      color: context.dividerColor.withOpacity(0.4),
+                      color: context.dividerColor.withValues(alpha: 0.4),
                     ),
                 ],
               ],
@@ -1106,7 +1104,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: accent.withOpacity(0.12),
+                  color: accent.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(icon, color: accent, size: 18),
@@ -1190,13 +1188,13 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.03),
+                color: Colors.black.withValues(alpha: 0.03),
                 blurRadius: 10,
                 offset: const Offset(0, 3),
               ),
             ],
             border: Border.all(
-              color: Colors.grey.withOpacity(0.06),
+              color: Colors.grey.withValues(alpha: 0.06),
               width: 1,
             ),
           ),
@@ -1209,8 +1207,8 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      color.withOpacity(0.15),
-                      color.withOpacity(0.05),
+                      color.withValues(alpha: 0.15),
+                      color.withValues(alpha: 0.05),
                     ],
                   ),
                   borderRadius: BorderRadius.circular(14),
@@ -1246,7 +1244,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
               ),
               Icon(
                 Icons.chevron_right_rounded,
-                color: context.textSecondary.withOpacity(0.5),
+                color: context.textSecondary.withValues(alpha: 0.5),
                 size: 22,
               ),
             ],
@@ -1278,17 +1276,17 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
             decoration: BoxDecoration(
               color: context.cardBackground,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: context.dividerColor.withOpacity(0.5)),
+              border: Border.all(color: context.dividerColor.withValues(alpha: 0.5)),
             ),
             child: Row(
               children: [
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: CoopvestColors.primary.withOpacity(0.1),
+                    color: CoopvestColors.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(
+                  child: const Icon(
                     Icons.notifications_none_outlined,
                     color: CoopvestColors.primary,
                     size: 24,

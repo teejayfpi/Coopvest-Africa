@@ -162,7 +162,7 @@ class _ContributionMethodScreenState
                       ?.copyWith(fontWeight: FontWeight.w700)),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: _employmentType,
+                initialValue: _employmentType,
                 decoration: const InputDecoration(
                   labelText: 'Employment Type *',
                   border: OutlineInputBorder(),
@@ -250,7 +250,7 @@ class _OptionCard extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: selected
-              ? CoopvestColors.primary.withOpacity(0.06)
+              ? CoopvestColors.primary.withValues(alpha: 0.06)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(

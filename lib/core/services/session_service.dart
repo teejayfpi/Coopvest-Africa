@@ -233,14 +233,14 @@ class _SessionTimeoutDialogState extends State<SessionTimeoutDialog> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
       ),
-      title: Row(
+      title: const Row(
         children: [
           Icon(
             Icons.timer_outlined,
             color: Colors.orange,
           ),
-          const SizedBox(width: 12),
-          const Text('Session Expiring'),
+          SizedBox(width: 12),
+          Text('Session Expiring'),
         ],
       ),
       content: Column(
@@ -256,7 +256,7 @@ class _SessionTimeoutDialogState extends State<SessionTimeoutDialog> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             decoration: BoxDecoration(
-              color: Colors.orange.withOpacity(0.1),
+              color: Colors.orange.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(

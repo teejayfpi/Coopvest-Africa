@@ -34,7 +34,7 @@ class AppCard extends StatelessWidget {
         color: backgroundColor ?? context.cardBackground,
         shape: RoundedRectangleBorder(
           borderRadius: borderRadius ?? BorderRadius.circular(12),
-          side: border?.top ?? BorderSide(color: context.dividerColor.withOpacity(0.5)),
+          side: border?.top ?? BorderSide(color: context.dividerColor.withValues(alpha: 0.5)),
         ),
         child: InkWell(
           onTap: onTap,

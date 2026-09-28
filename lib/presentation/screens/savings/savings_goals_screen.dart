@@ -48,12 +48,16 @@ class _SavingsGoalsScreenState extends ConsumerState<SavingsGoalsScreen> {
       _nameController.clear();
       _targetController.clear();
       _monthlyController.clear();
-      Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Savings goal created successfully!'), backgroundColor: CoopvestColors.success),
-      );
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Savings goal created successfully!'), backgroundColor: CoopvestColors.success),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to create goal: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to create goal: $e')));
+      }
     } finally {
       setState(() => _isCreating = false);
     }
@@ -210,7 +214,7 @@ class _SavingsGoalsScreenState extends ConsumerState<SavingsGoalsScreen> {
                 ),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(color: CoopvestColors.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                  decoration: BoxDecoration(color: CoopvestColors.primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
                   child: Text('${(progress * 100).toStringAsFixed(0)}%', style: const TextStyle(color: CoopvestColors.primary, fontWeight: FontWeight.bold, fontSize: 12)),
                 ),
               ],

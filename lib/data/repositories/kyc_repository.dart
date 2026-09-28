@@ -43,7 +43,7 @@ class KYCRepository {
       // for older payloads.
       final row = (data['kyc'] as Map<String, dynamic>?) ?? data;
 
-      String? str(dynamic v) => v == null ? null : v.toString();
+      String? str(dynamic v) => v?.toString();
 
       final personal = (row['personal_info'] as Map<String, dynamic>?) ?? const {};
       final employment = (row['employment_info'] as Map<String, dynamic>?) ?? const {};

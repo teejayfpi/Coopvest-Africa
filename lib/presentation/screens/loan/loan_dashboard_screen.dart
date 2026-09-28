@@ -65,7 +65,7 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
     final overdueLoans = loans.where((l) => l.status.toLowerCase() == 'overdue' || l.status.toLowerCase() == 'in_recovery').toList();
     final hasOverdueLoans = overdueLoans.isNotEmpty;
 
-    final _quickStats = {
+    final quickStats = {
       'totalLoans': loans.length,
       'activeLoans': activeLoans,
       'totalBorrowed': totalBorrowed,
@@ -99,9 +99,9 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
                     width: double.infinity,
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: CoopvestColors.error.withOpacity(0.12),
+                      color: CoopvestColors.error.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: CoopvestColors.error.withOpacity(0.5), width: 1.5),
+                      border: Border.all(color: CoopvestColors.error.withValues(alpha: 0.5), width: 1.5),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -131,7 +131,7 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
                         Container(
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                            color: CoopvestColors.error.withOpacity(0.08),
+                            color: CoopvestColors.error.withValues(alpha: 0.08),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: const Text(
@@ -153,7 +153,7 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
                     Expanded(
                       child: _buildStatCard(
                         'Active Loans',
-                        '${_quickStats['activeLoans']}',
+                        '${quickStats['activeLoans']}',
                         Icons.trending_up,
                         CoopvestColors.success,
                         onTap: () {},
@@ -163,7 +163,7 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
                     Expanded(
                       child: _buildStatCard(
                         'Total Borrowed',
-                        '\u20a6${(_quickStats['totalBorrowed'] as num).toDouble().toStringAsFixed(0)}',
+                        '\u20a6${(quickStats['totalBorrowed'] as num).toDouble().toStringAsFixed(0)}',
                         Icons.account_balance,
                         CoopvestColors.primary,
                         onTap: () {},
@@ -177,7 +177,7 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
                     Expanded(
                       child: _buildStatCard(
                         'Total Repaid',
-                        '\u20a6${(_quickStats['totalRepaid'] as num).toDouble().toStringAsFixed(0)}',
+                        '\u20a6${(quickStats['totalRepaid'] as num).toDouble().toStringAsFixed(0)}',
                         Icons.payments,
                         CoopvestColors.info,
                         onTap: () {},
@@ -187,7 +187,7 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
                     Expanded(
                       child: _buildStatCard(
                         'Applications',
-                        '${_quickStats['totalLoans']}',
+                        '${quickStats['totalLoans']}',
                         Icons.description,
                         Colors.orange,
                         onTap: () {},
@@ -276,14 +276,14 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
       onTap: onTap,
       elevation: 4,
       borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: color.withOpacity(0.1)),
+      border: Border.all(color: color.withValues(alpha: 0.1)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(icon, color: color, size: 20),
@@ -355,7 +355,7 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.1),
+                    color: statusColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
@@ -414,7 +414,7 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 decoration: BoxDecoration(
-                  color: CoopvestColors.success.withOpacity(0.06),
+                  color: CoopvestColors.success.withValues(alpha: 0.06),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(
@@ -446,7 +446,7 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
                         ),
                         Text(
                           '\u20a6${loan.amountRepaid.formatNumber()}',
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             color: CoopvestColors.success,
                             fontSize: 13,
@@ -477,7 +477,7 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
                   style: OutlinedButton.styleFrom(
                     foregroundColor: CoopvestColors.primary,
                     side: BorderSide(
-                      color: CoopvestColors.primary.withOpacity(0.4),
+                      color: CoopvestColors.primary.withValues(alpha: 0.4),
                     ),
                     shape: RoundedRectangleBorder(
                       borderRadius:
@@ -501,7 +501,7 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
                       label: const Text('Cancel Application'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: CoopvestColors.error,
-                        side: BorderSide(color: CoopvestColors.error.withOpacity(0.4)),
+                        side: BorderSide(color: CoopvestColors.error.withValues(alpha: 0.4)),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
@@ -545,7 +545,7 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
                   label: const Text('Loan Rollover'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: CoopvestColors.primary,
-                    side: BorderSide(color: CoopvestColors.primary.withOpacity(0.4)),
+                    side: BorderSide(color: CoopvestColors.primary.withValues(alpha: 0.4)),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
@@ -569,16 +569,16 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: CoopvestColors.warning.withOpacity(0.08),
+        color: CoopvestColors.warning.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: CoopvestColors.warning.withOpacity(0.25)),
+        border: Border.all(color: CoopvestColors.warning.withValues(alpha: 0.25)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(Icons.group_outlined, size: 16, color: CoopvestColors.warning),
+              const Icon(Icons.group_outlined, size: 16, color: CoopvestColors.warning),
               const SizedBox(width: 6),
               Text(
                 '$accepted of $required guarantors approved',
@@ -591,7 +591,7 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
               const Spacer(),
               Text(
                 required > 0 ? '${((accepted / required) * 100).round()}%' : '0%',
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: CoopvestColors.warning,
@@ -611,7 +611,7 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
                     decoration: BoxDecoration(
                       color: done
                           ? CoopvestColors.success
-                          : CoopvestColors.lightGray.withOpacity(0.5),
+                          : CoopvestColors.lightGray.withValues(alpha: 0.5),
                       borderRadius: BorderRadius.circular(3),
                     ),
                   ),
@@ -694,7 +694,7 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
             ? CoopvestColors.errorSurface
             : CoopvestColors.pendingSurface,
         borderRadius: BorderRadius.circular(CoopvestShape.chipRadius),
-        border: Border.all(color: statusColor.withOpacity(0.35)),
+        border: Border.all(color: statusColor.withValues(alpha: 0.35)),
       ),
       child: Row(
         children: [
@@ -869,7 +869,7 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
                   Container(
                     width: 240,
                     height: 240,
-                    color: CoopvestColors.lightGray.withOpacity(0.3),
+                    color: CoopvestColors.lightGray.withValues(alpha: 0.3),
                     child: const Center(child: Text('QR image unavailable')),
                   ),
                 const SizedBox(height: 16),
@@ -877,10 +877,10 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
-                      color: CoopvestColors.error.withOpacity(0.1),
+                      color: CoopvestColors.error.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Text(
+                    child: const Text(
                       'This QR code has expired. Please start a new loan application to generate a fresh one.',
                       textAlign: TextAlign.center,
                       style: TextStyle(fontSize: 12, color: CoopvestColors.error),

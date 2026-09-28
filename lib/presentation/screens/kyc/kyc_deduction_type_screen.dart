@@ -176,7 +176,7 @@ class _TypeCard extends StatelessWidget {
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
           color: selected
-              ? CoopvestColors.primary.withOpacity(0.06)
+              ? CoopvestColors.primary.withValues(alpha: 0.06)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
@@ -190,7 +190,7 @@ class _TypeCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: CoopvestColors.primary.withOpacity(0.1),
+                color: CoopvestColors.primary.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(icon, color: CoopvestColors.primary, size: 26),
@@ -233,7 +233,7 @@ class _TypeCard extends StatelessWidget {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
-                      color: CoopvestColors.primary.withOpacity(0.08),
+                      color: CoopvestColors.primary.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(

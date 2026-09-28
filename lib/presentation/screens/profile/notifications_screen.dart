@@ -161,7 +161,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
               child: ElevatedButton(
                 onPressed: () async {
                   await _savePreferences();
-                  if (mounted) {
+                  if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Notification preferences saved'), backgroundColor: CoopvestColors.success),
                     );
@@ -207,7 +207,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
       leading: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: CoopvestColors.primary.withOpacity(0.1),
+          color: CoopvestColors.primary.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Icon(icon, color: CoopvestColors.primary, size: 20),
@@ -217,7 +217,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
       trailing: Switch(
         value: value,
         onChanged: onChanged,
-        activeColor: CoopvestColors.primary,
+        activeThumbColor: CoopvestColors.primary,
       ),
     );
   }
