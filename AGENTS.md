@@ -278,3 +278,32 @@ data the server already holds. Covered by
 import it with `show Formatters` in files that also need string extensions, to
 avoid an ambiguous-extension clash with `capitalize`.
 
+## Render env vars are replaced, not merged
+
+`PUT /v1/services/{id}/env-vars` replaces the whole set. Sending only the keys
+you want to add silently deletes every other variable — and the service keeps
+running on the old values until the next deploy, so the damage only surfaces
+after a deploy or restart. Read the current set first and send the union:
+
+```bash
+curl -s "https://api.render.com/v1/services/$SVC/env-vars?limit=100" -H "Authorization: Bearer $RENDER_TOKEN"
+```
+
+Before adding a variable there, confirm you can re-derive every existing one:
+`SUPABASE_SERVICE_ROLE_KEY` and `SUPABASE_ANON_KEY` are recoverable from the
+Supabase management API, but `PAYSTACK_SECRET_KEY` and the `FIREBASE_*` pair
+exist *only* in Render and cannot be recovered once overwritten.
+
+## Contact replies need SMTP, and the password lives outside the repo
+
+An admin reply to a website enquiry is recorded in `contact_messages` whatever
+happens, but it only reaches the enquirer when `SMTP_HOST`, `SMTP_USER` and
+`SMTP_PASS` are all set on the backend. `CONTACT_FROM` (or `SMTP_FROM`) sets the
+from-address; it must be a mailbox the SMTP account is allowed to send as.
+
+`SMTP_PASS` is a Gmail app password for `coopvestafrica@gmail.com`. It is not in
+this repo and it is not in `render.yaml` — only the key name is there, with no
+value. Supabase's `smtp_pass` is *not* a substitute: the management API returns
+it encrypted, and the plaintext is rejected by Gmail. Do not paste the password
+into a commit or a shell command; set it through the Render dashboard, then
+confirm a reply reports `emailed: true`.
