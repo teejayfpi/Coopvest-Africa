@@ -37,7 +37,7 @@ class _PaystackCheckoutDialogState extends State<PaystackCheckoutDialog> {
   bool _loading = true;
   int _progress = 0;
   bool _loadFailed = false;
-  bool _allowExternalHttp = false;
+  final bool _allowExternalHttp = false;
 
   @override
   void initState() {
@@ -114,7 +114,7 @@ class _PaystackCheckoutDialogState extends State<PaystackCheckoutDialog> {
                         child: LinearProgressIndicator(
                           value: _progress/ 100,
                           minHeight: 2,
-                          backgroundColor: CoopvestColors.primary.withOpacity(0.15),
+                          backgroundColor: CoopvestColors.primary.withValues(alpha: 0.15),
                           color: CoopvestColors.primary,
                         ),
                       ),
@@ -167,7 +167,7 @@ class _PaystackCheckoutDialogState extends State<PaystackCheckoutDialog> {
   Widget _buildHeader() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: CoopvestColors.primary,
       ),
       child: Row(
@@ -217,7 +217,7 @@ class _PaystackCheckoutDialogState extends State<PaystackCheckoutDialog> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Cancel payment?'),
-        content: Text(
+        content: const Text(
           'If you cancel, the payment won\'t complete. Proceed anyway?',
         ),
         actions: [
@@ -227,8 +227,8 @@ class _PaystackCheckoutDialogState extends State<PaystackCheckoutDialog> {
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Cancel'),
             style: TextButton.styleFrom(foregroundColor: CoopvestColors.error),
+            child: const Text('Cancel'),
           ),
         ],
       ),

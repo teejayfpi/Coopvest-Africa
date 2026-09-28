@@ -129,7 +129,7 @@ class ContributionReminderService {
           'hasContributedThisMonth': hasContributedThisMonth,
           'preferredDay': preferredDay,
           'monthlyAmount': monthlyAmount,
-          'lastContributionDate': thisMonthContribution?.createdAt?.toIso8601String(),
+          'lastContributionDate': thisMonthContribution?.createdAt.toIso8601String(),
           'dueDate': PaymentDateUtils.resolveDueDate(
                   now.year, now.month, preferredDay)
               .toIso8601String(),
@@ -178,17 +178,15 @@ class ContributionReminderService {
     if (contributions.isEmpty) return 0;
     
     final sortedContributions = List<MonthlyContribution>.from(contributions)
-      ..sort((a, b) => (b.createdAt ?? DateTime(2000)).compareTo(a.createdAt ?? DateTime(2000)));
+      ..sort((a, b) => (b.createdAt).compareTo(a.createdAt));
     
     int streak = 0;
     DateTime? lastMonth;
     
     for (final contribution in sortedContributions) {
-      if (contribution.createdAt == null) continue;
-      
       final contributionMonth = DateTime(
-        contribution.createdAt!.year,
-        contribution.createdAt!.month,
+        contribution.createdAt.year,
+        contribution.createdAt.month,
       );
       
       if (lastMonth == null) {

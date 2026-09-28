@@ -21,7 +21,7 @@ void main() {
   group('registration-fee gate (bug 1)', () {
     test('a settled fee from the activation gate marks the member as paid', () {
       // This is the shape /auth/sync now returns.
-      final u = User.fromJson({
+      final u = User.fromJson(const {
         'id': 'p1',
         'email': 'a@b.c',
         'registration_fee_paid': true,
@@ -40,7 +40,7 @@ void main() {
     });
 
     test('an UNPAID member is correctly gated', () {
-      final u = User.fromJson({
+      final u = User.fromJson(const {
         'id': 'p2',
         'email': 'a@b.c',
         'registration_fee_paid': false,
@@ -60,7 +60,7 @@ void main() {
       // Salary-deduction members have their fee recovered by their employer, so
       // sending them to the payment screen would demand money through a channel
       // that is not theirs.
-      final u = User.fromJson({
+      final u = User.fromJson(const {
         'id': 'p3',
         'email': 'a@b.c',
         'registration_fee_paid': false,
@@ -78,7 +78,7 @@ void main() {
     });
 
     test('an older backend that only sends registration_fee_paid still works', () {
-      final u = User.fromJson({
+      final u = User.fromJson(const {
         'id': 'p4',
         'email': 'a@b.c',
         'registration_fee_paid': true,
@@ -91,7 +91,7 @@ void main() {
       // the client had to treat it as unpaid. This asserts the client-side
       // behaviour stays correct — the fix belongs on the server, and this is
       // the shape that must NOT be shipped again.
-      final u = User.fromJson({
+      final u = User.fromJson(const {
         'userId': 'USR-1',
         'id': 'p5',
         'email': 'a@b.c',
@@ -107,7 +107,7 @@ void main() {
 
   group('KYC status (bug 2)', () {
     test('an approved member reports approved', () {
-      final u = User.fromJson({
+      final u = User.fromJson(const {
         'id': 'p1', 'email': 'a@b.c', 'kycVerified': true,
       });
       expect(u.kycStatus, 'approved');
@@ -115,7 +115,7 @@ void main() {
 
     test('a member awaiting review reports pending, NOT approved', () {
       // The screen used to print a hardcoded "Verified" here.
-      final u = User.fromJson({
+      final u = User.fromJson(const {
         'id': 'p2', 'email': 'a@b.c', 'kyc_verified': false,
         'kyc_status': 'pending',
       });
@@ -125,7 +125,7 @@ void main() {
     });
 
     test('a rejected member reports rejected', () {
-      final u = User.fromJson({
+      final u = User.fromJson(const {
         'id': 'p3', 'email': 'a@b.c', 'kyc_status': 'rejected',
       });
       expect(u.kycStatus, 'rejected');
@@ -133,7 +133,7 @@ void main() {
 
     test('a missing kyc field defaults to pending, never approved', () {
       // Failing towards "approved" would show a false verification badge.
-      final u = User.fromJson({'id': 'p4', 'email': 'a@b.c'});
+      final u = User.fromJson(const {'id': 'p4', 'email': 'a@b.c'});
       expect(u.kycStatus, 'pending');
     });
   });

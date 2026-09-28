@@ -58,8 +58,8 @@ class MembershipScreen extends ConsumerWidget {
             ],
 
             // Pending Termination Info (shown if request is pending)
-            if (currentRequest != null && currentRequest!.isPending) ...[
-              _buildPendingTerminationInfo(context, ref, currentRequest!),
+            if (currentRequest != null && currentRequest.isPending) ...[
+              _buildPendingTerminationInfo(context, ref, currentRequest),
             ],
 
             const SizedBox(height: 24),
@@ -90,7 +90,7 @@ class MembershipScreen extends ConsumerWidget {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: CoopvestColors.primary.withOpacity(0.1),
+                  color: CoopvestColors.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(
@@ -152,13 +152,13 @@ class MembershipScreen extends ConsumerWidget {
           end: Alignment.bottomRight,
           colors: [
             CoopvestColors.primary,
-            CoopvestColors.primary.withOpacity(0.8),
+            CoopvestColors.primary.withValues(alpha: 0.8),
           ],
         ),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: CoopvestColors.primary.withOpacity(0.3),
+            color: CoopvestColors.primary.withValues(alpha: 0.3),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -211,12 +211,12 @@ class MembershipScreen extends ConsumerWidget {
                 vertical: 6,
               ),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
+                color: Colors.white.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Row(
+              child: const Row(
                 mainAxisSize: MainAxisSize.min,
-                children: const [
+                children: [
                   Icon(
                     Icons.hourglass_empty,
                     color: Colors.white,
@@ -423,7 +423,7 @@ class MembershipScreen extends ConsumerWidget {
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
                           valueColor: AlwaysStoppedAnimation<Color>(
-                            CoopvestColors.primary.withOpacity(0.7),
+                            CoopvestColors.primary.withValues(alpha: 0.7),
                           ),
                         ),
                       )
@@ -439,17 +439,17 @@ class MembershipScreen extends ConsumerWidget {
                             .read(terminationProvider.notifier)
                             .checkEligibility()
                             .then((eligibility) {
+                          if (!context.mounted) return;
                           Navigator.of(context).pop(); // Close loading dialog
-                          if (context.mounted) {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    const TerminationInfoScreen(),
-                              ),
-                            );
-                          }
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  const TerminationInfoScreen(),
+                            ),
+                          );
                         }).catchError((error) {
+                          if (!context.mounted) return;
                           Navigator.of(context).pop(); // Close loading dialog
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -488,7 +488,7 @@ class MembershipScreen extends ConsumerWidget {
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.15),
+                  color: Colors.black.withValues(alpha: 0.15),
                   blurRadius: 20,
                   offset: const Offset(0, 8),
                 ),
@@ -497,7 +497,7 @@ class MembershipScreen extends ConsumerWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                SizedBox(
+                const SizedBox(
                   width: 60,
                   height: 60,
                   child: CircularProgressIndicator(
@@ -537,17 +537,17 @@ class MembershipScreen extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: CoopvestColors.warning.withOpacity(0.1),
+        color: CoopvestColors.warning.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: CoopvestColors.warning.withOpacity(0.3),
+          color: CoopvestColors.warning.withValues(alpha: 0.3),
         ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: const [
+          const Row(
+            children: [
               Icon(Icons.warning, color: CoopvestColors.warning, size: 18),
               SizedBox(width: 8),
               Text(
@@ -598,23 +598,23 @@ class MembershipScreen extends ConsumerWidget {
           width: double.infinity,
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: CoopvestColors.warning.withOpacity(0.1),
+            color: CoopvestColors.warning.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: CoopvestColors.warning.withOpacity(0.3),
+              color: CoopvestColors.warning.withValues(alpha: 0.3),
             ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
+              const Row(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.hourglass_empty,
                     color: CoopvestColors.warning,
                   ),
-                  const SizedBox(width: 8),
-                  const Expanded(
+                  SizedBox(width: 8),
+                  Expanded(
                     child: Text(
                       'Your termination request is pending admin approval',
                       style: TextStyle(

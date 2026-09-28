@@ -59,7 +59,6 @@ class LoanNotifier extends StateNotifier<LoansState> {
   }) async {
     state = state.copyWith(status: LoanStatus.loading);
     try {
-      final userId = await _authRepository.getUserId();
       final response = await _loanApiService.applyForLoan(
         LoanApplicationRequest(
           loanType: loanType,
@@ -212,7 +211,7 @@ class LoanNotifier extends StateNotifier<LoansState> {
   Future<RepaymentScheduleData?> getRepaymentSchedule(String loanId) async {
     try {
       final response = await _loanApiService.getRepaymentSchedule(loanId);
-      if (response.success && response.schedule != null) {
+      if (response.success) {
         return response.schedule;
       }
       return null;
@@ -229,7 +228,6 @@ class LoanNotifier extends StateNotifier<LoansState> {
     required String paymentMethod,
   }) async {
     try {
-      final userId = await _authRepository.getUserId();
       final response = await _loanApiService.makeRepayment(
         loanId,
         LoanRepayRequest(

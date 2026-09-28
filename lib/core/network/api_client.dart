@@ -12,7 +12,7 @@ const String _accessTokenKey = 'access_token';
 const String _refreshTokenKey = 'refresh_token';
 
 /// Secure storage instance for token persistence
-final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
 
 /// API Client Provider
 final apiClientProvider = Provider<ApiClient>((ref) {

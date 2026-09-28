@@ -208,9 +208,6 @@ class _RegistrationOnboardingScreenState
   ];
 
   // Form keys for each step
-  final _step2Key = GlobalKey<FormState>();
-  final _step4Key = GlobalKey<FormState>();
-  final _step6Key = GlobalKey<FormState>();
 
   // Step 2 controllers
   final _addressCtrl = TextEditingController();
@@ -587,7 +584,7 @@ class _RegistrationOnboardingScreenState
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: CoopvestColors.success.withOpacity(0.1),
+                color: CoopvestColors.success.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: CoopvestColors.success),
               ),
@@ -630,11 +627,11 @@ class _RegistrationOnboardingScreenState
       barrierDismissible: false,
       builder: (dialogCtx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
+        title: const Row(
           children: [
             Icon(Icons.cloud_off_rounded, color: CoopvestColors.error, size: 22),
-            const SizedBox(width: 10),
-            const Text('Submission Failed'),
+            SizedBox(width: 10),
+            Text('Submission Failed'),
           ],
         ),
         content: Text(message),
@@ -949,7 +946,7 @@ class _RegistrationOnboardingScreenState
           Positioned.fill(
             child: DecoratedBox(
               decoration: BoxDecoration(
-                color: CoopvestColors.primary.withOpacity(0.08),
+                color: CoopvestColors.primary.withValues(alpha: 0.08),
               ),
               child: const Center(
                 child: Column(
@@ -999,7 +996,7 @@ class _WelcomeStep extends StatelessWidget {
               width: 80,
               height: 80,
               decoration: BoxDecoration(
-                color: CoopvestColors.primary.withOpacity(0.1),
+                color: CoopvestColors.primary.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.waving_hand,
@@ -1034,15 +1031,15 @@ class _WelcomeStep extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: CoopvestColors.warning.withOpacity(0.1),
+              color: CoopvestColors.warning.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                  color: CoopvestColors.warning.withOpacity(0.4)),
+                  color: CoopvestColors.warning.withValues(alpha: 0.4)),
             ),
-            child: Column(
+            child: const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Row(
+                Row(
                   children: [
                     Icon(Icons.info_outline,
                         color: CoopvestColors.warning, size: 18),
@@ -1054,8 +1051,8 @@ class _WelcomeStep extends StatelessWidget {
                             fontSize: 14)),
                   ],
                 ),
-                const SizedBox(height: 10),
-                const Text(
+                SizedBox(height: 10),
+                Text(
                   'A one-time non-refundable registration fee of ₦5,000 applies to all new members. '
                   'This will be added to your first monthly contribution.',
                   style: TextStyle(
@@ -1072,10 +1069,10 @@ class _WelcomeStep extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: CoopvestColors.primary.withOpacity(0.05),
+              color: CoopvestColors.primary.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                  color: CoopvestColors.primary.withOpacity(0.2)),
+                  color: CoopvestColors.primary.withValues(alpha: 0.2)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1229,14 +1226,14 @@ class _PersonalInfoStepState extends State<_PersonalInfoStep> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _SectionHeader(
+          const _SectionHeader(
               icon: Icons.person_outline,
               title: 'Personal Information',
               subtitle: 'Fill in your personal details as they appear on your official ID.'),
           const SizedBox(height: 20),
 
           // Gender
-          _FieldLabel(label: 'Gender *'),
+          const _FieldLabel(label: 'Gender *'),
           const SizedBox(height: 8),
           _ChipSelector(
             options: _genders,
@@ -1292,10 +1289,10 @@ class _PersonalInfoStepState extends State<_PersonalInfoStep> {
           const SizedBox(height: 20),
 
           // State
-          _FieldLabel(label: 'State *'),
+          const _FieldLabel(label: 'State *'),
           const SizedBox(height: 8),
           DropdownButtonFormField<String>(
-            value: widget.data.state.isEmpty ? null : widget.data.state,
+            initialValue: widget.data.state.isEmpty ? null : widget.data.state,
             hint: const Text('Select State'),
             decoration: InputDecoration(
               border: OutlineInputBorder(
@@ -1319,7 +1316,7 @@ class _PersonalInfoStepState extends State<_PersonalInfoStep> {
 
           // LGA — narrowed to the selected state's own LGAs.
           DropdownButtonFormField<String>(
-            value: (widget.data.lga.isEmpty ||
+            initialValue: (widget.data.lga.isEmpty ||
                     !NigeriaLocations.lgasFor(widget.data.state).any(
                         (l) => l['value'] == widget.data.lga))
                 ? null
@@ -1392,7 +1389,7 @@ class _IdentificationStepState extends State<_IdentificationStep> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _SectionHeader(
+          const _SectionHeader(
               icon: Icons.badge_outlined,
               title: 'Identification',
               subtitle: 'Upload your ID documents and a clear selfie photo.'),
@@ -1412,7 +1409,7 @@ class _IdentificationStepState extends State<_IdentificationStep> {
           const SizedBox(height: 20),
 
           // ID type
-          _FieldLabel(label: 'ID Type *'),
+          const _FieldLabel(label: 'ID Type *'),
           const SizedBox(height: 8),
           _ChipSelector(
             options: _idTypes,
@@ -1445,7 +1442,7 @@ class _IdentificationStepState extends State<_IdentificationStep> {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: CoopvestColors.info.withOpacity(0.08),
+              color: CoopvestColors.info.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Row(
@@ -1544,10 +1541,10 @@ class _EmploymentStepState extends State<_EmploymentStep> {
             ),
             const SizedBox(height: 20),
 
-            _FieldLabel(label: 'Employment Type *'),
+            const _FieldLabel(label: 'Employment Type *'),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
-              value: widget.data.employmentType.isEmpty
+              initialValue: widget.data.employmentType.isEmpty
                   ? null
                   : widget.data.employmentType,
               hint: const Text('Select Employment Type'),
@@ -1579,10 +1576,10 @@ class _EmploymentStepState extends State<_EmploymentStep> {
             ),
             const SizedBox(height: 20),
 
-            _FieldLabel(label: 'Years of Employment *'),
+            const _FieldLabel(label: 'Years of Employment *'),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
-              value: widget.data.yearsOfEmployment.isEmpty
+              initialValue: widget.data.yearsOfEmployment.isEmpty
                   ? null
                   : widget.data.yearsOfEmployment,
               hint: const Text('Select years of employment'),
@@ -1607,10 +1604,10 @@ class _EmploymentStepState extends State<_EmploymentStep> {
             ),
             const SizedBox(height: 20),
 
-            _FieldLabel(label: 'Employment Type (Optional)'),
+            const _FieldLabel(label: 'Employment Type (Optional)'),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
-              value: widget.data.employmentType.isEmpty
+              initialValue: widget.data.employmentType.isEmpty
                   ? null
                   : widget.data.employmentType,
               hint: const Text('Select Employment Type'),
@@ -1642,10 +1639,10 @@ class _EmploymentStepState extends State<_EmploymentStep> {
             ),
             const SizedBox(height: 20),
 
-            _FieldLabel(label: 'Years of Employment (Optional)'),
+            const _FieldLabel(label: 'Years of Employment (Optional)'),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
-              value: widget.data.yearsOfEmployment.isEmpty
+              initialValue: widget.data.yearsOfEmployment.isEmpty
                   ? null
                   : widget.data.yearsOfEmployment,
               hint: const Text('Select years of employment'),
@@ -1698,7 +1695,7 @@ class _ContributionStepState extends State<_ContributionStep> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _SectionHeader(
+          const _SectionHeader(
               icon: Icons.savings_outlined,
               title: 'Contribution Setup',
               subtitle: 'Set your monthly contribution. First payment includes the ₦5,000 registration fee.'),
@@ -1708,9 +1705,9 @@ class _ContributionStepState extends State<_ContributionStep> {
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: CoopvestColors.primary.withOpacity(0.06),
+              color: CoopvestColors.primary.withValues(alpha: 0.06),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: CoopvestColors.primary.withOpacity(0.2)),
+              border: Border.all(color: CoopvestColors.primary.withValues(alpha: 0.2)),
             ),
             child: Column(
               children: [
@@ -1728,7 +1725,7 @@ class _ContributionStepState extends State<_ContributionStep> {
           const SizedBox(height: 20),
 
           // Amount selection
-          _FieldLabel(label: 'Preferred Monthly Contribution *'),
+          const _FieldLabel(label: 'Preferred Monthly Contribution *'),
           const SizedBox(height: 12),
           Text(
             'You can increase your monthly contribution later from your dashboard.',
@@ -1788,7 +1785,7 @@ class _ContributionStepState extends State<_ContributionStep> {
           const SizedBox(height: 24),
 
           // Preferred payment date
-          _FieldLabel(label: 'Preferred Payment Date'),
+          const _FieldLabel(label: 'Preferred Payment Date'),
           const SizedBox(height: 12),
           PreferredPaymentDatePicker(
             selectedMonth: widget.data.preferredPaymentMonth,
@@ -1804,16 +1801,16 @@ class _ContributionStepState extends State<_ContributionStep> {
           ),
           if (widget.data.preferredPaymentDay >= 29) ...[
             const SizedBox(height: 12),
-            Row(
+            const Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.info_outline,
+                Icon(Icons.info_outline,
                     color: CoopvestColors.info, size: 15),
-                const SizedBox(width: 8),
+                SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     PaymentDateUtils.endOfMonthFallbackHint,
-                    style: const TextStyle(
+                    style: TextStyle(
                         color: CoopvestColors.info, fontSize: 11),
                   ),
                 ),
@@ -1881,7 +1878,7 @@ class _NextOfKinStepState extends State<_NextOfKinStep> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _SectionHeader(
+          const _SectionHeader(
               icon: Icons.family_restroom,
               title: 'Next of Kin',
               subtitle:
@@ -1895,7 +1892,7 @@ class _NextOfKinStepState extends State<_NextOfKinStep> {
           ),
           const SizedBox(height: 20),
 
-          _FieldLabel(label: 'Relationship *'),
+          const _FieldLabel(label: 'Relationship *'),
           const SizedBox(height: 8),
           _ChipSelector(
             options: _relationships,
@@ -1923,10 +1920,10 @@ class _NextOfKinStepState extends State<_NextOfKinStep> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: CoopvestColors.warning.withOpacity(0.1),
+              color: CoopvestColors.warning.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
               border:
-                  Border.all(color: CoopvestColors.warning.withOpacity(0.3)),
+                  Border.all(color: CoopvestColors.warning.withValues(alpha: 0.3)),
             ),
             child: const Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -2080,18 +2077,18 @@ class _BankInfoStep extends StatelessWidget {
               filled: true,
               fillColor: manualEntry
                   ? null
-                  : CoopvestColors.success.withOpacity(0.1),
+                  : CoopvestColors.success.withValues(alpha: 0.1),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
                 borderSide: manualEntry
                     ? BorderSide(color: context.dividerColor)
-                    : BorderSide(color: CoopvestColors.success),
+                    : const BorderSide(color: CoopvestColors.success),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
                 borderSide: manualEntry
                     ? BorderSide(color: context.dividerColor)
-                    : BorderSide(color: CoopvestColors.success),
+                    : const BorderSide(color: CoopvestColors.success),
               ),
             ),
           ),
@@ -2255,14 +2252,14 @@ class _SelfieStepState extends ConsumerState<_SelfieStep> {
             ),
           ] else if (_uploaded) ...[
             const SizedBox(height: CoopvestShape.gapMd),
-            Row(
+            const Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.check_circle_outline,
                   size: 16,
                   color: CoopvestColors.successText,
                 ),
-                const SizedBox(width: CoopvestShape.gapSm),
+                SizedBox(width: CoopvestShape.gapSm),
                 Text(
                   'Selfie uploaded',
                   style: TextStyle(
@@ -2329,7 +2326,7 @@ class _TermsStepState extends ConsumerState<_TermsStep> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _SectionHeader(
+          const _SectionHeader(
               icon: Icons.policy_outlined,
               title: 'Terms & Agreement',
               subtitle:
@@ -2339,10 +2336,10 @@ class _TermsStepState extends ConsumerState<_TermsStep> {
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: CoopvestColors.warning.withOpacity(0.08),
+              color: CoopvestColors.warning.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(10),
               border:
-                  Border.all(color: CoopvestColors.warning.withOpacity(0.3)),
+                  Border.all(color: CoopvestColors.warning.withValues(alpha: 0.3)),
             ),
             child: const Text(
               'Welcome to Coopvest Africa. A one-time non-refundable registration fee of ₦5,000 '
@@ -2377,10 +2374,10 @@ class _TermsStepState extends ConsumerState<_TermsStep> {
               child: Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: CoopvestColors.primary.withOpacity(0.06),
+                  color: CoopvestColors.primary.withValues(alpha: 0.06),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                      color: CoopvestColors.primary.withOpacity(0.3)),
+                      color: CoopvestColors.primary.withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   children: [
@@ -2449,12 +2446,12 @@ class _ExpandableTerm extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: accepted
-            ? CoopvestColors.success.withOpacity(0.06)
+            ? CoopvestColors.success.withValues(alpha: 0.06)
             : context.cardBackground,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: accepted
-              ? CoopvestColors.success.withOpacity(0.4)
+              ? CoopvestColors.success.withValues(alpha: 0.4)
               : context.dividerColor,
         ),
       ),
@@ -2549,7 +2546,7 @@ class _SectionHeader extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: CoopvestColors.primary.withOpacity(0.1),
+            color: CoopvestColors.primary.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(10),
           ),
           child: Icon(icon, color: CoopvestColors.primary, size: 22),
@@ -2731,7 +2728,7 @@ class _PhotoUploadCard extends StatelessWidget {
             decoration: BoxDecoration(
               color: file != null
                   ? Colors.transparent
-                  : CoopvestColors.primary.withOpacity(0.04),
+                  : CoopvestColors.primary.withValues(alpha: 0.04),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: file != null
@@ -2751,7 +2748,7 @@ class _PhotoUploadCard extends StatelessWidget {
                     children: [
                       Icon(icon,
                           size: 36,
-                          color: CoopvestColors.primary.withOpacity(0.6)),
+                          color: CoopvestColors.primary.withValues(alpha: 0.6)),
                       const SizedBox(height: 8),
                       Text('Tap to add photo',
                           style: TextStyle(
@@ -2798,10 +2795,10 @@ class _SourceOption extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 20),
         decoration: BoxDecoration(
-          color: CoopvestColors.primary.withOpacity(0.06),
+          color: CoopvestColors.primary.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-              color: CoopvestColors.primary.withOpacity(0.2)),
+              color: CoopvestColors.primary.withValues(alpha: 0.2)),
         ),
         child: Column(
           children: [

@@ -271,7 +271,7 @@ class _QRScannerScreenState extends ConsumerState<QRScannerScreen> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.7),
+                          color: Colors.black.withValues(alpha: 0.7),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Text(
@@ -284,7 +284,7 @@ class _QRScannerScreenState extends ConsumerState<QRScannerScreen> {
                 ),
                 if (_isProcessing)
                   Container(
-                    color: Colors.black.withOpacity(0.8),
+                    color: Colors.black.withValues(alpha: 0.8),
                     child: const Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -302,7 +302,7 @@ class _QRScannerScreenState extends ConsumerState<QRScannerScreen> {
                     left: 24,
                     right: 24,
                     child: AppCard(
-                      backgroundColor: CoopvestColors.error.withOpacity(0.9),
+                      backgroundColor: CoopvestColors.error.withValues(alpha: 0.9),
                       child: Row(
                         children: [
                           const Icon(Icons.error, color: Colors.white),
@@ -325,7 +325,7 @@ class _QRScannerScreenState extends ConsumerState<QRScannerScreen> {
             child: Column(
               children: [
                 AppCard(
-                  backgroundColor: CoopvestColors.primary.withOpacity(0.2),
+                  backgroundColor: CoopvestColors.primary.withValues(alpha: 0.2),
                   child: const Column(
                     children: [
                       Row(

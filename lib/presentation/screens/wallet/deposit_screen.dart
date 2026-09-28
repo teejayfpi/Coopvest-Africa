@@ -4,7 +4,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 // import 'package:image_picker/image_picker.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../widgets/paystack_checkout_dialog.dart';
 import '../../../config/theme_config.dart';
@@ -83,33 +82,6 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
       }
     });
   }
-
-  final List<Map<String, dynamic>> _depositTypes = [
-    {
-      'value': 'monthly_contribution',
-      'label': 'Monthly Contribution',
-      'icon': Icons.savings_outlined,
-      'description': 'Regular monthly savings contribution',
-    },
-    {
-      'value': 'loan_repayment',
-      'label': 'Loan Repayment',
-      'icon': Icons.payments_outlined,
-      'description': 'Repay an active loan',
-    },
-    {
-      'value': 'overdue_payment',
-      'label': 'Overdue Payment',
-      'icon': Icons.schedule_outlined,
-      'description': 'Settle an overdue contribution',
-    },
-    {
-      'value': 'fine',
-      'label': 'Fine',
-      'icon': Icons.gavel_outlined,
-      'description': 'Pay an imposed fine or penalty',
-    },
-  ];
 
   // MANUAL DEPOSIT DISABLED — the payment-method selector (bank transfer /
   // card / USSD) is gone; every deposit now goes through Paystack.
@@ -338,9 +310,9 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
         width: double.infinity,
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: CoopvestColors.warning.withOpacity(0.1),
+          color: CoopvestColors.warning.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: CoopvestColors.warning.withOpacity(0.4)),
+          border: Border.all(color: CoopvestColors.warning.withValues(alpha: 0.4)),
         ),
         child: const Text(
           'No active loans to repay. Loans you are currently repaying will appear here.',
@@ -350,7 +322,7 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
     }
 
     return DropdownButtonFormField<String>(
-      value: activeLoans.any((l) => l.id == _selectedLoanId) ? _selectedLoanId : null,
+      initialValue: activeLoans.any((l) => l.id == _selectedLoanId) ? _selectedLoanId : null,
       isExpanded: true,
       decoration: InputDecoration(
         labelText: 'Select Loan',
@@ -488,6 +460,7 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
 
       // Complete the payment inside the in-app WebView dialog above, then
       // return `true` so the backend-confirmation poll below runs.
+      if (!mounted) return;
       final confirmed = await showPaystackCheckoutDialog(context, url: url);
       if (confirmed != true || !mounted) return;
 
@@ -506,6 +479,7 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
       if (!mounted) return;
       if (status == 'success') {
         await ref.read(walletProvider.notifier).loadWallet();
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -902,7 +876,7 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
                 Text('Payment Allocation', style: TextStyle(fontWeight: FontWeight.bold, color: context.textPrimary)),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  value: _allocationType,
+                  initialValue: _allocationType,
                   decoration: InputDecoration(
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -1062,7 +1036,7 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
                 const SizedBox(height: 24),
 
                 AppCard(
-                  backgroundColor: CoopvestColors.info.withOpacity(0.1),
+                  backgroundColor: CoopvestColors.info.withValues(alpha: 0.1),
                   child: Row(
                     children: [
                       const Icon(Icons.info, color: CoopvestColors.info),

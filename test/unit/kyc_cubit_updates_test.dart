@@ -1,5 +1,4 @@
 import 'package:coopvest_mobile/core/network/api_client.dart';
-import 'package:coopvest_mobile/data/models/kyc_models.dart';
 import 'package:coopvest_mobile/data/repositories/kyc_repository.dart';
 import 'package:coopvest_mobile/presentation/providers/kyc_provider.dart';
 import 'package:flutter_test/flutter_test.dart';

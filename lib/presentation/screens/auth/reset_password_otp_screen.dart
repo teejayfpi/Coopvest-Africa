@@ -133,7 +133,7 @@ class _ResetPasswordOtpScreenState extends ConsumerState<ResetPasswordOtpScreen>
             const SizedBox(height: 8),
             Container(
               width: 72, height: 72,
-              decoration: BoxDecoration(color: CoopvestColors.success.withOpacity(0.1), shape: BoxShape.circle),
+              decoration: BoxDecoration(color: CoopvestColors.success.withValues(alpha: 0.1), shape: BoxShape.circle),
               child: const Icon(Icons.check_circle, size: 48, color: CoopvestColors.success),
             ),
             const SizedBox(height: 16),

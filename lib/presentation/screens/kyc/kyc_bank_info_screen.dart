@@ -212,7 +212,7 @@ class _KYCBankInfoScreenState extends ConsumerState<KYCBankInfoScreen> {
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: CoopvestColors.success.withOpacity(0.1),
+                color: CoopvestColors.success.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: CoopvestColors.success),
               ),

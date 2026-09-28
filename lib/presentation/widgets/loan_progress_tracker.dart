@@ -56,7 +56,7 @@ class LoanApplicationStatus extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: _getStatusColor().withOpacity(0.1),
+        color: _getStatusColor().withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
@@ -103,7 +103,7 @@ class LoanApplicationStatus extends StatelessWidget {
             color: isCompleted
                 ? CoopvestColors.primary
                 : isCurrent
-                    ? CoopvestColors.primary.withOpacity(0.2)
+                    ? CoopvestColors.primary.withValues(alpha: 0.2)
                     : Colors.grey.shade200,
             border: isCurrent
                 ? Border.all(color: CoopvestColors.primary, width: 2)
@@ -268,7 +268,7 @@ class LoanStatusCard extends StatelessWidget {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: _getStatusColor().withOpacity(0.1),
+                  color: _getStatusColor().withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
@@ -312,7 +312,7 @@ class LoanStatusCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: _getStatusColor().withOpacity(0.1),
+                  color: _getStatusColor().withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(

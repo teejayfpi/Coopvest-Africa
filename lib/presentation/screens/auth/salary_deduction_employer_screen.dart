@@ -297,7 +297,7 @@ class _SalaryDeductionEmployerScreenState
 
   Widget _buildEmploymentType() {
     return DropdownButtonFormField<String>(
-      value: _employmentType,
+      initialValue: _employmentType,
       decoration: const InputDecoration(labelText: 'Employment type'),
       items: EmploymentTypes.types
           .map((t) => DropdownMenuItem(value: t, child: Text(t)))
@@ -358,7 +358,7 @@ class _SalaryDeductionEmployerScreenState
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: selected
-                    ? CoopvestColors.primary.withOpacity(0.07)
+                    ? CoopvestColors.primary.withValues(alpha: 0.07)
                     : context.cardBackground,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(

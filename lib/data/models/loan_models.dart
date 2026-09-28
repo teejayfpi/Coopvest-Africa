@@ -189,7 +189,7 @@ class Loan extends Equatable {
       approvedAt: approvedAt ?? this.approvedAt,
       disbursedAt: disbursedAt ?? this.disbursedAt,
       remainingBalance: remainingBalance ?? this.remainingBalance,
-      nextDueDate: nextDueDate ?? this.nextDueDate,
+      nextDueDate: nextDueDate ?? nextDueDate,
     );
   }
 

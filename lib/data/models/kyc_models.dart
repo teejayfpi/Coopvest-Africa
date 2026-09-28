@@ -103,6 +103,18 @@ class KYCSubmission extends Equatable {
   /// employment section is required for them and skipped otherwise.
   bool get isSalaryDeduction => contributionType == 'salary_deduction';
 
+  /// True when the backend row holds nothing the member has entered yet.
+  ///
+  /// `GET /kyc/status` creates a provisional 'pending' row on first read, so a
+  /// non-null response is not evidence that the member has started. Only a row
+  /// that is still pending *and* empty on every member-entered field counts,
+  /// which is what lets a locally saved draft be resumed safely.
+  bool get isUntouchedServerRow =>
+      status == 'pending' &&
+      dateOfBirth == null &&
+      residentialAddress.isEmpty &&
+      idNumber == null;
+
   Map<String, dynamic> toJson() {
     return {
       'date_of_birth': dateOfBirth,

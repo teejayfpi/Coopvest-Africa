@@ -53,9 +53,9 @@ class TransactionsHistoryScreen extends ConsumerWidget {
               margin: const EdgeInsets.all(16),
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: CoopvestColors.primary.withOpacity(0.1),
+                color: CoopvestColors.primary.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: CoopvestColors.primary.withOpacity(0.3)),
+                border: Border.all(color: CoopvestColors.primary.withValues(alpha: 0.3)),
               ),
               child: InkWell(
                 onTap: () {
@@ -128,7 +128,7 @@ class TransactionsHistoryScreen extends ConsumerWidget {
                                   const SizedBox(height: 8),
                                   Text(
                                     'Pull down to refresh',
-                                    style: TextStyle(color: context.textSecondary.withOpacity(0.7), fontSize: 12),
+                                    style: TextStyle(color: context.textSecondary.withValues(alpha: 0.7), fontSize: 12),
                                   ),
                                 ],
                               ),
@@ -165,8 +165,8 @@ class TransactionsHistoryScreen extends ConsumerWidget {
               height: 44,
               decoration: BoxDecoration(
                 color: isCredit 
-                    ? CoopvestColors.success.withOpacity(0.1)
-                    : CoopvestColors.error.withOpacity(0.1),
+                    ? CoopvestColors.success.withValues(alpha: 0.1)
+                    : CoopvestColors.error.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(

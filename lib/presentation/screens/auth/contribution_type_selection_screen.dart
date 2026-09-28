@@ -217,13 +217,13 @@ class _ContributionTypeSelectionScreenState
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: CoopvestColors.info.withOpacity(0.08),
+                  color: CoopvestColors.info.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: CoopvestColors.info.withOpacity(0.25),
+                    color: CoopvestColors.info.withValues(alpha: 0.25),
                   ),
                 ),
-                child: Row(
+                child: const Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Icon(
@@ -231,7 +231,7 @@ class _ContributionTypeSelectionScreenState
                       color: CoopvestColors.info,
                       size: 22,
                     ),
-                    const SizedBox(width: 12),
+                    SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -244,7 +244,7 @@ class _ContributionTypeSelectionScreenState
                               fontSize: 14,
                             ),
                           ),
-                          const SizedBox(height: 4),
+                          SizedBox(height: 4),
                           Text(
                             'If you choose Salary Deduction, you will need to provide your employer\'s details during registration. If your employer is not yet enrolled with Coopvest, you can still register and we will help facilitate enrollment.',
                             style: TextStyle(
@@ -297,7 +297,7 @@ class _ContributionTypeSelectionScreenState
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: isSelected
-              ? CoopvestColors.primary.withOpacity(0.07)
+              ? CoopvestColors.primary.withValues(alpha: 0.07)
               : context.cardBackground,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
@@ -307,7 +307,7 @@ class _ContributionTypeSelectionScreenState
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: CoopvestColors.primary.withOpacity(0.12),
+                    color: CoopvestColors.primary.withValues(alpha: 0.12),
                     blurRadius: 12,
                     offset: const Offset(0, 4),
                   )
@@ -324,8 +324,8 @@ class _ContributionTypeSelectionScreenState
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? CoopvestColors.primary.withOpacity(0.15)
-                        : context.dividerColor.withOpacity(0.5),
+                        ? CoopvestColors.primary.withValues(alpha: 0.15)
+                        : context.dividerColor.withValues(alpha: 0.5),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(
@@ -374,12 +374,12 @@ class _ContributionTypeSelectionScreenState
                               vertical: 4,
                             ),
                             decoration: BoxDecoration(
-                              color: CoopvestColors.warning.withOpacity(0.12),
+                              color: CoopvestColors.warning.withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Text(
                               badge,
-                              style: TextStyle(
+                              style: const TextStyle(
                                 color: CoopvestColors.pendingText,
                                 fontSize: 10,
                                 fontWeight: FontWeight.w600,
@@ -434,7 +434,7 @@ class _ContributionTypeSelectionScreenState
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 color: isSelected
-                    ? CoopvestColors.primary.withOpacity(0.05)
+                    ? CoopvestColors.primary.withValues(alpha: 0.05)
                     : context.secondaryCardBackground,
                 borderRadius: BorderRadius.circular(10),
               ),

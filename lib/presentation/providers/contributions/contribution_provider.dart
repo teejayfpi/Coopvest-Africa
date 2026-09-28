@@ -12,10 +12,9 @@ final contributionRepositoryProvider = Provider<ContributionRepository>((ref) {
 
 /// Contribution Repository
 class ContributionRepository {
-  final ApiClient _apiClient;
   late ContributionApiService _apiService;
 
-  ContributionRepository(ApiClient apiClient) : _apiClient = apiClient {
+  ContributionRepository(ApiClient apiClient) {
     _apiService = ContributionApiService(apiClient.dio);
   }
 
@@ -244,27 +243,27 @@ class ContributionNotifier extends StateNotifier<ContributionState> {
 
   /// Quick filter - This Month
   Future<void> filterThisMonth() async {
-    await applyFilter(ContributionFilter().thisMonth());
+    await applyFilter(const ContributionFilter().thisMonth());
   }
 
   /// Quick filter - Last 3 Months
   Future<void> filterLast3Months() async {
-    await applyFilter(ContributionFilter().last3Months());
+    await applyFilter(const ContributionFilter().last3Months());
   }
 
   /// Quick filter - Last 6 Months
   Future<void> filterLast6Months() async {
-    await applyFilter(ContributionFilter().last6Months());
+    await applyFilter(const ContributionFilter().last6Months());
   }
 
   /// Quick filter - This Year
   Future<void> filterThisYear() async {
-    await applyFilter(ContributionFilter().thisYear());
+    await applyFilter(const ContributionFilter().thisYear());
   }
 
   /// Quick filter - All Time
   Future<void> filterAllTime() async {
-    await applyFilter(ContributionFilter().allTime());
+    await applyFilter(const ContributionFilter().allTime());
   }
 
   /// Load contribution detail

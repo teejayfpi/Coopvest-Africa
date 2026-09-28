@@ -81,7 +81,7 @@ class LoginHistoryScreen extends ConsumerWidget {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: _getDeviceColor(record.deviceType).withOpacity(0.1),
+                color: _getDeviceColor(record.deviceType).withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
@@ -110,10 +110,10 @@ class LoginHistoryScreen extends ConsumerWidget {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
-                            color: CoopvestColors.success.withOpacity(0.1),
+                            color: CoopvestColors.success.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          child: Text(
+                          child: const Text(
                             'Current',
                             style: TextStyle(
                               fontSize: 10,

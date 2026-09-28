@@ -145,7 +145,7 @@ class _CurrentAmountCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: CoopvestColors.primary.withOpacity(0.3),
+            color: CoopvestColors.primary.withValues(alpha: 0.3),
             blurRadius: 16,
             offset: const Offset(0, 6),
           )
@@ -177,7 +177,7 @@ class _CurrentAmountCard extends StatelessWidget {
             padding:
                 const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
+              color: Colors.white.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(20),
             ),
             child: const Text(
@@ -207,10 +207,10 @@ class _PendingReductionBanner extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: CoopvestColors.warning.withOpacity(0.1),
+        color: CoopvestColors.warning.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
         border:
-            Border.all(color: CoopvestColors.warning.withOpacity(0.4)),
+            Border.all(color: CoopvestColors.warning.withValues(alpha: 0.4)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -250,10 +250,10 @@ class _PendingReductionBanner extends ConsumerWidget {
               padding:
                   const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
-                color: CoopvestColors.error.withOpacity(0.1),
+                color: CoopvestColors.error.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                    color: CoopvestColors.error.withOpacity(0.3)),
+                    color: CoopvestColors.error.withValues(alpha: 0.3)),
               ),
               child: const Row(
                 mainAxisSize: MainAxisSize.min,
@@ -384,7 +384,7 @@ class _PolicyInfoBox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AppCard(
-      backgroundColor: CoopvestColors.info.withOpacity(0.07),
+      backgroundColor: CoopvestColors.info.withValues(alpha: 0.07),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -634,10 +634,10 @@ class _ReductionCard extends ConsumerWidget {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: CoopvestColors.warning.withOpacity(0.1),
+                    color: CoopvestColors.warning.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                        color: CoopvestColors.warning.withOpacity(0.4)),
+                        color: CoopvestColors.warning.withValues(alpha: 0.4)),
                   ),
                   child: const Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -786,7 +786,7 @@ class _ActionCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: iconColor.withOpacity(0.12),
+                  color: iconColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(icon, color: iconColor, size: 24),
@@ -815,7 +815,7 @@ class _ActionCard extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: badgeColor.withOpacity(0.12),
+                        color: badgeColor.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(

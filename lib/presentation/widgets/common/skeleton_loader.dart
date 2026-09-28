@@ -74,7 +74,7 @@ class _SkeletonItem extends StatelessWidget {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: Colors.grey.withOpacity(opacity),
+              color: Colors.grey.withValues(alpha: opacity),
               shape: BoxShape.circle,
             ),
           ),
@@ -88,7 +88,7 @@ class _SkeletonItem extends StatelessWidget {
                   width: double.infinity,
                   height: 16,
                   decoration: BoxDecoration(
-                    color: Colors.grey.withOpacity(opacity),
+                    color: Colors.grey.withValues(alpha: opacity),
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),
@@ -97,7 +97,7 @@ class _SkeletonItem extends StatelessWidget {
                   width: 150,
                   height: 12,
                   decoration: BoxDecoration(
-                    color: Colors.grey.withOpacity(opacity * 0.7),
+                    color: Colors.grey.withValues(alpha: opacity * 0.7),
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),
@@ -109,7 +109,7 @@ class _SkeletonItem extends StatelessWidget {
             width: 40,
             height: 12,
             decoration: BoxDecoration(
-              color: Colors.grey.withOpacity(opacity * 0.5),
+              color: Colors.grey.withValues(alpha: opacity * 0.5),
               borderRadius: BorderRadius.circular(4),
             ),
           ),
@@ -179,9 +179,9 @@ class _CardSkeleton extends StatelessWidget {
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.grey.withOpacity(opacity * 0.3),
+        color: Colors.grey.withValues(alpha: opacity * 0.3),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.withOpacity(opacity * 0.2)),
+        border: Border.all(color: Colors.grey.withValues(alpha: opacity * 0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -192,7 +192,7 @@ class _CardSkeleton extends StatelessWidget {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: Colors.grey.withOpacity(opacity),
+                  color: Colors.grey.withValues(alpha: opacity),
                   shape: BoxShape.circle,
                 ),
               ),
@@ -205,7 +205,7 @@ class _CardSkeleton extends StatelessWidget {
                       width: 120,
                       height: 14,
                       decoration: BoxDecoration(
-                        color: Colors.grey.withOpacity(opacity),
+                        color: Colors.grey.withValues(alpha: opacity),
                         borderRadius: BorderRadius.circular(4),
                       ),
                     ),
@@ -214,7 +214,7 @@ class _CardSkeleton extends StatelessWidget {
                       width: 80,
                       height: 10,
                       decoration: BoxDecoration(
-                        color: Colors.grey.withOpacity(opacity * 0.7),
+                        color: Colors.grey.withValues(alpha: opacity * 0.7),
                         borderRadius: BorderRadius.circular(4),
                       ),
                     ),
@@ -225,7 +225,7 @@ class _CardSkeleton extends StatelessWidget {
                 width: 60,
                 height: 24,
                 decoration: BoxDecoration(
-                  color: Colors.grey.withOpacity(opacity * 0.5),
+                  color: Colors.grey.withValues(alpha: opacity * 0.5),
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
@@ -236,7 +236,7 @@ class _CardSkeleton extends StatelessWidget {
             width: double.infinity,
             height: 8,
             decoration: BoxDecoration(
-              color: Colors.grey.withOpacity(opacity * 0.5),
+              color: Colors.grey.withValues(alpha: opacity * 0.5),
               borderRadius: BorderRadius.circular(4),
             ),
           ),
@@ -247,7 +247,7 @@ class _CardSkeleton extends StatelessWidget {
                 child: Container(
                   height: 8,
                   decoration: BoxDecoration(
-                    color: Colors.grey.withOpacity(opacity * 0.5),
+                    color: Colors.grey.withValues(alpha: opacity * 0.5),
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),
@@ -257,7 +257,7 @@ class _CardSkeleton extends StatelessWidget {
                 width: 80,
                 height: 8,
                 decoration: BoxDecoration(
-                  color: Colors.grey.withOpacity(opacity * 0.5),
+                  color: Colors.grey.withValues(alpha: opacity * 0.5),
                   borderRadius: BorderRadius.circular(4),
                 ),
               ),
@@ -287,7 +287,7 @@ class TableRowSkeleton extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         border: Border(
-          bottom: BorderSide(color: Colors.grey.withOpacity(0.2)),
+          bottom: BorderSide(color: Colors.grey.withValues(alpha: 0.2)),
         ),
       ),
       child: Row(
@@ -299,7 +299,7 @@ class TableRowSkeleton extends StatelessWidget {
               height: 12,
               margin: const EdgeInsets.only(right: 8),
               decoration: BoxDecoration(
-                color: Colors.grey.withOpacity(0.3),
+                color: Colors.grey.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(4),
               ),
             ),

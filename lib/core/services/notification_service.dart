@@ -129,7 +129,7 @@ class NotificationService {
           enableVibration: true,
         ),
         // Rollover channel — uses the custom ding-dong sound
-        AndroidNotificationChannel(
+        const AndroidNotificationChannel(
           _channelRolloverId,
           'Rollover Notifications',
           description: 'Loan rollover consent requests and status updates',

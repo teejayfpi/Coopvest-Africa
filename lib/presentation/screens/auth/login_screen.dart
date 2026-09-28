@@ -107,7 +107,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         // Supabase persists the session, so biometric just unlocks it
         if (await authRepo.hasValidSession()) {
           try {
-            final user = await authRepo.restoreSessionWithBiometric();
+            await authRepo.restoreSessionWithBiometric();
             await ref.read(authProvider.notifier).getCurrentUser();
             return;
           } catch (e) {
@@ -289,10 +289,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         child: Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: CoopvestColors.primary.withOpacity(0.1),
+                            color: CoopvestColors.primary.withValues(alpha: 0.1),
                             shape: BoxShape.circle,
                           ),
-                          child: Icon(
+                          child: const Icon(
                             Icons.fingerprint,
                             size: 48,
                             color: CoopvestColors.primary,
@@ -341,39 +341,39 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1B3A6B).withOpacity(0.05),
+                  color: const Color(0xFF1B3A6B).withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: const Color(0xFF1B3A6B).withOpacity(0.10),
+                    color: const Color(0xFF1B3A6B).withValues(alpha: 0.10),
                   ),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    _TrustBadgeItem(
+                    const _TrustBadgeItem(
                       icon: Icons.lock_outline_rounded,
                       label: 'SSL Encrypted',
-                      color: const Color(0xFF1B3A6B),
+                      color: Color(0xFF1B3A6B),
                     ),
                     Container(
                       width: 1,
                       height: 32,
-                      color: const Color(0xFF1B3A6B).withOpacity(0.15),
+                      color: const Color(0xFF1B3A6B).withValues(alpha: 0.15),
                     ),
-                    _TrustBadgeItem(
+                    const _TrustBadgeItem(
                       icon: Icons.verified_user_outlined,
                       label: 'Secure Login',
-                      color: const Color(0xFF0F7A5C),
+                      color: Color(0xFF0F7A5C),
                     ),
                     Container(
                       width: 1,
                       height: 32,
-                      color: const Color(0xFF1B3A6B).withOpacity(0.15),
+                      color: const Color(0xFF1B3A6B).withValues(alpha: 0.15),
                     ),
-                    _TrustBadgeItem(
+                    const _TrustBadgeItem(
                       icon: Icons.shield_outlined,
                       label: 'Data Protected',
-                      color: const Color(0xFF1B3A6B),
+                      color: Color(0xFF1B3A6B),
                     ),
                   ],
                 ),
@@ -411,7 +411,7 @@ class _TrustBadgeItem extends StatelessWidget {
           style: TextStyle(
             fontSize: 10,
             fontWeight: FontWeight.w600,
-            color: color.withOpacity(0.8),
+            color: color.withValues(alpha: 0.8),
             letterSpacing: 0.3,
           ),
         ),

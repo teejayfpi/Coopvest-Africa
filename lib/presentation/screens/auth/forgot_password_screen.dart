@@ -198,7 +198,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen>
             width: 72,
             height: 72,
             decoration: BoxDecoration(
-              color: CoopvestColors.primary.withOpacity(0.1),
+              color: CoopvestColors.primary.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: const Icon(
@@ -390,10 +390,10 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen>
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1B3A6B).withOpacity(0.06),
+                    color: const Color(0xFF1B3A6B).withValues(alpha: 0.06),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: const Color(0xFF1B3A6B).withOpacity(0.12),
+                      color: const Color(0xFF1B3A6B).withValues(alpha: 0.12),
                     ),
                   ),
                   child: Row(

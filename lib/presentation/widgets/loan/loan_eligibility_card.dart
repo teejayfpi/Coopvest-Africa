@@ -32,7 +32,7 @@ class LoanEligibilityCard extends ConsumerWidget {
     final loansEnabled = featureService.isEnabled('loan_requests');
 
     final monthsDone = user?.membershipDurationMonths ?? 0;
-    final monthsRequired = AppConfig.loanEligibilityMonths;
+    const monthsRequired = AppConfig.loanEligibilityMonths;
     final monthsLeft = (monthsRequired - monthsDone).clamp(0, monthsRequired);
     // The 6-month minimum is deliberately waived while the platform is in
     // testing (`AppConfig.loanEligibilityMonths = 0`, and loanPolicy.js says the
@@ -40,7 +40,7 @@ class LoanEligibilityCard extends ConsumerWidget {
     // is NaN, which renders as a broken progress ring — and treat a waived
     // requirement as "no minimum" rather than a 100% milestone, so the copy
     // below does not claim progress the member has not made.
-    final requirementWaived = monthsRequired <= 0;
+    const requirementWaived = monthsRequired <= 0;
     final progress = requirementWaived
         ? 1.0
         : (monthsDone / monthsRequired).clamp(0.0, 1.0);
@@ -66,18 +66,18 @@ class LoanEligibilityCard extends ConsumerWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            primaryColor.withOpacity(0.08),
-            primaryColor.withOpacity(0.02),
+            primaryColor.withValues(alpha: 0.08),
+            primaryColor.withValues(alpha: 0.02),
           ],
         ),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: primaryColor.withOpacity(0.18),
+          color: primaryColor.withValues(alpha: 0.18),
           width: 1.2,
         ),
         boxShadow: [
           BoxShadow(
-            color: primaryColor.withOpacity(0.08),
+            color: primaryColor.withValues(alpha: 0.08),
             blurRadius: 16,
             offset: const Offset(0, 4),
           ),
@@ -92,7 +92,7 @@ class LoanEligibilityCard extends ConsumerWidget {
               Container(
                 padding: const EdgeInsets.all(9),
                 decoration: BoxDecoration(
-                  color: primaryColor.withOpacity(0.15),
+                  color: primaryColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
@@ -140,7 +140,7 @@ class LoanEligibilityCard extends ConsumerWidget {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: primaryColor.withOpacity(0.12),
+                  color: primaryColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
@@ -172,7 +172,7 @@ class LoanEligibilityCard extends ConsumerWidget {
                       size: const Size(90, 90),
                       painter: _ArcProgressPainter(
                         progress: progress,
-                        trackColor: primaryColor.withOpacity(0.12),
+                        trackColor: primaryColor.withValues(alpha: 0.12),
                         progressColor: primaryColor,
                       ),
                     ),
@@ -232,10 +232,10 @@ class LoanEligibilityCard extends ConsumerWidget {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 10, vertical: 8),
                         decoration: BoxDecoration(
-                          color: CoopvestColors.success.withOpacity(0.08),
+                          color: CoopvestColors.success.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(
-                            color: CoopvestColors.success.withOpacity(0.2),
+                            color: CoopvestColors.success.withValues(alpha: 0.2),
                           ),
                         ),
                         child: Column(
@@ -281,19 +281,19 @@ class LoanEligibilityCard extends ConsumerWidget {
                         ),
                       ),
                       const SizedBox(height: 6),
-                      _BulletRow(
+                      const _BulletRow(
                         icon: Icons.bolt_rounded,
                         color: CoopvestColors.primary,
                         label: 'Borrow up to 3× your savings',
                       ),
                       const SizedBox(height: 4),
-                      _BulletRow(
+                      const _BulletRow(
                         icon: Icons.calendar_month_rounded,
                         color: CoopvestColors.primary,
                         label: 'Flexible repayment tenures',
                       ),
                       const SizedBox(height: 4),
-                      _BulletRow(
+                      const _BulletRow(
                         icon: Icons.groups_rounded,
                         color: CoopvestColors.primary,
                         label: 'Guaranteed by 3 co-members',
@@ -342,7 +342,7 @@ class LoanEligibilityCard extends ConsumerWidget {
                 borderRadius: BorderRadius.circular(8),
                 child: LinearProgressIndicator(
                   value: progress,
-                  backgroundColor: primaryColor.withOpacity(0.1),
+                  backgroundColor: primaryColor.withValues(alpha: 0.1),
                   color: primaryColor,
                   minHeight: 8,
                 ),
@@ -375,15 +375,15 @@ class LoanEligibilityCard extends ConsumerWidget {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: CoopvestColors.warning.withOpacity(0.1),
+                color: CoopvestColors.warning.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: CoopvestColors.warning.withOpacity(0.3)),
+                border: Border.all(color: CoopvestColors.warning.withValues(alpha: 0.3)),
               ),
-              child: Row(
+              child: const Row(
                 children: [
                   Icon(Icons.lock_outline, size: 18, color: CoopvestColors.warning),
-                  const SizedBox(width: 10),
-                  const Expanded(
+                  SizedBox(width: 10),
+                  Expanded(
                     child: Text(
                       'Loan applications are temporarily disabled by the administrator.',
                       style: TextStyle(fontSize: 12),
@@ -428,9 +428,9 @@ class _MilestonePills extends StatelessWidget {
                   height: 26,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: done ? color : color.withOpacity(0.1),
+                    color: done ? color : color.withValues(alpha: 0.1),
                     border: Border.all(
-                      color: done ? color : color.withOpacity(0.25),
+                      color: done ? color : color.withValues(alpha: 0.25),
                       width: 1.5,
                     ),
                   ),
@@ -442,7 +442,7 @@ class _MilestonePills extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.bold,
-                              color: color.withOpacity(0.5),
+                              color: color.withValues(alpha: 0.5),
                             ),
                           ),
                   ),

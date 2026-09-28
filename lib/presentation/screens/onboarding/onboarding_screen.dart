@@ -106,7 +106,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             end: Alignment.bottomCenter,
             colors: [
               _pages[_currentPage].backgroundColor,
-              _pages[_currentPage].backgroundColor.withOpacity(0.8),
+              _pages[_currentPage].backgroundColor.withValues(alpha: 0.8),
             ],
           ),
         ),
@@ -190,7 +190,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             height: 200,
             width: 200,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
+              color: Colors.white.withValues(alpha: 0.2),
               shape: BoxShape.circle,
             ),
             child: Icon(

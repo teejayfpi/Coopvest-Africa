@@ -422,7 +422,7 @@ Future<void> _verifyFromLink() async {
                   width: 80,
                   height: 80,
                   decoration: BoxDecoration(
-                    color: CoopvestColors.primary.withOpacity(0.1),
+                    color: CoopvestColors.primary.withValues(alpha: 0.1),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(Icons.mark_email_unread_outlined,
@@ -604,7 +604,7 @@ Future<void> _verifyFromLink() async {
                     // Sign out and go back to registration step 1
                     await sb.Supabase.instance.client.auth.signOut();
                     await ref.read(authProvider.notifier).logout();
-                    if (mounted) {
+                    if (context.mounted) {
                       Navigator.of(context).pop();
                     }
                   },
@@ -630,7 +630,7 @@ Future<void> _verifyFromLink() async {
             width: 24,
             height: 24,
             decoration: BoxDecoration(
-              color: CoopvestColors.primary.withOpacity(0.1),
+              color: CoopvestColors.primary.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: Center(

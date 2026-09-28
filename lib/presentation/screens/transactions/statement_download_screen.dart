@@ -23,8 +23,6 @@ class StatementDownloadScreen extends ConsumerStatefulWidget {
 }
 
 class _StatementDownloadScreenState extends ConsumerState<StatementDownloadScreen> {
-  final LoggerService _logger = LoggerService();
-
   DateTime? _startDate;
   DateTime? _endDate;
   bool _isGenerating = false;
@@ -295,7 +293,7 @@ class _StatementDownloadScreenState extends ConsumerState<StatementDownloadScree
                         padding: const EdgeInsets.all(12),
                         child: Row(
                           children: [
-                            Icon(Icons.calendar_today, color: CoopvestColors.primary, size: 20),
+                            const Icon(Icons.calendar_today, color: CoopvestColors.primary, size: 20),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Column(
@@ -331,7 +329,7 @@ class _StatementDownloadScreenState extends ConsumerState<StatementDownloadScree
                         padding: const EdgeInsets.all(12),
                         child: Row(
                           children: [
-                            Icon(Icons.calendar_today, color: CoopvestColors.primary, size: 20),
+                            const Icon(Icons.calendar_today, color: CoopvestColors.primary, size: 20),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Column(
@@ -372,26 +370,29 @@ class _StatementDownloadScreenState extends ConsumerState<StatementDownloadScree
               ),
             ),
             const SizedBox(height: 12),
-            ..._statementTypes.map((type) => Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: AppCard(
-                    child: RadioListTile<String>(
-                      value: type['type'] as String,
-                      groupValue: _selectedType,
-                      onChanged: (value) {
-                        setState(() {
-                          _selectedType = value!;
-                        });
-                      },
-                      secondary: Icon(type['icon'] as IconData, color: CoopvestColors.primary),
-                      title: Text(
-                        type['label'] as String,
-                        style: TextStyle(color: context.textPrimary),
+            RadioGroup<String>(
+              groupValue: _selectedType,
+              onChanged: (value) {
+                if (value == null) return;
+                setState(() => _selectedType = value);
+              },
+              child: Column(
+                children: _statementTypes.map((type) => Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: AppCard(
+                        child: RadioListTile<String>(
+                          value: type['type'] as String,
+                          secondary: Icon(type['icon'] as IconData, color: CoopvestColors.primary),
+                          title: Text(
+                            type['label'] as String,
+                            style: TextStyle(color: context.textPrimary),
+                          ),
+                          activeColor: CoopvestColors.primary,
+                        ),
                       ),
-                      activeColor: CoopvestColors.primary,
-                    ),
-                  ),
-                )).toList(),
+                    )).toList(),
+              ),
+            ),
             const SizedBox(height: 24),
 
             // Preview Section
@@ -478,13 +479,13 @@ class _StatementDownloadScreenState extends ConsumerState<StatementDownloadScree
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: CoopvestColors.info.withOpacity(0.1),
+                color: CoopvestColors.info.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: CoopvestColors.info.withOpacity(0.3)),
+                border: Border.all(color: CoopvestColors.info.withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.info_outline, color: CoopvestColors.info, size: 24),
+                  const Icon(Icons.info_outline, color: CoopvestColors.info, size: 24),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(

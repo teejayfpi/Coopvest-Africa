@@ -92,13 +92,13 @@ class TerminationInfoScreen extends ConsumerWidget {
           end: Alignment.bottomRight,
           colors: [
             CoopvestColors.error,
-            CoopvestColors.error.withOpacity(0.8),
+            CoopvestColors.error.withValues(alpha: 0.8),
           ],
         ),
         borderRadius: BorderRadius.circular(16),
       ),
-      child: Column(
-        children: const [
+      child: const Column(
+        children: [
           Icon(
             Icons.warning_amber_rounded,
             color: Colors.white,
@@ -135,8 +135,8 @@ class TerminationInfoScreen extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: const [
+          const Row(
+            children: [
               Icon(Icons.info, color: CoopvestColors.info),
               SizedBox(width: 8),
               Text(
@@ -243,8 +243,8 @@ class TerminationInfoScreen extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: const [
+          const Row(
+            children: [
               Icon(Icons.verified_user, color: CoopvestColors.primary),
               SizedBox(width: 8),
               Text(
@@ -336,8 +336,8 @@ class TerminationInfoScreen extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: const [
+          const Row(
+            children: [
               Icon(Icons.gavel, color: CoopvestColors.primary),
               SizedBox(width: 8),
               Text(
@@ -399,7 +399,7 @@ class TerminationInfoScreen extends ConsumerWidget {
             width: 28,
             height: 28,
             decoration: BoxDecoration(
-              color: CoopvestColors.primary.withOpacity(0.1),
+              color: CoopvestColors.primary.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: Center(
@@ -451,14 +451,14 @@ class TerminationInfoScreen extends ConsumerWidget {
           color: CoopvestColors.info.withAlpha((255 * 0.3).toInt()),
         ),
       ),
-      child: Row(
+      child: const Row(
         children: [
-          const Icon(Icons.cloud, color: CoopvestColors.info),
-          const SizedBox(width: 12),
+          Icon(Icons.cloud, color: CoopvestColors.info),
+          SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
+              children: [
                 Text(
                   'Backend Validation',
                   style: TextStyle(

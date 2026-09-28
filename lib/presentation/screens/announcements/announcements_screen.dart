@@ -40,7 +40,7 @@ class _AnnouncementsScreenState extends ConsumerState<AnnouncementsScreen> {
               onPressed: () {
                 ref.read(announcementProvider.notifier).markAllAsRead();
               },
-              child: Text(
+              child: const Text(
                 'Mark All Read',
                 style: TextStyle(color: CoopvestColors.primary),
               ),
@@ -124,7 +124,7 @@ class _AnnouncementsScreenState extends ConsumerState<AnnouncementsScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: _getTypeColor(announcement.type).withOpacity(0.1),
+                    color: _getTypeColor(announcement.type).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Row(
@@ -158,7 +158,7 @@ class _AnnouncementsScreenState extends ConsumerState<AnnouncementsScreen> {
                     ),
                   ),
                 if (isPinned)
-                  Icon(
+                  const Icon(
                     Icons.push_pin,
                     size: 16,
                     color: CoopvestColors.warning,
@@ -250,7 +250,7 @@ class _AnnouncementsScreenState extends ConsumerState<AnnouncementsScreen> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
-                      color: _getTypeColor(announcement.type).withOpacity(0.1),
+                      color: _getTypeColor(announcement.type).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(

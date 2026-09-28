@@ -59,7 +59,7 @@ class _SalaryDeductionConsentScreenState extends ConsumerState<SalaryDeductionCo
     try {
       // Try to submit consent to backend
       final apiClient = ref.read(apiClientProvider);
-      final response = await apiClient.post('/auth/salary-consent', data: {
+      await apiClient.post('/auth/salary-consent', data: {
         'memberId': memberId,
         'consent': _agreeToConsent,
         'timestamp': DateTime.now().toIso8601String(),
@@ -113,7 +113,7 @@ class _SalaryDeductionConsentScreenState extends ConsumerState<SalaryDeductionCo
       // Unknown error — do not silently proceed; show the error to the user
       logger.e('Consent submission error: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Unexpected error. Please try again.'),
           backgroundColor: CoopvestColors.error,
         ));
@@ -123,26 +123,6 @@ class _SalaryDeductionConsentScreenState extends ConsumerState<SalaryDeductionCo
     }
   }
   
-  void _showErrorWithProceedOption(String message) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Theme.of(context).cardColor,
-        title: const Text('Notice'),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.of(context).pushReplacementNamed('/home');
-            },
-            child: const Text('Continue'),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -160,14 +140,14 @@ class _SalaryDeductionConsentScreenState extends ConsumerState<SalaryDeductionCo
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: CoopvestColors.warning.withOpacity(0.1),
+                  color: CoopvestColors.warning.withValues(alpha: 0.1),
                   border: Border.all(color: CoopvestColors.warning),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Row(
+                child: const Row(
                   children: [
-                    const Icon(Icons.info_outline, color: CoopvestColors.warning, size: 24),
-                    const SizedBox(width: 12),
+                    Icon(Icons.info_outline, color: CoopvestColors.warning, size: 24),
+                    SizedBox(width: 12),
                     Expanded(
                       child: Text(
                         'This is a mandatory consent required to access loans',

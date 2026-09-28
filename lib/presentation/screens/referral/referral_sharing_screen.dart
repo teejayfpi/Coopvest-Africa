@@ -101,7 +101,7 @@ class _ReferralSharingScreenState extends ConsumerState<ReferralSharingScreen> {
         borderRadius: BorderRadius.circular(20), 
         boxShadow: [
           BoxShadow(
-            color: CoopvestColors.primary.withOpacity(0.1), 
+            color: CoopvestColors.primary.withValues(alpha: 0.1), 
             blurRadius: 20, 
             offset: const Offset(0, 10),
           ),
@@ -127,7 +127,7 @@ class _ReferralSharingScreenState extends ConsumerState<ReferralSharingScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.error_outline, color: CoopvestColors.error, size: 48),
+                  const Icon(Icons.error_outline, color: CoopvestColors.error, size: 48),
                   const SizedBox(height: 8),
                   Text(
                     'Unable to generate QR code',
@@ -138,20 +138,20 @@ class _ReferralSharingScreenState extends ConsumerState<ReferralSharingScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          Text(
+          const Text(
             'Scan to join Coopvest Africa', 
-            style: const TextStyle(color: CoopvestColors.mediumGray, fontSize: 14),
+            style: TextStyle(color: CoopvestColors.mediumGray, fontSize: 14),
           ),
           const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: CoopvestColors.primary.withOpacity(0.1),
+              color: CoopvestColors.primary.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
               'Code: $referralCode',
-              style: TextStyle(
+              style: const TextStyle(
                 color: CoopvestColors.primary,
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
@@ -169,7 +169,7 @@ class _ReferralSharingScreenState extends ConsumerState<ReferralSharingScreen> {
       decoration: BoxDecoration(
         color: context.cardBackground, 
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: CoopvestColors.primary.withOpacity(0.2)),
+        border: Border.all(color: CoopvestColors.primary.withValues(alpha: 0.2)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -256,7 +256,7 @@ class _ReferralSharingScreenState extends ConsumerState<ReferralSharingScreen> {
   }
 
   Widget _buildMessageTemplate(BuildContext context, String code, String name) {
-    final message = "Hey! Join Coopvest Africa using my referral code $code and get exclusive benefits. https://coopvest.app/register?ref=$code";
+    final message = 'Hey! Join Coopvest Africa using my referral code $code and get exclusive benefits. https://coopvest.app/register?ref=$code';
     
     return Container(
       padding: const EdgeInsets.all(16),

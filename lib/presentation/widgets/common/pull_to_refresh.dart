@@ -46,8 +46,8 @@ class PullToRefreshListView extends StatelessWidget {
       child: ListView(
         controller: controller,
         padding: padding ?? const EdgeInsets.all(16),
-        children: children,
         addAutomaticKeepAlives: addAutomaticKeepAlive,
+        children: children,
       ),
     );
   }

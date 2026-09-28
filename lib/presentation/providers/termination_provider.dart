@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/services/logger_service.dart';
 import '../../data/models/termination_models.dart';
-import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/termination_repository.dart';
 
 /// Termination Provider - State management for membership termination operations
@@ -10,19 +9,18 @@ import '../../data/repositories/termination_repository.dart';
 /// The mobile application acts only as a request interface.
 final terminationProvider =
     StateNotifierProvider<TerminationNotifier, TerminationState>((ref) {
-  final authRepository = ref.watch(authRepositoryProvider);
   final terminationRepository = ref.watch(terminationRepositoryProvider);
-  return TerminationNotifier(authRepository, terminationRepository);
+  return TerminationNotifier(terminationRepository);
 });
 
 /// Termination Notifier - Handles termination state changes
 class TerminationNotifier extends StateNotifier<TerminationState> {
-  final AuthRepository _authRepository;
   final TerminationRepository _terminationRepository;
   final LoggerService _logger;
 
-  TerminationNotifier(this._authRepository, this._terminationRepository)
-      : _logger = LoggerService(),
+  TerminationNotifier(TerminationRepository terminationRepository)
+      : _terminationRepository = terminationRepository,
+        _logger = LoggerService(),
         super(const TerminationState());
 
   // ============== Eligibility Check ==============

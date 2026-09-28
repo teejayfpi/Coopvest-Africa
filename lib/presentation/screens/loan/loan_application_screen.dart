@@ -131,7 +131,7 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
   String get _qrDataForDisplay => _qrCodeData ?? '{"qrId":"${_qrId ?? _loanId}","loanId":"$_loanId"}';
 
   // Fallback display for legacy UI (shows loan ID)
-  String get _formattedLoanId => 'COOP-${_loanId}';
+  String get _formattedLoanId => 'COOP-$_loanId';
 
   // Check if user is eligible for loan based on membership duration and contributions
   // Requirements: At least 6 months membership AND at least 6 months of consistent contributions
@@ -147,7 +147,7 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
     
     // Check membership duration
     int membershipMonths = 0;
-    if (user != null && user.createdAt != null) {
+    if (user != null) {
       membershipMonths = user.membershipDurationMonths;
     }
     
@@ -165,19 +165,14 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
         return c.postedDate!.isAfter(sixMonthsAgo) || 
                c.postedDate!.isAtSameMomentAs(sixMonthsAgo);
       }
-      if (c.createdAt != null) {
-        return c.createdAt.isAfter(sixMonthsAgo) || 
-               c.createdAt.isAtSameMomentAs(sixMonthsAgo);
-      }
-      return false;
+      return c.createdAt.isAfter(sixMonthsAgo) || 
+             c.createdAt.isAtSameMomentAs(sixMonthsAgo);
     }).toList();
     
     // Get unique months with successful contributions
     final uniqueContributionMonths = <String>{};
     for (final c in successfulContributions) {
-      if (c.contributionMonth != null) {
-        uniqueContributionMonths.add(c.contributionMonth!);
-      }
+      uniqueContributionMonths.add(c.contributionMonth);
     }
     
     final contributionMonths = uniqueContributionMonths.length;
@@ -194,7 +189,7 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
     // TESTING ONLY: 6-month membership & contribution requirement bypassed for loan testing.
     // Restore the original check below when testing is complete:
     // final isEligible = membershipMonths >= 6 && finalContributionMonths >= 6;
-    final isEligible = true;
+    const isEligible = true;
     
     return {
       'isEligible': isEligible,
@@ -266,11 +261,11 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
+            const Row(
               children: [
-                const Icon(Icons.block, color: CoopvestColors.error, size: 28),
-                const SizedBox(width: 12),
-                const Expanded(
+                Icon(Icons.block, color: CoopvestColors.error, size: 28),
+                SizedBox(width: 12),
+                Expanded(
                   child: Text(
                     'Loan Eligibility Requirements Not Met',
                     style: TextStyle(
@@ -411,9 +406,9 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
                   Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: CoopvestColors.primary.withOpacity(0.05),
+                      color: CoopvestColors.primary.withValues(alpha: 0.05),
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: CoopvestColors.primary.withOpacity(0.2)),
+                      border: Border.all(color: CoopvestColors.primary.withValues(alpha: 0.2)),
                     ),
                     child: const Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -608,7 +603,7 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
           : (wallet?.balance ?? 0.0);
       
       // Calculate limits based on savings
-      final minAmount = 1000.0;
+      const minAmount = 1000.0;
       // Loan limit = savings × product multiplier (Premium 4x, Maxi 5x, others 3x)
       final maxAmount = memberSavings * multiplier;
 
@@ -626,7 +621,7 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
         setState(() {
           _loanStatus = 'Rejected';
           _rejectionReason = maxAmount > 0
-              ? 'Maximum amount for ${_selectedLoanType} is \u20a6${maxAmount.toStringAsFixed(0)} (${multiplier}x your savings)'
+              ? 'Maximum amount for $_selectedLoanType is \u20a6${maxAmount.toStringAsFixed(0)} (${multiplier}x your savings)'
               : 'You need accumulated savings to apply for a $_selectedLoanType. Your loan limit is ${multiplier}x your total savings.';
           _isSubmitting = false;
         });
@@ -671,7 +666,7 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
           backendLoanId = (loan['loan_id'] as String?) ?? (loan['id'] as String?);
         }
 
-        if (backendLoanId == null || backendLoanId!.isEmpty) {
+        if (backendLoanId == null || backendLoanId.isEmpty) {
           throw Exception('Backend did not return a loan id');
         }
       } catch (e) {
@@ -711,14 +706,14 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
       }
 
       // Simple approval logic (15%+ savings = Approved, 10–15% = Pending Review)
-      final bool showQr = true; // Always show QR code
+      const bool showQr = true; // Always show QR code
       
       // Generate local QR data if backend didn't provide one
-      if (qrCodeData == null || qrCodeData!.isEmpty) {
+      if (qrCodeData == null || qrCodeData.isEmpty) {
         // Create a local QR data with all loan info
         final loanStatusText = monthlySavings >= requestedAmount * 0.15 ? 'Approved' : 'Pending Review';
-        qrCodeData = 'COOPVEST_LOAN|${backendLoanId ?? 'LOCAL-${DateTime.now().millisecondsSinceEpoch}'}|$_selectedLoanType|₦$requestedAmount|${widget.userName}|${widget.userPhone}|$loanStatusText';
-        qrId = backendLoanId ?? 'LOCAL-${DateTime.now().millisecondsSinceEpoch}';
+        qrCodeData = 'COOPVEST_LOAN|$backendLoanId|$_selectedLoanType|₦$requestedAmount|${widget.userName}|${widget.userPhone}|$loanStatusText';
+        qrId = backendLoanId;
       }
       
       if (monthlySavings >= requestedAmount * 0.15) {
@@ -768,8 +763,8 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: Row(
-          children: const [
+        title: const Row(
+          children: [
             Icon(Icons.check_circle, color: CoopvestColors.success),
             SizedBox(width: 8),
             Text('Success!'),
@@ -778,7 +773,7 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Your ${_selectedLoanType} application has been APPROVED!', style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text('Your $_selectedLoanType application has been APPROVED!', style: const TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
             Text(
               showQr 
@@ -819,8 +814,8 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Row(
-          children: const [
+        title: const Row(
+          children: [
             Icon(Icons.hourglass_top, color: Colors.orange),
             SizedBox(width: 8),
             Text('Under Review'),
@@ -829,9 +824,9 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Your ${_selectedLoanType} application is now under review.'),
+            Text('Your $_selectedLoanType application is now under review.'),
             const SizedBox(height: 16),
-            Text(
+            const Text(
               'Please share the QR code with your 3 guarantors. Once all 3 guarantors confirm, your loan will be processed.',
               textAlign: TextAlign.center,
             ),
@@ -892,7 +887,7 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
         : (wallet?.balance ?? 0.0);
     
     // Calculate min and max based on savings multiplier
-    final minAmount = 1000.0; // Minimum loan of ₦1,000
+    const minAmount = 1000.0; // Minimum loan of ₦1,000
     // Loan limit = savings × product multiplier (Premium 4x, Maxi 5x, others 3x)
     final maxAmount = memberSavings * multiplier;
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
@@ -936,7 +931,7 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.account_balance, color: CoopvestColors.primary),
+                          const Icon(Icons.account_balance, color: CoopvestColors.primary),
                           const SizedBox(width: 8),
                           Text(
                             'Select Loan Type',
@@ -953,7 +948,7 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: DropdownButtonFormField<String>(
-                          value: _selectedLoanType,
+                          initialValue: _selectedLoanType,
                           decoration: const InputDecoration(
                             border: InputBorder.none,
                             contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -1100,7 +1095,7 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.info, color: CoopvestColors.warning),
+                          const Icon(Icons.info, color: CoopvestColors.warning),
                           const SizedBox(width: 8),
                           Text(
                             'Important Requirements',
@@ -1143,6 +1138,14 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
                   width: double.infinity,
                 ),
 
+                // Rejection / failure reason. The status section below only
+                // renders once a QR has been issued, so without this the member
+                // saw a rejection with no explanation at all.
+                if (!_showQrCode && _rejectionReason != null) ...[
+                  const SizedBox(height: 24),
+                  _buildRejectionBanner(),
+                ],
+
                 // QR Code and Status Section
                 if (_showQrCode) ...[
                   const SizedBox(height: 32),
@@ -1172,7 +1175,6 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
 
   Widget _buildLoanSummary(Map<String, dynamic> loanInfo) {
     final amount = double.tryParse(_amountController.text.replaceAll(',', '')) ?? 0;
-    final savings = double.tryParse(_monthlySavingsController.text) ?? 0;
     final interestRate = (loanInfo['interest'] as num).toDouble();
     final tenure = loanInfo['duration'] as int;
     
@@ -1186,8 +1188,8 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
           const Text('Loan Summary', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           const Divider(),
           _buildSummaryRow('Requested Amount', '\u20a6${amount.toStringAsFixed(2)}'),
-          _buildSummaryRow('Interest Rate', '${interestRate}%'),
-          _buildSummaryRow('Tenure', '${tenure} Months'),
+          _buildSummaryRow('Interest Rate', '$interestRate%'),
+          _buildSummaryRow('Tenure', '$tenure Months'),
           _buildSummaryRow('Total Repayment', '\u20a6${totalRepayment.toStringAsFixed(2)}', isBold: true),
           _buildSummaryRow('Monthly Repayment', '\u20a6${monthlyRepayment.toStringAsFixed(2)}'),
           // Spell the arithmetic out so the member can check it rather than
@@ -1195,7 +1197,7 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
           Padding(
             padding: const EdgeInsets.only(top: 6),
             child: Text(
-              '\u20a6${monthlyRepayment.toStringAsFixed(2)} \u00d7 ${tenure} months = '
+              '\u20a6${monthlyRepayment.toStringAsFixed(2)} \u00d7 $tenure months = '
               '\u20a6${totalRepayment.toStringAsFixed(2)}',
               style: TextStyle(fontSize: 11, color: context.textSecondary),
             ),
@@ -1225,9 +1227,14 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
     
     // Tiered interest reduction based on active referrals
     double reduction = 0;
-    if (activeReferralsCount >= 10) reduction = 2.0;
-    else if (activeReferralsCount >= 5) reduction = 1.0;
-    else if (activeReferralsCount >= 2) reduction = 0.5;
+    if (activeReferralsCount >= 10) {
+      reduction = 2.0;
+    } else if (activeReferralsCount >= 5) {
+      reduction = 1.0;
+    }
+    else if (activeReferralsCount >= 2) {
+      reduction = 0.5;
+    }
 
     final originalInterest = (loanInfo['interest'] as num).toDouble();
     final finalInterest = max(0.0, originalInterest - reduction);
@@ -1237,11 +1244,11 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          const Row(
             children: [
-              const Icon(Icons.stars, color: CoopvestColors.primary, size: 20),
-              const SizedBox(width: 8),
-              const Text('Referral Bonus', style: TextStyle(fontWeight: FontWeight.bold, color: CoopvestColors.primary)),
+              Icon(Icons.stars, color: CoopvestColors.primary, size: 20),
+              SizedBox(width: 8),
+              Text('Referral Bonus', style: TextStyle(fontWeight: FontWeight.bold, color: CoopvestColors.primary)),
             ],
           ),
           const SizedBox(height: 8),
@@ -1250,7 +1257,7 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
             Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Text(
-                'Interest reduced by ${reduction}%! (Original: ${originalInterest}%, New: ${finalInterest}%)',
+                'Interest reduced by $reduction%! (Original: $originalInterest%, New: $finalInterest%)',
                 style: const TextStyle(color: CoopvestColors.success, fontWeight: FontWeight.bold, fontSize: 12),
               ),
             )
@@ -1262,6 +1269,50 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
                 style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic),
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  /// Explains why a submission was rejected or failed, so the member is not
+  /// left staring at a form that silently did nothing.
+  Widget _buildRejectionBanner() {
+    final reason = _rejectionReason!;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: CoopvestColors.errorSurface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: CoopvestColors.error.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.error_outline, color: CoopvestColors.error, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Application not submitted',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: CoopvestColors.errorText,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  reason,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: CoopvestColors.errorText,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -1299,7 +1350,14 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
                   data: _qrDataForDisplay,
                   version: QrVersions.auto,
                   size: 200.0,
-                  foregroundColor: isDarkMode ? Colors.white : Colors.black,
+                  eyeStyle: QrEyeStyle(
+                    eyeShape: QrEyeShape.square,
+                    color: isDarkMode ? Colors.white : Colors.black,
+                  ),
+                  dataModuleStyle: QrDataModuleStyle(
+                    dataModuleShape: QrDataModuleShape.square,
+                    color: isDarkMode ? Colors.white : Colors.black,
+                  ),
                 ),
               const SizedBox(height: 16),
               Text(_formattedLoanId, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),

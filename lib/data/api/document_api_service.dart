@@ -140,7 +140,7 @@ class DocumentApiService {
         'requiredCount': response.data['requiredCount'] ?? 0,
         'missingTypes': List<String>.from(response.data['missingTypes'] ?? []),
       };
-    } on DioException catch (e) {
+    } on DioException {
       return {
         'isComplete': false,
         'submittedCount': 0,
@@ -158,7 +158,7 @@ class DocumentApiService {
         '/documents/pending-count',
       );
       return response.data['count'] ?? 0;
-    } on DioException catch (e) {
+    } on DioException {
       return 0;
     }
   }

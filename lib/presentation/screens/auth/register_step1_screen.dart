@@ -35,7 +35,7 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
   // they tick the box so acceptance is provable, then carried through the flow
   // and persisted with the rest of registration.
   DateTime? _termsAcceptedAt;
-  String _termsVersion = TermsContent.version;
+  final String _termsVersion = TermsContent.version;
   bool _isLoading = false;
 
   String? _nameError;
@@ -93,7 +93,9 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
         _phoneError != null ||
         _emailError != null ||
         _passwordError != null ||
-        _confirmPasswordError != null) return;
+        _confirmPasswordError != null) {
+      return;
+    }
 
     if (!_agreeToTerms) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -146,6 +148,7 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
         final sbUser = sb.Supabase.instance.client.auth.currentUser;
         final emailConfirmed = (sbUser?.emailConfirmedAt != null) ||
             (registeredUser?.isEmailVerified ?? false);
+        if (!mounted) return;
         if (emailConfirmed) {
           Navigator.of(context).pushNamed('/register-step3', arguments: regArgs);
         } else {

@@ -72,7 +72,7 @@ class TerminationApplicationScreen extends ConsumerWidget {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: CoopvestColors.primary.withOpacity(0.1),
+              color: CoopvestColors.primary.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: const Icon(
@@ -107,7 +107,7 @@ class TerminationApplicationScreen extends ConsumerWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: CoopvestColors.success.withOpacity(0.1),
+              color: CoopvestColors.success.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(4),
             ),
             child: const Text(
@@ -162,52 +162,52 @@ class TerminationApplicationScreen extends ConsumerWidget {
         const SizedBox(height: 12),
         Container(
           decoration: CoopvestShape.cardDecoration(context),
-          child: Column(
-            children: _reasons.asMap().entries.map((entry) {
-              final reason = entry.value;
-              final isSelected = selectedReason == reason;
-              final isLast = entry.key == _reasons.length - 1;
-
-              return Column(
-                children: [
-                  RadioListTile<TerminationReason>(
-                    value: reason,
-                    groupValue: selectedReason,
-                    onChanged: (value) {
-                      if (value != null) {
-                        final currentFormData = ref.read(terminationProvider).formData;
-                        if (currentFormData != null) {
-                          notifier.updateFormData(
-                            currentFormData.copyWith(reason: value),
-                          );
-                        } else {
-                          notifier.updateFormData(
-                            TerminationFormData(
-                              reason: value,
-                              exitType: TerminationExitType.permanent,
-                              acknowledgedFinancialObligations: false,
-                              acknowledgedServiceTermination: false,
-                              acknowledgedGuarantorObligations: false,
-                            ),
-                          );
-                        }
-                      }
-                    },
-                    title: Text(
-                      getTerminationReasonText(reason),
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: CoopvestColors.textPrimary,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    activeColor: CoopvestColors.error,
-                    controlAffinity: ListTileControlAffinity.trailing,
+          child: RadioGroup<TerminationReason>(
+            groupValue: selectedReason,
+            onChanged: (value) {
+              if (value == null) return;
+              final currentFormData = ref.read(terminationProvider).formData;
+              if (currentFormData != null) {
+                notifier.updateFormData(
+                  currentFormData.copyWith(reason: value),
+                );
+              } else {
+                notifier.updateFormData(
+                  TerminationFormData(
+                    reason: value,
+                    exitType: TerminationExitType.permanent,
+                    acknowledgedFinancialObligations: false,
+                    acknowledgedServiceTermination: false,
+                    acknowledgedGuarantorObligations: false,
                   ),
-                  if (!isLast) const Divider(height: 1),
-                ],
-              );
-            }).toList(),
+                );
+              }
+            },
+            child: Column(
+              children: _reasons.asMap().entries.map((entry) {
+                final reason = entry.value;
+                final isLast = entry.key == _reasons.length - 1;
+
+                return Column(
+                  children: [
+                    RadioListTile<TerminationReason>(
+                      value: reason,
+                      title: Text(
+                        getTerminationReasonText(reason),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: CoopvestColors.textPrimary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      activeColor: CoopvestColors.error,
+                      controlAffinity: ListTileControlAffinity.trailing,
+                    ),
+                    if (!isLast) const Divider(height: 1),
+                  ],
+                );
+              }).toList(),
+            ),
           ),
         ),
       ],
@@ -283,7 +283,7 @@ class TerminationApplicationScreen extends ConsumerWidget {
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: isSelected
-                  ? CoopvestColors.error.withOpacity(0.1)
+                  ? CoopvestColors.error.withValues(alpha: 0.1)
                   : Colors.white,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
@@ -292,7 +292,7 @@ class TerminationApplicationScreen extends ConsumerWidget {
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
+                  color: Colors.black.withValues(alpha: 0.05),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
@@ -332,7 +332,6 @@ class TerminationApplicationScreen extends ConsumerWidget {
   }
 
   Widget _buildDetailsSection(BuildContext context, WidgetRef ref, TerminationNotifier notifier) {
-    final formData = ref.read(terminationProvider).formData;
     final reasonController = TextEditingController();
 
     return Column(
@@ -388,8 +387,8 @@ class TerminationApplicationScreen extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: const [
+        const Row(
+          children: [
             Icon(Icons.checklist, color: CoopvestColors.primary),
             SizedBox(width: 8),
             Text(
@@ -596,8 +595,8 @@ class TerminationApplicationScreen extends ConsumerWidget {
                 color: CoopvestColors.warning.withAlpha((255 * 0.1).toInt()),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Row(
-                children: const [
+              child: const Row(
+                children: [
                   Icon(Icons.warning, color: CoopvestColors.warning),
                   SizedBox(width: 12),
                   Expanded(
@@ -656,9 +655,9 @@ class TerminationApplicationScreen extends ConsumerWidget {
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: const Text('Request Submitted'),
-        content: Column(
+        content: const Column(
           mainAxisSize: MainAxisSize.min,
-          children: const [
+          children: [
             Icon(
               Icons.check_circle,
               color: CoopvestColors.success,

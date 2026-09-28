@@ -74,6 +74,7 @@ class _AccountActivationScreenState
 
       // Full in-app WebView —the checkout stays inside the app so the `opay://`
       // hand-off can't crash Android's activity manager (previous behavior..
+      if (!mounted) return;
       final confirmed = await showPaystackCheckoutDialog(context, url: url);
       if (confirmed != true || !mounted) return;
 
@@ -207,7 +208,7 @@ class _AccountActivationScreenState
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: CoopvestColors.primary.withOpacity(0.08),
+                  color: CoopvestColors.primary.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Column(
@@ -444,12 +445,12 @@ class _StatusRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: highlight
-            ? CoopvestColors.warning.withOpacity(0.12)
+            ? CoopvestColors.warning.withValues(alpha: 0.12)
             : theme.cardColor,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: highlight
-              ? CoopvestColors.warning.withOpacity(0.4)
+              ? CoopvestColors.warning.withValues(alpha: 0.4)
               : CoopvestColors.lightGray,
         ),
       ),

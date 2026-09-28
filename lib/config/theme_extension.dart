@@ -19,7 +19,7 @@ extension ScreenTheme on BuildContext {
   /// Secondary card background (for nested cards)
   Color get secondaryCardBackground =>
       Theme.of(this).brightness == Brightness.dark
-          ? CoopvestColors.darkSurface.withOpacity(0.8)
+          ? CoopvestColors.darkSurface.withValues(alpha: 0.8)
           : CoopvestColors.veryLightGray;
 
   /// Text color for primary content
@@ -64,18 +64,18 @@ extension ScreenTheme on BuildContext {
   /// Status badge background
   Color get statusBadgeBackground =>
       Theme.of(this).brightness == Brightness.dark
-          ? Colors.white.withOpacity(0.1)
+          ? Colors.white.withValues(alpha: 0.1)
           : CoopvestColors.veryLightGray;
 
   /// Gradient overlay for cards
   List<Color> get cardGradient => Theme.of(this).brightness == Brightness.dark
       ? [
           CoopvestColors.darkSurface,
-          CoopvestColors.darkSurface.withOpacity(0.9),
+          CoopvestColors.darkSurface.withValues(alpha: 0.9),
         ]
       : [
           CoopvestColors.white,
-          CoopvestColors.white.withOpacity(0.9),
+          CoopvestColors.white.withValues(alpha: 0.9),
         ];
 }
 

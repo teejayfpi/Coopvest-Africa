@@ -556,6 +556,18 @@ middleware and several routes but were created by no migration, so a fresh
 environment fails the gate query. Migration 048 creates them and backfills the
 channel from `kyc.personal_info`.
 
+## KYC status is never null — guard drafts on `isUntouchedServerRow`
+
+`GET /kyc/status` calls getOrCreateKyc, so it always returns a provisional
+`pending` row; the response is non-nullable. A guard written as
+`submission ??= await _restoreDraft()` can therefore never run, which silently
+disables the "resume my KYC draft" feature. Use
+`KYCSubmission.isUntouchedServerRow` (`lib/data/models/kyc_models.dart`) instead:
+a locally saved draft is restored only while the server row is still `pending`
+*and* empty on every member-entered field, so stale local values can never mask
+data the server already holds. Covered by
+`test/unit/kyc_draft_resume_test.dart`.
+
 ## Deployment
 
 `coopvest-api` on Render auto-deploys on every commit to `main`

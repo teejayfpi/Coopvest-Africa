@@ -66,14 +66,14 @@ class ReferralDashboardScreen extends ConsumerWidget {
 
   Widget _buildReferralCodeCard(BuildContext context, String referralCode, WidgetRef ref) {
     return AppCard(
-      backgroundColor: CoopvestColors.primary.withOpacity(0.1),
+      backgroundColor: CoopvestColors.primary.withValues(alpha: 0.1),
       child: Column(
         children: [
-          Row(mainAxisAlignment: MainAxisAlignment.center, children: [const Icon(Icons.card_giftcard, color: CoopvestColors.primary, size: 28), const SizedBox(width: 8), Text('Your Referral Code', style: TextStyle(color: CoopvestColors.primary, fontWeight: FontWeight.bold))]),
+          const Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.card_giftcard, color: CoopvestColors.primary, size: 28), SizedBox(width: 8), Text('Your Referral Code', style: TextStyle(color: CoopvestColors.primary, fontWeight: FontWeight.bold))]),
           const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-            decoration: BoxDecoration(color: context.cardBackground, borderRadius: BorderRadius.circular(12), border: Border.all(color: CoopvestColors.primary.withOpacity(0.3))),
+            decoration: BoxDecoration(color: context.cardBackground, borderRadius: BorderRadius.circular(12), border: Border.all(color: CoopvestColors.primary.withValues(alpha: 0.3))),
             child: Text(referralCode, style: const TextStyle(color: CoopvestColors.primary, fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 2)),
           ),
           const SizedBox(height: 16),
@@ -142,7 +142,7 @@ class ReferralDashboardScreen extends ConsumerWidget {
 
   Widget _buildStatCard(BuildContext context, String title, String value, IconData icon, Color color) {
     return AppCard(
-      backgroundColor: color.withOpacity(0.1),
+      backgroundColor: color.withValues(alpha: 0.1),
       child: Column(
         children: [
           Icon(icon, color: color, size: 24),

@@ -145,7 +145,7 @@ class _GuarantorVerificationScreenState
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: CoopvestColors.primary.withOpacity(0.1),
+                color: CoopvestColors.primary.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Column(
@@ -314,9 +314,9 @@ class _GuarantorVerificationScreenState
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: CoopvestColors.primary.withOpacity(0.06),
+            color: CoopvestColors.primary.withValues(alpha: 0.06),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: CoopvestColors.primary.withOpacity(0.3)),
+            border: Border.all(color: CoopvestColors.primary.withValues(alpha: 0.3)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -388,9 +388,9 @@ class _GuarantorVerificationScreenState
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: CoopvestColors.warning.withOpacity(0.07),
+            color: CoopvestColors.warning.withValues(alpha: 0.07),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: CoopvestColors.warning.withOpacity(0.25)),
+            border: Border.all(color: CoopvestColors.warning.withValues(alpha: 0.25)),
           ),
           child: const Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -402,7 +402,7 @@ class _GuarantorVerificationScreenState
                 child: Text(
                   'Late loan repayments may attract a ₦3,000 penalty fee after '
                   'repeated default notices. Continued non-payment beyond three '
-                  "months may trigger guarantor recovery procedures in accordance "
+                  'months may trigger guarantor recovery procedures in accordance '
                   "with Coopvest Africa's loan policy.",
                   style: TextStyle(
                       color: CoopvestColors.warning, fontSize: 11, height: 1.5),
@@ -418,12 +418,12 @@ class _GuarantorVerificationScreenState
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: _agreedToTerms
-                ? CoopvestColors.success.withOpacity(0.06)
+                ? CoopvestColors.success.withValues(alpha: 0.06)
                 : context.cardBackground,
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: _agreedToTerms
-                  ? CoopvestColors.success.withOpacity(0.4)
+                  ? CoopvestColors.success.withValues(alpha: 0.4)
                   : context.dividerColor,
             ),
           ),
@@ -440,9 +440,9 @@ class _GuarantorVerificationScreenState
                 child: Padding(
                   padding: const EdgeInsets.only(top: 4),
                   child: Text(
-                    "I have read and understood the guarantor responsibilities and "
+                    'I have read and understood the guarantor responsibilities and '
                     "Coopvest Africa's loan policy. I consent to act as guarantor "
-                    "for this loan.",
+                    'for this loan.',
                     style: TextStyle(
                         color: context.textPrimary, fontSize: 13, height: 1.4),
                   ),

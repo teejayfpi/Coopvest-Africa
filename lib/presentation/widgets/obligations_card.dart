@@ -123,7 +123,7 @@ class ObligationsCard extends ConsumerWidget {
                       color: context.textPrimary,
                     ),
                   ),
-                  Text(
+                  const Text(
                     'View all',
                     style: TextStyle(
                       fontSize: 12,

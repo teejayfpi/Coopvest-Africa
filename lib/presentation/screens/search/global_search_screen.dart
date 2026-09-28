@@ -80,7 +80,7 @@ class _GlobalSearchScreenState extends ConsumerState<GlobalSearchScreen> {
   List<SearchItem> get _filteredItems {
     if (_query.isEmpty) return [];
     
-    List<SearchItem> results = [];
+    final List<SearchItem> results = [];
     for (var category in _categories) {
       for (var item in category.items) {
         if (item.title.toLowerCase().contains(_query.toLowerCase()) ||
@@ -220,8 +220,8 @@ class _GlobalSearchScreenState extends ConsumerState<GlobalSearchScreen> {
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: CoopvestColors.primary.withOpacity(0.1),
-          child: Icon(Icons.search, color: CoopvestColors.primary, size: 20),
+          backgroundColor: CoopvestColors.primary.withValues(alpha: 0.1),
+          child: const Icon(Icons.search, color: CoopvestColors.primary, size: 20),
         ),
         title: Text(
           item.title,

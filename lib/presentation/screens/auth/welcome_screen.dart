@@ -50,7 +50,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
             bottom: 0, left: 0, right: 0,
             child: Container(
               padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(color: context.cardBackground, boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -5))]),
+              decoration: BoxDecoration(color: context.cardBackground, boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, -5))]),
               child: Column(
                 children: [
                   Row(mainAxisAlignment: MainAxisAlignment.center, children: List.generate(slides.length, (index) => Container(width: _currentPage == index ? 32 : 8, height: 8, margin: const EdgeInsets.symmetric(horizontal: 4), decoration: BoxDecoration(color: _currentPage == index ? CoopvestColors.primary : context.dividerColor, borderRadius: BorderRadius.circular(4))))),
@@ -99,7 +99,7 @@ class OnboardingSlideWidget extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(width: 120, height: 120, decoration: BoxDecoration(color: slide.color.withOpacity(0.1), borderRadius: BorderRadius.circular(30)), child: Center(child: Icon(slide.icon, size: 60, color: slide.color))).animate().scale(duration: 600.ms).fadeIn(),
+          Container(width: 120, height: 120, decoration: BoxDecoration(color: slide.color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(30)), child: Center(child: Icon(slide.icon, size: 60, color: slide.color))).animate().scale(duration: 600.ms).fadeIn(),
           const SizedBox(height: 40),
           Text(slide.title, textAlign: TextAlign.center, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: context.textPrimary)).animate().fadeIn(duration: 400.ms).slideY(begin: 0.3, end: 0),
           const SizedBox(height: 12),

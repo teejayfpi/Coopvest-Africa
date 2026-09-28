@@ -230,7 +230,7 @@ class _RolloverEligibilityScreenState
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: CoopvestColors.warning.withOpacity(0.12),
+                  color: CoopvestColors.warning.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Column(

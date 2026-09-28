@@ -44,7 +44,7 @@ class _KYCSuccessScreenState extends ConsumerState<KYCSuccessScreen> {
                 width: 120,
                 height: 120,
                 decoration: BoxDecoration(
-                  color: CoopvestColors.primary.withOpacity(0.1),
+                  color: CoopvestColors.primary.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
@@ -157,7 +157,7 @@ class _KYCSuccessScreenState extends ConsumerState<KYCSuccessScreen> {
           Container(
             width: 24,
             height: 24,
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: CoopvestColors.primary,
               shape: BoxShape.circle,
             ),

@@ -39,7 +39,7 @@ class SupportHomeScreen extends ConsumerWidget {
                   children: [
                     Container(
                       width: 60, height: 60,
-                      decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
+                      decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), shape: BoxShape.circle),
                       child: const Icon(Icons.support_agent, color: Colors.white, size: 30),
                     ),
                     const SizedBox(width: 16),
@@ -151,7 +151,7 @@ class SupportHomeScreen extends ConsumerWidget {
                 decoration: BoxDecoration(color: context.cardBackground, borderRadius: BorderRadius.circular(12)),
                 child: Row(
                   children: [
-                    Icon(Icons.access_time, color: CoopvestColors.primary),
+                    const Icon(Icons.access_time, color: CoopvestColors.primary),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
@@ -172,13 +172,13 @@ class SupportHomeScreen extends ConsumerWidget {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: CoopvestColors.warning.withOpacity(0.1),
+                  color: CoopvestColors.warning.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: CoopvestColors.warning.withOpacity(0.3)),
+                  border: Border.all(color: CoopvestColors.warning.withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.priority_high, color: CoopvestColors.warning),
+                    const Icon(Icons.priority_high, color: CoopvestColors.warning),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(

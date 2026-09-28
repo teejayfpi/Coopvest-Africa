@@ -95,9 +95,15 @@ class KYCCubit extends StateNotifier<KYCState> {
       return;
     }
 
-    // Fall back to the locally saved draft when the server has no record yet,
-    // so a member who closed the app mid-flow resumes where they left off.
-    submission ??= await _restoreDraft();
+    // getKYCStatus() is non-nullable and the backend creates a provisional
+    // 'pending' row on first read, so a non-null response does NOT mean the
+    // member has entered anything yet. Fall back to the locally saved draft
+    // only when that server row is still untouched, so a member who closed
+    // the app mid-flow resumes where they left off without stale local values
+    // ever masking data the server already holds.
+    if (submission.isUntouchedServerRow) {
+      submission = (await _restoreDraft()) ?? submission;
+    }
 
     // Best-effort: refresh the organizations list without letting its failure
     // affect the KYC submission status that AuthGuard gates on.

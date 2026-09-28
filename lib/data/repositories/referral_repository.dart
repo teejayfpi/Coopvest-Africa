@@ -146,7 +146,6 @@ class ReferralRepository {
     required String loanId,
   }) async {
     try {
-      final userId = await _authRepository.getUserId();
       final request = ApplyBonusRequest(
         loanId: loanId,
         loanType: 'Quick Loan', // Default type

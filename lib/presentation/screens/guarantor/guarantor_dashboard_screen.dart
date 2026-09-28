@@ -115,9 +115,9 @@ class _GuarantorDashboardScreenState
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.2)),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Column(
         children: [
@@ -231,7 +231,7 @@ class _GuarantorDashboardScreenState
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: CoopvestColors.primary.withOpacity(0.1),
+                    color: CoopvestColors.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
@@ -249,10 +249,10 @@ class _GuarantorDashboardScreenState
                     padding:
                         const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: CoopvestColors.error.withOpacity(0.1),
+                      color: CoopvestColors.error.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(4),
                     ),
-                    child: Text(
+                    child: const Text(
                       'EXPIRED',
                       style: TextStyle(
                         fontSize: 9,
@@ -269,7 +269,7 @@ class _GuarantorDashboardScreenState
               children: [
                 CircleAvatar(
                   radius: 24,
-                  backgroundColor: CoopvestColors.primary.withOpacity(0.1),
+                  backgroundColor: CoopvestColors.primary.withValues(alpha: 0.1),
                   child: Text(
                     _getInitials(request.memberName),
                     style: const TextStyle(
@@ -307,7 +307,7 @@ class _GuarantorDashboardScreenState
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: context.secondaryCardBackground.withOpacity(0.5),
+                color: context.secondaryCardBackground.withValues(alpha: 0.5),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
@@ -370,7 +370,7 @@ class _GuarantorDashboardScreenState
               child: LinearProgressIndicator(
                 value: request.progress,
                 minHeight: 6,
-                backgroundColor: CoopvestColors.primary.withOpacity(0.1),
+                backgroundColor: CoopvestColors.primary.withValues(alpha: 0.1),
                 valueColor: const AlwaysStoppedAnimation(CoopvestColors.primary),
               ),
             ),
@@ -447,7 +447,7 @@ class _GuarantorDashboardScreenState
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: statusColor.withOpacity(0.1),
+                color: statusColor.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
@@ -497,7 +497,7 @@ class _GuarantorDashboardScreenState
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.1),
+                    color: statusColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
@@ -549,9 +549,9 @@ class _GuarantorDashboardScreenState
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.05),
+          color: color.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color.withOpacity(0.2)),
+          border: Border.all(color: color.withValues(alpha: 0.2)),
         ),
         child: Row(
           children: [
@@ -654,12 +654,12 @@ class _GuarantorDashboardScreenState
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: CoopvestColors.info.withOpacity(0.1),
+                color: CoopvestColors.info.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.info, color: CoopvestColors.info),
+                  const Icon(Icons.info, color: CoopvestColors.info),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
@@ -682,7 +682,7 @@ class _GuarantorDashboardScreenState
               Navigator.of(context).pop();
               final success =
                   await ref.read(guarantorProvider.notifier).acceptRequest(request.id);
-              if (success && mounted) {
+              if (success && context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text('Successfully accepted as guarantor'),
@@ -722,9 +722,9 @@ class _GuarantorDashboardScreenState
               final success = await ref
                   .read(guarantorProvider.notifier)
                   .declineRequest(request.id);
-              if (success && mounted) {
+              if (success && context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
+                  const SnackBar(
                     content: Text('Request declined'),
                     backgroundColor: CoopvestColors.primary,
                   ),
@@ -797,7 +797,7 @@ class _GuarantorDashboardScreenState
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: CoopvestColors.primary.withOpacity(0.1),
+                    color: CoopvestColors.primary.withValues(alpha: 0.1),
                     blurRadius: 20,
                     offset: const Offset(0, 10),
                   ),
@@ -831,7 +831,7 @@ class _GuarantorDashboardScreenState
                   const SizedBox(height: 4),
                   Text(
                     'Guarantor ID: ${guarantorId.substring(0, 8)}...',
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 12,
                       color: CoopvestColors.mediumGray,
                     ),
@@ -886,12 +886,12 @@ class _GuarantorDashboardScreenState
               margin: const EdgeInsets.symmetric(horizontal: 40),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: CoopvestColors.info.withOpacity(0.1),
+                color: CoopvestColors.info.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.info_outline, color: CoopvestColors.info, size: 20),
+                  const Icon(Icons.info_outline, color: CoopvestColors.info, size: 20),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(

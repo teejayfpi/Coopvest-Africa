@@ -213,10 +213,10 @@ class _GuarantorResponseScreenState
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: const Color(0xFF1B3A6B).withOpacity(0.07),
+              color: const Color(0xFF1B3A6B).withValues(alpha: 0.07),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: const Color(0xFF1B3A6B).withOpacity(0.15),
+                color: const Color(0xFF1B3A6B).withValues(alpha: 0.15),
               ),
             ),
             child: Row(
@@ -243,7 +243,7 @@ class _GuarantorResponseScreenState
 
           if (rollover != null) ...[
             // Borrower card
-            _SectionLabel(label: 'Borrower'),
+            const _SectionLabel(label: 'Borrower'),
             const SizedBox(height: 8),
             AppCard(
               backgroundColor: context.cardBackground,
@@ -251,7 +251,7 @@ class _GuarantorResponseScreenState
                 children: [
                   CircleAvatar(
                     backgroundColor:
-                        CoopvestColors.primary.withOpacity(0.12),
+                        CoopvestColors.primary.withValues(alpha: 0.12),
                     radius: 24,
                     child: Text(
                       rollover.memberName.isNotEmpty
@@ -292,7 +292,7 @@ class _GuarantorResponseScreenState
             const SizedBox(height: 20),
 
             // Loan details
-            _SectionLabel(label: 'Original Loan'),
+            const _SectionLabel(label: 'Original Loan'),
             const SizedBox(height: 8),
             AppCard(
               backgroundColor: context.cardBackground,
@@ -322,7 +322,7 @@ class _GuarantorResponseScreenState
             const SizedBox(height: 20),
 
             // New terms
-            _SectionLabel(label: 'Requested Rollover Terms'),
+            const _SectionLabel(label: 'Requested Rollover Terms'),
             const SizedBox(height: 8),
             AppCard(
               backgroundColor: context.cardBackground,
@@ -353,10 +353,10 @@ class _GuarantorResponseScreenState
 
             // Consent deadline
             if (rollover.guarantorConsentDeadline != null) ...[
-              _SectionLabel(label: 'Consent Deadline'),
+              const _SectionLabel(label: 'Consent Deadline'),
               const SizedBox(height: 8),
               AppCard(
-                backgroundColor: CoopvestColors.warning.withOpacity(0.08),
+                backgroundColor: CoopvestColors.warning.withValues(alpha: 0.08),
                 child: Row(
                   children: [
                     const Icon(Icons.access_time_rounded,
@@ -380,10 +380,10 @@ class _GuarantorResponseScreenState
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: CoopvestColors.error.withOpacity(0.06),
+                color: CoopvestColors.error.withValues(alpha: 0.06),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: CoopvestColors.error.withOpacity(0.2),
+                  color: CoopvestColors.error.withValues(alpha: 0.2),
                 ),
               ),
               child: Row(

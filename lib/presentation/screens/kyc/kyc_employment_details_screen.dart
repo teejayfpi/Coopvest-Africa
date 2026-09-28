@@ -410,7 +410,7 @@ class _KYCEmploymentDetailsScreenState
                 controller: _dateOfBirthController,
                 readOnly: true,
                 onTap: _selectDateOfBirth,
-                suffixIcon: Icon(
+                suffixIcon: const Icon(
                   Icons.calendar_today,
                   color: CoopvestColors.primary,
                   size: 20,

@@ -138,7 +138,7 @@ class _GuarantorConsentScreenState
                               newGuarantorName: nameCtrl.text.trim(),
                               newGuarantorPhone: phoneCtrl.text.trim(),
                             );
-                        if (mounted) {
+                        if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(success
@@ -341,7 +341,7 @@ class _GuarantorConsentScreenState
 
     if (declined > 0) {
       return AppCard(
-        backgroundColor: CoopvestColors.error.withOpacity(0.1),
+        backgroundColor: CoopvestColors.error.withValues(alpha: 0.1),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -370,7 +370,7 @@ class _GuarantorConsentScreenState
 
     if (accepted == 3) {
       return AppCard(
-        backgroundColor: CoopvestColors.success.withOpacity(0.1),
+        backgroundColor: CoopvestColors.success.withValues(alpha: 0.1),
         child: Column(
           children: [
             const Icon(Icons.check_circle,
@@ -437,7 +437,7 @@ class GuarantorDetailCard extends StatelessWidget {
           Row(
             children: [
               CircleAvatar(
-                backgroundColor: CoopvestColors.primary.withOpacity(0.1),
+                backgroundColor: CoopvestColors.primary.withValues(alpha: 0.1),
                 child: Text(
                   guarantor.guarantorName.isNotEmpty
                       ? guarantor.guarantorName[0].toUpperCase()
@@ -519,7 +519,7 @@ class GuarantorDetailCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text(

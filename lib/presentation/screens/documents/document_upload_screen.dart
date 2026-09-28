@@ -126,7 +126,7 @@ class _DocumentUploadScreenState extends ConsumerState<DocumentUploadScreen> {
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: CoopvestColors.primary.withOpacity(0.1),
+          color: CoopvestColors.primary.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(16),
         ),
         child: Column(
@@ -213,12 +213,12 @@ class _DocumentUploadScreenState extends ConsumerState<DocumentUploadScreen> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: CoopvestColors.warning.withOpacity(0.1),
+                  color: CoopvestColors.warning.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
                   '${state.pendingCount} pending',
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 12,
                     color: CoopvestColors.warning,
                     fontWeight: FontWeight.w600,
@@ -254,7 +254,6 @@ class _DocumentUploadScreenState extends ConsumerState<DocumentUploadScreen> {
 
   Widget _buildKycProgressCard(Map<String, dynamic> kycStatus) {
     final isComplete = kycStatus['isComplete'] as bool? ?? false;
-    final submitted = kycStatus['submittedCount'] as int? ?? 0;
     final approved = kycStatus['approvedCount'] as int? ?? 0;
     final required = kycStatus['requiredCount'] as int? ?? 0;
     final missing = List<String>.from(kycStatus['missingTypes'] ?? []);
@@ -268,12 +267,12 @@ class _DocumentUploadScreenState extends ConsumerState<DocumentUploadScreen> {
         gradient: LinearGradient(
           colors: isComplete
               ? [
-                  CoopvestColors.success.withOpacity(0.1),
-                  CoopvestColors.success.withOpacity(0.05),
+                  CoopvestColors.success.withValues(alpha: 0.1),
+                  CoopvestColors.success.withValues(alpha: 0.05),
                 ]
               : [
-                  CoopvestColors.primary.withOpacity(0.1),
-                  CoopvestColors.primary.withOpacity(0.05),
+                  CoopvestColors.primary.withValues(alpha: 0.1),
+                  CoopvestColors.primary.withValues(alpha: 0.05),
                 ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -281,8 +280,8 @@ class _DocumentUploadScreenState extends ConsumerState<DocumentUploadScreen> {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isComplete
-              ? CoopvestColors.success.withOpacity(0.3)
-              : CoopvestColors.primary.withOpacity(0.3),
+              ? CoopvestColors.success.withValues(alpha: 0.3)
+              : CoopvestColors.primary.withValues(alpha: 0.3),
         ),
       ),
       child: Column(
@@ -322,7 +321,7 @@ class _DocumentUploadScreenState extends ConsumerState<DocumentUploadScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: (isComplete ? CoopvestColors.success : CoopvestColors.warning)
-                      .withOpacity(0.1),
+                      .withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
@@ -345,7 +344,7 @@ class _DocumentUploadScreenState extends ConsumerState<DocumentUploadScreen> {
               minHeight: 8,
               backgroundColor:
                   (isComplete ? CoopvestColors.success : CoopvestColors.primary)
-                      .withOpacity(0.1),
+                      .withValues(alpha: 0.1),
               valueColor:
                   AlwaysStoppedAnimation(isComplete ? CoopvestColors.success : CoopvestColors.primary),
             ),
@@ -374,7 +373,7 @@ class _DocumentUploadScreenState extends ConsumerState<DocumentUploadScreen> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -407,8 +406,8 @@ class _DocumentUploadScreenState extends ConsumerState<DocumentUploadScreen> {
                 ),
                 borderRadius: BorderRadius.circular(12),
                 color: _selectedFile != null
-                    ? CoopvestColors.success.withOpacity(0.05)
-                    : context.secondaryCardBackground.withOpacity(0.5),
+                    ? CoopvestColors.success.withValues(alpha: 0.05)
+                    : context.secondaryCardBackground.withValues(alpha: 0.5),
               ),
               child: _selectedFile != null
                   ? Row(
@@ -416,7 +415,7 @@ class _DocumentUploadScreenState extends ConsumerState<DocumentUploadScreen> {
                         Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: CoopvestColors.success.withOpacity(0.1),
+                            color: CoopvestColors.success.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child:
@@ -471,7 +470,7 @@ class _DocumentUploadScreenState extends ConsumerState<DocumentUploadScreen> {
                           'JPG, PNG, PDF (max 10MB)',
                           style: TextStyle(
                             fontSize: 11,
-                            color: context.textSecondary.withOpacity(0.7),
+                            color: context.textSecondary.withValues(alpha: 0.7),
                           ),
                         ),
                       ],
@@ -481,7 +480,7 @@ class _DocumentUploadScreenState extends ConsumerState<DocumentUploadScreen> {
           const SizedBox(height: 16),
           // Document Type Dropdown
           DropdownButtonFormField<String>(
-            value: _selectedDocumentType,
+            initialValue: _selectedDocumentType,
             decoration: const InputDecoration(
               labelText: 'Document Type',
               border: OutlineInputBorder(),
@@ -566,7 +565,7 @@ class _DocumentUploadScreenState extends ConsumerState<DocumentUploadScreen> {
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-            Expanded(child: DocumentUploadForm()),
+            const Expanded(child: DocumentUploadForm()),
           ],
         ),
       ),
@@ -632,7 +631,7 @@ class _DocumentUploadScreenState extends ConsumerState<DocumentUploadScreen> {
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: statusColor.withOpacity(0.1),
+                color: statusColor.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
@@ -688,7 +687,7 @@ class _DocumentUploadScreenState extends ConsumerState<DocumentUploadScreen> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.1),
+                    color: statusColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
@@ -706,7 +705,7 @@ class _DocumentUploadScreenState extends ConsumerState<DocumentUploadScreen> {
                     width: 150,
                     child: Text(
                       document.reviewNotes!,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 11,
                         color: CoopvestColors.error,
                       ),
@@ -839,7 +838,7 @@ class _DocumentUploadFormState extends ConsumerState<DocumentUploadForm> {
                     child: Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: CoopvestColors.primary.withOpacity(0.1),
+                        color: CoopvestColors.primary.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: const Column(
@@ -862,7 +861,7 @@ class _DocumentUploadFormState extends ConsumerState<DocumentUploadForm> {
                     child: Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: CoopvestColors.primary.withOpacity(0.1),
+                        color: CoopvestColors.primary.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: const Column(
@@ -950,8 +949,8 @@ class _DocumentUploadFormState extends ConsumerState<DocumentUploadForm> {
                   ),
                   borderRadius: BorderRadius.circular(12),
                   color: _selectedFile != null
-                      ? CoopvestColors.success.withOpacity(0.05)
-                      : context.secondaryCardBackground.withOpacity(0.5),
+                      ? CoopvestColors.success.withValues(alpha: 0.05)
+                      : context.secondaryCardBackground.withValues(alpha: 0.5),
                 ),
                 child: _selectedFile != null
                     ? Row(
@@ -959,7 +958,7 @@ class _DocumentUploadFormState extends ConsumerState<DocumentUploadForm> {
                           Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: CoopvestColors.success.withOpacity(0.1),
+                              color: CoopvestColors.success.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: const Icon(Icons.check_circle, color: CoopvestColors.success),
@@ -990,7 +989,7 @@ class _DocumentUploadFormState extends ConsumerState<DocumentUploadForm> {
                           const SizedBox(height: 4),
                           Text('JPG, PNG, PDF (max 10MB)',
                               style: TextStyle(
-                                  fontSize: 12, color: context.textSecondary.withOpacity(0.7))),
+                                  fontSize: 12, color: context.textSecondary.withValues(alpha: 0.7))),
                         ],
                       ),
               ),
@@ -998,7 +997,7 @@ class _DocumentUploadFormState extends ConsumerState<DocumentUploadForm> {
             const SizedBox(height: 20),
             // Document Type
             DropdownButtonFormField<String>(
-              value: _selectedDocumentType,
+              initialValue: _selectedDocumentType,
               decoration: const InputDecoration(
                 labelText: 'Document Type',
                 border: OutlineInputBorder(),

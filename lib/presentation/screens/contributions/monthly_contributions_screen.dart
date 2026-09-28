@@ -22,7 +22,6 @@ class _MonthlyContributionsScreenState
     extends ConsumerState<MonthlyContributionsScreen> {
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
-  bool _showFilters = false;
 
   @override
   void initState() {
@@ -113,7 +112,7 @@ class _MonthlyContributionsScreenState
           Text(
             _getCurrentMonthYear(),
             style: TextStyle(
-              color: Colors.white.withOpacity(0.8),
+              color: Colors.white.withValues(alpha: 0.8),
               fontSize: 14,
             ),
           ),
@@ -141,7 +140,7 @@ class _MonthlyContributionsScreenState
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: CoopvestColors.primary.withOpacity(0.05),
+        color: CoopvestColors.primary.withValues(alpha: 0.05),
         borderRadius: const BorderRadius.only(
           bottomLeft: Radius.circular(20),
           bottomRight: Radius.circular(20),
@@ -231,9 +230,9 @@ class _MonthlyContributionsScreenState
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: badgeColor.withOpacity(0.1),
+        color: badgeColor.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: badgeColor.withOpacity(0.3)),
+        border: Border.all(color: badgeColor.withValues(alpha: 0.3)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -274,7 +273,7 @@ class _MonthlyContributionsScreenState
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -408,7 +407,7 @@ class _MonthlyContributionsScreenState
     return FilterChip(
       label: Text(label),
       selected: isActive,
-      selectedColor: CoopvestColors.primary.withOpacity(0.1),
+      selectedColor: CoopvestColors.primary.withValues(alpha: 0.1),
       checkmarkColor: CoopvestColors.primary,
       labelStyle: TextStyle(
         color: isActive ? CoopvestColors.primary : context.textSecondary,
@@ -501,7 +500,7 @@ class _MonthlyContributionsScreenState
                     padding: const EdgeInsets.symmetric(
                         horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: statusColor.withOpacity(0.1),
+                      color: statusColor.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
@@ -516,7 +515,7 @@ class _MonthlyContributionsScreenState
                 ],
               ),
               const SizedBox(height: 12),
-              Divider(color: context.dividerColor.withOpacity(0.5)),
+              Divider(color: context.dividerColor.withValues(alpha: 0.5)),
               const SizedBox(height: 12),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -664,7 +663,7 @@ class _MonthlyContributionsScreenState
             Icon(
               Icons.error_outline,
               size: 64,
-              color: CoopvestColors.error.withOpacity(0.5),
+              color: CoopvestColors.error.withValues(alpha: 0.5),
             ),
             const SizedBox(height: 16),
             Text(
@@ -708,7 +707,7 @@ class _MonthlyContributionsScreenState
             Icon(
               Icons.account_balance_wallet_outlined,
               size: 64,
-              color: context.textSecondary.withOpacity(0.3),
+              color: context.textSecondary.withValues(alpha: 0.3),
             ),
             const SizedBox(height: 16),
             Text(

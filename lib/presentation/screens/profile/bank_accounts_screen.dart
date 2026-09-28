@@ -170,9 +170,11 @@ class _BankAccountsScreenState extends ConsumerState<BankAccountsScreen> {
                                   if (bankCodeCtrl.text.isNotEmpty)
                                     'bankCode': bankCodeCtrl.text.trim(),
                                 });
-                                if (mounted) {
+                                if (ctx.mounted) {
                                   Navigator.of(ctx).pop();
                                   await _loadAccounts();
+                                }
+                                if (mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
                                       content: Text('Bank account added'),
@@ -297,7 +299,7 @@ class _BankAccountsScreenState extends ConsumerState<BankAccountsScreen> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(Icons.account_balance_wallet_outlined,
-                              size: 64, color: context.textSecondary.withOpacity(0.5)),
+                              size: 64, color: context.textSecondary.withValues(alpha: 0.5)),
                           const SizedBox(height: 16),
                           Text('No bank accounts linked',
                               style: TextStyle(fontSize: 16, color: context.textSecondary)),
@@ -324,7 +326,7 @@ class _BankAccountsScreenState extends ConsumerState<BankAccountsScreen> {
                                   width: 48,
                                   height: 48,
                                   decoration: BoxDecoration(
-                                    color: CoopvestColors.primary.withOpacity(0.1),
+                                    color: CoopvestColors.primary.withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: const Icon(Icons.account_balance,
@@ -345,7 +347,7 @@ class _BankAccountsScreenState extends ConsumerState<BankAccountsScreen> {
                                         padding: const EdgeInsets.symmetric(
                                             horizontal: 8, vertical: 2),
                                         decoration: BoxDecoration(
-                                          color: CoopvestColors.primary.withOpacity(0.1),
+                                          color: CoopvestColors.primary.withValues(alpha: 0.1),
                                           borderRadius: BorderRadius.circular(4),
                                         ),
                                         child: const Text('Primary',
@@ -365,7 +367,7 @@ class _BankAccountsScreenState extends ConsumerState<BankAccountsScreen> {
                                     Text(
                                       account.accountNumber,
                                       style: TextStyle(
-                                          color: context.textSecondary.withOpacity(0.7)),
+                                          color: context.textSecondary.withValues(alpha: 0.7)),
                                     ),
                                   ],
                                 ),

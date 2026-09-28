@@ -315,25 +315,25 @@ class ContributionSummary extends Equatable {
     // (totalThisMonth, totalThisYear, lifetimeContributions,
     // expectedMonthlyAmount, contributionStatus). Support both camelCase and
     // snake_case so a mismatched case never silently falls back to mock data.
-    double _asDouble(dynamic v) {
+    double asDouble(dynamic v) {
       if (v == null) return 0.0;
       if (v is num) return v.toDouble();
       return double.tryParse(v.toString()) ?? 0.0;
     }
 
     return ContributionSummary(
-      totalThisMonth: _asDouble(json['totalThisMonth'] ?? json['total_this_month']),
-      totalThisYear: _asDouble(json['totalThisYear'] ?? json['total_this_year']),
-      lifetimeContributions: _asDouble(json['lifetimeContributions'] ?? json['lifetime_contributions']),
-      expectedMonthlyAmount: _asDouble(json['expectedMonthlyAmount'] ?? json['expected_monthly_amount']),
+      totalThisMonth: asDouble(json['totalThisMonth'] ?? json['total_this_month']),
+      totalThisYear: asDouble(json['totalThisYear'] ?? json['total_this_year']),
+      lifetimeContributions: asDouble(json['lifetimeContributions'] ?? json['lifetime_contributions']),
+      expectedMonthlyAmount: asDouble(json['expectedMonthlyAmount'] ?? json['expected_monthly_amount']),
       contributionStatus: (json['contributionStatus'] ?? json['contribution_status'] ?? 'pending') as String,
       monthsContributed: (json['monthsContributed'] ?? json['months_contributed'] ?? 0) as int,
       totalContributionsCount: (json['totalContributionsCount'] ?? json['total_contributions_count'] ?? 0) as int,
       pendingAmount: json['pendingAmount'] != null || json['pending_amount'] != null
-          ? _asDouble(json['pendingAmount'] ?? json['pending_amount'])
+          ? asDouble(json['pendingAmount'] ?? json['pending_amount'])
           : null,
       overdueAmount: json['overdueAmount'] != null || json['overdue_amount'] != null
-          ? _asDouble(json['overdueAmount'] ?? json['overdue_amount'])
+          ? asDouble(json['overdueAmount'] ?? json['overdue_amount'])
           : null,
     );
   }

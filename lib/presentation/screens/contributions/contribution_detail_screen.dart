@@ -65,7 +65,6 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(contributionProvider);
-    final detail = state.selectedDetail;
 
     return Scaffold(
       backgroundColor: context.scaffoldBackground,
@@ -125,7 +124,7 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
             Icon(
               Icons.error_outline,
               size: 64,
-              color: CoopvestColors.error.withOpacity(0.5),
+              color: CoopvestColors.error.withValues(alpha: 0.5),
             ),
             const SizedBox(height: 16),
             const Text('Failed to load contribution details'),
@@ -194,7 +193,7 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            statusColor.withOpacity(0.8),
+            statusColor.withValues(alpha: 0.8),
             statusColor,
           ],
           begin: Alignment.topLeft,
@@ -207,7 +206,7 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
+              color: Colors.white.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(
@@ -233,7 +232,7 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
                 Text(
                   contribution.type.displayName,
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.8),
+                    color: Colors.white.withValues(alpha: 0.8),
                     fontSize: 14,
                   ),
                 ),
@@ -271,7 +270,7 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               decoration: BoxDecoration(
-                color: CoopvestColors.success.withOpacity(0.1),
+                color: CoopvestColors.success.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
@@ -299,10 +298,10 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: CoopvestColors.primary.withOpacity(0.1),
+                color: CoopvestColors.primary.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(
+              child: const Icon(
                 Icons.receipt_long,
                 color: CoopvestColors.primary,
                 size: 20,
@@ -424,7 +423,7 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: CoopvestColors.primary.withOpacity(0.05),
+              color: CoopvestColors.primary.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
@@ -473,7 +472,7 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
           children: [
             Row(
               children: [
-                Icon(
+                const Icon(
                   Icons.history,
                   color: CoopvestColors.primary,
                   size: 20,
@@ -512,7 +511,7 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
                         Container(
                           width: 2,
                           height: 40,
-                          color: _getStatusColor(item.status).withOpacity(0.3),
+                          color: _getStatusColor(item.status).withValues(alpha: 0.3),
                         ),
                     ],
                   ),
@@ -547,7 +546,7 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
                                 .format(item.timestamp),
                             style: TextStyle(
                               fontSize: 12,
-                              color: context.textSecondary.withOpacity(0.7),
+                              color: context.textSecondary.withValues(alpha: 0.7),
                             ),
                           ),
                         ],
@@ -575,7 +574,7 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
           children: [
             Row(
               children: [
-                Icon(
+                const Icon(
                   Icons.list_alt,
                   color: CoopvestColors.primary,
                   size: 20,
@@ -607,7 +606,7 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
         color: context.scaffoldBackground,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: context.dividerColor.withOpacity(0.3),
+          color: context.dividerColor.withValues(alpha: 0.3),
         ),
       ),
       child: Column(
@@ -621,8 +620,8 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
                   color: log.success
-                      ? CoopvestColors.success.withOpacity(0.1)
-                      : CoopvestColors.error.withOpacity(0.1),
+                      ? CoopvestColors.success.withValues(alpha: 0.1)
+                      : CoopvestColors.error.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
@@ -663,7 +662,7 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
             DateFormat('MMM dd, yyyy HH:mm:ss').format(log.timestamp),
             style: TextStyle(
               fontSize: 11,
-              color: context.textSecondary.withOpacity(0.7),
+              color: context.textSecondary.withValues(alpha: 0.7),
             ),
           ),
           if (log.errorMessage != null) ...[
@@ -671,12 +670,12 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: CoopvestColors.error.withOpacity(0.1),
+                color: CoopvestColors.error.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
                 log.errorMessage!,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 12,
                   color: CoopvestColors.error,
                 ),
@@ -697,10 +696,10 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: CoopvestColors.info.withOpacity(0.1),
+                color: CoopvestColors.info.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(
+              child: const Icon(
                 Icons.verified_user,
                 color: CoopvestColors.info,
                 size: 20,

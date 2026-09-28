@@ -482,7 +482,7 @@ class RolloverEmptyState extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
+            const Icon(
               Icons.account_balance_wallet_outlined,
               size: 64,
               color: CoopvestColors.lightGray,
