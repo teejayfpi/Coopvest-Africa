@@ -35,10 +35,13 @@ let ran = false;
 
 // Connection candidates, tried in order. The first that connects wins.
 //
-// The project's old connection strings referenced
-// `aws-0-us-east-1-975937489815.pooler.supabase.com`, which is now NXDOMAIN —
-// Supabase's pooler hostname dropped the account-number suffix. The current
-// pooler host is `aws-0-us-east-1.pooler.supabase.com` (resolves to IPv4).
+// The project lives in eu-west-1 (per the Supabase management API for ref
+// nyoauzqezpxeonmrxxgi), so the pooler host is `aws-1-eu-west-1`. Both the
+// older `aws-0-us-east-1-975937489815...` host in run_migration_now.js and the
+// `aws-0-us-east-1...` host this file used to list are wrong for this project:
+// the former is NXDOMAIN, the latter resolves but answers
+// "tenant/user postgres.<ref> not found" because the tenant is not in that
+// region. Verified against the live database — only the eu-west-1 host connects.
 //
 // Supabase pooler username conventions (we try both, since the repo has used
 // each at different times):
@@ -56,7 +59,7 @@ let ran = false;
 //    user with the DB password.
 const DB_PASSWORD = process.env.SUPABASE_DB_PASSWORD || 'Temiloluwa@1963';
 const REF = 'nyoauzqezpxeonmrxxgi';
-const POOLER_HOST = 'aws-0-us-east-1.pooler.supabase.com';
+const POOLER_HOST = 'aws-1-eu-west-1.pooler.supabase.com';
 const CONNECTION_CANDIDATES = [
   `postgresql://postgres.${REF}:${encodeURIComponent(DB_PASSWORD)}@${POOLER_HOST}:6543/postgres`,
   `postgresql://${encodeURIComponent(`postgres.${DB_PASSWORD}`)}@${POOLER_HOST}:6543/postgres`,
