@@ -31,6 +31,8 @@ const emailVerificationRoutes = require('./routes/emailVerification');
 const referralRoutes = require('./routes/referrals');
 const ticketRoutes = require('./routes/tickets');
 const adminTicketRoutes = require('./routes/adminTickets');
+const contactRoutes = require('./routes/contact');
+const adminContactRoutes = require('./routes/adminContact');
 const adminRoutes = require('./routes/admin');
 const organizationRoutes = require('./routes/organizations');
 const loanRoutes = require('./routes/loans');
@@ -312,6 +314,10 @@ app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/auth', emailVerificationRoutes);
 app.use('/api/referrals', requireFeatureFlag('referralSystem'), referralRoutes);
 app.use('/api/tickets', ticketRoutes);
+// Public website contact form (no auth by design — the visitor is anonymous).
+// Same handler at both prefixes so the site and any v1 caller resolve.
+app.use('/api/contact', contactRoutes);
+app.use('/api/v1/contact', contactRoutes);
 app.use('/api/loans', requireFeatureFlag('loanModule'), requireActivated, loanRoutes);
 app.use('/api/wallet', requireRegistrationPaid, walletRoutes);
 app.use('/api/user', userRoutes);
@@ -425,6 +431,9 @@ app.use('/api/admin/comparative', comparativeRoutes);
 // so its /organizations/* sub-paths win; adminApi has no catch-all and keeps
 // serving its own GET/POST /organizations list+create.
 app.use('/api/admin/organizations', organizationFinanceRoutes);
+// Website enquiry management. Mounted before adminApi for the same reason as
+// the routers above: its /contact-messages sub-paths resolve here first.
+app.use('/api/admin/contact-messages', adminContactRoutes);
 app.use('/api/admin', adminApiRoutes);
 
 // Security & Access page routes (consumed by /pages/security-access). Mounted
@@ -483,6 +492,7 @@ app.use('/api/v2/admin/direct-messages', directMessageRoutes);
 app.use('/api/v2/admin/reports', reportsRoutes);
 app.use('/api/v2/admin/comparative', comparativeRoutes);
 app.use('/api/v2/admin/organizations', organizationFinanceRoutes);
+app.use('/api/v2/admin/contact-messages', adminContactRoutes);
 app.use('/api/v2/admin', adminApiRoutes);
 app.use('/api/v2/admin/kyc', kycAdminRoutes);
 app.use('/api/v2/admin/members', memberDetailRoutes);
