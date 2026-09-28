@@ -294,16 +294,30 @@ Before adding a variable there, confirm you can re-derive every existing one:
 Supabase management API, but `PAYSTACK_SECRET_KEY` and the `FIREBASE_*` pair
 exist *only* in Render and cannot be recovered once overwritten.
 
-## Contact replies need SMTP, and the password lives outside the repo
+## Admin replies need a mail transport, and Render's free plan blocks SMTP
 
-An admin reply to a website enquiry is recorded in `contact_messages` whatever
-happens, but it only reaches the enquirer when `SMTP_HOST`, `SMTP_USER` and
-`SMTP_PASS` are all set on the backend. `CONTACT_FROM` (or `SMTP_FROM`) sets the
-from-address; it must be a mailbox the SMTP account is allowed to send as.
+An admin reply to a website enquiry is always recorded in `contact_messages`,
+but it only reaches the enquirer when a mail transport is configured on the
+backend. `src/services/mailer.js` picks one in this order:
 
-`SMTP_PASS` is a Gmail app password for `coopvestafrica@gmail.com`. It is not in
-this repo and it is not in `render.yaml` — only the key name is there, with no
-value. Supabase's `smtp_pass` is *not* a substitute: the management API returns
-it encrypted, and the plaintext is rejected by Gmail. Do not paste the password
-into a commit or a shell command; set it through the Render dashboard, then
-confirm a reply reports `emailed: true`.
+1. `RESEND_API_KEY` - Resend HTTP API. Goes over 443.
+2. `SMTP_HOST` + `SMTP_USER` + `SMTP_PASS` - nodemailer.
+
+**Prefer Resend.** Free Render web services block outbound traffic to SMTP ports
+25, 465 and 587 (Render changelog, 26 September 2025), so an SMTP send from
+`coopvest-api` fails with `Connection timeout` however correct the credentials
+are. Port 25 stays blocked even on paid instances; 465/587 work once the service
+is on a paid plan. This is why the mailer defaults to an HTTPS API rather than
+SMTP.
+
+`CONTACT_FROM` sets the from-address. With Resend and no from-address the
+sandbox sender `onboarding@resend.dev` is used, which only delivers to the
+account's own address until a sending domain is verified - so a domain must be
+verified before members receive replies.
+
+The Gmail app password for `coopvestafrica@gmail.com` is not in this repo and
+not in `render.yaml`; only the key name is there, with no value. Supabase's
+`smtp_pass` is *not* a substitute: the management API returns it encrypted and
+the plaintext is rejected by Gmail. Do not paste a password into a commit or a
+shell command; set it in the Render dashboard, then confirm a reply reports
+`emailed: true`.
