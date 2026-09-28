@@ -1,15 +1,30 @@
 /**
- * Idempotent governance schema bootstrap.
+ * Idempotent startup schema bootstrap.
  *
  * Ensures the Super Admin governance tables (admin_approvals, security_alerts,
- * admin_activity, security_settings) and login_history enrichment columns exist.
+ * admin_activity, security_settings) and login_history enrichment columns exist,
+ * and that the website contact enquiry queue (contact_messages) exists.
  * Runs at server startup. Uses the Supabase transaction pooler with the service
  * role token as the password (same connection backend/pg_migrate.js uses).
  *
  * The migration SQL uses CREATE TABLE IF NOT EXISTS / ADD COLUMN IF NOT EXISTS,
  * so repeated runs are safe no-ops. Failures are non-fatal: the server still
  * starts, and admin API endpoints degrade gracefully when tables are absent.
+ *
+ * NOTE: only the migrations listed in MIGRATIONS are applied here. Every other
+ * migration in backend/migrations/ still has to be applied by hand, so a new
+ * table that a route depends on will not exist in production just because its
+ * SQL file was merged.
  */
+
+// Applied on every boot. Add to this list only when the SQL is fully idempotent
+// — it runs on production on each start, not once.
+const MIGRATIONS = [
+  '012_super_admin_governance.sql',
+  // Without this the public /api/contact ingest cannot store an enquiry, so the
+  // website contact form returns 502 and nothing is recorded anywhere.
+  '049_contact_messages.sql',
+];
 
 const { Client } = require('pg');
 const fs = require('fs');
@@ -53,28 +68,10 @@ async function ensureGovernanceSchema() {
   if (ran) return;
   ran = true;
 
-  // governanceSchema.js lives in backend/src/config/, so the migrations dir is
-  // two levels up: backend/migrations/. (A single '..' would resolve to
-  // backend/src/migrations, which does not exist — this was the original bug
-  // that silently skipped the bootstrap on every deploy.)
-  const sqlPath = path.join(__dirname, '..', '..', 'migrations', '012_super_admin_governance.sql');
-  let sql;
-  try {
-    sql = fs.readFileSync(sqlPath, 'utf8');
-  } catch (readErr) {
-    logger.warn('governance schema: migration file not found, skipping bootstrap');
-    return;
-  }
-
   const connectionString = process.env.SUPABASE_DB_URL;
   const candidates = connectionString ? [connectionString, ...CONNECTION_CANDIDATES] : CONNECTION_CANDIDATES;
 
-  // Split the migration into individual statements so a failure on one CREATE
-  // TABLE (e.g. a pre-existing partial schema) does not roll back the others.
-  // Every statement is idempotent (IF NOT EXISTS / IF EXISTS), so re-runs are
-  // safe. We execute each in its own implicit transaction.
-  const statements = splitSqlStatements(sql);
-
+  // One connection for every migration; the pooler handshake is the slow part.
   let client = null;
   let connectedWith = null;
   for (const cs of candidates) {
@@ -91,33 +88,60 @@ async function ensureGovernanceSchema() {
   }
   if (!client) {
     logger.warn('governance schema bootstrap skipped: could not connect to the database via any connection string');
-    logger.warn('Admin governance endpoints may return errors until 012_super_admin_governance.sql is applied.');
+    logger.warn(`Schema may be incomplete until these are applied by hand: ${MIGRATIONS.join(', ')}.`);
     return;
   }
 
-  let applied = 0;
-  const failed = [];
   try {
-    logger.info(`governance schema: connected via ${connectedWith}; applying ${statements.length} statements`);
-    for (const stmt of statements) {
-      try {
-        await client.query(stmt);
-        applied++;
-      } catch (err) {
-        const msg = String(err.message || '');
-        if (/already exists|duplicate|conflict/i.test(msg)) { applied++; continue; }
-        failed.push(`${msg} [stmt: ${stmt.replace(/\s+/g, ' ').slice(0, 60)}...]`);
-      }
+    for (const name of MIGRATIONS) {
+      await applyMigration(client, name);
     }
-    logger.info(`✅ governance schema applied: ${applied}/${statements.length} statements ok` +
-      (failed.length ? ` (${failed.length} skipped)` : ''));
-    if (failed.length) {
-      logger.warn(`governance schema skipped statements: ${failed.join(' | ').slice(0, 800)}`);
-    }
-  } catch (err) {
-    logger.warn(`governance schema bootstrap skipped (query error): ${err.message}`);
   } finally {
     try { await client.end(); } catch (_) {}
+  }
+}
+
+/**
+ * Apply one migration over an open client.
+ *
+ * governanceSchema.js lives in backend/src/config/, so the migrations dir is two
+ * levels up: backend/migrations/. (A single '..' would resolve to
+ * backend/src/migrations, which does not exist — this was the original bug that
+ * silently skipped the bootstrap on every deploy.)
+ */
+async function applyMigration(client, name) {
+  const sqlPath = path.join(__dirname, '..', '..', 'migrations', name);
+  let sql;
+  try {
+    sql = fs.readFileSync(sqlPath, 'utf8');
+  } catch (readErr) {
+    logger.warn(`schema: migration ${name} not found, skipping`);
+    return;
+  }
+
+  // Split the migration into individual statements so a failure on one CREATE
+  // TABLE (e.g. a pre-existing partial schema) does not roll back the others.
+  // Every statement is idempotent (IF NOT EXISTS / IF EXISTS), so re-runs are
+  // safe. We execute each in its own implicit transaction.
+  const statements = splitSqlStatements(sql);
+
+  let applied = 0;
+  const failed = [];
+  logger.info(`schema: applying ${name} (${statements.length} statements)`);
+  for (const stmt of statements) {
+    try {
+      await client.query(stmt);
+      applied++;
+    } catch (err) {
+      const msg = String(err.message || '');
+      if (/already exists|duplicate|conflict/i.test(msg)) { applied++; continue; }
+      failed.push(`${msg} [stmt: ${stmt.replace(/\s+/g, ' ').slice(0, 60)}...]`);
+    }
+  }
+  logger.info(`✅ schema ${name}: ${applied}/${statements.length} statements ok` +
+    (failed.length ? ` (${failed.length} skipped)` : ''));
+  if (failed.length) {
+    logger.warn(`schema ${name} skipped statements: ${failed.join(' | ').slice(0, 800)}`);
   }
 }
 
