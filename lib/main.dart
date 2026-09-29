@@ -499,7 +499,16 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
         '/kyc-success': (context) => const KYCSuccessScreen(),
         '/kyc-complete': (context) => const KYCSuccessScreen(),
 
-        '/home': (context) => const MainContainer(),
+        // The dashboard is wrapped in AuthGuard so a direct `pushNamed('/home')`
+        // — from a notification tap, a deep link, or a button that had already
+        // checked the gate — cannot bypass the registration-fee gate. Without
+        // this, a Direct Deposit member who had not paid could reach the
+        // dashboard through any of those routes. `signedOutChild` is the
+        // welcome screen so signing out of the dashboard does not flash it.
+        '/home': (context) => const AuthGuard(
+              signedOutChild: WelcomeScreen(),
+              child: MainContainer(),
+            ),
 
         '/loan-dashboard': (context) {
           final args = ModalRoute.of(context)?.settings.arguments
