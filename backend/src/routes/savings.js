@@ -14,6 +14,7 @@ const supabase = require('../config/supabase');
 const { authenticate } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const logger = require('../utils/logger');
+const notifyService = require('../services/notifyService');
 const { adjustBalance, recordTransaction, ensureWallet } = require('./wallet');
 
 router.use(authenticate);
@@ -128,6 +129,17 @@ router.post(
         amount,
         description: description || 'Savings withdrawal',
       });
+
+      // Money has left the member's savings and landed in their wallet. Alert
+      // admins so a withdrawal wave is visible the moment it happens.
+      notifyService.notifyAdmins({
+        title: 'Savings Withdrawal',
+        body: `${req.user.email || 'A member'} withdrew ${Number(amount).toLocaleString('en-NG', { style: 'currency', currency: 'NGN' })} from savings to their wallet.`,
+        type: 'savings',
+        category: 'info',
+        priority: 'normal',
+      }).catch((err) => logger.warn('savings withdraw: admin notify failed (non-fatal):', err.message));
+
       res.status(201).json({ success: true, savings, transaction: txn });
     } catch (err) {
       res.status(err.statusCode || 500).json({ success: false, error: err.message });
