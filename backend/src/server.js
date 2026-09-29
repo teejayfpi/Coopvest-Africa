@@ -27,6 +27,7 @@ const websocketService = require('./services/websocketService');
 
 // Import routes
 const authRoutes = require('./routes/auth');
+const appRoutes = require('./routes/app');
 const emailVerificationRoutes = require('./routes/emailVerification');
 const referralRoutes = require('./routes/referrals');
 const ticketRoutes = require('./routes/tickets');
@@ -259,6 +260,11 @@ seedRequiredFlags();
 // ==============================================================================
 app.use('/api/v1/auth', authLimiter, authRoutes);
 app.use('/api/v1/auth', emailVerificationRoutes);
+// Onboarding home summary. Deliberately ungated: the app's root gate calls it
+// with an *unpaid* member to decide whether to show the registration-fee
+// screen, so a gate here would make the gate unreachable. It returns only the
+// activation booleans, never balances — see routes/app.js.
+app.use('/api/v1/app', appRoutes);
 app.use('/api/v1/referrals', requireFeatureFlag('referralSystem'), referralRoutes);
 app.use('/api/v1/tickets', ticketRoutes);
 app.use('/api/v1/loans', requireFeatureFlag('loanModule'), requireActivated, loanRoutes);
