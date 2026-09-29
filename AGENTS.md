@@ -261,7 +261,10 @@ passes them into `evaluateContributionReminder`
 (`lib/core/services/contribution_reminder_service.dart`), which is pure and
 unit-tested. `ObligationsCard` honours `joined_this_month` the same way.
 Do not reintroduce a client-side "overdue" decision that trusts only the
-contributions list — it will nag paid and new members again.
+contributions list — it will nag paid and new members again. The daily cron
+edge function `supabase/functions/process-contribution-reminders/index.ts` has
+the same rule baked in (it used to read a `user_settings.user_id` column that
+does not exist, so it crashed every run); keep both in step.
 
 ## Loan totals must exclude never-disbursed loans
 Cancelled/rejected applications are not borrowing. The backend leaves
