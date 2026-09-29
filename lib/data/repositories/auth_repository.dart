@@ -311,6 +311,20 @@ class AuthRepository {
     }
   }
 
+  /// Get the server's activation-gate summary for the signed-in member.
+  ///
+  /// Backs the client gate's "am I activated?" check. Kept separate from
+  /// [getCurrentUser] because it must always hit the server: the whole point is
+  /// to overrule a stale cached profile after a sign-out/sign-in or a
+  /// back-press, so a cached answer would defeat it.
+  Future<Map<String, dynamic>> getHomeStatus() async {
+    final response = await _apiClient.get('/app/home-status');
+    if (response is Map<String, dynamic> && response['gate'] is Map) {
+      return Map<String, dynamic>.from(response['gate'] as Map);
+    }
+    throw Exception('Unexpected home-status response');
+  }
+
   /// Get current user (with caching).
   ///
   /// On a transient backend failure (e.g. Render cold start, flaky mobile
