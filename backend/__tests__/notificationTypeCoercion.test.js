@@ -54,6 +54,14 @@ describe('notification type coercion', () => {
     ['kyc_submitted', 'kyc'],
     ['otp_sent', 'security'],
     ['contribution_reminder', 'reminder'],
+    // Types added when wiring admin alerts for the remaining actionable member
+    // events (termination, investments, savings withdrawals, payment proofs,
+    // document uploads). Each must land inside the CHECK constraint or the
+    // alert is silently dropped.
+    ['termination', 'system'],
+    ['investment', 'investment'],
+    ['savings', 'savings'],
+    ['payment_proof', 'transaction'],
   ])('%s → %s', (input, expected) => {
     expect(normalizeNotifType(input)).toBe(expected);
   });

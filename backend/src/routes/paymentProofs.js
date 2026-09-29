@@ -131,6 +131,19 @@ router.post(
         })
         .catch((e) => logger.warn('Payment proof submitted notification failed (non-fatal):', e.message));
 
+      // A manual proof needs an admin to verify it before the member is
+      // credited. Without this alert it waited in the queue silently — the
+      // member saw "awaiting verification" and no admin was told.
+      notifyService
+        .notifyAdmins({
+          title: 'Payment Proof Awaiting Verification',
+          body: `${req.user.email || 'A member'} submitted a ${payment_type || 'payment'} proof of ${Number(amount || 0).toLocaleString('en-NG', { style: 'currency', currency: 'NGN' })}${transaction_reference ? ` (ref ${transaction_reference})` : ''} for verification.`,
+          type: 'payment_proof',
+          category: 'action_required',
+          priority: 'normal',
+        })
+        .catch((e) => logger.warn('Payment proof admin notify failed (non-fatal):', e.message));
+
       res.status(201).json({
         success: true,
         message: 'Your payment proof has been submitted successfully and is awaiting verification by the Coopvest Africa team.',
