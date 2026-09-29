@@ -264,10 +264,22 @@ passes them into `evaluateContributionReminder`
 (`lib/core/services/contribution_reminder_service.dart`), which is pure and
 unit-tested. `ObligationsCard` honours `joined_this_month` the same way.
 Do not reintroduce a client-side "overdue" decision that trusts only the
-contributions list — it will nag paid and new members again. The daily cron
-edge function `supabase/functions/process-contribution-reminders/index.ts` has
-the same rule baked in (it used to read a `user_settings.user_id` column that
-does not exist, so it crashed every run); keep both in step.
+contributions list — it will nag paid and new members again.
+
+The daily push is now sent by `backend/src/workers/contributionReminderWorker.js`
+(started in `server.js`), which calls `computeObligations` and therefore applies
+the exact same paid/new/payroll rule as the obligations card — push and app can
+never disagree. It de-dupes with a `reminder:YYYY-MM` tag written into the
+notification body, so a restart cannot repeat a month's reminder.
+
+It replaced the Supabase edge function `process-contribution-reminders`, which
+was **never deployed** (both `functions/v1/process-contribution-reminders` and
+`send-contribution-reminder` return 404 on the live project) and could not have
+worked anyway: it called the legacy `fcm.googleapis.com/fcm/send` API, which
+Google shut down in June 2024. It also read `user_settings.user_id` /
+`fcm_token` / `preferred_day` / `monthly_amount`, none of which exist on that
+table. The copy is left in the repo for reference; do not deploy it. Real push
+uses `firebase-admin` (FCM v1) through `notifyService`, which works.
 
 ## Loan totals must exclude never-disbursed loans
 Cancelled/rejected applications are not borrowing. The backend leaves

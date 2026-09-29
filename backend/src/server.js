@@ -429,6 +429,12 @@ rolloverDeadlineWorker.start();
 const loanRecoveryWorker = require('./workers/loanRecoveryWorker');
 loanRecoveryWorker.start();
 
+// Contribution Reminder Worker — server-side replacement for the never-deployed
+// `process-contribution-reminders` edge function. Uses the same paid-or-new rule
+// as the member's obligations card, so paid/new members are never nagged.
+const contributionReminderWorker = require('./workers/contributionReminderWorker');
+contributionReminderWorker.start();
+
 server.listen(PORT, '0.0.0.0', () => {
   logger.info(`🚀 Coopvest Referral API running on port ${PORT}`);
   logger.info(`🌐 WebSocket endpoint: ws://localhost:${PORT}/ws`);
