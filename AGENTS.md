@@ -277,7 +277,6 @@ webhook, `GET /payments/verify/:reference`, and the reconcile sweep
   required — this touches member money).
 * Nothing auto-refunds. Whether to credit or refund is a human/policy decision;
   the system's job is to surface it and never lose it.
-
 ## "Paid this month" must count wallet deposits, and new members are not overdue
 Wallet deposits (`wallet_deposit`/manual deposit flow) do **not** write a
 `contributions` row — they update `savings.last_savings_date` and mirror a
