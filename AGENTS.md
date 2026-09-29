@@ -245,6 +245,24 @@ increase/reduction re-fetches it; `home_dashboard_screen._loadData()` and the
 loan dashboard's pull-to-refresh also `ref.invalidate(obligationsProvider)`.
 Do not remove these — without them the card silently goes stale again.
 
+## "Paid this month" must count wallet deposits, and new members are not overdue
+Wallet deposits (`wallet_deposit`/manual deposit flow) do **not** write a
+`contributions` row — they update `savings.last_savings_date` and mirror a
+`transactions` credit. Detecting a paid month from `contributions` alone
+therefore reported every wallet-deposit payer as still owing, which drove the
+recurring false notification "your contribution of ₦X is N days overdue".
+`hasPaidThisSavingsMonth` (`backend/src/routes/wallet.js`) now treats either a
+paid `contributions` row for the current month **or** a
+`savings.last_savings_date` inside the current month as settled. `applyPaidMonthRule`
+also zeroes the savings due when `joinedThisMonth`, so a brand-new account is
+not instantly in arrears. The app reads `month_paid_savings` /
+`joined_this_month` / `last_savings_date` from `GET /wallet/obligations` and
+passes them into `evaluateContributionReminder`
+(`lib/core/services/contribution_reminder_service.dart`), which is pure and
+unit-tested. `ObligationsCard` honours `joined_this_month` the same way.
+Do not reintroduce a client-side "overdue" decision that trusts only the
+contributions list — it will nag paid and new members again.
+
 ## Loan totals must exclude never-disbursed loans
 Cancelled/rejected applications are not borrowing. The backend leaves
 `remaining_balance` NULL for them, which parses to 0, so
