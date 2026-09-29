@@ -155,7 +155,10 @@ request.
 Wired to: website contact form (`routes/contact.js` — the enquiry now lights
 the bell instead of waiting for the 30s Website-Enquiries poll), support
 tickets (`routes/tickets.js`), loan applications (`routes/loans.js`), KYC
-submissions (`routes/kyc.js`), and the existing org-approval request.
+submissions (`routes/kyc.js`), the existing org-approval request, instant
+Paystack settlements (`routes/payments.js`), member deposits/withdrawals
+(`routes/wallet.js`), contribution-schedule edits (`routes/contributions.js`)
+and rollover requests (`routes/rollover.js`).
 
 `GET /api/admin/notifications` is scoped to admin profile_ids and returns a
 true `unreadCount`; `POST .../read-all` is scoped the same way. The admin
