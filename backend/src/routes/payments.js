@@ -47,11 +47,9 @@ const MIN_AMOUNT_NGN = 100;
  * double-crediting. For `other`-stored proofs (fine/fee/mixed) the
  * trigger creates only a receipt/transaction row — we apply everything here.
 
-
  * NOTE: registration_fee is settled separately in settleSuccessfulCharge
  * above (flips the activation flag + member_fees for the registration fee). This
  * helper handles the remaining allocation types.
-
  */
 async function applyAllocations(proof, { recordedBy = null } = {}) {
   if (!proof || !proof.id) return;
@@ -60,8 +58,8 @@ async function applyAllocations(proof, { recordedBy = null } = {}) {
     const allocationType = metadata.allocation_type || 'monthly_contribution';
     // Derive the breakdown from the STORED payment type, not the allocation
     // label: an approved registration_fee/loan_repayment proof must never be
-    // re-interpreted as savings (that credited registration fees and loan
-    // repayments straight into member wallets).
+    // re-interpreted as savings (that credited ₦5,000 registration fees and
+    // loan repayments straight into member wallets).
     const derivedType = proof.payment_type === 'monthly_contribution'
       ? 'monthly_contribution'
       : (proof.allocation_type || allocationType);
@@ -70,7 +68,7 @@ async function applyAllocations(proof, { recordedBy = null } = {}) {
       : normalizeAllocations(Number(proof.amount) || 0, derivedType, null);
     const savingsAmt = allocations.reduce((s, a) => s + (a.type === 'savings' ? a.amount : 0), 0);
     const loanAmt = allocations.reduce((s, a) => s + (a.type === 'loan_repayment' ? a.amount : 0), 0);
-    const feeAllocs = allocations.filter((a) => ['fine', 'fee', 'registration_fee'].includes(a.type));
+    const feeAllocs = allocations.filter((a) => ['fine', 'fee', 'registration_fee'].includes(a.type) );
 
     // 1. Savings → credit the wallet (skip when the DB trigger already did
     // it for straight monthly_contribution proofs, and never for a
@@ -78,7 +76,6 @@ async function applyAllocations(proof, { recordedBy = null } = {}) {
     if (savingsAmt > 0
       && proof.payment_type !== 'monthly_contribution'
       && proof.payment_type !== 'registration_fee') {
-
       const { ensureWallet } = require('./wallet');
       const wallet = await ensureWallet(proof.profile_id);
       if (wallet && wallet.id) {
@@ -92,7 +89,6 @@ async function applyAllocations(proof, { recordedBy = null } = {}) {
 
     // 2. Loan repayment → reduce the active loan balance (same idempotent
     // guard as the admin proof-approval handler: keyed by reference = proof.id).
-
     if (loanAmt > 0) {
       const { data: alreadyApplied } = await supabase
         .from('loan_repayments')
@@ -156,8 +152,6 @@ async function applyAllocations(proof, { recordedBy = null } = {}) {
 
     // 3. Fines / fees → settle outstanding member_fees obligations.
 
-
-
     for (const alloc of feeAllocs) {
       const amt = Number(alloc.amount) || 0;
       if (amt <= 0) continue;
@@ -185,14 +179,153 @@ async function applyAllocations(proof, { recordedBy = null } = {}) {
       if (feeRow) {
         await supabase
           .from('member_fees')
-          .update({ status: 'paid', paid_at: new Date().toISOString(), deposit_id: proof.id, updated_at: new Date().toISOString() })
+          .update({
+            status: 'paid',
+            paid_at: new Date().toISOString(),
+            deposit_id: proof.id,
+            updated_at: new Date().toISOString(),
+          })
           .eq('id', feeRow.id);
-        logger.info(`paystack settle: fee ${alloc.type} ₦${amt} settled (proof ${proof.id})`);
+        logger.info(`paystack settle: ${alloc.type} ₦${amt} paid → fee ${feeRow.id} (proof ${proof.id})`);
+      } else {
+        logger.warn(`paystack settle: ${alloc.type} ₦${amt} has no outstanding member_fees row to settle`);
       }
     }
-  } catch (err) {
-    logger.warn(`paystack settle: applyAllocations error (non-fatal): ${err.message}`);
+  } catch (applyErr) {
+    // Never fail the settlement because of an allocation application — the
+    // proof is already approved and reconcile-able later.
+    logger.error(`paystack settle: allocation application failed (non-fatal): ${applyErr.message}`);
   }
+}
+
+function secretKey() {
+  return process.env.PAYSTACK_SECRET_KEY || null;
+}
+
+async function paystackFetch(path, options = {}) {
+  const key = secretKey();
+  if (!key) {
+    const err = new Error('Paystack is not configured on the server.');
+    err.statusCode = 503;
+    throw err;
+  }
+  const response = await fetch(`${PAYSTACK_BASE}${path}`, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${key}`,
+      'Content-Type': 'application/json',
+      ...(options.headers || {}),
+    },
+  });
+  const payload = await response.json().catch(() => ({}));
+  return { ok: response.ok, status: response.status, payload };
+}
+
+/**
+ * Record a Paystack deposit as an approved payment proof so the existing
+ * approval trigger (savings credit, transaction row, digital receipt) runs
+ * through the exact same path as an admin-approved manual deposit.
+ * Idempotent: a proof already approved for this reference is left alone.
+ */
+async function settleSuccessfulCharge(reference) {
+  const { data: proof, error } = await supabase
+    .from('payment_proofs')
+    .select('*')
+    .eq('transaction_reference', reference)
+    .is('deleted_at', null)
+    .maybeSingle();
+  if (error) throw error;
+  if (!proof) {
+    logger.warn(`paystack settle: no payment proof parked for reference ${reference}`);
+    return { settled: false, reason: 'no_proof' };
+  }
+  if (proof.status === 'approved') {
+    return { settled: true, already: true, proof };
+  }
+
+  const now = new Date().toISOString();
+  const { error: updErr } = await supabase
+    .from('payment_proofs')
+    .update({
+      status: 'approved',
+      approved_at: now,
+      // approved_by stays null — settled by the gateway, not an admin.
+      admin_notes: 'Auto-approved via Paystack charge confirmation.',
+      updated_at: now,
+    })
+    .eq('id', proof.id);
+  if (updErr) throw updErr;
+
+  // Registration fee → flip the activation flag (same effect as the admin
+  // approval handler; the DB trigger itself only writes the receipt).
+  if (proof.payment_type === 'registration_fee') {
+    await supabase
+      .from('profiles')
+      .update({
+        registration_fee_paid: true,
+        registration_fee_paid_at: now,
+        registration_completed: true,
+        updated_at: now,
+      })
+      .eq('id', proof.profile_id);
+    await supabase
+      .from('member_fees')
+      .update({ status: 'paid', paid_at: now, deposit_id: proof.id })
+      .eq('profile_id', proof.profile_id)
+      .eq('fee_type', 'registration_fee')
+      .eq('status', 'outstanding');
+  }
+
+  // Apply the allocation breakdown (savings/loan/fines/fees) for every
+  // instant type — straight monthly proofs reuse the DB trigger for savings,
+  // while loan/fine/fee/mixed need this loop (rare non-fatal failures are
+  // logged inside applyAllocations, never block the approval).
+  await applyAllocations(proof);
+
+
+  // Confirm the charge to the member in realtime — the app's in-app WebView
+  // poll usually sees the success, but this push/in-app notification covers
+  // weak-network handoffs where the poll fails or the app was backgrounded, so
+  // the member still gets an explicit auto-confirmation (and the wallet/status
+  // screens can refresh via the realtime notification listener).
+  try {
+    await notifyService.notifyPaymentProofApproved({
+      profileId: proof.profile_id,
+      amount: proof.amount,
+      paymentType: proof.payment_type,
+      transactionReference: proof.transaction_reference,
+    });
+    logger.info(`paystack settle: confirmation sent to ${proof.profile_id} (proof ${proof.id})`);
+  } catch (notifyErr) {
+    logger.warn(`paystack settle: confirmation notification failed (non-fatal): ${notifyErr.message}`);
+  }
+
+  // Tell the admins a payment landed. A gateway settlement needs no action, but
+  // admins asked to be told about every payment, and it is the honest record of
+  // money in. Fire-and-forget: a notify failure must not undo the settlement.
+  try {
+    const amountFmt = Number(proof.amount).toLocaleString('en-NG', {
+      style: 'currency',
+      currency: 'NGN',
+    });
+    const payer = await supabase
+      .from('profiles')
+      .select('name, email')
+      .eq('id', proof.profile_id)
+      .maybeSingle();
+    const who = payer.data?.name || payer.data?.email || 'A member';
+    await notifyService.notifyAdmins({
+      title: 'Payment Received',
+      body: `${who} paid ${amountFmt} by card (${proof.payment_type}). Reference ${proof.transaction_reference || reference}.`,
+      type: 'transaction',
+      category: 'success',
+    });
+  } catch (adminNotifyErr) {
+    logger.warn(`paystack settle: admin notification failed (non-fatal): ${adminNotifyErr.message}`);
+  }
+
+  logger.info(`paystack settle: proof ${proof.id} approved (reference ${reference})`);
+  return { settled: true, already: false, proof };
 }
 
 /**
@@ -216,6 +349,10 @@ router.post(
       const paymentType = ALLOWED_PAYMENT_TYPES.has(req.body.payment_type)
         ? req.body.payment_type
         : 'monthly_contribution';
+      // Fall back to the declared payment_type when the caller omits an
+      // explicit allocation_type. The activation screen posts
+      // { amount, payment_type: 'registration_fee' } with no allocation_type;
+      // without this the charge was treated as a monthly contribution.
       const requestedAllocation = req.body.allocation_type || paymentType;
       const allocations = normalizeAllocations(amountNgn, requestedAllocation, req.body.allocations)
         // Carry an explicitly targeted loan into the loan_repayment allocation

@@ -817,4 +817,9 @@ module.exports = {
   // Admin fan-out
   getAdminRecipients,
   notifyAdmins,
+  // Exported for tests — the type coercion is what stops an invalid value
+  // tripping the notifications_type_check constraint and silently dropping an
+  // admin alert (deposit/withdrawal used to do exactly that).
+  normalizeNotifType,
+  normalizeNotifCategory,
 };
