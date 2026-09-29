@@ -23,6 +23,7 @@ const supabase = require('../config/supabase');
 const { authenticate } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const logger = require('../utils/logger');
+const notifyService = require('../services/notifyService');
 
 router.use(authenticate);
 
@@ -171,6 +172,17 @@ router.post('/upload', upload.single('document'), async (req, res) => {
       .single();
 
     if (insertError) throw insertError;
+
+    // A pending document needs an admin to approve/reject it. Alert them (the
+    // KYC submit path does this; a document uploaded later through the
+    // documents screen did not, so it sat in the review queue unseen).
+    notifyService.notifyAdmins({
+      title: 'New Document Uploaded',
+      body: `${req.user.email || 'A member'} uploaded a "${type}" document for review.`,
+      type: 'kyc',
+      category: 'action_required',
+      priority: 'normal',
+    }).catch((err) => logger.warn('documents upload: admin notify failed (non-fatal):', err.message));
 
     res.status(201).json({
       success: true,

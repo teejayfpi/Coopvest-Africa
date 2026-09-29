@@ -21,6 +21,7 @@ const supabase = require('../config/supabase');
 const { authenticate } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const logger = require('../utils/logger');
+const notifyService = require('../services/notifyService');
 
 router.use(authenticate);
 
@@ -195,6 +196,18 @@ router.post(
         .from('profiles')
         .update({ is_active: false })
         .eq('id', profileId);
+
+      // A member leaving is a money event: their savings must be paid out and
+      // the request is time-boxed (5-10 business days). Alert admins so it does
+      // not sit unseen in the queue. Fired after the write; never blocks the
+      // response.
+      notifyService.notifyAdmins({
+        title: 'Membership Termination Requested',
+        body: `${req.user.email || 'A member'} requested to terminate their membership. Reason: ${String(reason).slice(0, 160)}. Savings payout and final settlement are pending.`,
+        type: 'termination',
+        category: 'action_required',
+        priority: 'high',
+      }).catch((err) => logger.warn('termination request: admin notify failed (non-fatal):', err.message));
 
       res.status(201).json({
         success: true,

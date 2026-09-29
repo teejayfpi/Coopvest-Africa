@@ -73,6 +73,17 @@ router.post(
         .select('*')
         .single();
       if (error) throw error;
+
+      // A new participation moves real money into a pool. Alert admins so the
+      // pool's funding is visible without them polling the dashboard.
+      notifyService.notifyAdmins({
+        title: 'New Investment Participation',
+        body: `${req.user.email || 'A member'} joined the pool "${pool.name}" with ${Number(req.body.amount).toLocaleString('en-NG', { style: 'currency', currency: 'NGN' })}.`,
+        type: 'investment',
+        category: 'info',
+        priority: 'normal',
+      }).catch((err) => logger.warn('investment join: admin notify failed (non-fatal):', err.message));
+
       res.status(201).json({ success: true, participation: data });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
