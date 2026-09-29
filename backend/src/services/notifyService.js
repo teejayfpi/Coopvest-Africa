@@ -124,26 +124,32 @@ async function sendInApp({
   type = 'announcement',
   category = 'info',
   priority = 'normal',
+  data,
 }) {
   const dbType = normalizeNotifType(type);
   const dbCategory = normalizeNotifCategory(category, type);
   // `notifications.message` is NOT NULL and is what the admin dashboard reads;
-  // the mobile model reads `body` first and falls back to `message`. The
-  // rollover-deadline worker also de-dupes with an ILIKE against `body`. Both
+  // the mobile model reads `body` first and falls back to `message`. Both
   // columns must therefore be written — writing only `body` made every insert
   // fail with 23502, which the caller swallowed, so no notification was ever
   // stored (admin alerts included).
-  const { data, error } = await supabase
+  //
+  // `data` is optional structured metadata (e.g. a worker's de-dupe tag) kept
+  // out of the visible text. Older workers appended the tag to `body`, which
+  // then showed up in the member's notification feed.
+  const insert = {
+    profile_id: profileId,
+    title,
+    message: body,
+    body,
+    type: dbType,
+    category: dbCategory,
+    priority,
+  };
+  if (data !== undefined) insert.data = data;
+  const { data: row, error } = await supabase
     .from('notifications')
-    .insert({
-      profile_id: profileId,
-      title,
-      message: body,
-      body,
-      type: dbType,
-      category: dbCategory,
-      priority,
-    })
+    .insert(insert)
     .select('*')
     .maybeSingle();
 
@@ -151,7 +157,7 @@ async function sendInApp({
     logger.warn('notifyService.sendInApp failed:', error.message);
     return { status: 'failed', error: error.message };
   }
-  return { status: 'sent', id: data?.id };
+  return { status: 'sent', id: row?.id };
 }
 
 // ── email ─────────────────────────────────────────────────────────────────────
@@ -491,7 +497,7 @@ async function notifyRolloverGuarantorReplaced({
 /**
  * High-level fan-out: deliver to multiple profiles across multiple channels.
  */
-async function broadcast({ profileIds, channels = ['in_app'], title, body, subject, type, category, priority = 'normal' }) {
+async function broadcast({ profileIds, channels = ['in_app'], title, body, subject, type, category, priority = 'normal', data }) {
   const results = [];
 
   for (const pid of profileIds) {
@@ -504,7 +510,7 @@ async function broadcast({ profileIds, channels = ['in_app'], title, body, subje
     if (!profile) continue;
 
     if (channels.includes('in_app')) {
-      results.push(await sendInApp({ profileId: pid, title, body, type, category, priority }));
+      results.push(await sendInApp({ profileId: pid, title, body, type, category, priority, data }));
     }
     if (channels.includes('email') && profile.email) {
       results.push(await sendEmail({ to: profile.email, subject: subject || title, text: body }));

@@ -72,7 +72,7 @@ function decideReminder({ savingsDue, days, contributionMethod, isFlagged }) {
   };
 }
 
-/** True when this month's reminder (tagged in the body) is already stored. */
+/** True when this month's reminder (tagged in `data.tag`) is already stored. */
 async function alreadyRemindedThisMonth(profileId, tag) {
   const since = new Date();
   since.setDate(1);
@@ -84,7 +84,7 @@ async function alreadyRemindedThisMonth(profileId, tag) {
       .eq('profile_id', profileId)
       .eq('type', 'reminder')
       .gte('created_at', since.toISOString())
-      .ilike('body', `%${tag}%`)
+      .eq('data->>tag', tag)
       .limit(1);
     return Array.isArray(data) && data.length > 0;
   } catch (err) {
@@ -105,7 +105,9 @@ async function remindMember(profile) {
     if (!decision) return 'skip';
 
     // One reminder per member per calendar month, so a restart or a re-run
-    // cannot turn a single overdue month into a stream of pushes.
+    // cannot turn a single overdue month into a stream of pushes. The tag lives
+    // in `data`, not the body — appending it to the body leaked the internal
+    // tag into the member's notification feed.
     const tag = `reminder:${obligations.current_month}`;
     if (await alreadyRemindedThisMonth(profile.id, tag)) return 'dupe';
 
@@ -113,9 +115,10 @@ async function remindMember(profile) {
       profileIds: [profile.id],
       channels: ['in_app', 'push'],
       title: decision.title,
-      body: `${decision.body} [${tag}]`,
+      body: decision.body,
       type: 'reminder',
       category: 'warning',
+      data: { tag },
     });
     return decision.kind;
   } catch (err) {

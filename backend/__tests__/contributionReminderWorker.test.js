@@ -60,6 +60,27 @@ describe('decideReminder', () => {
   });
 });
 
+describe('reminder de-dupe tag stays out of the visible text', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'workers', 'contributionReminderWorker.js'),
+    'utf8'
+  );
+
+  test('the tag is stored in data, not interpolated into the body', () => {
+    // Regression: `${decision.body} [${tag}]` leaked `[reminder:2026-09]` into
+    // every member's notification feed.
+    expect(src).not.toMatch(/body:\s*`\$\{decision\.body\}\s*\[/);
+    expect(src).toContain('data: { tag }');
+  });
+
+  test('de-dupe reads the structured tag, not an ILIKE on body', () => {
+    expect(src).toContain("eq('data->>tag', tag)");
+    expect(src).not.toContain("ilike('body'");
+  });
+});
+
 describe('daysSincePreferredDay', () => {
   test('a due date later this month is still upcoming', () => {
     const now = new Date(2026, 8, 10); // 10 Sep 2026
