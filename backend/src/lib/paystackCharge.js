@@ -15,11 +15,33 @@ function secretKey() {
   return process.env.PAYSTACK_SECRET_KEY || null;
 }
 
+/**
+ * Whether the server can actually reach Paystack.
+ *
+ * The env var being *present* is not enough: a truncated or public (`pk_`)
+ * value makes every `/transaction/initialize` fail at the gateway with an
+ * opaque error the member sees as "online payment failed". Checking the shape
+ * here turns that into a clear, actionable message at boot and at the first
+ * request.
+ */
+function paystackConfigured() {
+  const key = secretKey();
+  if (!key) return { ok: false, reason: 'missing', message: 'PAYSTACK_SECRET_KEY is not set.' };
+  if (!key.startsWith('sk_')) {
+    return { ok: false, reason: 'not_a_secret_key', message: 'PAYSTACK_SECRET_KEY is not a secret key (expected an sk_… value).' };
+  }
+  if (key.length < 20) {
+    return { ok: false, reason: 'truncated', message: 'PAYSTACK_SECRET_KEY looks truncated.' };
+  }
+  return { ok: true, reason: null, message: null };
+}
+
 async function paystackFetch(path, options = {}) {
   const key = secretKey();
   if (!key) {
     const err = new Error('Paystack is not configured on the server.');
     err.statusCode = 503;
+    err.code = 'PAYMENT_UNAVAILABLE';
     throw err;
   }
   const response = await fetch(`${PAYSTACK_BASE}${path}`, {
@@ -83,4 +105,4 @@ function classifyFailure({ eventName, status, gatewayResponse } = {}) {
   };
 }
 
-module.exports = { paystackFetch, verifyCharge, classifyFailure, secretKey, PAYSTACK_BASE };
+module.exports = { paystackFetch, verifyCharge, classifyFailure, secretKey, paystackConfigured, PAYSTACK_BASE };

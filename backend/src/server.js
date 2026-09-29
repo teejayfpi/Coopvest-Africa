@@ -440,6 +440,16 @@ contributionReminderWorker.start();
 const failedChargeReconcileWorker = require('./workers/failedChargeReconcileWorker');
 failedChargeReconcileWorker.start();
 
+// Surface a misconfigured payment gateway at boot instead of letting members
+// discover it as an opaque "online payment failed" at checkout.
+const { paystackConfigured } = require('./lib/paystackCharge');
+const paystackStatus = paystackConfigured();
+if (paystackStatus.ok) {
+  logger.info('💳 Paystack: secret key loaded — online payments enabled');
+} else {
+  logger.error(`💳 Paystack: NOT configured (${paystackStatus.reason}) — ${paystackStatus.message} Online payments will fail until this is set.`);
+}
+
 server.listen(PORT, '0.0.0.0', () => {
   logger.info(`🚀 Coopvest Referral API running on port ${PORT}`);
   logger.info(`🌐 WebSocket endpoint: ws://localhost:${PORT}/ws`);

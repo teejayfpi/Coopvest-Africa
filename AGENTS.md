@@ -400,6 +400,14 @@ Quick liveness probe for the Paystack key without credentials: `POST
 /api/v1/payments/webhook` returns 401 (key loaded → signature mismatch) when
 configured, 503 when not.
 
+A *present* key is not necessarily a *working* key. `paystackConfigured()`
+(`backend/src/lib/paystackCharge.js`) checks the shape (present, `sk_` prefix,
+not truncated) and logs the result at boot; a bad key otherwise shows up only
+as an opaque "Online payment failed" at checkout. `POST /payments/initialize`
+returns `503 { code: 'PAYMENT_UNAVAILABLE' }` with a member-safe message when
+the gateway is not usable, so the app never surfaces the raw internal string.
+Both backends (Render `coopvest-api` and the Vercel host) serve the same code
+and share this behaviour.
 
 ## Render env vars are replaced, not merged
 

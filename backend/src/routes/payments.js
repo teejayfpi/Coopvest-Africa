@@ -501,7 +501,17 @@ router.post(
       });
     } catch (err) {
       logger.error('paystack initialize error:', err);
-      res.status(err.statusCode || 500).json({ success: false, error: err.message });
+      // A gateway that is not configured is an operator problem, not the
+      // member's. Say what is wrong and that nothing was charged, so the app
+      // does not surface a raw internal string.
+      const unavailable = err.statusCode === 503 || err.code === 'PAYMENT_UNAVAILABLE';
+      res.status(unavailable ? 503 : (err.statusCode || 500)).json({
+        success: false,
+        code: unavailable ? 'PAYMENT_UNAVAILABLE' : undefined,
+        error: unavailable
+          ? 'Online payments are temporarily unavailable. Please use another payment method or try again later — you have not been charged.'
+          : err.message,
+      });
     }
   }
 );
