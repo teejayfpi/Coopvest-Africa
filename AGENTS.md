@@ -199,6 +199,21 @@ dashboard (`Admin-Dashboard/src/hooks/use-admin-notifications.ts`) subscribes
 to `postgres_changes` on its own `profile_id` for instant bell updates, plays
 a sound, and shows an opt-in desktop notification.
 
+### `notifications` has BOTH `message` and `body` — write both
+
+The table has two text columns and they are not interchangeable:
+
+- **`message` is `NOT NULL`** and is what the admin dashboard renders.
+- **`body` is nullable**; the Flutter model reads `json['body'] ?? json['message']`.
+
+`sendInApp` (and the `/scheduled-notifications/run-due` sender in `adminApi.js`)
+once inserted only `body`. Every insert then failed with Postgres **23502**
+(`null value in column "message"`), and because notify failures are treated as
+non-fatal (`logger.warn` + `{status:'failed'}`) the error was swallowed — so
+**no notification was ever stored**, admin alerts included. When adding an
+insert against `notifications`, set `message` as well as `body`. Pinned by
+`backend/__tests__/notificationMessageColumn.test.js`.
+
 ## Role note
 The DB uses both `superadmin` and `super_admin` spellings; treat both as Super
 Admin everywhere.
