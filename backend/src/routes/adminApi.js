@@ -3927,6 +3927,9 @@ router.post('/scheduled-notifications/run-due', async (_req, res) => {
         const rows = targets.map((pid) => ({
           profile_id: pid,
           title: row.title,
+          // `message` is NOT NULL (admin dashboard reads it); mobile reads
+          // `body` first, so write both.
+          message: row.body,
           body: row.body,
           type: row.type,
           category: row.category,
