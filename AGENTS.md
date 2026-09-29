@@ -669,6 +669,35 @@ middleware and several routes but were created by no migration, so a fresh
 environment fails the gate query. Migration 048 creates them and backfills the
 channel from `kyc.personal_info`.
 
+### The gate must be reachable-proof, not just present
+A Direct Deposit member who had not paid could reach the dashboard by pressing
+Back, relaunching, or re-logging in. Two things caused it, and both need to stay
+fixed:
+
+- **`/home` must be wrapped in `AuthGuard`** (`lib/main.dart`). It used to render
+  `MainContainer` directly, so *every* `pushNamed('/home')` — notification tap,
+  deep link, a button on a screen that had already checked the gate — skipped the
+  guard entirely. `AuthGuard.signedOutChild` (defaults to `child`) is the
+  welcome screen on the `/home` route so sign-out does not flash the dashboard.
+- **The guard reads the server, not the cached profile** (`GET /app/home-status`).
+  The profile's `registration_fee_paid` is exactly what goes stale on a
+  back-press, which is the case the gate exists for. `AuthGuard` shows a spinner
+  until the answer arrives and only falls back to the profile after two failed
+  attempts, so a cold Render start does not strand a paying member.
+
+Route the client on `registration_fee_settled`, **not** `activated`: the latter
+also requires KYC approval, and re-using it re-blocks members who paid but are
+awaiting KYC review. That split mirrors `requireRegistrationPaid` vs
+`requireActivated` in `middleware/auth.js`.
+
+### Every gate needs the test that would have caught the bypass
+`backend/__tests__/registrationFeeEnforcement.test.js` and the
+`registration-fee bypass (Direct Deposit)` group in
+`test/unit/registration_gate_test.dart` pin the route-level and payload-level
+shapes. The bug was a *reachability* gap, not a wrong boolean, so a test that
+only asserts the exemption rule would not have caught it — assert the entry
+point, too.
+
 ## KYC status is never null — guard drafts on `isUntouchedServerRow`
 
 `GET /kyc/status` calls getOrCreateKyc, so it always returns a provisional
