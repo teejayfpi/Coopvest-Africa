@@ -22,6 +22,7 @@ const supabase = require('../config/supabase');
 const { authenticate } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const logger = require('../utils/logger');
+const notifyService = require('../services/notifyService');
 
 router.use(authenticate);
 
@@ -125,6 +126,17 @@ router.post(
         author_id: req.user.id,
         author_role: 'member',
         body: description,
+      });
+
+      // A member raising a support ticket previously produced no admin-facing
+      // notification at all — it only surfaced if an admin happened to have the
+      // Support page open. Alert every admin so the queue is visible.
+      await notifyService.notifyAdmins({
+        title: 'New Support Ticket',
+        body: `${ticket.ticket_id || 'New'} — ${title}`,
+        type: 'system',
+        category: 'action_required',
+        priority: 'high',
       });
 
       res.status(201).json({ success: true, ticket: serializeTicket(ticket) });

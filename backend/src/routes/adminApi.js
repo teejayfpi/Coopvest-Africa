@@ -1488,17 +1488,48 @@ router.get('/audit-logs', async (req, res) => {
 
 /**
  * GET /api/v1/admin/notifications
+ *
+ * The admin notification feed. Scoped to notifications addressed to an
+ * admin/staff profile: member-facing broadcasts (payment reminders, wallet
+ * credits, …) each write a row keyed to the *member's* profile_id, so without
+ * this filter the bell showed every member notification and the admin's own
+ * alerts were lost in the noise.
  */
 router.get('/notifications', async (req, res) => {
   try {
     const { page, limit, from, to } = paging(req);
+    const admins = await notifyService.getAdminRecipients();
+    const adminIds = admins.map((a) => a.id);
+
+    if (adminIds.length === 0) {
+      return res.json({
+        success: true,
+        notifications: [],
+        pagination: { page, limit, total: 0 },
+        unreadCount: 0,
+      });
+    }
+
     const { data, error, count } = await supabase
       .from('notifications')
       .select('*, profile:profiles!notifications_profile_id_fkey(id, user_id, name, email)', { count: 'exact' })
+      .in('profile_id', adminIds)
       .order('created_at', { ascending: false })
       .range(from, to);
     if (error) throw error;
-    res.json({ success: true, notifications: data || [], pagination: { page, limit, total: count || 0 } });
+
+    const { count: unreadCount } = await supabase
+      .from('notifications')
+      .select('id', { count: 'exact', head: true })
+      .in('profile_id', adminIds)
+      .eq('is_read', false);
+
+    res.json({
+      success: true,
+      notifications: data || [],
+      pagination: { page, limit, total: count || 0 },
+      unreadCount: unreadCount || 0,
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -2894,13 +2925,22 @@ router.post('/notifications/:id/read', async (req, res) => {
 
 /**
  * POST /api/v1/admin/notifications/read-all
- * Admin marks all notifications as read.
+ * Admin marks all notifications in the admin feed as read.
+ *
+ * Scoped to admin/staff recipients to match GET /notifications; without this it
+ * also flipped member notifications to read, silently clearing their unread
+ * badges from the app.
  */
 router.post('/notifications/read-all', async (req, res) => {
   try {
+    const admins = await notifyService.getAdminRecipients();
+    const adminIds = admins.map((a) => a.id);
+    if (adminIds.length === 0) return res.json({ success: true });
+
     const { error } = await supabase
       .from('notifications')
       .update({ is_read: true, read_at: new Date().toISOString() })
+      .in('profile_id', adminIds)
       .eq('is_read', false);
     if (error) throw error;
     res.json({ success: true });

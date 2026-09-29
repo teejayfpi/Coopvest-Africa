@@ -189,6 +189,48 @@ async function recordTransaction(profileId, row) {
  */
 const ACTIVE_LOAN_STATUSES = ['active', 'repaying', 'overdue', 'approved', 'disbursed'];
 
+// A contribution row in any of these states means the money is in — the
+// monthly contribution has been paid for that month.
+const PAID_CONTRIBUTION_STATUSES = ['successful', 'approved', 'completed', 'confirmed', 'paid'];
+
+/** 'YYYY-MM' for a date (defaults to now). */
+function monthKey(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/** 'YYYY-MM' for the calendar month after `date` (defaults to now). */
+function nextMonthKey(date = new Date()) {
+  return monthKey(new Date(date.getFullYear(), date.getMonth() + 1, 1));
+}
+
+/**
+ * Apply the "paid this month" rule to an obligations object and derive the
+ * amounts actually due.
+ *
+ * A member who has already paid this month's savings must not keep seeing that
+ * money as "due" — the standing amount moves to `next_month_savings` so the app
+ * can tell them what next month expects instead. Pure (no I/O) so the rule is
+ * unit-testable without a database.
+ */
+function applyPaidMonthRule(obligations, { paidThisMonth, now = new Date() } = {}) {
+  obligations.month_paid_savings = Boolean(paidThisMonth);
+  obligations.current_month = monthKey(now);
+  obligations.next_month = nextMonthKey(now);
+
+  const savingsDue = obligations.month_paid_savings ? 0 : obligations.monthly_savings;
+  obligations.savings_due = savingsDue;
+  obligations.next_month_savings = obligations.month_paid_savings
+    ? obligations.monthly_savings
+    : 0;
+
+  const loanMonthly = obligations.loans.reduce((s, l) => s + (Number(l.monthly_repayment) || 0), 0);
+  const finesTotal = obligations.fines.reduce((s, f) => s + (Number(f.amount) || 0), 0);
+  const feesTotal = obligations.fees.reduce((s, f) => s + (Number(f.amount) || 0), 0);
+
+  obligations.total_due = savingsDue + loanMonthly + finesTotal + feesTotal;
+  return obligations;
+}
+
 async function computeObligations(profileId) {
   const obligations = {
     monthly_savings: 0,
@@ -264,14 +306,25 @@ async function computeObligations(profileId) {
     logger.warn('obligations: member_fees lookup failed:', fErr.message);
   }
 
-  const loanMonthly = obligations.loans.reduce((s, l) => s + l.monthly_repayment, 0);
-  const finesTotal = obligations.fines.reduce((s, f) => s + f.amount, 0);
-  const feesTotal = obligations.fees.reduce((s, f) => s + f.amount, 0);
+  // Has this month's savings contribution already been paid? A member who has
+  // paid must not keep seeing "Total due this month" — they should be shown
+  // what is expected *next* month instead.
+  const thisMonth = monthKey();
+  let paidThisMonth = false;
+  try {
+    const { data: paidRows } = await supabase
+      .from('contributions')
+      .select('id')
+      .eq('profile_id', profileId)
+      .eq('contribution_month', thisMonth)
+      .in('status', PAID_CONTRIBUTION_STATUSES)
+      .limit(1);
+    paidThisMonth = Array.isArray(paidRows) && paidRows.length > 0;
+  } catch (cErr) {
+    logger.warn('obligations: contributions lookup failed:', cErr.message);
+  }
 
-  obligations.total_due =
-    obligations.monthly_savings + loanMonthly + finesTotal + feesTotal;
-
-  return obligations;
+  return applyPaidMonthRule(obligations, { paidThisMonth });
 }
 
 /**
@@ -939,3 +992,6 @@ module.exports.ensureWallet = ensureWallet;
 module.exports.adjustBalance = adjustBalance;
 module.exports.recordTransaction = recordTransaction;
 module.exports.computeObligations = computeObligations;
+module.exports.applyPaidMonthRule = applyPaidMonthRule;
+module.exports.monthKey = monthKey;
+module.exports.nextMonthKey = nextMonthKey;

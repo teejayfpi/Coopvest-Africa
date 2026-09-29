@@ -300,6 +300,30 @@ async function settleSuccessfulCharge(reference) {
     logger.warn(`paystack settle: confirmation notification failed (non-fatal): ${notifyErr.message}`);
   }
 
+  // Tell the admins a payment landed. A gateway settlement needs no action, but
+  // admins asked to be told about every payment, and it is the honest record of
+  // money in. Fire-and-forget: a notify failure must not undo the settlement.
+  try {
+    const amountFmt = Number(proof.amount).toLocaleString('en-NG', {
+      style: 'currency',
+      currency: 'NGN',
+    });
+    const payer = await supabase
+      .from('profiles')
+      .select('name, email')
+      .eq('id', proof.profile_id)
+      .maybeSingle();
+    const who = payer.data?.name || payer.data?.email || 'A member';
+    await notifyService.notifyAdmins({
+      title: 'Payment Received',
+      body: `${who} paid ${amountFmt} by card (${proof.payment_type}). Reference ${proof.transaction_reference || reference}.`,
+      type: 'transaction',
+      category: 'success',
+    });
+  } catch (adminNotifyErr) {
+    logger.warn(`paystack settle: admin notification failed (non-fatal): ${adminNotifyErr.message}`);
+  }
+
   logger.info(`paystack settle: proof ${proof.id} approved (reference ${reference})`);
   return { settled: true, already: false, proof };
 }

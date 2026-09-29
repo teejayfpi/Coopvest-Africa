@@ -46,16 +46,25 @@ class ObligationsCard extends ConsumerWidget {
           0,
           (sum, f) => sum + (((f as Map)['amount'] as num?)?.toDouble() ?? 0),
         );
+        // Once this month's contribution is paid it stops being "due" — the
+        // standing amount moves to the next-month expectation instead, so a
+        // member who has paid is not told they still owe this month's money.
+        final paidThisMonth = data['month_paid_savings'] == true;
+        final currentMonth = data['current_month']?.toString() ?? '';
+        final nextMonthSavings =
+            (data['next_month_savings'] as num?)?.toDouble() ?? 0.0;
+        final savingsDue = paidThisMonth ? 0.0 : monthlyContribution;
+        final nextMonthExpected =
+            (nextMonthSavings > 0 ? nextMonthSavings : monthlyContribution) +
+                monthlyLoanRepayment;
+
         // Recompute rather than trusting total_due: it must always equal the
         // rows rendered underneath it.
-        final totalDue = monthlyContribution +
-            monthlyLoanRepayment +
-            finesTotal +
-            feesTotal;
+        final totalDue = savingsDue + monthlyLoanRepayment + finesTotal + feesTotal;
 
         final hasLoanObligation = loansData.isNotEmpty;
         final payableNow =
-            hasLoanObligation ? monthlyLoanRepayment : monthlyContribution;
+            hasLoanObligation ? monthlyLoanRepayment : savingsDue;
 
         // Nothing due: show the "all caught up" state rather than a card of
         // ₦0 rows, which reads like a broken screen. The green check plus the
@@ -84,7 +93,9 @@ class ObligationsCard extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        "You're all caught up",
+                        paidThisMonth
+                            ? "You've paid for ${_monthLabel(currentMonth)}"
+                            : "You're all caught up",
                         style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w500,
@@ -93,7 +104,9 @@ class ObligationsCard extends ConsumerWidget {
                       ),
                       const SizedBox(height: CoopvestShape.gapXs),
                       Text(
-                        'No contributions or repayments due.',
+                        paidThisMonth
+                            ? 'Expected next month: \u20a6${nextMonthExpected.formatNumber()}'
+                            : 'No contributions or repayments due.',
                         style: TextStyle(
                           fontSize: 12,
                           color: context.textSecondary,
@@ -136,9 +149,11 @@ class ObligationsCard extends ConsumerWidget {
               const SizedBox(height: CoopvestShape.gapMd),
               _obligationRow(
                 context,
-                'Monthly Savings \u2192 Member\'s savings',
+                paidThisMonth
+                    ? 'Monthly Savings \u2192 paid for ${_monthLabel(currentMonth)}'
+                    : 'Monthly Savings \u2192 Member\'s savings',
                 '\u20a6${monthlyContribution.formatNumber()}',
-                CoopvestColors.primary,
+                paidThisMonth ? CoopvestColors.successText : CoopvestColors.primary,
               ),
               if (hasLoanObligation) ...[
                 const SizedBox(height: 8),
@@ -183,11 +198,20 @@ class ObligationsCard extends ConsumerWidget {
                 ),
               ],
               const Divider(height: 24),
+              if (paidThisMonth && nextMonthExpected > 0) ...[
+                _obligationRow(
+                  context,
+                  'Expected next month',
+                  '\u20a6${nextMonthExpected.formatNumber()}',
+                  CoopvestColors.pendingText,
+                ),
+                const SizedBox(height: 8),
+              ],
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Total due this month',
+                    paidThisMonth ? 'Still due this month' : 'Total due this month',
                     style: TextStyle(fontWeight: FontWeight.bold, color: context.textPrimary),
                   ),
                   Text(
@@ -270,6 +294,21 @@ class ObligationsCard extends ConsumerWidget {
         ),
       ],
     );
+  }
+
+  /// '2026-09' → 'September 2026'. Falls back to the raw key so a malformed
+  /// month never renders as blank.
+  static String _monthLabel(String yyyyMm) {
+    final parts = yyyyMm.split('-');
+    if (parts.length != 2) return yyyyMm;
+    final year = int.tryParse(parts[0]);
+    final month = int.tryParse(parts[1]);
+    if (year == null || month == null || month < 1 || month > 12) return yyyyMm;
+    const names = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December',
+    ];
+    return '${names[month - 1]} $year';
   }
 
   static String _entryLabel(Object? entry) {
