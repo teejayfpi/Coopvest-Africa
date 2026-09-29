@@ -5,6 +5,57 @@ import '../network/api_client.dart';
 import '../utils/payment_date_utils.dart';
 import 'logger_service.dart';
 
+/// The kind of contribution reminder to show, or [none].
+enum ContributionReminderKind { none, dueToday, dueSoon, overdue, }
+
+/// A reminder decision: what to show and, for [dueSoon]/[overdue], how many
+/// days it refers to.
+class ContributionReminderDecision {
+  final ContributionReminderKind kind;
+  final int days;
+  const ContributionReminderDecision(this.kind, [this.days = 0]);
+
+  static const none = ContributionReminderDecision(ContributionReminderKind.none);
+}
+
+/// Decide which contribution reminder (if any) a member should see.
+///
+/// Pure and free of clock/IO concerns so the rules can be unit-tested. This
+/// exists because the previous inline logic nagged members who had already paid
+/// (it only trusted a `contributions` row, while wallet deposits never write
+/// one) and nagged brand-new members whose first due date had not arrived yet.
+///
+/// [daysSincePreferredDay] is days past this month's due date: 0 = today,
+/// negative = still upcoming, positive = overdue.
+ContributionReminderDecision evaluateContributionReminder({
+  required bool hasPaidThisMonth,
+  required bool isNewMember,
+  required bool isPayroll,
+  required int daysSincePreferredDay,
+}) {
+  // Nothing to chase: already settled, joined this month, or on payroll.
+  if (hasPaidThisMonth || isNewMember || isPayroll) {
+    return ContributionReminderDecision.none;
+  }
+
+  if (daysSincePreferredDay == 0) {
+    return const ContributionReminderDecision(ContributionReminderKind.dueToday);
+  }
+  if (daysSincePreferredDay == -3 || daysSincePreferredDay == -1) {
+    return ContributionReminderDecision(
+      ContributionReminderKind.dueSoon,
+      daysSincePreferredDay.abs(),
+    );
+  }
+  if (daysSincePreferredDay > 0) {
+    return ContributionReminderDecision(
+      ContributionReminderKind.overdue,
+      daysSincePreferredDay,
+    );
+  }
+  return ContributionReminderDecision.none;
+}
+
 /// Contribution Reminder Service - Singleton Pattern
 /// Handles contribution reminder notifications with both:
 /// - Client-side: In-app reminders when user opens app
@@ -27,11 +78,18 @@ class ContributionReminderService {
 
   /// Check and send appropriate contribution reminders
   /// Called on app startup and periodically while app is open
+  /// [paidThisMonth] and [isNewMember] come from the server's obligations
+  /// calculation, which knows about wallet-deposit payments and the join date.
+  /// [isPayroll] short-circuits for salary-deduction members, who never pay
+  /// in-app and so must never be told they are overdue.
   Future<void> checkAndSendReminders({
     required List<MonthlyContribution> contributions,
     required double monthlyAmount,
     required int preferredDay,
     required double totalSavings,
+    bool paidThisMonth = false,
+    bool isNewMember = false,
+    bool isPayroll = false,
   }) async {
     // Rate limit: Only check once per hour
     if (_lastCheckTime != null &&
@@ -49,39 +107,45 @@ class ContributionReminderService {
     // Calculate contribution streak
     final streak = _calculateContributionStreak(contributions);
     
-    // Check if contribution was made this month
-    if (thisMonthContribution == null) {
-      // No contribution this month yet
-      final daysSincePreferredDay = _getDaysSincePreferredDay(preferredDay, now);
-      
-      if (daysSincePreferredDay == 0) {
-        // Due today
+    final decision = evaluateContributionReminder(
+      hasPaidThisMonth: paidThisMonth || thisMonthContribution != null,
+      isNewMember: isNewMember,
+      isPayroll: isPayroll,
+      daysSincePreferredDay: _getDaysSincePreferredDay(preferredDay, now),
+    );
+
+    switch (decision.kind) {
+      case ContributionReminderKind.dueToday:
         await _notificationService.showNoContributionThisMonthNotification(
           monthlyAmount: monthlyAmount,
           dayOfMonth: preferredDay,
         );
-      } else if (daysSincePreferredDay == -3 || daysSincePreferredDay == -1) {
-        // Due in 3 days or tomorrow
+        break;
+      case ContributionReminderKind.dueSoon:
         await _notificationService.showContributionReminderNotification(
-          daysUntilDue: daysSincePreferredDay.abs(),
+          daysUntilDue: decision.days,
           monthlyAmount: monthlyAmount,
         );
-      } else if (daysSincePreferredDay > 0) {
-        // Overdue
+        break;
+      case ContributionReminderKind.overdue:
         await _notificationService.showMissedContributionNotification(
           monthlyAmount: monthlyAmount,
-          daysOverdue: daysSincePreferredDay,
+          daysOverdue: decision.days,
         );
-      }
-    } else {
-      // Contribution was made - check for streak notification
+        break;
+      case ContributionReminderKind.none:
+        break;
+    }
+
+    // Only celebrate/inform about progress when the month is actually paid.
+    if (thisMonthContribution != null) {
       if (streak >= 3 && streak % 3 == 0) {
         await _notificationService.showContributionStreakNotification(
           streakMonths: streak,
           totalSavings: totalSavings,
         );
       }
-      
+
       // Check loan eligibility progress
       await _checkLoanEligibility(totalSavings);
     }

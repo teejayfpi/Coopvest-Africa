@@ -155,7 +155,10 @@ request.
 Wired to: website contact form (`routes/contact.js` — the enquiry now lights
 the bell instead of waiting for the 30s Website-Enquiries poll), support
 tickets (`routes/tickets.js`), loan applications (`routes/loans.js`), KYC
-submissions (`routes/kyc.js`), and the existing org-approval request.
+submissions (`routes/kyc.js`), the existing org-approval request, instant
+Paystack settlements (`routes/payments.js`), member deposits/withdrawals
+(`routes/wallet.js`), contribution-schedule edits (`routes/contributions.js`)
+and rollover requests (`routes/rollover.js`).
 
 `GET /api/admin/notifications` is scoped to admin profile_ids and returns a
 true `unreadCount`; `POST .../read-all` is scoped the same way. The admin
@@ -244,6 +247,39 @@ after restarting. It now `watch`es
 increase/reduction re-fetches it; `home_dashboard_screen._loadData()` and the
 loan dashboard's pull-to-refresh also `ref.invalidate(obligationsProvider)`.
 Do not remove these — without them the card silently goes stale again.
+
+## "Paid this month" must count wallet deposits, and new members are not overdue
+Wallet deposits (`wallet_deposit`/manual deposit flow) do **not** write a
+`contributions` row — they update `savings.last_savings_date` and mirror a
+`transactions` credit. Detecting a paid month from `contributions` alone
+therefore reported every wallet-deposit payer as still owing, which drove the
+recurring false notification "your contribution of ₦X is N days overdue".
+`hasPaidThisSavingsMonth` (`backend/src/routes/wallet.js`) now treats either a
+paid `contributions` row for the current month **or** a
+`savings.last_savings_date` inside the current month as settled. `applyPaidMonthRule`
+also zeroes the savings due when `joinedThisMonth`, so a brand-new account is
+not instantly in arrears. The app reads `month_paid_savings` /
+`joined_this_month` / `last_savings_date` from `GET /wallet/obligations` and
+passes them into `evaluateContributionReminder`
+(`lib/core/services/contribution_reminder_service.dart`), which is pure and
+unit-tested. `ObligationsCard` honours `joined_this_month` the same way.
+Do not reintroduce a client-side "overdue" decision that trusts only the
+contributions list — it will nag paid and new members again.
+
+The daily push is now sent by `backend/src/workers/contributionReminderWorker.js`
+(started in `server.js`), which calls `computeObligations` and therefore applies
+the exact same paid/new/payroll rule as the obligations card — push and app can
+never disagree. It de-dupes with a `reminder:YYYY-MM` tag written into the
+notification body, so a restart cannot repeat a month's reminder.
+
+It replaced the Supabase edge function `process-contribution-reminders`, which
+was **never deployed** (both `functions/v1/process-contribution-reminders` and
+`send-contribution-reminder` return 404 on the live project) and could not have
+worked anyway: it called the legacy `fcm.googleapis.com/fcm/send` API, which
+Google shut down in June 2024. It also read `user_settings.user_id` /
+`fcm_token` / `preferred_day` / `monthly_amount`, none of which exist on that
+table. The copy is left in the repo for reference; do not deploy it. Real push
+uses `firebase-admin` (FCM v1) through `notifyService`, which works.
 
 ## Loan totals must exclude never-disbursed loans
 Cancelled/rejected applications are not borrowing. The backend leaves
