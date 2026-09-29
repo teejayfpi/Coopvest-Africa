@@ -157,8 +157,19 @@ the bell instead of waiting for the 30s Website-Enquiries poll), support
 tickets (`routes/tickets.js`), loan applications (`routes/loans.js`), KYC
 submissions (`routes/kyc.js`), the existing org-approval request, instant
 Paystack settlements (`routes/payments.js`), member deposits/withdrawals
-(`routes/wallet.js`), contribution-schedule edits (`routes/contributions.js`)
-and rollover requests (`routes/rollover.js`).
+(`routes/wallet.js`), contribution-schedule edits (`routes/contributions.js`),
+rollover requests (`routes/rollover.js`), membership termination
+(`routes/termination.js`), investment participation
+(`routes/investments.js`), savings withdrawal (`routes/savings.js`), manual
+payment-proof submission (`routes/paymentProofs.js`) and document upload
+(`routes/documents.js`).
+
+Every new type a caller passes must survive `normalizeNotifType` onto the
+`notifications.type` CHECK constraint, or the insert throws 23514 and the
+alert is silently swallowed. `__tests__/adminNotificationCoverage.test.js`
+pins both the wiring (alert present, fire-and-forget, has `.catch`) and the
+type coercion for these events. Deliberately *not* wired: `savings/deposit`
+(wallet → savings, self-directed) and `savings/goals` (no money moves).
 
 `GET /api/admin/notifications` is scoped to admin profile_ids and returns a
 true `unreadCount`; `POST .../read-all` is scoped the same way. The admin
