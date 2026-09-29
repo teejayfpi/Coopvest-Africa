@@ -164,6 +164,27 @@ router.post(
       }
 
       logger.info(`Rollover created: ${rollover.id} for loan ${loanId}`);
+
+      // Admins asked to be told about every member-actionable request. A
+      // rollover needs an admin decision once guarantors consent, so surface it
+      // in the admin notification feed (fire-and-forget — a notify failure must
+      // not undo the request the member just made).
+      supabase
+        .from('profiles')
+        .select('full_name, email')
+        .eq('id', req.user.id)
+        .maybeSingle()
+        .then(({ data: borrower }) => {
+          const who = borrower?.full_name || borrower?.email || 'A member';
+          return notify.notifyAdmins({
+            title: 'Loan Rollover Requested',
+            body: `${who} requested a ${extensionMonths}-month rollover on loan ${loanId}. Guarantor consent deadline is 7 days.`,
+            type: 'loan',
+            category: 'action_required',
+          });
+        })
+        .catch((err) => logger.warn('Rollover admin notification failed (non-fatal):', err.message));
+
       res.status(201).json({ success: true, rollover });
     } catch (err) {
       logger.error('rollover create error:', err);

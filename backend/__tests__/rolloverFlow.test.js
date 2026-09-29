@@ -101,4 +101,20 @@ describe('rollover flow', () => {
     // in an "approved but unchanged" state.
     expect(adminSource).toMatch(/status: 'awaiting_admin_approval', approved_at: null/);
   });
+
+  test('creating a rollover raises an actionable admin notification', () => {
+    // The admin dashboard is supposed to receive every member-actionable event.
+    // A rollover request is arguably the most actionable of all, and it was
+    // silently absent from the admin feed. Guard that the creation path calls
+    // notifyAdmins with an action_required category.
+    const start = memberSource.indexOf("logger.info(`Rollover created");
+    expect(start).toBeGreaterThan(-1);
+    const code = memberSource
+      .slice(start, start + 1200)
+      .split('\n')
+      .filter((l) => !l.trim().startsWith('//'))
+      .join('\n');
+    expect(code).toMatch(/notifyAdmins\(/);
+    expect(code).toMatch(/category: 'action_required'/);
+  });
 });

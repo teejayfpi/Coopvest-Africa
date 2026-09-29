@@ -81,4 +81,62 @@ describe('obligations paid-month rule', () => {
     );
     expect(out.total_due).toBe(17500);
   });
+
+  test('a member who joined this month is not yet due', () => {
+    const out = applyPaidMonthRule(base(), {
+      paidThisMonth: false,
+      joinedThisMonth: true,
+    });
+    expect(out.joined_this_month).toBe(true);
+    expect(out.month_paid_savings).toBe(false);
+    expect(out.savings_due).toBe(0);
+    expect(out.total_due).toBe(0);
+    // The standing amount is not "next month's" either — they simply haven't
+    // started yet, so the app should show the neutral all-caught-up copy.
+    expect(out.next_month_savings).toBe(0);
+  });
+
+  test('a new member still owes fines and fees already on their account', () => {
+    const out = applyPaidMonthRule(
+      {
+        monthly_savings: 5000,
+        loans: [],
+        fines: [{ amount: 500 }],
+        fees: [{ amount: 250 }],
+      },
+      { paidThisMonth: false, joinedThisMonth: true }
+    );
+    expect(out.savings_due).toBe(0);
+    expect(out.total_due).toBe(750);
+  });
+
+  test('paid status wins over a join date in the same month', () => {
+    const out = applyPaidMonthRule(base(), {
+      paidThisMonth: true,
+      joinedThisMonth: true,
+    });
+    expect(out.month_paid_savings).toBe(true);
+    expect(out.next_month_savings).toBe(5000);
+    expect(out.total_due).toBe(0);
+  });
+});
+
+describe('savings-month comparison', () => {
+  const { isSameMonth } = require('../src/routes/wallet');
+
+  test('treats two dates in the same calendar month as paid', () => {
+    expect(isSameMonth('2026-09-13T00:00:00Z', new Date(2026, 8, 29))).toBe(true);
+    expect(isSameMonth(new Date(2026, 8, 1), new Date(2026, 8, 30))).toBe(true);
+  });
+
+  test('a last deposit from a previous month is not this month', () => {
+    expect(isSameMonth('2026-08-31T23:59:59Z', new Date(2026, 8, 1))).toBe(false);
+    expect(isSameMonth(new Date(2026, 8, 29), new Date(2026, 9, 1))).toBe(false);
+  });
+
+  test('a missing or unparseable date never counts as paid', () => {
+    expect(isSameMonth(null, new Date(2026, 8, 29))).toBe(false);
+    expect(isSameMonth(undefined, new Date(2026, 8, 29))).toBe(false);
+    expect(isSameMonth('not-a-date', new Date(2026, 8, 29))).toBe(false);
+  });
 });

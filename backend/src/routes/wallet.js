@@ -203,25 +203,70 @@ function nextMonthKey(date = new Date()) {
   return monthKey(new Date(date.getFullYear(), date.getMonth() + 1, 1));
 }
 
+/** True when both dates fall in the same calendar month. False if either is unparseable. */
+function isSameMonth(a, b = new Date()) {
+  const da = a instanceof Date ? a : new Date(a);
+  if (Number.isNaN(da.getTime())) return false;
+  return da.getFullYear() === b.getFullYear() && da.getMonth() === b.getMonth();
+}
+
+/**
+ * Whether the member has already met this month's savings obligation.
+ *
+ * Two records can prove it, because members pay through two different flows:
+ *   - a `contributions` row for the current month (the payment-proof flow), or
+ *   - `savings.last_savings_date` in the current month (the wallet-deposit flow,
+ *     which never writes a `contributions` row).
+ *
+ * Relying on `contributions` alone marked every wallet-deposit payer as owing.
+ * Pure apart from the one lookup, so the month rule is unit-testable.
+ */
+async function hasPaidThisSavingsMonth(profileId, { lastSavingsDate, now = new Date() } = {}) {
+  if (isSameMonth(lastSavingsDate, now)) return true;
+  try {
+    const { data: paidRows } = await supabase
+      .from('contributions')
+      .select('id')
+      .eq('profile_id', profileId)
+      .eq('contribution_month', monthKey(now))
+      .in('status', PAID_CONTRIBUTION_STATUSES)
+      .limit(1);
+    return Array.isArray(paidRows) && paidRows.length > 0;
+  } catch (cErr) {
+    logger.warn('obligations: contributions lookup failed:', cErr.message);
+    return false;
+  }
+}
+
 /**
  * Apply the "paid this month" rule to an obligations object and derive the
  * amounts actually due.
  *
  * A member who has already paid this month's savings must not keep seeing that
  * money as "due" — the standing amount moves to `next_month_savings` so the app
- * can tell them what next month expects instead. Pure (no I/O) so the rule is
- * unit-testable without a database.
+ * can tell them what next month expects instead. A member who joined this month
+ * has not missed anything yet, so their savings is not due either until the
+ * first due date passes; without this a brand-new account showed as overdue.
+ * Pure (no I/O) so the rule is unit-testable without a database.
  */
-function applyPaidMonthRule(obligations, { paidThisMonth, now = new Date() } = {}) {
+function applyPaidMonthRule(
+  obligations,
+  { paidThisMonth, joinedThisMonth = false, now = new Date() } = {},
+) {
   obligations.month_paid_savings = Boolean(paidThisMonth);
+  obligations.joined_this_month = Boolean(joinedThisMonth);
   obligations.current_month = monthKey(now);
   obligations.next_month = nextMonthKey(now);
 
-  const savingsDue = obligations.month_paid_savings ? 0 : obligations.monthly_savings;
+  // A new member is not yet due; a paid member is no longer due. Either way
+  // this month's savings is not owed.
+  const savingsDue =
+    obligations.month_paid_savings || obligations.joined_this_month
+      ? 0
+      : obligations.monthly_savings;
   obligations.savings_due = savingsDue;
-  obligations.next_month_savings = obligations.month_paid_savings
-    ? obligations.monthly_savings
-    : 0;
+  obligations.next_month_savings =
+    obligations.month_paid_savings ? obligations.monthly_savings : 0;
 
   const loanMonthly = obligations.loans.reduce((s, l) => s + (Number(l.monthly_repayment) || 0), 0);
   const finesTotal = obligations.fines.reduce((s, f) => s + (Number(f.amount) || 0), 0);
@@ -249,7 +294,7 @@ async function computeObligations(profileId) {
     const [{ data: savings }, { data: plan }] = await Promise.all([
       supabase
         .from('savings')
-        .select('monthly_savings')
+        .select('monthly_savings, last_savings_date')
         .eq('profile_id', profileId)
         .maybeSingle(),
       supabase
@@ -262,6 +307,9 @@ async function computeObligations(profileId) {
       planAmount: plan?.current_monthly_amount,
       savingsAmount: savings?.monthly_savings,
     });
+    // Exposed so the app can tell "paid this month" without guessing from the
+    // contributions table, which wallet deposits do not populate.
+    obligations.last_savings_date = savings?.last_savings_date || null;
   } catch (sErr) {
     logger.warn('obligations: savings lookup failed:', sErr.message);
   }
@@ -309,22 +357,32 @@ async function computeObligations(profileId) {
   // Has this month's savings contribution already been paid? A member who has
   // paid must not keep seeing "Total due this month" — they should be shown
   // what is expected *next* month instead.
-  const thisMonth = monthKey();
-  let paidThisMonth = false;
+  //
+  // Wallet deposits (the flow most members actually use) do NOT write a
+  // `contributions` row, so checking only that table wrongly reported paid
+  // members as owing. `savings.last_savings_date` inside the current month is
+  // the reliable signal for them.
+  const paidThisMonth = await hasPaidThisSavingsMonth(profileId, {
+    lastSavingsDate: obligations.last_savings_date,
+    now: new Date(),
+  });
+
+  // A member who joined this month has no obligation until their first due
+  // date passes. Without this, a brand-new account was told its contribution
+  // was already N days overdue.
+  let joinedThisMonth = false;
   try {
-    const { data: paidRows } = await supabase
-      .from('contributions')
-      .select('id')
-      .eq('profile_id', profileId)
-      .eq('contribution_month', thisMonth)
-      .in('status', PAID_CONTRIBUTION_STATUSES)
-      .limit(1);
-    paidThisMonth = Array.isArray(paidRows) && paidRows.length > 0;
-  } catch (cErr) {
-    logger.warn('obligations: contributions lookup failed:', cErr.message);
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('created_at')
+      .eq('id', profileId)
+      .maybeSingle();
+    joinedThisMonth = isSameMonth(profile?.created_at, new Date());
+  } catch (pErr) {
+    logger.warn('obligations: profile lookup failed:', pErr.message);
   }
 
-  return applyPaidMonthRule(obligations, { paidThisMonth });
+  return applyPaidMonthRule(obligations, { paidThisMonth, joinedThisMonth });
 }
 
 /**
@@ -995,3 +1053,4 @@ module.exports.computeObligations = computeObligations;
 module.exports.applyPaidMonthRule = applyPaidMonthRule;
 module.exports.monthKey = monthKey;
 module.exports.nextMonthKey = nextMonthKey;
+module.exports.isSameMonth = isSameMonth;

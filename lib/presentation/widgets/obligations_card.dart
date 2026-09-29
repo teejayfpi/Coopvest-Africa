@@ -50,10 +50,14 @@ class ObligationsCard extends ConsumerWidget {
         // standing amount moves to the next-month expectation instead, so a
         // member who has paid is not told they still owe this month's money.
         final paidThisMonth = data['month_paid_savings'] == true;
+        // A member who joined this month has no obligation until their first
+        // due date passes; showing ₦5,000 due would read as an instant arrears.
+        final joinedThisMonth = data['joined_this_month'] == true;
         final currentMonth = data['current_month']?.toString() ?? '';
         final nextMonthSavings =
             (data['next_month_savings'] as num?)?.toDouble() ?? 0.0;
-        final savingsDue = paidThisMonth ? 0.0 : monthlyContribution;
+        final savingsDue =
+            (paidThisMonth || joinedThisMonth) ? 0.0 : monthlyContribution;
         final nextMonthExpected =
             (nextMonthSavings > 0 ? nextMonthSavings : monthlyContribution) +
                 monthlyLoanRepayment;
@@ -95,7 +99,9 @@ class ObligationsCard extends ConsumerWidget {
                       Text(
                         paidThisMonth
                             ? "You've paid for ${_monthLabel(currentMonth)}"
-                            : "You're all caught up",
+                            : joinedThisMonth
+                                ? 'Welcome to Coopvest'
+                                : "You're all caught up",
                         style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w500,
@@ -106,7 +112,9 @@ class ObligationsCard extends ConsumerWidget {
                       Text(
                         paidThisMonth
                             ? 'Expected next month: \u20a6${nextMonthExpected.formatNumber()}'
-                            : 'No contributions or repayments due.',
+                            : joinedThisMonth
+                                ? 'Your first contribution will be due on your chosen day next month.'
+                                : 'No contributions or repayments due.',
                         style: TextStyle(
                           fontSize: 12,
                           color: context.textSecondary,

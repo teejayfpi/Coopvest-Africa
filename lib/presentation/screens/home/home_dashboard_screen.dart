@@ -13,6 +13,7 @@ import '../../../presentation/providers/auth_provider.dart';
 import '../../../presentation/providers/wallet_provider.dart';
 import '../../../presentation/providers/loan_provider.dart';
 import '../../../presentation/providers/contributions/contribution_provider.dart';
+import '../../../presentation/providers/contributions/contribution_settings_provider.dart';
 import '../../../presentation/providers/notifications_provider.dart';
 import 'notifications_screen.dart';
 import '../../../core/services/realtime_notification_service.dart';
@@ -150,7 +151,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
       ref.read(walletProvider.notifier).loadTransactions(page: 1, pageSize: 5);
 
       // Check and send contribution reminders after data is loaded
-      _checkContributionReminders();
+      unawaited(_checkContributionReminders());
     } catch (e) {
       if (mounted) {
         debugPrint('Error loading dashboard data: $e');
@@ -158,27 +159,41 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
     }
   }
 
-  void _checkContributionReminders() {
+  Future<void> _checkContributionReminders() async {
     final user = ref.read(currentUserProvider);
     final walletState = ref.read(walletProvider);
     final contributionState = ref.read(contributionProvider);
 
     if (user == null) return;
 
-    // Get user's contribution method from settings
-    // Default to 'manual' if not set (assume manual until proven payroll)
-    const contributionMethod = 'manual';
-    
-    // Use defaults - backend will have accurate user preferences
-    const preferredDay = 5; // Default to 5th of month
-    const monthlyAmount = 5000.0; // Minimum contribution
+    // Real settings, not the old hardcoded 5th / NGN5,000. Falls back to the
+    // minimum when the member has not chosen yet.
+    ContributionSettings settings;
+    try {
+      settings = await ref.read(contributionSettingsProvider.future);
+    } catch (_) {
+      settings = const ContributionSettings();
+    }
 
-    // Use singleton service
+    final isPayroll = user.onSalaryDeduction || settings.method == 'payroll';
+    final preferredDay = settings.preferredDay ?? 5;
+    final monthlyAmount = settings.monthlyAmount ?? 5000.0;
+
+    // The server knows whether this month is settled (it counts wallet-deposit
+    // payments too, which the contributions table does not) and whether the
+    // member joined this month. Both stop a false "overdue" nudge.
+    final obligations = await _readObligations();
+    final paidThisMonth = obligations?['month_paid_savings'] == true;
+    final isNewMember = _joinedThisMonth(user.createdAt);
+
     contributionReminderService.checkAndSendReminders(
       contributions: contributionState.contributions,
       monthlyAmount: monthlyAmount,
       preferredDay: preferredDay,
       totalSavings: walletState.wallet?.totalContributions ?? 0.0,
+      paidThisMonth: paidThisMonth,
+      isNewMember: isNewMember,
+      isPayroll: isPayroll,
     );
 
     // Sync status with backend for cron job processing
@@ -187,8 +202,23 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
       contributions: contributionState.contributions,
       monthlyAmount: monthlyAmount,
       preferredDay: preferredDay,
-      contributionMethod: contributionMethod,
+      contributionMethod: isPayroll ? 'payroll' : 'manual',
     );
+  }
+
+  /// Best-effort read of the server's obligations object. Returns null when the
+  /// call fails so a reminder can still be evaluated with local data.
+  Future<Map<String, dynamic>?> _readObligations() async {
+    try {
+      return await ref.read(obligationsProvider.future);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static bool _joinedThisMonth(DateTime createdAt) {
+    final now = DateTime.now();
+    return createdAt.year == now.year && createdAt.month == now.month;
   }
 
   @override
