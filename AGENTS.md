@@ -141,6 +141,28 @@ which calls `getOrCreatePlan`.
   (INSERT on `notifications` with `profile_id = userId`) never fires.
   Migration `029_notifications_realtime.sql` does this (applied via Mgmt API).
 - `feature_flag.notifications` = `true` live (fail-open if missing) — not the issue.
+
+## Admin notifications are push-based now (mobile + website → dashboard)
+
+`notifyService.notifyAdmins()` is the single entry point for anything that
+should reach admins. It looks up every `profiles` row whose `role` is in
+`['admin','super_admin','superadmin','staff','operator']` (mirrors the
+`is_staff()` RLS helper) and fans out in-app + FCM push, with an optional
+email (via `alertService`, non-fatal). Never throws — callers have already
+persisted the underlying record, so a notification failure must not fail the
+request.
+
+Wired to: website contact form (`routes/contact.js` — the enquiry now lights
+the bell instead of waiting for the 30s Website-Enquiries poll), support
+tickets (`routes/tickets.js`), loan applications (`routes/loans.js`), KYC
+submissions (`routes/kyc.js`), and the existing org-approval request.
+
+`GET /api/admin/notifications` is scoped to admin profile_ids and returns a
+true `unreadCount`; `POST .../read-all` is scoped the same way. The admin
+dashboard (`Admin-Dashboard/src/hooks/use-admin-notifications.ts`) subscribes
+to `postgres_changes` on its own `profile_id` for instant bell updates, plays
+a sound, and shows an opt-in desktop notification.
+
 ## Monthly contribution is the obligations source of truth
 `contribution_plans.current_monthly_amount` is the single source of truth for
 a member's monthly savings. `savings.monthly_savings` is a denormalised mirror
@@ -277,6 +299,27 @@ data the server already holds. Covered by
 `₦100150000.00` next to the header's `₦100,150,000`. Use the shared formatter —
 import it with `show Formatters` in files that also need string extensions, to
 avoid an ambiguous-extension clash with `capitalize`.
+
+## Live payment + push config (as of 2026-09-28)
+
+`coopvest-api` (srv-d735htpr0fns73996big) now has `PAYSTACK_SECRET_KEY` and the
+`FIREBASE_PROJECT_ID`/`FIREBASE_CLIENT_EMAIL`/`FIREBASE_PRIVATE_KEY` trio set —
+16 vars total. Before that, `POST /payments/initialize` and
+`bank-accounts/verify` returned 503 "Paystack is not configured on the server"
+and every push was skipped as `no_firebase_credentials`. Firebase project is
+`coopvest-africa-46a86` (same one the mobile `google-services.json` points at).
+
+Still unset (feature coded but dormant): `CONTACT_NOTIFY_TO` (website-enquiry
+heads-up email — `RESEND_API_KEY` already works so this is the only missing
+piece), `ALERT_EMAIL_RECIPIENTS` (security alerts; and that path uses SMTP,
+which the Render free plan blocks anyway), `CONTACT_INGEST_TOKEN`. Firebase is
+set but push still needs a member to sign into the mobile app so
+`POST /api/v1/notifications/fcm-token` writes a `device_tokens` row.
+
+Quick liveness probe for the Paystack key without credentials: `POST
+/api/v1/payments/webhook` returns 401 (key loaded → signature mismatch) when
+configured, 503 when not.
+
 
 ## Render env vars are replaced, not merged
 

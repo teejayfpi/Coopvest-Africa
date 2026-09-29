@@ -16,6 +16,7 @@ const validate = require('../middleware/validate');
 const { verifyLoanOwnership } = require('../middleware/ownership');
 const referralService = require('../services/referralService');
 const qrCodeService = require('../services/qrCodeService');
+const notifyService = require('../services/notifyService');
 const loanPolicy = require('../lib/loanPolicy');
 const logger = require('../utils/logger');
 
@@ -254,6 +255,17 @@ router.post(
       }
 
       await auditLog(profileId, 'LOAN_APPLIED', loan.id, { loanType, amount, bonusPercent, agreementAccepted: true });
+
+      // Surface the new application in the admin notification feed; previously a
+      // loan application produced no admin-facing notification, only a row in the
+      // Loans queue.
+      await notifyService.notifyAdmins({
+        title: 'New Loan Application',
+        body: `${req.user.email || 'A member'} applied for a ${loanType} of ₦${Number(amount).toLocaleString('en-NG')} (${tenureMonths} months).`,
+        type: 'loan',
+        category: 'action_required',
+        priority: 'high',
+      });
 
       res.status(201).json({
         success: true,

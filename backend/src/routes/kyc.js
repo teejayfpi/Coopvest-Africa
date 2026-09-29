@@ -15,6 +15,7 @@ const supabase = require('../config/supabase');
 const { authenticate } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const logger = require('../utils/logger');
+const notifyService = require('../services/notifyService');
 const { ageInYears, normalizeDateOfBirth, MIN_AGE_YEARS } = require('../services/registrationMerge');
 
 // In-memory file upload (10 MB max) — the file is streamed straight into
@@ -409,6 +410,16 @@ router.post(
       }
 
       res.json({ success: true, kyc: data });
+
+      // Alert admins that a KYC submission is waiting for review. Fired after
+      // the response so a notification failure cannot affect the member.
+      notifyService.notifyAdmins({
+        title: 'New KYC Submission',
+        body: `${req.user.email || 'A member'} submitted their KYC documents for verification.`,
+        type: 'kyc',
+        category: 'action_required',
+        priority: 'high',
+      }).catch((err) => logger.warn('kyc submit: admin notify failed (non-fatal):', err.message));
     } catch (err) {
       logger.error('kyc submit error:', err);
       res.status(500).json({ success: false, error: err.message });

@@ -477,7 +477,7 @@ async function notifyRolloverGuarantorReplaced({
 /**
  * High-level fan-out: deliver to multiple profiles across multiple channels.
  */
-async function broadcast({ profileIds, channels = ['in_app'], title, body, subject, type }) {
+async function broadcast({ profileIds, channels = ['in_app'], title, body, subject, type, category, priority = 'normal' }) {
   const results = [];
 
   for (const pid of profileIds) {
@@ -490,7 +490,7 @@ async function broadcast({ profileIds, channels = ['in_app'], title, body, subje
     if (!profile) continue;
 
     if (channels.includes('in_app')) {
-      results.push(await sendInApp({ profileId: pid, title, body, type }));
+      results.push(await sendInApp({ profileId: pid, title, body, type, category, priority }));
     }
     if (channels.includes('email') && profile.email) {
       results.push(await sendEmail({ to: profile.email, subject: subject || title, text: body }));
@@ -504,6 +504,116 @@ async function broadcast({ profileIds, channels = ['in_app'], title, body, subje
   }
 
   return results;
+}
+
+// ── Admin notifications ───────────────────────────────────────────────────────
+
+/**
+ * Mirrors the role list used in migration 012 for `admin_staff`. Notifications
+ * are addressed to a `profiles.id`; only real profiles (not staff-only rows)
+ * have one.
+ */
+const ADMIN_ROLES = ['admin', 'super_admin', 'superadmin', 'staff', 'operator'];
+
+/**
+ * Fetch the profiles of every active admin/staff member.
+ *
+ * Shared by every admin-facing notification so the recipient set is defined in
+ * exactly one place. Returns `[]` (never throws) when the lookup fails.
+ */
+async function getAdminRecipients() {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, email')
+    .in('role', ADMIN_ROLES);
+  if (error) {
+    logger.warn('notifyService.getAdminRecipients failed:', error.message);
+    return [];
+  }
+  return data || [];
+}
+
+/**
+ * Heads-up email for an admin-relevant event.
+ *
+ * Reuses `alertService` (SMTP/Resend). No-op when `ALERT_EMAIL_RECIPIENTS` is
+ * unset, and always non-fatal so a mail failure never blocks the action that
+ * triggered it. `riskLevel: 'INFO'` keeps it out of `sendCriticalAlert`'s
+ * high/critical filter while still sending the email.
+ */
+async function emailAdmins({ title, message }) {
+  const recipients = (process.env.ALERT_EMAIL_RECIPIENTS || '')
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean);
+  if (recipients.length === 0) return;
+  try {
+    await alertService.sendEmailAlert({
+      title,
+      message,
+      auditId: 'admin-notify',
+      userId: null,
+      riskLevel: 'INFO',
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    logger.warn('notifyService.emailAdmins failed (non-fatal):', err.message);
+  }
+}
+
+/**
+ * Tell every admin/staff member about something that needs their attention —
+ * e.g. a website enquiry, a support ticket, a loan application or a KYC
+ * submission.
+ *
+ * Delivers in-app + FCM push (best effort; push is skipped without Firebase
+ * credentials) and an optional heads-up email. Never throws: the caller has
+ * usually already persisted the underlying record, so a notification failure
+ * must not fail the request.
+ *
+ * @param {object}  opts
+ * @param {string}  opts.title       notification title
+ * @param {string}  opts.body        notification body
+ * @param {string}  [opts.type]      rich event type (normalised per notification)
+ * @param {string}  [opts.category]  UI severity (info/warning/success/action_required)
+ * @param {string}  [opts.priority]  low | normal | high | urgent
+ * @param {boolean} [opts.email]     also send the heads-up email (default false)
+ * @param {string}  [opts.emailHtml] HTML body for the email (defaults to `body`)
+ */
+async function notifyAdmins({
+  title,
+  body,
+  type = 'system',
+  category = 'info',
+  priority = 'normal',
+  email = false,
+  emailHtml,
+}) {
+  try {
+    const admins = await getAdminRecipients();
+    if (admins.length === 0) {
+      logger.info('notifyService.notifyAdmins: no admin profiles found');
+      return { admins: 0 };
+    }
+
+    await broadcast({
+      profileIds: admins.map((a) => a.id),
+      channels: ['in_app', 'push'],
+      title,
+      body,
+      type,
+      category,
+      priority,
+    });
+
+    if (email) {
+      await emailAdmins({ title, message: emailHtml || body });
+    }
+    return { admins: admins.length };
+  } catch (err) {
+    logger.warn('notifyService.notifyAdmins failed (non-fatal):', err.message);
+    return { admins: 0, error: err.message };
+  }
 }
 
 // ── Payment Proof Notifications ─────────────────────────────────────────────
@@ -613,40 +723,15 @@ async function notifyAdminsOrganizationApprovalRequest({ profileId, memberName, 
   const title = 'Organization Approval Requested';
   const body = `${memberName} has asked to contribute by salary deduction and needs "${organizationName}" enrolled as a partner organisation.`;
 
-  const { data: admins } = await supabase
-    .from('profiles')
-    .select('id, email')
-    .in('role', ['admin', 'super_admin', 'superadmin', 'staff', 'operator']);
-
-  if (!admins || admins.length === 0) {
-    logger.info('notifyAdminsOrganizationApprovalRequest: no admin profiles found');
-    return;
-  }
-
-  const profileIds = admins.map((a) => a.id);
-  const adminEmails = admins.map((a) => a.email).filter(Boolean);
-
-  await broadcast({
-    profileIds,
-    channels: ['in_app', 'push'],
+  const { admins } = await notifyAdmins({
     title,
     body,
     type: 'organization_approval',
+    category: 'action_required',
+    email: true,
+    emailHtml: `${body}<br><br>Member ID: <code>${profileId}</code>`,
   });
-
-  if (adminEmails.length > 0) {
-    await alertService.sendEmailAlert({
-      title: `🏢 ${title}`,
-      message: `${body}<br><br>Member ID: <code>${profileId}</code>`,
-      auditId: `org-approval-${profileId}`,
-      userId: profileId,
-      riskLevel: 'INFO',
-      timestamp: new Date().toISOString(),
-      metadata: { organizationName },
-    }).catch((err) => logger.warn('Org approval admin email failed (non-fatal):', err.message));
-  }
-
-  logger.info(`Organization approval notification sent to ${profileIds.length} admin(s)`);
+  logger.info(`Organization approval notification sent to ${admins} admin(s)`);
 }
 
 /**
@@ -729,4 +814,12 @@ module.exports = {
   // Salary deduction / organisation remittance
   notifyAdminsOrganizationApprovalRequest,
   notifySalaryDeductionContributionPosted,
+  // Admin fan-out
+  getAdminRecipients,
+  notifyAdmins,
+  // Exported for tests — the type coercion is what stops an invalid value
+  // tripping the notifications_type_check constraint and silently dropping an
+  // admin alert (deposit/withdrawal used to do exactly that).
+  normalizeNotifType,
+  normalizeNotifCategory,
 };
