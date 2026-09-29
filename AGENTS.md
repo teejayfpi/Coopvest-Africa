@@ -248,6 +248,36 @@ increase/reduction re-fetches it; `home_dashboard_screen._loadData()` and the
 loan dashboard's pull-to-refresh also `ref.invalidate(obligationsProvider)`.
 Do not remove these — without them the card silently goes stale again.
 
+## A failed charge that debited the member must not vanish
+
+Paystack can fail a card charge *after* the member's bank authorised or debited
+it (`charge.failed` debit-on-hold, and `transfer.reversed`). The old flow only
+understood `charge.success`, so those references sat at
+`payment_proofs.status = 'pending'` forever, the app showed an indefinite
+"Payment not confirmed yet", and nothing recorded that money may have left the
+member's account. Support could not tell "never paid" from "debited but not
+credited".
+
+`handleFailedCharge` (`backend/src/routes/payments.js`) is now shared by the
+webhook, `GET /payments/verify/:reference`, and the reconcile sweep
+(`failedChargeReconcileWorker.js`, every 30 min). Rules that must not regress:
+
+* `classifyFailure` (`src/lib/paystackCharge.js`) is the single source of truth:
+  `reversed`/`failed` ⇒ `possibleDebit = true` and an admin alert; `abandoned`
+  ⇒ recorded, member told, **no** admin alarm (no money moved).
+* A charge already `approved` is never flipped to `failed` — a failure event
+  trailing a real success would tell the member their credited money is gone. It
+  raises a "failure after credit" admin alert instead.
+* `verifyCharge` returning `ok = false` means Paystack was unreachable, **not**
+  that the payment failed. Leave the row pending and retry; never treat a
+  transport error as a decline.
+* Every failure writes to `payment_failed_charges` (migration 050), unique on
+  reference+status. Admins work the queue at `GET /api/admin/payments/failed`
+  and close it with `PATCH /api/admin/payments/failed/:id/resolve` (a note is
+  required — this touches member money).
+* Nothing auto-refunds. Whether to credit or refund is a human/policy decision;
+  the system's job is to surface it and never lose it.
+
 ## "Paid this month" must count wallet deposits, and new members are not overdue
 Wallet deposits (`wallet_deposit`/manual deposit flow) do **not** write a
 `contributions` row — they update `savings.last_savings_date` and mirror a
