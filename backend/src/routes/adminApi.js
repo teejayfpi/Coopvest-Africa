@@ -1773,6 +1773,128 @@ router.get('/deposits', async (req, res) => {
 });
 
 /**
+ * GET /api/admin/payments/failed
+ *
+ * Charges the gateway reported as failed. When the member's bank may already
+ * have been debited these need a human: credit the member or confirm the
+ * reversal. Defaults to the open (unresolved) queue; `?all=1` returns history.
+ */
+router.get('/payments/failed', async (req, res) => {
+  try {
+    const { page, limit, from, to } = paging(req);
+    let q = supabase
+      .from('payment_failed_charges')
+      .select('*, profile:profiles!profile_id(id, user_id, name, email, phone)', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(from, to);
+    if (!req.query.all) q = q.is('resolved_at', null);
+    if (req.query.needsFollowup === '1') q = q.eq('needs_followup', true);
+    if (req.query.reference) q = q.eq('reference', req.query.reference);
+
+    const { data, error, count } = await q;
+    if (error) throw error;
+
+    const rows = (data || []).map((r) => {
+      const p = r.profile || {};
+      return {
+        id: r.id,
+        memberId: p.user_id || r.profile_id,
+        memberName: p.name || '',
+        memberEmail: p.email || null,
+        memberPhone: p.phone || null,
+        amount: Number(r.amount || 0),
+        reference: r.reference,
+        gateway: r.gateway,
+        gatewayStatus: r.gateway_status,
+        gatewayMessage: r.gateway_message || null,
+        possibleDebit: Boolean(r.possible_debit),
+        needsFollowup: Boolean(r.needs_followup),
+        resolvedAt: r.resolved_at || null,
+        resolutionNote: r.resolution_note || null,
+        date: r.created_at,
+        createdAt: r.created_at,
+      };
+    });
+
+    res.json({
+      success: true,
+      data: rows,
+      failedCharges: rows,
+      total: count || 0,
+      page,
+      limit,
+      totalPages: Math.max(1, Math.ceil((count || 0) / limit)),
+      pagination: { page, limit, total: count || 0 },
+    });
+  } catch (err) {
+    logger.error('admin failed-charges list error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/admin/payments/failed/summary
+ */
+router.get('/payments/failed/summary', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('payment_failed_charges')
+      .select('id, amount, possible_debit, resolved_at');
+    if (error) throw error;
+    const all = data || [];
+    const open = all.filter((r) => !r.resolved_at);
+    const debits = open.filter((r) => r.possible_debit);
+    res.json({
+      success: true,
+      data: {
+        totalCount: all.length,
+        openCount: open.length,
+        possibleDebitCount: debits.length,
+        possibleDebitAmount: debits.reduce((s, r) => s + Number(r.amount || 0), 0),
+      },
+    });
+  } catch (err) {
+    logger.error('admin failed-charges summary error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * PATCH /api/admin/payments/failed/:id/resolve
+ * Body: { resolutionNote }
+ *
+ * Closes a follow-up once an admin has checked the bank and credited or
+ * confirmed the reversal. Records who did it — this touches member money, so
+ * "resolved" without a name and a note is not acceptable.
+ */
+router.patch('/payments/failed/:id/resolve', async (req, res) => {
+  try {
+    const note = (req.body && (req.body.resolutionNote || req.body.note)) || null;
+    if (!note) return res.status(400).json({ success: false, error: 'resolutionNote is required' });
+
+    const now = new Date().toISOString();
+    const { data, error } = await supabase
+      .from('payment_failed_charges')
+      .update({
+        resolved_at: now,
+        resolved_by: req.user.id,
+        resolution_note: note,
+        needs_followup: false,
+      })
+      .eq('id', req.params.id)
+      .select('*')
+      .single();
+    if (error) throw error;
+
+    await logAdminAction('FAILED_CHARGE_RESOLVED', { model: 'payment_failed_charges', id: req.params.id }, { note }, req);
+    res.json({ success: true, failedCharge: data });
+  } catch (err) {
+    logger.error('admin failed-charge resolve error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * GET /api/admin/deposits/summary
  */
 router.get('/deposits/summary', async (req, res) => {
