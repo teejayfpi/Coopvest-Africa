@@ -9,7 +9,7 @@ const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const multer = require('multer');
 const supabase = require('../config/supabase');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, requireRegistrationPaid } = require('../middleware/auth');
 const logger = require('../utils/logger');
 
 const AVATAR_BUCKET = process.env.AVATAR_BUCKET || 'kyc-documents';
@@ -219,7 +219,7 @@ router.put('/password', authenticate, [
  * GET /api/v1/user/dashboard
  * Get user dashboard data from Supabase
  */
-router.get('/dashboard', authenticate, async (req, res) => {
+router.get('/dashboard', authenticate, requireRegistrationPaid, async (req, res) => {
   try {
     const { userId } = req.user;
 

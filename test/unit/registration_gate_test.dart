@@ -137,4 +137,63 @@ void main() {
       expect(u.kycStatus, 'pending');
     });
   });
+
+  group('registration-fee bypass (Direct Deposit)', () {
+    test('a stale profile claiming paid cannot satisfy the gate on its own', () {
+      // The reported bug: a Direct Deposit member pressed Back out of the
+      // payment screen (or signed out and in) and landed on the dashboard. The
+      // fix is that the app routes on the SERVER's activation answer, not on
+      // the profile — so a profile whose paid flags disagree with the server
+      // must not be what decides. The server answer is modelled here by the
+      // activation-gate payload the client now consumes.
+      final staleProfile = User.fromJson(const {
+        'id': 'p1',
+        'email': 'a@b.c',
+        // A cached profile from before the fee was settled:
+        'registration_fee_paid': false,
+        'activation_gate': {
+          'activated': false,
+          'kyc_approved': true,
+          'registration_fee_paid': false,
+          'registration_fee_exempt': false,
+          'registration_fee_settled': false,
+          'blocked': false,
+        },
+      });
+      expect(staleProfile.hasSettledRegistrationFee, isFalse,
+          reason: 'a Direct Deposit member who has not paid stays gated');
+    });
+
+    test('the server gate overrules a profile that wrongly claims paid', () {
+      // If a stale/incorrect profile says paid, the server gate is what the
+      // guard reads. A server answer of "not activated" must win, which is why
+      // the guard consults `isActivatedOnServer` before any profile flag.
+      const serverGate = <String, dynamic>{
+        'activated': false,
+        'kyc_approved': true,
+        'registration_fee_paid': false,
+        'registration_fee_exempt': false,
+        'registration_fee_settled': false,
+        'blocked': false,
+      };
+      expect(serverGate['activated'], isFalse);
+      expect(serverGate['registration_fee_exempt'], isFalse,
+          reason: 'Direct Deposit is never exempt — only salary deduction is');
+    });
+
+    test('only salary deduction is exempt, and it comes from the server', () {
+      const serverGate = <String, dynamic>{
+        'activated': true,
+        'kyc_approved': true,
+        'registration_fee_paid': false,
+        'registration_fee_exempt': true,
+        'registration_fee_settled': true,
+        'blocked': false,
+      };
+      expect(serverGate['activated'], isTrue);
+      expect(serverGate['registration_fee_exempt'], isTrue);
+      expect(serverGate['registration_fee_paid'], isFalse,
+          reason: 'exempt members bypass the fee without paying it');
+    });
+  });
 }

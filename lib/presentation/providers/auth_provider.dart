@@ -189,6 +189,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
     } catch (e) {
       logger.e('Refresh current user error: $e');
     }
+    // Re-ask the server so the gate reflects the payment immediately; without
+    // this a member who just paid would keep seeing the activation screen
+    // until the next launch or resume.
+    await refreshGateStatus();
   }
 
   /// Logout — Firebase sign-out + backend token revocation
@@ -197,6 +201,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       await _authRepository.logout();
       _apiClient.clearAuthToken();
+      clearGateStatus();
       state = const AuthState(status: AuthStatus.unauthenticated);
     } catch (e) {
       logger.e('Logout error: $e');
@@ -251,6 +256,59 @@ class AuthNotifier extends StateNotifier<AuthState> {
       return false;
     }
   }
+
+  /// The server's registration-fee gate decision for the signed-in member, or
+  /// null when it could not be fetched.
+  bool? _feeSettledOnServer;
+
+  /// Server-derived registration-fee decision; null until [refreshGateStatus]
+  /// succeeds.
+  ///
+  /// This is the fee flag, not the full `activated` flag: the dashboard is
+  /// deliberately not gated on KYC approval (members can see their own money
+  /// while KYC is reviewed), and routing on `activated` would reintroduce that
+  /// block. It mirrors `requireRegistrationPaid` in the backend.
+  bool? get isFeeSettledOnServer => _feeSettledOnServer;
+
+  /// Ask the server whether this member's registration fee is settled (paid, or
+  /// exempt for salary deduction).
+  ///
+  /// Needed because the reachable gate must not trust a stale profile: a
+  /// Direct Deposit member could otherwise be dropped on the dashboard by a
+  /// back-press or a re-login. Returns whether the call succeeded, so the
+  /// caller can fail closed rather than assume settlement.
+  ///
+  /// The wire shape mirrors `gateStatusFor` in the backend, whose
+  /// `registration_fee_settled` field is exactly what `requireRegistrationPaid`
+  /// enforces — so the app does not re-derive the exemption client-side.
+  Future<bool> refreshGateStatus() async {
+    try {
+      final gate = await _authRepository.getHomeStatus();
+      _feeSettledOnServer = gate['registration_fee_settled'] as bool? ?? false;
+      state = state.copyWith(
+        user: state.user?.copyWith(
+          registrationFeePaid: gate['registration_fee_paid'] as bool? ?? false,
+          registrationFeeSettled:
+              gate['registration_fee_settled'] as bool? ?? false,
+          registrationFeeExempt:
+              gate['registration_fee_exempt'] as bool? ?? false,
+        ),
+      );
+      return true;
+    } catch (e) {
+      logger.w('Gate status unavailable: $e');
+      // Report failure WITHOUT discarding a decision confirmed earlier in this
+      // session. The caller fails closed on the first check of a member (no
+      // decision yet) but a later transient failure must not evict a member who
+      // has already been confirmed — that would strand paying members on the
+      // activation screen every time the network hiccups.
+      return false;
+    }
+  }
+
+  /// Clear the cached gate decision on sign-out so it cannot leak across
+  /// accounts — the next member to sign in on this device must be asked again.
+  void clearGateStatus() => _feeSettledOnServer = null;
 
   /// Email verification — sends a verification email via Firebase
   Future<void> verifyEmail(String code) async {

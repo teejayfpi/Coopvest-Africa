@@ -19,7 +19,16 @@ import '../screens/membership/account_activation_screen.dart';
 class AuthGuard extends ConsumerStatefulWidget {
   final Widget child;
 
-  const AuthGuard({super.key, required this.child});
+  /// Rendered instead of [child] when the member is NOT authenticated.
+  ///
+  /// Defaults to [child], which is correct for the root guard whose child
+  /// handles the signed-out state itself (WelcomeScreen). It must be set when
+  /// the guard wraps a screen that must never be shown while signed out — e.g.
+  /// the `/home` route, whose child is the dashboard: returning that child on
+  /// sign-out would flash the dashboard at a member who just logged out.
+  final Widget? signedOutChild;
+
+  const AuthGuard({super.key, required this.child, this.signedOutChild});
 
   @override
   ConsumerState<AuthGuard> createState() => _AuthGuardState();
@@ -31,7 +40,41 @@ class _AuthGuardState extends ConsumerState<AuthGuard> {
   int _silentRetryCount = 0;
   static const int _maxSilentRetries = 3;
 
-    /// Retry the KYC fetch quietly after a delay (gives a cold-starting backend
+  /// Server gate checks started while no decision was available yet.
+  int _gateAttempts = 0;
+
+  /// True while a gate request is in flight, so concurrent builds do not each
+  /// fire one and burn through [_maxGateAttempts] before the first reply lands.
+  bool _gateCheckInFlight = false;
+
+  /// How many times the guard will wait on the server before falling back to
+  /// the profile flag from the last `/auth/me`. Two absorbs a normal Render
+  /// cold start without stranding a member on a spinner when the backend is
+  /// genuinely unreachable.
+  static const int _maxGateAttempts = 2;
+
+  /// Ask the server for its activation-gate decision, at most [_maxGateAttempts]
+  /// times, and rebuild once it lands.
+  ///
+  /// The guard re-runs this on every (re)build, and the guard is rebuilt by the
+  /// paths a member can use to escape the payment screen — pressing back,
+  /// relaunching the app, or signing in again — plus every return from
+  /// background. That is what makes the gate non-skippable: it never trusts the
+  /// route it was handed or a stale profile; it re-asks.
+  void _requestGateCheck() {
+    if (_gateCheckInFlight) return;
+    if (_gateAttempts >= _maxGateAttempts) return;
+    _gateAttempts++;
+    _gateCheckInFlight = true;
+    Future.microtask(() async {
+      if (!mounted) return;
+      await ref.read(authProvider.notifier).refreshGateStatus();
+      _gateCheckInFlight = false;
+      if (mounted) setState(() {});
+    });
+  }
+
+  /// Retry the KYC fetch quietly after a delay (gives a cold-starting backend
   /// time to wake). Silent retries never toggle the provider's loading status,
   /// so the dashboard stays on screen instead of flashing a spinner.
   void _scheduleSilentKycRetry() {
@@ -51,9 +94,11 @@ class _AuthGuardState extends ConsumerState<AuthGuard> {
     final authState = ref.watch(authProvider);
     final user = authState.user;
 
-    // If not authenticated, show the child (WelcomeScreen)
+    // If not authenticated, show the signed-out child (defaults to widget.child,
+    // which is WelcomeScreen at the root).
     if (!authState.isAuthenticated) {
-      return widget.child;
+      _gateAttempts = 0;
+      return widget.signedOutChild ?? widget.child;
     }
 
     // NOTE: there is deliberately no `registrationCompleted` gate here.
@@ -87,7 +132,11 @@ class _AuthGuardState extends ConsumerState<AuthGuard> {
     // split (requireRegistrationPaid on wallet/savings, requireActivated on
     // loans), so the client gate matches what the API will actually allow.
     final activation = _activationGate(user);
-    if (activation == _ActivationStage.feePending) {
+    if (activation == _GateDecision.checking) {
+      // No decision yet — wait for the server's answer rather than guessing.
+      return const _GateLoadingScreen();
+    }
+    if (activation == _GateDecision.feePending) {
       return const AccountActivationScreen();
     }
 
@@ -109,42 +158,63 @@ class _AuthGuardState extends ConsumerState<AuthGuard> {
     return widget.child;
   }
 
-  /// Determines the membership-activation stage from the profile alone.
+  /// Determines the membership-activation stage from the server's
+  /// registration-fee decision, falling back to the profile only if the server
+  /// stays unreachable.
   ///
-  /// The activation screen only renders when the *backend* confirms KYC is
-  /// approved (kyc_verified) but the registration fee is not yet settled. A
-  /// member whose KYC is merely submitted-but-awaiting-approval, or a profile
-  /// that is 'unknown' (backend unreachable) is NOT routed here — we must never
-  /// block an existing member behind a stale/ambiguous flag.
-  _ActivationStage _activationGate(User? user) {
-    if (user == null) return _ActivationStage.active;
-    // Callers reach this gate only once the member has SUBMITTED KYC. The
-    // registration fee gates dashboard access — members pay it right after
-    // KYC, and the admin then verifies KYC + payment together. Gating on
-    // admin approval here would let unpaid members onto the dashboard while
-    // their KYC awaits review.
-    //
-    // Salary-deduction members are exempt: their fee is recovered from salary by
-    // their employer and remitted with their contributions, so sending them to
-    // the in-app payment screen would demand money through a channel that isn't
-    // theirs. `hasSettledRegistrationFee` covers paid *and* exempt; the backend
-    // derives the exemption in its activation gate, so this routes on exactly
-    // the decision the server enforces rather than a second, client-side rule.
-    if (!user.hasSettledRegistrationFee) {
-      return _ActivationStage.feePending;
+  /// The activation screen only renders when the registration fee is not
+  /// settled. Salary-deduction members are exempt: their fee is recovered from
+  /// salary by their employer and remitted with their contributions, so sending
+  /// them to the in-app payment screen would demand money through a channel
+  /// that isn't theirs.
+  ///
+  /// The decision comes from the server (`GET /app/home-status`), not the
+  /// profile, because the profile can be stale in exactly the situation this
+  /// gate defends against: a Direct Deposit member who pressed back out of the
+  /// payment screen, or signed out and in again, can hold a cached profile
+  /// whose `registration_fee_paid` no longer matches the server. The server
+  /// derives the salary-deduction exemption itself, so the app never applies a
+  /// second, client-side rule.
+  _GateDecision _activationGate(User? user) {
+    final serverDecision = ref.read(authProvider.notifier).isFeeSettledOnServer;
+
+    if (serverDecision == null) {
+      // No server answer yet: ask, and wait. Two cold-start attempts are
+      // absorbed; after that, if the backend is still unreachable, fall back to
+      // the profile flag so a paying member on a bad network is not stranded.
+      if (_gateAttempts < _maxGateAttempts) {
+        _requestGateCheck();
+        return _GateDecision.checking;
+      }
+      return (user?.hasSettledRegistrationFee ?? false)
+          ? _GateDecision.active
+          : _GateDecision.feePending;
     }
-    return _ActivationStage.active;
+
+    return serverDecision ? _GateDecision.active : _GateDecision.feePending;
   }
 
 }
 
-/// Membership-activation stages used by AuthGuard to decide between the
-/// dashboard, the KYC flow, and the Account Activation (registration fee) screen.
-enum _ActivationStage {
-  /// KYC submitted but the registration fee isn't settled → Account
-  /// Activation screen.
+/// Result of the registration-fee gate.
+enum _GateDecision {
+  /// Waiting on the server's activation answer.
+  checking,
+  /// Registration fee not settled and no exemption → Account Activation screen.
   feePending,
-  /// Fee settled (KYC approval is verified together with the fee by the
-  /// admin) → dashboard.
+  /// Fee settled (or salary-deduction exempt) → dashboard.
   active,
+}
+
+/// Shown while the server's activation answer is in flight, so the guard never
+/// briefly renders the dashboard an unpaid member is not entitled to.
+class _GateLoadingScreen extends StatelessWidget {
+  const _GateLoadingScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(child: CircularProgressIndicator()),
+    );
+  }
 }
