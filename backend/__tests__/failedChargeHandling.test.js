@@ -56,3 +56,40 @@ describe('paystack charge modules load', () => {
     expect(typeof require('../src/workers/failedChargeReconcileWorker').processSweep).toBe('function');
   });
 });
+
+describe('paystackConfigured', () => {
+  const { paystackConfigured, paystackFetch } = require('../src/lib/paystackCharge');
+  const original = process.env.PAYSTACK_SECRET_KEY;
+  afterEach(() => {
+    if (original === undefined) delete process.env.PAYSTACK_SECRET_KEY;
+    else process.env.PAYSTACK_SECRET_KEY = original;
+  });
+
+  test('reports missing when the env var is unset', () => {
+    delete process.env.PAYSTACK_SECRET_KEY;
+    expect(paystackConfigured()).toMatchObject({ ok: false, reason: 'missing' });
+  });
+
+  test('rejects a public key pasted where a secret key belongs', () => {
+    process.env.PAYSTACK_SECRET_KEY = 'pk_test_0123456789abcdef0123456789abcdef';
+    expect(paystackConfigured()).toMatchObject({ ok: false, reason: 'not_a_secret_key' });
+  });
+
+  test('rejects a truncated secret key', () => {
+    process.env.PAYSTACK_SECRET_KEY = 'sk_test_short';
+    expect(paystackConfigured()).toMatchObject({ ok: false, reason: 'truncated' });
+  });
+
+  test('accepts a well-formed secret key', () => {
+    process.env.PAYSTACK_SECRET_KEY = 'sk_test_0123456789abcdef0123456789abcdef';
+    expect(paystackConfigured()).toMatchObject({ ok: true, reason: null });
+  });
+
+  test('an unconfigured gateway surfaces as an actionable 503, not a raw string', async () => {
+    delete process.env.PAYSTACK_SECRET_KEY;
+    await expect(paystackFetch('/transaction/initialize')).rejects.toMatchObject({
+      statusCode: 503,
+      code: 'PAYMENT_UNAVAILABLE',
+    });
+  });
+});
