@@ -127,9 +127,23 @@ async function sendInApp({
 }) {
   const dbType = normalizeNotifType(type);
   const dbCategory = normalizeNotifCategory(category, type);
+  // `notifications.message` is NOT NULL and is what the admin dashboard reads;
+  // the mobile model reads `body` first and falls back to `message`. The
+  // rollover-deadline worker also de-dupes with an ILIKE against `body`. Both
+  // columns must therefore be written — writing only `body` made every insert
+  // fail with 23502, which the caller swallowed, so no notification was ever
+  // stored (admin alerts included).
   const { data, error } = await supabase
     .from('notifications')
-    .insert({ profile_id: profileId, title, body, type: dbType, category: dbCategory, priority })
+    .insert({
+      profile_id: profileId,
+      title,
+      message: body,
+      body,
+      type: dbType,
+      category: dbCategory,
+      priority,
+    })
     .select('*')
     .maybeSingle();
 
