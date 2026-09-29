@@ -29,8 +29,9 @@ const validate = require('../middleware/validate');
 const logger = require('../utils/logger');
 const notifyService = require('../services/notifyService');
 const { ALLOWED_PAYMENT_TYPES, DB_PAYMENT_TYPE, normalizeAllocations } = require('../lib/allocations');
+const { paystackFetch, secretKey, classifyFailure } = require('../lib/paystackCharge');
+const { recordFailedCharge, alertFailedCharge } = require('../lib/failedChargeAudit');
 
-const PAYSTACK_BASE = 'https://api.paystack.co';
 const MIN_AMOUNT_NGN = 100;
 
 /**
@@ -198,29 +199,6 @@ async function applyAllocations(proof, { recordedBy = null } = {}) {
   }
 }
 
-function secretKey() {
-  return process.env.PAYSTACK_SECRET_KEY || null;
-}
-
-async function paystackFetch(path, options = {}) {
-  const key = secretKey();
-  if (!key) {
-    const err = new Error('Paystack is not configured on the server.');
-    err.statusCode = 503;
-    throw err;
-  }
-  const response = await fetch(`${PAYSTACK_BASE}${path}`, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${key}`,
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
-  });
-  const payload = await response.json().catch(() => ({}));
-  return { ok: response.ok, status: response.status, payload };
-}
-
 /**
  * Record a Paystack deposit as an approved payment proof so the existing
  * approval trigger (savings credit, transaction row, digital receipt) runs
@@ -326,6 +304,104 @@ async function settleSuccessfulCharge(reference) {
 
   logger.info(`paystack settle: proof ${proof.id} approved (reference ${reference})`);
   return { settled: true, already: false, proof };
+}
+
+/**
+ * A gateway charge that ended in failure.
+ *
+ * `reversed` is the unambiguous "the member was debited and Paystack reversed
+ * it" case. `charge.failed` can be either a clean decline or a debit-on-hold
+ * that has not settled — Paystack's own payload does not always say which, so
+ * `possibleDebit` stays true for `failed` and `reversed` and the admin queue is
+ * the place a human resolves the ambiguity against the bank statement.
+ * `abandoned` (member closed checkout) is recorded quietly: no debit, no alert.
+ */
+async function handleFailedCharge(data, eventName) {
+  const reference = data?.reference;
+  if (!reference) return;
+
+  const { gatewayStatus, possibleDebit, alertAdmins, gatewayMessage } = classifyFailure({
+    eventName,
+    status: data?.status,
+    gatewayResponse: data?.gateway_response,
+  });
+
+  const { data: proof } = await supabase
+    .from('payment_proofs')
+    .select('id, profile_id, amount, status, payment_type')
+    .eq('transaction_reference', reference)
+    .is('deleted_at', null)
+    .maybeSingle();
+
+  // A charge already credited must never be marked failed — that would tell the
+  // member their money is gone when it is not. This happens when a spurious
+  // failure event trails a real success; surface it to admins instead of
+  // silently discarding it, because a reversal of credited money is real.
+  if (proof && proof.status === 'approved') {
+    logger.warn(`paystack: failure event (${gatewayStatus}) for already-approved ${reference}`);
+    await notifyService.notifyAdmins({
+      title: 'Gateway Anomaly — Failure After Credit',
+      body: `Paystack reported "${gatewayStatus}" for reference ${reference}, which is already credited to the member. Verify against the bank; a real reversal must be reconciled manually.`,
+      type: 'transaction',
+      category: 'action_required',
+      priority: 'high',
+    }).catch(() => {});
+    return;
+  }
+
+  if (proof) {
+    const now = new Date().toISOString();
+    await supabase
+      .from('payment_proofs')
+      .update({
+        status: 'failed',
+        failed_at: now,
+        failure_reason: gatewayMessage || gatewayStatus,
+        updated_at: now,
+      })
+      .eq('id', proof.id)
+      .eq('status', 'pending');
+  } else {
+    // No parked proof — a stray reference, or one created before this handler
+    // existed. Still record it; the audit is the point.
+    logger.warn(`paystack: failure event for unknown reference ${reference}`);
+  }
+
+  await recordFailedCharge({
+    profileId: proof?.profile_id || data?.metadata?.profile_id || null,
+    reference,
+    amount: proof?.amount ?? (data?.amount != null ? Number(data.amount) / 100 : null),
+    gatewayStatus,
+    gatewayMessage,
+    possibleDebit,
+    payload: data || {},
+  });
+
+  if (alertAdmins || possibleDebit || gatewayStatus === 'reversed') {
+    await alertFailedCharge({
+      profileId: proof?.profile_id || null,
+      reference,
+      amount: proof?.amount ?? (data?.amount != null ? Number(data.amount) / 100 : null),
+      gatewayStatus,
+      gatewayMessage,
+      possibleDebit,
+      alertAdmins,
+    });
+  } else {
+    // Abandoned checkout: tell the member (they may have closed the app) but do
+    // not raise an admin alert — there is no money and nothing to act on.
+    await alertFailedCharge({
+      profileId: proof?.profile_id || null,
+      reference,
+      amount: proof?.amount ?? null,
+      gatewayStatus,
+      gatewayMessage,
+      possibleDebit: false,
+      alertAdmins: false,
+    });
+  }
+
+  logger.info(`paystack: recorded failed charge ${reference} (${gatewayStatus}, possibleDebit=${possibleDebit})`);
 }
 
 /**
@@ -458,7 +534,27 @@ router.get(
         const result = await settleSuccessfulCharge(reference);
         return res.json({ success: true, status: 'success', settled: result.settled });
       }
-      res.json({ success: true, status: payload.data?.status || 'pending' });
+
+      // The member returned from checkout and Paystack says the charge did not
+      // go through. Route it through the same handler the webhook uses so the
+      // failed charge is recorded and, when the bank may have debited them, the
+      // member is told what to do — instead of the catch-all "not confirmed yet".
+      const gatewayStatus = payload.data?.status || 'pending';
+      if (gatewayStatus === 'failed' || gatewayStatus === 'reversed' || gatewayStatus === 'abandoned') {
+        await handleFailedCharge(
+          payload.data,
+          gatewayStatus === 'reversed' ? 'transfer.reversed' : 'charge.failed',
+        );
+        return res.json({
+          success: true,
+          status: gatewayStatus,
+          message: gatewayStatus === 'abandoned'
+            ? 'Payment was not completed. You can try again.'
+            : 'The payment did not go through. If your bank debited you, it will be reversed automatically.',
+        });
+      }
+
+      res.json({ success: true, status: gatewayStatus });
     } catch (err) {
       logger.error('paystack verify error:', err);
       res.status(err.statusCode || 500).json({ success: false, error: err.message });
@@ -488,7 +584,18 @@ router.post('/webhook', async (req, res) => {
     const event = req.body || {};
     if (event.event === 'charge.success' && event.data?.reference) {
       await settleSuccessfulCharge(event.data.reference);
+      return res.sendStatus(200);
     }
+
+    // A charge that failed AFTER the member's bank may have authorised or
+    // debited it. Previously ignored entirely: the reference sat at `pending`
+    // forever and the member saw an indefinite "Payment not confirmed yet".
+    // Record it, flag a possible debit, and alert member + admins.
+    if ((event.event === 'charge.failed' || event.event === 'transfer.reversed') && event.data?.reference) {
+      await handleFailedCharge(event.data, event.event);
+      return res.sendStatus(200);
+    }
+
     res.sendStatus(200);
   } catch (err) {
     logger.error('paystack webhook error:', err);
@@ -500,3 +607,4 @@ router.post('/webhook', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.settleSuccessfulCharge = settleSuccessfulCharge;

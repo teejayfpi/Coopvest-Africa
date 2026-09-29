@@ -435,6 +435,11 @@ loanRecoveryWorker.start();
 const contributionReminderWorker = require('./workers/contributionReminderWorker');
 contributionReminderWorker.start();
 
+// Failed-charge reconcile Worker — safety net for charges that fail after a
+// possible debit but whose webhook never arrives or is missed.
+const failedChargeReconcileWorker = require('./workers/failedChargeReconcileWorker');
+failedChargeReconcileWorker.start();
+
 server.listen(PORT, '0.0.0.0', () => {
   logger.info(`🚀 Coopvest Referral API running on port ${PORT}`);
   logger.info(`🌐 WebSocket endpoint: ws://localhost:${PORT}/ws`);
