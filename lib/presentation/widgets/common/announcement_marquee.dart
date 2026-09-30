@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../data/models/announcement_models.dart';
+import '../../../config/theme_config.dart';
 import '../../providers/announcement_provider.dart';
 
 /// Scrolling "news ticker" for admin announcements.
@@ -21,10 +22,21 @@ class AnnouncementMarquee extends ConsumerStatefulWidget {
   /// Height of the ticker strip.
   final double height;
 
-  const AnnouncementMarquee({super.key, this.onTap, this.height = 40});
+  /// Renders for a dark (brand-green) background instead of the default light
+  /// one. The home dashboard shows the ticker inside the green header, where
+  /// the light-background palette would be unreadable.
+  final bool onDark;
+
+  const AnnouncementMarquee({
+    super.key,
+    this.onTap,
+    this.height = 40,
+    this.onDark = false,
+  });
 
   @override
-  ConsumerState<AnnouncementMarquee> createState() => _AnnouncementMarqueeState();
+  ConsumerState<AnnouncementMarquee> createState() =>
+      _AnnouncementMarqueeState();
 }
 
 class _AnnouncementMarqueeState extends ConsumerState<AnnouncementMarquee>
@@ -85,7 +97,8 @@ class _AnnouncementMarqueeState extends ConsumerState<AnnouncementMarquee>
   }
 
   String _tickerText(List<Announcement> items) {
-    final parts = items.map((a) => a.title.trim()).where((t) => t.isNotEmpty).toList();
+    final parts =
+        items.map((a) => a.title.trim()).where((t) => t.isNotEmpty).toList();
     if (parts.isEmpty) return '';
     // Separator so consecutive items do not run together.
     return parts.join('     •     ');
@@ -104,8 +117,12 @@ class _AnnouncementMarqueeState extends ConsumerState<AnnouncementMarquee>
     _syncAnimation(marquee);
     final text = _tickerText(marquee);
 
+    // Vertical margins live here rather than in the parent so they disappear
+    // with the ticker: an account with no marquee announcement keeps the exact
+    // spacing it had before the ticker existed. No horizontal padding — the
+    // caller's own insets apply (the header already pads its children).
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
@@ -114,10 +131,20 @@ class _AnnouncementMarqueeState extends ConsumerState<AnnouncementMarquee>
           child: Container(
             height: widget.height,
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
+              color: widget.onDark
+                  ? Colors.white.withValues(alpha: 0.14)
+                  : Theme.of(context)
+                      .colorScheme
+                      .primary
+                      .withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
-                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.25),
+                color: widget.onDark
+                    ? Colors.white.withValues(alpha: 0.28)
+                    : Theme.of(context)
+                        .colorScheme
+                        .primary
+                        .withValues(alpha: 0.25),
               ),
             ),
             child: Row(
@@ -125,21 +152,32 @@ class _AnnouncementMarqueeState extends ConsumerState<AnnouncementMarquee>
                 // A "news" marker, so the strip reads as a ticker rather than a
                 // stray line of text.
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   margin: const EdgeInsets.only(left: 6),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primary,
+                    color: widget.onDark
+                        ? Colors.white
+                        : Theme.of(context).colorScheme.primary,
                     borderRadius: BorderRadius.circular(6),
                   ),
-                  child: const Row(
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.campaign_rounded, size: 14, color: Colors.white),
-                      SizedBox(width: 4),
+                      Icon(
+                        Icons.campaign_rounded,
+                        size: 14,
+                        color: widget.onDark
+                            ? CoopvestColors.primary
+                            : Colors.white,
+                      ),
+                      const SizedBox(width: 4),
                       Text(
                         'NEWS',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: widget.onDark
+                              ? CoopvestColors.primary
+                              : Colors.white,
                           fontSize: 10,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 0.5,
@@ -157,7 +195,8 @@ class _AnnouncementMarqueeState extends ConsumerState<AnnouncementMarquee>
                           builder: (context, _) {
                             return Transform.translate(
                               offset: Offset(
-                                constraints.maxWidth - (_controller.value * _travel),
+                                constraints.maxWidth -
+                                    (_controller.value * _travel),
                                 0,
                               ),
                               child: Align(
@@ -167,9 +206,10 @@ class _AnnouncementMarqueeState extends ConsumerState<AnnouncementMarquee>
                                   maxLines: 1,
                                   softWrap: false,
                                   overflow: TextOverflow.visible,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w500,
+                                    color: widget.onDark ? Colors.white : null,
                                   ),
                                 ),
                               ),

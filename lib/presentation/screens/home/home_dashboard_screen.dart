@@ -252,73 +252,71 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
             children: [
               _buildHeader(context, userName, membershipId, user?.name ?? 'User', user?.id ?? '', loansState),
 
-              // Scrolling admin news. Renders nothing when no announcement is
-              // configured as a marquee, so the layout is unchanged otherwise.
-              const SizedBox(height: 8),
-              AnnouncementMarquee(
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const AnnouncementsScreen()),
-                ),
-              ),
-              
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Stat Cards - Overlapping
-                    Transform.translate(
-                      offset: const Offset(0, -30),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: _buildCompactStatCard(
-                              context,
-                              'Wallet',
-                              walletBalance.formatCurrencyCompact(),
-                              Icons.account_balance_wallet_outlined,
-                              () => Navigator.push(context, MaterialPageRoute(builder: (context) => WalletDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? ''))),
-                              accentColor: CoopvestColors.primary,
-                              chipTint: CoopvestColors.iconTintGreen,
-                              isZero: walletBalance <= 0,
-                              zeroHint: 'Add money →',
-                              onZeroTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => DepositScreen(userId: user?.id ?? ''))),
-                            ),
+                    // Stat Cards. These used to be pulled up 30px with a
+                    // Transform.translate to overlap the green header. When the
+                    // news marquee was inserted between the header and this row,
+                    // that negative offset started eating into the ticker
+                    // instead and painted the cards over it. Normal flow spacing
+                    // now: no offset, so nothing overlaps regardless of whether
+                    // the marquee renders.
+                    Row(
+                      // Cards can differ in height once one shows a "zero"
+                      // hint line and another does not; top-align them so the
+                      // row reads as a level set instead of a stagger.
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: _buildCompactStatCard(
+                            context,
+                            'Wallet',
+                            walletBalance.formatCurrencyCompact(),
+                            Icons.account_balance_wallet_outlined,
+                            () => Navigator.push(context, MaterialPageRoute(builder: (context) => WalletDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? ''))),
+                            accentColor: CoopvestColors.primary,
+                            chipTint: CoopvestColors.iconTintGreen,
+                            isZero: walletBalance <= 0,
+                            zeroHint: 'Add money →',
+                            onZeroTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => DepositScreen(userId: user?.id ?? ''))),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _buildCompactStatCard(
-                              context,
-                              'Savings',
-                              (wallet?.totalSavings ?? 0.0).formatCurrencyCompact(),
-                              Icons.savings_outlined,
-                              () => Navigator.push(context, MaterialPageRoute(builder: (context) => const MonthlyContributionsScreen())),
-                              accentColor: CoopvestColors.primaryLight,
-                              chipTint: CoopvestColors.iconTintMint,
-                              isZero: (wallet?.totalSavings ?? 0.0) <= 0,
-                              zeroHint: 'Start saving →',
-                              onZeroTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => DepositScreen(userId: user?.id ?? ''))),
-                            ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildCompactStatCard(
+                            context,
+                            'Savings',
+                            (wallet?.totalSavings ?? 0.0).formatCurrencyCompact(),
+                            Icons.savings_outlined,
+                            () => Navigator.push(context, MaterialPageRoute(builder: (context) => const MonthlyContributionsScreen())),
+                            accentColor: CoopvestColors.primaryLight,
+                            chipTint: CoopvestColors.iconTintMint,
+                            isZero: (wallet?.totalSavings ?? 0.0) <= 0,
+                            zeroHint: 'Start saving →',
+                            onZeroTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => DepositScreen(userId: user?.id ?? ''))),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _buildCompactStatCard(
-                              context,
-                              'Loans',
-                              activeLoans.formatCurrencyCompact(),
-                              Icons.monetization_on_outlined,
-                              () => Navigator.push(context, MaterialPageRoute(builder: (context) => LoanDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? '', userPhone: user?.phone ?? ''))),
-                              // Loans is the gold card: gold chip, deepened
-                              // gold icon and link so it stays legible on white.
-                              accentColor: CoopvestColors.accentIcon,
-                              chipTint: CoopvestColors.iconTintGold,
-                              isZero: activeLoans <= 0,
-                              zeroHint: 'Apply now →',
-                              onZeroTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => LoanDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? '', userPhone: user?.phone ?? ''))),
-                            ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildCompactStatCard(
+                            context,
+                            'Loans',
+                            activeLoans.formatCurrencyCompact(),
+                            Icons.monetization_on_outlined,
+                            () => Navigator.push(context, MaterialPageRoute(builder: (context) => LoanDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? '', userPhone: user?.phone ?? ''))),
+                            // Loans is the gold card: gold chip, deepened
+                            // gold icon and link so it stays legible on white.
+                            accentColor: CoopvestColors.accentIcon,
+                            chipTint: CoopvestColors.iconTintGold,
+                            isZero: activeLoans <= 0,
+                            zeroHint: 'Apply now →',
+                            onZeroTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => LoanDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? '', userPhone: user?.phone ?? ''))),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                     
                     const SizedBox(height: 20),
@@ -584,7 +582,21 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
           ),
           
           const SizedBox(height: 28),
-          
+
+          // Admin news ticker. Sits inside the green header, directly under the
+          // greeting, because the header is the only part of the dashboard that
+          // is guaranteed to be on screen at launch: the balance panel below it
+          // is tall enough that a ticker placed after the header falls below the
+          // fold on shorter phones and the member never sees it. The widget owns
+          // its own vertical margins and collapses to nothing when no
+          // announcement is flagged as a marquee.
+          AnnouncementMarquee(
+            onDark: true,
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const AnnouncementsScreen()),
+            ),
+          ),
+
           // Total Balance Section
           Container(
             padding: const EdgeInsets.all(20),
