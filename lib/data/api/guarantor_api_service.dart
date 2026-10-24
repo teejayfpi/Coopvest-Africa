@@ -115,6 +115,25 @@ class GuarantorApiService {
     }
   }
 
+  /// Members the current borrower may pick as a guarantor.
+  ///
+  /// The backend filters by contribution channel: salary-deduction borrowers
+  /// see salary-deduction members of their own organisation; direct-deposit
+  /// borrowers see direct-deposit members. `channel` is 'salary' or 'direct'.
+  Future<EligibleGuarantorList> getEligibleMembers({String? search}) async {
+    try {
+      final response = await _apiClient.dio.get(
+        '/guarantor/eligible-members',
+        queryParameters: {if (search != null && search.isNotEmpty) 'search': search},
+      );
+      return EligibleGuarantorList.fromJson(
+        response.data as Map<String, dynamic>,
+      );
+    } on DioException catch (e) {
+      throw Exception(e.response?.data['error'] ?? 'Failed to load eligible guarantors');
+    }
+  }
+
   /// Withdraw from a guarantor request (before loan is approved)
   Future<bool> withdraw(String guaranteeId) async {
     try {

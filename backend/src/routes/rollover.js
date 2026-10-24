@@ -27,6 +27,7 @@ const { authenticate } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const logger = require('../utils/logger');
 const notify = require('../services/notifyService');
+const { evaluateGuarantorEligibility } = require('../lib/guarantorEligibility');
 
 router.use(authenticate);
 
@@ -109,6 +110,19 @@ router.post(
         .maybeSingle();
       if (existing) {
         return res.status(409).json({ success: false, error: 'A pending rollover request already exists for this loan' });
+      }
+
+      // Every guarantor must be eligible before anything is persisted, so a
+      // rejected request leaves no rollover row and no partial set behind.
+      for (const g of guarantors) {
+        const eligibility = await evaluateGuarantorEligibility(
+          supabase,
+          req.user.id,
+          g.guarantorId,
+        );
+        if (!eligibility.eligible) {
+          return res.status(400).json({ success: false, error: eligibility.reason, code: eligibility.code });
+        }
       }
 
       const { data: rollover, error: rErr } = await supabase
@@ -558,6 +572,16 @@ router.patch(
       }
 
       const { newGuarantorId, newGuarantorName, newGuarantorPhone } = req.body;
+
+      // The replacement must satisfy the same channel/organisation rule.
+      const eligibility = await evaluateGuarantorEligibility(
+        supabase,
+        req.user.id,
+        newGuarantorId,
+      );
+      if (!eligibility.eligible) {
+        return res.status(400).json({ success: false, error: eligibility.reason, code: eligibility.code });
+      }
 
       const { data, error } = await supabase
         .from('rollover_guarantors')
