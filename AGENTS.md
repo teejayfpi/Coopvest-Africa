@@ -709,6 +709,13 @@ Note the channel write is deliberately *not* cleared when salary deduction is
 saved with no employer named: a settings toggle that collects no employer must
 not erase the one already on file.
 
+The screen picks the employer from the enrolled list (`_EmployerPickerSheet` →
+`GET /organizations/selectable`) so the profile stores a real `organization_id`
+rather than a free-text name. An employer that is not enrolled goes through
+`requestOrganizationApproval` and is saved as a pending name. Keep sending the
+id only for a picked employer — the backend re-checks it is a real, active
+organisation before linking, and falls back to a pending name otherwise.
+
 ### The gate must be reachable-proof, not just present
 A Direct Deposit member who had not paid could reach the dashboard by pressing
 Back, relaunching, or re-logging in. Two things caused it, and both need to stay
