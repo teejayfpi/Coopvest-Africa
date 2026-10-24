@@ -62,7 +62,18 @@ function planProfileChannelUpdate({ contributionType, employerName, requestedOrg
       // Employer named but not enrolled (or the id did not resolve): record it
       // as a pending request, which still counts as an employer on file so the
       // fee is recovered once payroll runs. Never link an unverified id.
+      //
+      // Clear any existing link too. This path is reached when a member changes
+      // employer, and leaving the previous `organization_id` in place would
+      // keep them attached to an employer they have left — payroll would go on
+      // deducting for the old organisation, and the same-organisation guarantor
+      // rule would match their guarantors against it.
+      update.organization_id = null;
       update.pending_organization_name = name;
+    } else {
+      // Channel set to salary deduction with no employer named at all. Leave any
+      // existing employer untouched: a settings toggle that does not collect an
+      // employer must not erase the one already on file.
     }
   } else {
     // Self-funded: clear the employer so a stale link cannot keep the
