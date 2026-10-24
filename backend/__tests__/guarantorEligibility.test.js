@@ -34,9 +34,23 @@ const direct = (id) => ({
 });
 const unknown = (id) => ({
   id,
+  contribution_method: 'something_unrecognised',
+  contribution_type: null,
+  organization_id: null,
+});
+// Legacy row: no explicit channel, no employer.
+const legacyNoOrg = (id) => ({
+  id,
   contribution_method: null,
   contribution_type: null,
   organization_id: null,
+});
+// Legacy row: no explicit channel, but an employer link.
+const legacyWithOrg = (id, orgId = ORG_A) => ({
+  id,
+  contribution_method: null,
+  contribution_type: null,
+  organization_id: orgId,
 });
 
 describe('contributionChannel', () => {
@@ -52,10 +66,17 @@ describe('contributionChannel', () => {
     expect(contributionChannel({ contribution_method: 'manual' })).toBe('direct');
   });
 
-  test('anything else is unknown', () => {
+  test('an unrecognised explicit value is unknown', () => {
     expect(contributionChannel(null)).toBe('unknown');
-    expect(contributionChannel({})).toBe('unknown');
     expect(contributionChannel({ contribution_method: 'something_else' })).toBe('unknown');
+  });
+
+  test('a NULL channel is derived from the employer link, not refused', () => {
+    // Employer on file => paid by salary deduction.
+    expect(contributionChannel({ organization_id: ORG_A })).toBe('salary');
+    expect(contributionChannel({ pending_organization_name: 'Ab' })).toBe('salary');
+    // No employer and no explicit channel => self-funded.
+    expect(contributionChannel({})).toBe('direct');
   });
 });
 
@@ -107,6 +128,25 @@ describe('direct-deposit borrower', () => {
     const r = guarantorEligibility(direct('b'), unknown('g'));
     expect(r.eligible).toBe(false);
     expect(r.code).toBe('GUARANTOR_CHANNEL_UNKNOWN');
+  });
+});
+
+describe('legacy members with a NULL channel', () => {
+  test('a borrower with an employer is treated as salary and matched by organisation', () => {
+    const r = guarantorEligibility(legacyWithOrg('b', ORG_A), legacyWithOrg('g', ORG_A));
+    expect(r.eligible).toBe(true);
+  });
+
+  test('a borrower with an employer rejects a different organisation', () => {
+    const r = guarantorEligibility(legacyWithOrg('b', ORG_A), legacyWithOrg('g', ORG_B));
+    expect(r.eligible).toBe(false);
+    expect(r.code).toBe('ORG_MISMATCH');
+  });
+
+  test('a borrower with no employer and no channel is treated as direct deposit', () => {
+    expect(canGuarantee(legacyNoOrg('b'), legacyNoOrg('g'))).toBe(true);
+    // ...and a salaried member may not stand for them.
+    expect(guarantorEligibility(legacyNoOrg('b'), salary('g', ORG_A)).code).toBe('GUARANTOR_SALARIED');
   });
 });
 

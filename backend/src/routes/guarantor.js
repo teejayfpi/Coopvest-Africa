@@ -21,7 +21,7 @@ const { authenticate } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const logger = require('../utils/logger');
 const notifyService = require('../services/notifyService');
-const { evaluateGuarantorEligibility, contributionChannel } = require('../lib/guarantorEligibility');
+const { evaluateGuarantorEligibility, contributionChannel, canGuarantee } = require('../lib/guarantorEligibility');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -811,9 +811,12 @@ router.get(
   validate,
   async (req, res) => {
     try {
+      const PROFILE_COLS =
+        'id, name, organization_id, pending_organization_name, contribution_method, contribution_type';
+
       const { data: me, error: meErr } = await supabase
         .from('profiles')
-        .select('id, contribution_method, contribution_type, organization_id')
+        .select(PROFILE_COLS)
         .eq('id', req.user.id)
         .maybeSingle();
       if (meErr) throw meErr;
@@ -827,24 +830,13 @@ router.get(
         });
       }
 
+      // Filter with the same `canGuarantee` used to enforce the rule, so the
+      // list offered and the rule applied can never disagree.
       let q = supabase
         .from('profiles')
-        .select('id, name, organization_id, contribution_method, contribution_type')
+        .select(PROFILE_COLS)
         .neq('id', req.user.id)
-        .limit(50);
-
-      if (channel === 'salary') {
-        // Same organisation, and on salary deduction themselves.
-        if (!me.organization_id) {
-          return res.json({ success: true, channel, organizationId: null, members: [] });
-        }
-        q = q
-          .eq('organization_id', me.organization_id)
-          .or('contribution_method.in.(payroll,salary_deduction,salary-based),contribution_type.in.(payroll,salary_deduction,salary-based)');
-      } else {
-        // Direct-deposit borrower: only direct-deposit members may stand.
-        q = q.or('contribution_method.in.(direct_deposit,manual),contribution_type.in.(direct_deposit,manual)');
-      }
+        .limit(200);
 
       const search = String(req.query.search || '').trim();
       if (search) q = q.ilike('name', `%${search}%`);
@@ -852,11 +844,14 @@ router.get(
       const { data, error } = await q;
       if (error) throw error;
 
-      const members = (data || []).map((p) => ({
-        id: p.id,
-        name: p.name || 'Coopvest Member',
-        organizationId: p.organization_id || null,
-      }));
+      const members = (data || [])
+        .filter((p) => canGuarantee(me, p))
+        .slice(0, 50)
+        .map((p) => ({
+          id: p.id,
+          name: p.name || 'Coopvest Member',
+          organizationId: p.organization_id || null,
+        }));
       res.json({ success: true, channel, organizationId: me.organization_id || null, members });
     } catch (err) {
       logger.error('Error listing eligible guarantors:', err);
