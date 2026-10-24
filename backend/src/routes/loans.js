@@ -18,6 +18,7 @@ const referralService = require('../services/referralService');
 const qrCodeService = require('../services/qrCodeService');
 const notifyService = require('../services/notifyService');
 const loanPolicy = require('../lib/loanPolicy');
+const { evaluateGuarantorEligibility } = require('../lib/guarantorEligibility');
 const logger = require('../utils/logger');
 
 const ADMIN_ROLES = ['admin', 'superadmin', 'super_admin', 'staff'];
@@ -603,6 +604,15 @@ router.get(
       const loan = loanData || {};
       const borrower = profileData || {};
 
+      // Pre-check the scanning guarantor against the borrower so the app can
+      // refuse an ineligible scan before the consent screen is shown. The
+      // confirm endpoints re-check authoritatively.
+      const eligibility = await evaluateGuarantorEligibility(
+        supabase,
+        loan.profile_id,
+        req.user.id,
+      );
+
       res.json({
         success: true,
         qrId: qrRow.qr_id,
@@ -617,6 +627,9 @@ router.get(
         guarantorsFound: qrRow.guarantors_found || 0,
         expiresAt: qrRow.expires_at,
         isExpired: qrRow.expires_at ? new Date() > new Date(qrRow.expires_at) : false,
+        guarantorEligible: eligibility.eligible,
+        guarantorIneligibleCode: eligibility.code,
+        guarantorIneligibleReason: eligibility.reason,
       });
     } catch (err) {
       logger.error('Error fetching loan by QR ID:', err);
@@ -910,6 +923,22 @@ router.post(
         .maybeSingle();
 
       if (findErr) throw findErr;
+
+      // The guarantor must share the borrower's contribution channel (same
+      // organisation for salary-deduction, direct-deposit for direct-deposit).
+      const { data: loanOwner } = await supabase
+        .from('loans')
+        .select('profile_id')
+        .eq('id', loanId)
+        .maybeSingle();
+      const eligibility = await evaluateGuarantorEligibility(
+        supabase,
+        loanOwner && loanOwner.profile_id,
+        guarantorId,
+      );
+      if (!eligibility.eligible) {
+        return res.status(400).json({ success: false, error: eligibility.reason, code: eligibility.code });
+      }
 
       const now = new Date().toISOString();
 

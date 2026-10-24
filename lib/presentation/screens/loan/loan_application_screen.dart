@@ -1108,6 +1108,7 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
                       const SizedBox(height: 12),
                       _buildInfoRow('• You need 3 guarantors to approve this loan'),
                       _buildInfoRow('• Guarantors must be existing members'),
+                      _buildInfoRow('• Guarantors must share your contribution channel — same organisation if you are on salary deduction, or direct-deposit members if you contribute by direct deposit'),
                       _buildInfoRow('• Monthly savings must be at least 10% of loan amount'),
                       _buildInfoRow('• Defaulting loans will be inherited by guarantors'),
                     ],
