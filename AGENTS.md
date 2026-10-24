@@ -693,6 +693,22 @@ could not fire and `contributionChannel()` classified them as direct deposit,
 which also breaks guarantor eligibility. Migration 051 backfills those members.
 Keep the two call sites on the one helper rather than re-deriving the mapping.
 
+### Changing employer must not require a channel switch
+`ContributionMethodScreen` used to save only when the channel *changed*, so a
+member already on salary deduction had no way to move to a new employer.
+`organization_id` drives both payroll deduction and the same-organisation
+guarantor rule, so a member who changed jobs stayed attached to the employer
+they left — payroll kept deducting for the old organisation and their guarantors
+were matched against it. The screen now also saves on an employer-only edit
+(`_employerChanged`), and the helper clears the previous `organization_id` when
+a named employer does not resolve to an active organisation, so the old link
+cannot linger. The route already re-flags KYC as `submitted` on any salary
+update, so a new employer still goes through admin review.
+
+Note the channel write is deliberately *not* cleared when salary deduction is
+saved with no employer named: a settings toggle that collects no employer must
+not erase the one already on file.
+
 ### The gate must be reachable-proof, not just present
 A Direct Deposit member who had not paid could reach the dashboard by pressing
 Back, relaunching, or re-logging in. Two things caused it, and both need to stay

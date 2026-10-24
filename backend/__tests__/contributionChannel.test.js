@@ -22,7 +22,7 @@ describe('planProfileChannelUpdate', () => {
       orgIsActive: false,
     });
     expect(update.contribution_method).toBe('payroll');
-    expect(update.organization_id).toBeUndefined();
+    expect(update.organization_id).toBeNull();
     expect(update.pending_organization_name).toBe('Acme Ltd');
   });
 
@@ -31,8 +31,20 @@ describe('planProfileChannelUpdate', () => {
       contributionType: 'salary_deduction',
       employerName: '  Acme Ltd  ',
     });
-    expect(update.organization_id).toBeUndefined();
+    expect(update.organization_id).toBeNull();
     expect(update.pending_organization_name).toBe('Acme Ltd');
+  });
+
+  test('changing employer clears the previous organisation link', () => {
+    // The member was linked to an enrolled employer and is now moving to one
+    // that is not enrolled. Keeping the old link would leave payroll deducting
+    // for the employer they left.
+    const update = planProfileChannelUpdate({
+      contributionType: 'salary_deduction',
+      employerName: 'NewCo',
+    });
+    expect(update.organization_id).toBeNull();
+    expect(update.pending_organization_name).toBe('NewCo');
   });
 
   test('direct deposit clears any employer link so the payroll exemption cannot linger', () => {

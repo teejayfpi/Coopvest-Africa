@@ -4,15 +4,22 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../data/models/kyc_models.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/kyc_provider.dart';
 import '../../widgets/common/buttons.dart';
 
-/// Lets an active member switch their contribution channel:
+/// Lets an active member manage their contribution channel:
 ///   Direct Deposit  ↔  Salary Deduction
 ///
 /// Switching TO salary deduction collects the employment details the channel
 /// needs and re-submits the KYC so an admin reviews the new employment
 /// information (visible on the admin website).
+///
+/// It also lets a member who is *already* on salary deduction change their
+/// employer without touching the channel. That case matters: `organization_id`
+/// drives both payroll deduction and the same-organisation guarantor rule, so a
+/// member who changes jobs and cannot update their employer stays attached to
+/// the one they left.
 class ContributionMethodScreen extends ConsumerStatefulWidget {
   const ContributionMethodScreen({Key? key}) : super(key: key);
 
@@ -32,6 +39,10 @@ class _ContributionMethodScreenState
   final _workAddressCtrl = TextEditingController();
   String? _employmentType;
 
+  /// The employer originally on file, so an employer-only change is detected
+  /// even when the channel is not switched. Captured in [initState].
+  late final String _initialEmployer;
+
   @override
   void initState() {
     super.initState();
@@ -40,6 +51,7 @@ class _ContributionMethodScreenState
     _employmentType =
         sub != null && sub.employmentType.isNotEmpty ? sub.employmentType : null;
     _employerCtrl.text = sub?.employerName ?? sub?.organizationName ?? '';
+    _initialEmployer = _employerCtrl.text.trim();
     _occupationCtrl.text = sub?.occupation ?? '';
     _workAddressCtrl.text = sub?.workAddress ?? '';
   }
@@ -59,8 +71,21 @@ class _ContributionMethodScreenState
     return _selected != null && _selected != current;
   }
 
+  /// True when a member already on salary deduction has edited their employer.
+  ///
+  /// This is the job-change path: the channel is unchanged, so [_changed] is
+  /// false, but the employer must still be re-submitted for review.
+  bool get _employerChanged =>
+      _selected == 'salary_deduction' &&
+      _employerCtrl.text.trim() != _initialEmployer;
+
   Future<void> _save() async {
-    if (_selected == null || !_changed) return;
+    if (_selected == null) return;
+    // Capture the intent before the request: `switchContributionType` updates
+    // the provider on success, so `_changed` would read false afterwards and
+    // every save would report itself as an employer-only change.
+    final wasChannelChange = _changed;
+    if (!wasChannelChange && !_employerChanged) return;
 
     if (_selected == 'salary_deduction') {
       if (_employmentType == null || _employerCtrl.text.trim().isEmpty) {
@@ -89,12 +114,19 @@ class _ContributionMethodScreenState
               }
             : null,
       );
+      // Refresh the cached user so the gate reflects the new channel/employer
+      // without a relaunch — the same reason the sign-up employer screen does.
+      await ref.read(authProvider.notifier).refreshCurrentUser();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(_selected == 'salary_deduction'
-              ? 'Switched to Salary Deduction — your employment details were sent for review.'
-              : 'Switched to Direct Deposit.'),
+          content: Text(
+            wasChannelChange
+                ? (_selected == 'salary_deduction'
+                    ? 'Switched to Salary Deduction — your employment details were sent for review.'
+                    : 'Switched to Direct Deposit.')
+                : 'Employer updated — your new employment details were sent for review.',
+          ),
           backgroundColor: CoopvestColors.success,
         ),
       );
@@ -103,7 +135,7 @@ class _ContributionMethodScreenState
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Could not switch: $e'),
+          content: Text('Could not save: $e'),
           backgroundColor: CoopvestColors.error,
         ),
       );
@@ -175,6 +207,7 @@ class _ContributionMethodScreenState
               const SizedBox(height: 12),
               TextFormField(
                 controller: _employerCtrl,
+                onChanged: (_) => setState(() {}),
                 decoration: const InputDecoration(
                   labelText: 'Employer / Organization Name *',
                   border: OutlineInputBorder(),
@@ -206,7 +239,9 @@ class _ContributionMethodScreenState
               ),
               const SizedBox(height: 8),
               Text(
-                'Switching to salary deduction sends your employment details for admin review.',
+                _changed
+                    ? 'Switching to salary deduction sends your employment details for admin review.'
+                    : 'Changing your employer sends the new details for admin review.',
                 style: theme.textTheme.bodySmall
                     ?.copyWith(color: CoopvestColors.textSecondary),
               ),
@@ -216,7 +251,7 @@ class _ContributionMethodScreenState
               label: 'Save',
               onPressed: _save,
               isLoading: _saving,
-              isEnabled: _changed && !_saving,
+              isEnabled: (_changed || _employerChanged) && !_saving,
             ),
           ],
         ),
