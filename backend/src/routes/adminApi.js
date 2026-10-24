@@ -27,6 +27,11 @@ const riskScoring = require('../lib/riskScoring');
 const manualDeposit = require('../lib/manualDeposit');
 const { classifyChannels, normalizeAudience, AUDIENCE_TYPES } = require('../lib/notificationBroadcast');
 const rbac = require('../lib/permissions');
+const {
+  guarantorEligibility,
+  contributionChannel,
+  REASON,
+} = require('../lib/guarantorEligibility');
 
 /** Notify the loan's borrower of an approve/reject decision. Never throws. */
 async function notifyBorrowerOfDecision(loan, approve, reason) {
@@ -1012,7 +1017,7 @@ router.get('/loans', async (req, res) => {
     const { page, limit, from, to } = paging(req);
     let q = supabase
       .from('loans')
-      .select('*, profile:profiles!profile_id(id, user_id, name, email, phone)', { count: 'exact' })
+      .select('*, profile:profiles!profile_id(id, user_id, name, email, phone, organization_id, contribution_method, contribution_type, pending_organization_name)', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(from, to);
     if (req.query.status) q = q.eq('status', req.query.status);
@@ -1083,22 +1088,34 @@ router.get('/loans', async (req, res) => {
 
     // Resolve guarantors for the current page of loans.
     const loanIds = loansArr.map((l) => l.id).filter(Boolean);
+    const profileByLoan = {};
+    (data || []).forEach((l) => { if (l.profile) profileByLoan[l.id] = l.profile; });
     if (loanIds.length > 0) {
       const { data: guarantorRows } = await supabase
         .from('loan_guarantors')
-        .select('id, loan_id, status, consented_at, created_at, guarantor_profile:profiles!loan_guarantors_guarantor_id_fkey(id, name, email, phone)')
+        .select('id, loan_id, status, consented_at, created_at, guarantor_profile:profiles!loan_guarantors_guarantor_id_fkey(id, name, email, phone, organization_id, contribution_method, contribution_type, pending_organization_name)')
         .in('loan_id', loanIds);
 
       const byLoan = {};
       (guarantorRows || []).forEach((g) => {
         const gp = g.guarantor_profile || {};
         if (!byLoan[g.loan_id]) byLoan[g.loan_id] = [];
+        // Surface the same eligibility verdict the guarantor page shows, so a
+        // loan detail view never implies a guarantee is sound when the rule
+        // (contribution channel / organisation) no longer holds.
+        const borrowerProfile = profileByLoan[g.loan_id];
+        const elig = borrowerProfile
+          ? guarantorEligibility(borrowerProfile, gp)
+          : { eligible: false, code: 'UNKNOWN', reason: REASON.UNKNOWN };
         byLoan[g.loan_id].push({
           id: g.id,
           name: gp.name || gp.email || 'Unknown',
           email: gp.email || null,
           phone: gp.phone || null,
           status: g.status,
+          channel: contributionChannel(gp),
+          eligible: elig.eligible,
+          ineligibleReason: elig.eligible ? null : elig.reason,
           consentedAt: g.consented_at ?? null,
           createdAt: g.created_at,
         });
@@ -5265,48 +5282,271 @@ router.get('/bulk/export-members', async (req, res) => {
  * Guarantors
  * GET /api/v1/admin/guarantors, PUT /guarantors/settings, POST /guarantors/requests/:id/:action
  */
+const GUARANTOR_PROFILE_COLS =
+  'id, name, email, organization_id, contribution_method, contribution_type, pending_organization_name';
+
+/** The status a loan_guarantors row carries, whichever column is populated. */
+function guarantorRowStatus(g) {
+  return g.status || g.request_status || 'pending';
+}
+
+/**
+ * Normalise the raw loan_guarantors rows to the relationship shape the admin
+ * UI renders, resolving borrower/guarantor names and — the point of this
+ * change — the contribution channel and whether the pairing still satisfies
+ * the guarantor eligibility rule the mobile app enforces.
+ *
+ * The rule is derived, not stored, so a relationship can become ineligible if
+ * a member's contribution method or organisation later changes. Surfacing that
+ * here lets an operator spot an unenforceable guarantee before recovery time.
+ */
+async function buildGuarantorRelationships(rows) {
+  const list = rows || [];
+  const loanIds = [...new Set(list.map((g) => g.loan_id).filter(Boolean))];
+  const loanMap = {};
+  if (loanIds.length) {
+    const { data: loans } = await supabase
+      .from('loans')
+      .select('id, profile_id, amount, status')
+      .in('id', loanIds);
+    (loans || []).forEach((l) => { loanMap[l.id] = l; });
+  }
+
+  const borrowerIds = Object.values(loanMap).map((l) => l.profile_id).filter(Boolean);
+  const guarantorIds = list
+    .map((g) => g.guarantor_profile_id || g.guarantor_id)
+    .filter(Boolean);
+  const profileIds = [...new Set([...borrowerIds, ...guarantorIds])];
+
+  const profileMap = {};
+  const orgIds = new Set();
+  if (profileIds.length) {
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select(GUARANTOR_PROFILE_COLS)
+      .in('id', profileIds);
+    (profiles || []).forEach((p) => {
+      profileMap[p.id] = p;
+      if (p.organization_id) orgIds.add(p.organization_id);
+    });
+  }
+
+  const orgMap = {};
+  if (orgIds.size) {
+    const { data: orgs } = await supabase
+      .from('organizations')
+      .select('id, name, code')
+      .in('id', [...orgIds]);
+    (orgs || []).forEach((o) => { orgMap[o.id] = o; });
+  }
+
+  const nameOf = (id) => {
+    const p = profileMap[id];
+    return p ? (p.name || p.email || 'Unknown') : 'Unknown';
+  };
+  const orgNameOf = (id) => (id && orgMap[id] ? orgMap[id].name : null);
+
+  return list.map((g) => {
+    const loan = loanMap[g.loan_id] || {};
+    const borrowerId = loan.profile_id || null;
+    const guarantorId = g.guarantor_profile_id || g.guarantor_id || null;
+    const borrower = borrowerId ? profileMap[borrowerId] : null;
+    const guarantor = guarantorId ? profileMap[guarantorId] : null;
+
+    // A missing profile on either side yields the UNKNOWN verdict rather than
+    // being coerced into a channel, so a relationship we cannot verify is
+    // never shown as eligible.
+    const elig = borrowerId
+      ? guarantorEligibility(borrower, guarantor)
+      : { eligible: false, code: 'UNKNOWN', reason: REASON.UNKNOWN };
+
+    return {
+      id: g.id,
+      loanId: g.loan_id,
+      borrowerId,
+      borrowerName: nameOf(borrowerId),
+      borrowerChannel: borrower ? contributionChannel(borrower) : 'unknown',
+      borrowerOrganization: borrower ? orgNameOf(borrower.organization_id) : null,
+      guarantorId,
+      guarantorName: g.guarantor_name || nameOf(guarantorId),
+      guarantorChannel: guarantor ? contributionChannel(guarantor) : 'unknown',
+      guarantorOrganization: guarantor ? orgNameOf(guarantor.organization_id) : null,
+      loanAmount: parseFloat(loan.amount) || 0,
+      status: guarantorRowStatus(g),
+      eligible: elig.eligible,
+      ineligibleReason: elig.eligible ? null : elig.reason,
+      ineligibleCode: elig.eligible ? null : elig.code,
+      startedAt: g.created_at,
+    };
+  });
+}
+
 router.get('/guarantors', async (req, res) => {
   try {
-    const [rels, settingsRow] = await Promise.all([
-      supabase.from('loan_guarantors').select('id, loan_id, guarantor_id, status, created_at').order('created_at', { ascending: false }).limit(100),
-      supabase.from('guarantor_settings').select('*').limit(1).single(),
-    ]);
-    if (rels.error) throw rels.error;
-    // join loans for borrower + amount
-    const loanIds = [...new Set((rels.data || []).map((g) => g.loan_id).filter(Boolean))];
-    let loanMap = {};
-    if (loanIds.length) {
-      const { data: loans } = await supabase.from('loans').select('id, profile_id, amount, status').in('id', loanIds);
-      (loans || []).forEach((l) => { loanMap[l.id] = l; });
-    }
-    const borrowerIds = Object.values(loanMap).map((l) => l.profile_id).filter(Boolean);
-    const guarantorIds = (rels.data || []).map((g) => g.guarantor_id).filter(Boolean);
-    const names = await profileNames([...borrowerIds, ...guarantorIds]);
+    const { data: rels, error: relErr } = await supabase
+      .from('loan_guarantors')
+      .select('id, loan_id, guarantor_id, guarantor_profile_id, guarantor_name, status, request_status, created_at')
+      .order('created_at', { ascending: false })
+      .limit(100);
+    if (relErr) throw relErr;
 
-    const relationships = (rels.data || []).map((g) => {
-      const loan = loanMap[g.loan_id] || {};
-      return {
-        id: g.id,
-        borrowerId: loan.profile_id || null,
-        borrowerName: names[loan.profile_id] || 'Unknown',
-        guarantorId: g.guarantor_id,
-        guarantorName: names[g.guarantor_id] || 'Unknown',
-        loanAmount: parseFloat(loan.amount) || 0,
-        status: g.status || 'active',
-        startedAt: g.created_at,
-      };
-    });
-    const settings = {
-      requireGuarantor: (settingsRow.data?.minimum_membership_months ?? 0) > 0,
-      minimumGuarantorBalance: settingsRow.data?.minimum_balance ?? 0,
-      minimumMembershipMonths: settingsRow.data?.minimum_membership_months ?? 0,
-    };
+    const relationships = await buildGuarantorRelationships(rels);
+
+    // Pending requests = rows still awaiting consent. Kept derived from the same
+    // set so the two tables cannot disagree about which rows are pending.
+    const pendingRequests = relationships
+      .filter((r) => r.status === 'pending')
+      .map((r) => ({
+        id: r.id,
+        borrowerId: r.borrowerId,
+        borrowerName: r.borrowerName,
+        guarantorId: r.guarantorId,
+        guarantorName: r.guarantorName,
+        loanAmount: r.loanAmount,
+        requestedAt: r.startedAt,
+      }));
+
+    // Settings are fetched separately so a missing guarantor_settings table
+    // cannot 500 the whole page (the table is not in the migrations).
+    let settings = { requireGuarantor: false, minimumGuarantorBalance: 0, minimumMembershipMonths: 0 };
+    try {
+      const { data: settingsRow } = await supabase
+        .from('guarantor_settings')
+        .select('*')
+        .limit(1)
+        .maybeSingle();
+      if (settingsRow) {
+        settings = {
+          requireGuarantor: (settingsRow.minimum_membership_months ?? 0) > 0,
+          minimumGuarantorBalance: settingsRow.minimum_balance ?? 0,
+          minimumMembershipMonths: settingsRow.minimum_membership_months ?? 0,
+        };
+      }
+    } catch (settingsErr) {
+      logger.warn('guarantor_settings unavailable:', settingsErr.message);
+    }
+
     res.json({
       success: true,
       relationships,
-      pendingRequests: [],
+      pendingRequests,
       settings,
       totalRelationships: relationships.length,
+      totalIneligible: relationships.filter((r) => !r.eligible).length,
+    });
+  } catch (err) {
+    logger.error('Error listing guarantors:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/** Settings on their own, so the page can load before relationships resolve. */
+router.get('/guarantors/settings', async (req, res) => {
+  try {
+    const { data: settingsRow } = await supabase
+      .from('guarantor_settings')
+      .select('*')
+      .limit(1)
+      .maybeSingle();
+    res.json({
+      success: true,
+      settings: {
+        requireGuarantor: (settingsRow?.minimum_membership_months ?? 0) > 0,
+        minimumGuarantorBalance: settingsRow?.minimum_balance ?? 0,
+        minimumMembershipMonths: settingsRow?.minimum_membership_months ?? 0,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/admin/guarantors/eligibility?borrowerId=&guarantorId=
+ * Evaluate the mobile guarantor rule for a specific pair, so an operator can
+ * answer "can this member guarantee this borrower?" without guessing.
+ */
+router.get('/guarantors/eligibility', async (req, res) => {
+  try {
+    const { borrowerId, guarantorId } = req.query;
+    if (!borrowerId || !guarantorId) {
+      return res.status(400).json({ success: false, error: 'borrowerId and guarantorId are required' });
+    }
+    const { data: profiles, error } = await supabase
+      .from('profiles')
+      .select(GUARANTOR_PROFILE_COLS)
+      .in('id', [borrowerId, guarantorId]);
+    if (error) throw error;
+    const byId = new Map((profiles || []).map((p) => [p.id, p]));
+    const borrower = byId.get(borrowerId);
+    const guarantor = byId.get(guarantorId);
+    if (!borrower || !guarantor) {
+      return res.status(404).json({ success: false, error: 'One or both members were not found' });
+    }
+    const verdict = guarantorEligibility(borrower, guarantor);
+
+    const orgIds = [...new Set([borrower.organization_id, guarantor.organization_id].filter(Boolean))];
+    const orgMap = {};
+    if (orgIds.length) {
+      const { data: orgs } = await supabase.from('organizations').select('id, name').in('id', orgIds);
+      (orgs || []).forEach((o) => { orgMap[o.id] = o.name; });
+    }
+
+    res.json({
+      success: true,
+      eligible: verdict.eligible,
+      code: verdict.code,
+      reason: verdict.reason,
+      borrower: {
+        id: borrower.id,
+        name: borrower.name || borrower.email,
+        channel: contributionChannel(borrower),
+        organization: orgMap[borrower.organization_id] || null,
+      },
+      guarantor: {
+        id: guarantor.id,
+        name: guarantor.name || guarantor.email,
+        channel: contributionChannel(guarantor),
+        organization: orgMap[guarantor.organization_id] || null,
+      },
+    });
+  } catch (err) {
+    logger.error('Error evaluating guarantor eligibility:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/admin/guarantors/members?search=
+ * Lightweight member picker for the eligibility checker.
+ */
+router.get('/guarantors/members', async (req, res) => {
+  try {
+    let q = supabase
+      .from('profiles')
+      .select('id, name, email, organization_id, contribution_method, contribution_type, pending_organization_name')
+      .order('name', { ascending: true })
+      .limit(20);
+    const search = String(req.query.search || '').trim();
+    if (search) q = q.or(`name.ilike.%${search}%,email.ilike.%${search}%`);
+    const { data, error } = await q;
+    if (error) throw error;
+
+    const orgIds = [...new Set((data || []).map((p) => p.organization_id).filter(Boolean))];
+    const orgMap = {};
+    if (orgIds.length) {
+      const { data: orgs } = await supabase.from('organizations').select('id, name').in('id', orgIds);
+      (orgs || []).forEach((o) => { orgMap[o.id] = o.name; });
+    }
+
+    res.json({
+      success: true,
+      members: (data || []).map((p) => ({
+        id: p.id,
+        name: p.name || p.email || 'Unknown',
+        channel: contributionChannel(p),
+        organization: orgMap[p.organization_id] || null,
+      })),
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
