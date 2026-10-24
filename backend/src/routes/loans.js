@@ -18,6 +18,7 @@ const referralService = require('../services/referralService');
 const qrCodeService = require('../services/qrCodeService');
 const notifyService = require('../services/notifyService');
 const loanPolicy = require('../lib/loanPolicy');
+const { evaluateGuarantorEligibility } = require('../lib/guarantorEligibility');
 const logger = require('../utils/logger');
 
 const ADMIN_ROLES = ['admin', 'superadmin', 'super_admin', 'staff'];
@@ -147,10 +148,19 @@ router.post(
       }
 
       // ── Savings-based eligibility cap (Policy §3) ─────────────────────────
-      // savings.total_saved is never written anywhere in the codebase, so it
-      // is always 0 and would cap every loan at ₦0. Use the wallet balance —
-      // the member's actual funds — as the basis for the eligibility cap,
-      // falling back to total_saved only if it was ever populated.
+      // The cap is the member's savings × the product multiplier.
+      //
+      // The previous comment here claimed total_saved "is never written anywhere
+      // in the codebase, so it is always 0". That is wrong: the payment-proof
+      // triggers in migrations 007 and 023 increment it on every verified
+      // deposit, and production has members with a real balance. The code below
+      // already preferred it, so behaviour matched policy — but the comment
+      // invited someone to "fix" the ordering and cap loans against the wallet
+      // instead, which for a member holding savings and an empty wallet would
+      // drop their ceiling to zero.
+      //
+      // Preference order: total_saved (verified savings), else the wallet
+      // balance (funds the member actually holds).
       const { data: savings, error: savingsErr } = await supabase
         .from('savings')
         .select('total_saved')
@@ -594,6 +604,15 @@ router.get(
       const loan = loanData || {};
       const borrower = profileData || {};
 
+      // Pre-check the scanning guarantor against the borrower so the app can
+      // refuse an ineligible scan before the consent screen is shown. The
+      // confirm endpoints re-check authoritatively.
+      const eligibility = await evaluateGuarantorEligibility(
+        supabase,
+        loan.profile_id,
+        req.user.id,
+      );
+
       res.json({
         success: true,
         qrId: qrRow.qr_id,
@@ -608,6 +627,9 @@ router.get(
         guarantorsFound: qrRow.guarantors_found || 0,
         expiresAt: qrRow.expires_at,
         isExpired: qrRow.expires_at ? new Date() > new Date(qrRow.expires_at) : false,
+        guarantorEligible: eligibility.eligible,
+        guarantorIneligibleCode: eligibility.code,
+        guarantorIneligibleReason: eligibility.reason,
       });
     } catch (err) {
       logger.error('Error fetching loan by QR ID:', err);
@@ -901,6 +923,22 @@ router.post(
         .maybeSingle();
 
       if (findErr) throw findErr;
+
+      // The guarantor must share the borrower's contribution channel (same
+      // organisation for salary-deduction, direct-deposit for direct-deposit).
+      const { data: loanOwner } = await supabase
+        .from('loans')
+        .select('profile_id')
+        .eq('id', loanId)
+        .maybeSingle();
+      const eligibility = await evaluateGuarantorEligibility(
+        supabase,
+        loanOwner && loanOwner.profile_id,
+        guarantorId,
+      );
+      if (!eligibility.eligible) {
+        return res.status(400).json({ success: false, error: eligibility.reason, code: eligibility.code });
+      }
 
       const now = new Date().toISOString();
 

@@ -34,15 +34,10 @@ class LoanApiService {
     return _dio.get('/loans/$loanId/guarantors').then((response) => GuarantorsListResponse.fromJson(response.data));
   }
 
-  /// Confirm guarantee (guarantor accepts)
-  /// Calls the /loans/:loanId/guarantors/confirm endpoint (QR scan flow).
-  /// This endpoint upserts the loan_guarantors row so it works whether or not
-  /// a pending record already exists for this guarantor.
-  /// The loanId is used as the path param so the backend resolves the record
-  /// by loan_id + guarantor_id (from the JWT token).
   /// Confirm guarantee via the dedicated guarantor route (QR scan flow).
   /// Uses POST /guarantor/:loanId/confirm which upserts the loan_guarantors
-  /// row without a feature flag so it is always reachable.
+  /// row without a feature flag so it is always reachable. The backend
+  /// re-checks guarantor eligibility (contribution channel / organisation).
   Future<GuarantorConfirmResponse> confirmGuarantee(String loanId, GuarantorConfirmRequest request) async {
     try {
       final response = await _dio.post(
@@ -63,10 +58,9 @@ class LoanApiService {
     }
   }
 
-  /// Decline guarantee (guarantor rejects)
-  /// Calls the /guarantor/requests/:loanId/decline endpoint.
-  /// The loanId is used as the path param so the backend resolves the record
-  /// by loan_id + guarantor_id (from the JWT token).
+  /// Decline guarantee (guarantor rejects).
+  /// Calls POST /loans/:loanId/guarantors/decline, which resolves the record by
+  /// loan_id + guarantor_id (from the JWT token).
   Future<GuarantorDeclineResponse> declineGuarantee(String loanId, GuarantorDeclineRequest request) {
     return _dio.post('/loans/$loanId/guarantors/decline', data: request.toJson()).then((response) {
       // Map the backend response to GuarantorDeclineResponse

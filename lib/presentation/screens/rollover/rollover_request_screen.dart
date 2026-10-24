@@ -4,7 +4,9 @@ import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../data/models/loan_models.dart';
 import '../../../data/models/rollover_models.dart';
+import '../../../data/models/guarantor_models.dart';
 import '../../../data/api/rollover_api_service.dart' show GuarantorInfo;
+import '../../../data/api/guarantor_api_service.dart';
 import '../../providers/rollover_provider.dart';
 import '../../widgets/common/buttons.dart';
 import '../../widgets/common/cards.dart';
@@ -253,41 +255,15 @@ class RolloverRequestScreen extends ConsumerWidget {
   /// Choose a guarantor. Kept local to the screen so the request flow can add
   /// guarantors without navigating away mid-form.
   Future<void> _showGuarantorPicker(BuildContext context, WidgetRef ref) async {
-    final controller = TextEditingController();
-    final added = await showDialog<bool>(
+    final member = await showDialog<EligibleGuarantor>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Add a guarantor'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'All three guarantors must give fresh consent for this rollover.',
-              style: TextStyle(fontSize: 13, color: CoopvestColors.textSecondary),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              autofocus: true,
-              decoration: const InputDecoration(
-                labelText: 'Guarantor name or member ID',
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Add')),
-        ],
-      ),
+      builder: (dialogContext) => const _EligibleGuarantorPicker(),
     );
-
-    final value = controller.text.trim();
-    if (added != true || value.isEmpty || !context.mounted) return;
+    if (member == null || !context.mounted) return;
     ref.read(rolloverProvider.notifier).addGuarantor(
           GuarantorInfo(
-            guarantorId: value,
-            guarantorName: value,
+            guarantorId: member.id,
+            guarantorName: member.name,
             guarantorPhone: '',
           ),
         );
@@ -356,3 +332,121 @@ class RolloverRequestScreen extends ConsumerWidget {
     );
   }
 }
+
+/// Picks a guarantor from the members the backend says are eligible for this
+/// borrower. The backend applies the contribution-channel rule (same
+/// organisation for salary deduction, direct deposit for direct deposit), so an
+/// ineligible member is never offered.
+class _EligibleGuarantorPicker extends StatefulWidget {
+  const _EligibleGuarantorPicker();
+
+  @override
+  State<_EligibleGuarantorPicker> createState() =>
+      _EligibleGuarantorPickerState();
+}
+
+class _EligibleGuarantorPickerState extends State<_EligibleGuarantorPicker> {
+  final _searchController = TextEditingController();
+  final _service = GuarantorApiService();
+  List<EligibleGuarantor> _members = const [];
+  String? _error;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      final result = await _service.getEligibleMembers(
+        search: _searchController.text.trim(),
+      );
+      if (!mounted) return;
+      setState(() { _members = result.members; _loading = false; });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString().replaceFirst('Exception: ', '');
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Add a guarantor'),
+      content: SizedBox(
+        width: 320,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Only members who are eligible to guarantee your loan are shown.',
+              style: TextStyle(fontSize: 13, color: CoopvestColors.textSecondary),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _searchController,
+              textInputAction: TextInputAction.search,
+              onSubmitted: (_) => _load(),
+              decoration: InputDecoration(
+                labelText: 'Search by name',
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.search),
+                  onPressed: _load,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            if (_loading)
+              const Padding(
+                padding: EdgeInsets.all(24),
+                child: CircularProgressIndicator(),
+              )
+            else if (_error != null)
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(_error!, style: const TextStyle(color: CoopvestColors.error)),
+              )
+            else if (_members.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: Text('No eligible members found.'),
+              )
+            else
+              SizedBox(
+                height: 220,
+                child: ListView.builder(
+                  itemCount: _members.length,
+                  itemBuilder: (context, index) {
+                    final member = _members[index];
+                    return ListTile(
+                      title: Text(member.name),
+                      onTap: () => Navigator.pop(context, member),
+                    );
+                  },
+                ),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+      ],
+    );
+  }
+}
+

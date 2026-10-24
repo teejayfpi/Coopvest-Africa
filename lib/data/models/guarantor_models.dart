@@ -146,3 +146,52 @@ class GuarantorStats {
     );
   }
 }
+
+/// A member who may be selected as a guarantor, as returned by
+/// `GET /guarantor/eligible-members`.
+class EligibleGuarantor {
+  final String id;
+  final String name;
+  final String? organizationId;
+
+  EligibleGuarantor({
+    required this.id,
+    required this.name,
+    this.organizationId,
+  });
+
+  factory EligibleGuarantor.fromJson(Map<String, dynamic> json) {
+    return EligibleGuarantor(
+      id: (json['id'] ?? '') as String,
+      name: (json['name'] ?? 'Coopvest Member') as String,
+      organizationId: json['organizationId'] as String?,
+    );
+  }
+}
+
+/// Response wrapper for the eligible-guarantor list. `channel` is 'salary'
+/// (same-organisation salary-deduction members) or 'direct' (direct-deposit
+/// members).
+class EligibleGuarantorList {
+  final String channel;
+  final String? organizationId;
+  final List<EligibleGuarantor> members;
+
+  EligibleGuarantorList({
+    required this.channel,
+    this.organizationId,
+    required this.members,
+  });
+
+  factory EligibleGuarantorList.fromJson(Map<String, dynamic> json) {
+    final list = (json['members'] as List<dynamic>? ?? [])
+        .map((e) => EligibleGuarantor.fromJson(e as Map<String, dynamic>))
+        .toList();
+    return EligibleGuarantorList(
+      channel: (json['channel'] ?? 'unknown') as String,
+      organizationId: json['organizationId'] as String?,
+      members: list,
+    );
+  }
+}
+

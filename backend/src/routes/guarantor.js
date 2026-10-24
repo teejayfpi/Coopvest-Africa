@@ -21,6 +21,7 @@ const { authenticate } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const logger = require('../utils/logger');
 const notifyService = require('../services/notifyService');
+const { evaluateGuarantorEligibility, contributionChannel, canGuarantee } = require('../lib/guarantorEligibility');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -405,20 +406,23 @@ router.post(
         return res.status(400).json({ success: false, error: `Request is already ${mapStatus(row.status)}` });
       }
 
-      // Borrowers cannot guarantee their own loan.
-      {
-        const { data: loanRow, error: loanErr } = await supabase
-          .from('loans')
-          .select('profile_id')
-          .eq('id', row.loan_id)
-          .maybeSingle();
-        if (loanErr) throw loanErr;
-        if (loanRow && loanRow.profile_id === req.user.id) {
-          return res.status(400).json({
-            success: false,
-            error: 'You cannot stand as a guarantor for your own loan. Please have someone else scan the QR code.',
-          });
-        }
+      // A guarantor must share the borrower's contribution channel (same
+      // organisation for salary-deduction, direct-deposit for direct-deposit),
+      // and can never guarantee their own loan.
+      const { data: loanRow, error: loanErr } = await supabase
+        .from('loans')
+        .select('profile_id')
+        .eq('id', row.loan_id)
+        .maybeSingle();
+      if (loanErr) throw loanErr;
+
+      const eligibility = await evaluateGuarantorEligibility(
+        supabase,
+        loanRow && loanRow.profile_id,
+        req.user.id,
+      );
+      if (!eligibility.eligible) {
+        return res.status(400).json({ success: false, error: eligibility.reason, code: eligibility.code });
       }
 
       const now = new Date().toISOString();
@@ -694,18 +698,23 @@ router.post(
         return res.status(400).json({ success: false, error: 'Invalid loan reference format. Please update your app and try again.' });
       }
 
-      // Borrowers cannot guarantee their own loan.
+      // A guarantor must share the borrower's contribution channel (same
+      // organisation for salary-deduction, direct-deposit for direct-deposit),
+      // and can never guarantee their own loan.
       const { data: loanRow, error: loanErr } = await supabase
         .from('loans')
         .select('profile_id')
         .eq('id', loanId)
         .maybeSingle();
       if (loanErr) throw loanErr;
-      if (loanRow && loanRow.profile_id === guarantorId) {
-        return res.status(400).json({
-          success: false,
-          error: 'You cannot stand as a guarantor for your own loan. Please have someone else scan the QR code.',
-        });
+
+      const eligibility = await evaluateGuarantorEligibility(
+        supabase,
+        loanRow && loanRow.profile_id,
+        guarantorId,
+      );
+      if (!eligibility.eligible) {
+        return res.status(400).json({ success: false, error: eligibility.reason, code: eligibility.code });
       }
 
       const now = new Date().toISOString();
@@ -783,6 +792,69 @@ router.post(
       });
     } catch (err) {
       logger.error('Error confirming guarantee (/:loanId/confirm):', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// GET /eligible-members?search=
+//
+// Members the current borrower is allowed to pick as a guarantor, per
+// guarantorEligibility.js. The app's picker uses this instead of free-text so
+// an ineligible member cannot be selected in the first place.
+// ---------------------------------------------------------------------------
+router.get(
+  '/eligible-members',
+  authenticate,
+  [query('search').optional().isString()],
+  validate,
+  async (req, res) => {
+    try {
+      const PROFILE_COLS =
+        'id, name, organization_id, pending_organization_name, contribution_method, contribution_type';
+
+      const { data: me, error: meErr } = await supabase
+        .from('profiles')
+        .select(PROFILE_COLS)
+        .eq('id', req.user.id)
+        .maybeSingle();
+      if (meErr) throw meErr;
+      if (!me) return res.status(404).json({ success: false, error: 'Profile not found' });
+
+      const channel = contributionChannel(me);
+      if (channel === 'unknown') {
+        return res.status(400).json({
+          success: false,
+          error: 'Your contribution method is not set yet, so guarantors cannot be listed. Please complete your profile.',
+        });
+      }
+
+      // Filter with the same `canGuarantee` used to enforce the rule, so the
+      // list offered and the rule applied can never disagree.
+      let q = supabase
+        .from('profiles')
+        .select(PROFILE_COLS)
+        .neq('id', req.user.id)
+        .limit(200);
+
+      const search = String(req.query.search || '').trim();
+      if (search) q = q.ilike('name', `%${search}%`);
+
+      const { data, error } = await q;
+      if (error) throw error;
+
+      const members = (data || [])
+        .filter((p) => canGuarantee(me, p))
+        .slice(0, 50)
+        .map((p) => ({
+          id: p.id,
+          name: p.name || 'Coopvest Member',
+          organizationId: p.organization_id || null,
+        }));
+      res.json({ success: true, channel, organizationId: me.organization_id || null, members });
+    } catch (err) {
+      logger.error('Error listing eligible guarantors:', err);
       res.status(500).json({ success: false, error: err.message });
     }
   }
