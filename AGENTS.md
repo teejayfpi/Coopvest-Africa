@@ -500,6 +500,14 @@ supports. Comparative/reporting code uses the ledger and returns a
 `contributions` — a headline figure must be traceable to real transactions.
 The stray rows still need deleting from the DB.
 
+### Report fixtures must not pin loan due dates to calendar dates
+`default_report` and `default_statistics` classify a loan as overdue by
+comparing `next_due_date` to "now", so a test fixture with a hardcoded due date
+is a time bomb: it reads "not yet due" the day it is written and "overdue"
+once real time passes it, failing a test whose code is correct. Use a relative
+date (`daysFromNow(n)` in `__tests__/reporting.test.js`), not a literal, for
+any fixture date the report logic compares against the clock.
+
 ## Comparative analytics module
 `src/lib/reportPeriods.js` (UTC periods, ISO weeks), `comparativeMetrics.js`
 (ledger-backed flow vs stock metrics), `comparisonEngine.js` (abs + % change,
@@ -668,6 +676,22 @@ over admin latency.
 middleware and several routes but were created by no migration, so a fresh
 environment fails the gate query. Migration 048 creates them and backfills the
 channel from `kyc.personal_info`.
+
+### Both sign-up routes must write the channel, not just the shortened one
+The channel is written to `profiles` in exactly two places, and they must agree:
+
+- `POST /kyc/contribution-type` — the shortened path;
+- `POST /auth/complete-registration` — the full wizard, which posts the whole
+  profile and never calls the former.
+
+Both call `planProfileChannelUpdate()` in
+`backend/src/lib/contributionChannel.js`, which is the single definition of the
+write. It used to live only in `/kyc/contribution-type`, so a member who came
+through the wizard (reachable when Supabase email confirmation is off — step 1
+routes straight to `/register-step3`) kept a NULL channel: the fee exemption
+could not fire and `contributionChannel()` classified them as direct deposit,
+which also breaks guarantor eligibility. Migration 051 backfills those members.
+Keep the two call sites on the one helper rather than re-deriving the mapping.
 
 ### The gate must be reachable-proof, not just present
 A Direct Deposit member who had not paid could reach the dashboard by pressing

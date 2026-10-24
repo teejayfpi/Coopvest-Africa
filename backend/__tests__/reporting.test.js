@@ -78,6 +78,19 @@ function fakeDb(tables) {
   };
 }
 
+const DAY_MS = 86400000;
+
+/**
+ * A date `n` days from today, as YYYY-MM-DD.
+ *
+ * Loan due dates must be relative, not fixed calendar dates. `default_report`
+ * and `default_statistics` classify a loan as overdue when its `next_due_date`
+ * is before "now", so a pinned date silently flips the fixture from "not yet
+ * due" to "overdue" the moment real time passes it — the reports were right,
+ * the fixture rotted.
+ */
+const daysFromNow = (n) => new Date(Date.now() + n * DAY_MS).toISOString().slice(0, 10);
+
 const SEED = {
   profiles: [
     { id: 'p1', user_id: 'USR-1', name: 'Ada Obi', email: 'ada@x.com', phone: '0801', organization_id: 'o1', is_active: true, is_flagged: false, kyc_verified: true, registration_fee_paid: true, membership_status: 'active', monthly_amount: 5000, created_at: '2026-09-01T10:00:00Z' },
@@ -97,8 +110,8 @@ const SEED = {
     { id: 's2', profile_id: 'p2', total_saved: 100000, monthly_savings: 10000, balance: 100000, consecutive_months: 2, last_savings_date: '2026-09-03' },
   ],
   loans: [
-    { id: 'l1', loan_id: 'LN-1', profile_id: 'p1', loan_type: 'Stable Loan (12 months)', amount: 900000, total_repayment: 1000000, remaining_balance: 500000, monthly_repayment: 50000, status: 'active', next_due_date: '2026-09-30', created_at: '2026-09-01T10:00:00Z' },
-    { id: 'l2', loan_id: 'LN-2', profile_id: 'p2', loan_type: 'Quick Loan', amount: 300000, total_repayment: 330000, remaining_balance: 330000, monthly_repayment: 30000, status: 'overdue', next_due_date: '2026-08-01', created_at: '2026-08-01T10:00:00Z' },
+    { id: 'l1', loan_id: 'LN-1', profile_id: 'p1', loan_type: 'Stable Loan (12 months)', amount: 900000, total_repayment: 1000000, remaining_balance: 500000, monthly_repayment: 50000, status: 'active', next_due_date: daysFromNow(30), created_at: '2026-09-01T10:00:00Z' },
+    { id: 'l2', loan_id: 'LN-2', profile_id: 'p2', loan_type: 'Quick Loan', amount: 300000, total_repayment: 330000, remaining_balance: 330000, monthly_repayment: 30000, status: 'overdue', next_due_date: daysFromNow(-30), created_at: '2026-08-01T10:00:00Z' },
   ],
   loan_repayments: [
     { id: 'r1', loan_id: 'l1', profile_id: 'p1', amount: 50000, paid_at: '2026-09-10T10:00:00Z', status: 'paid', created_at: '2026-09-10T10:00:00Z' },
