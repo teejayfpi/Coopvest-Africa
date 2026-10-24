@@ -145,6 +145,22 @@ class _QRScannerScreenState extends ConsumerState<QRScannerScreen> {
             return;
           }
 
+          // The backend refuses a guarantor who does not share the borrower's
+          // contribution channel (same organisation for salary deduction,
+          // direct deposit for direct deposit). Stop before the consent screen
+          // rather than letting them consent to a guarantee that will bounce.
+          if (data['guarantorEligible'] == false) {
+            final reason = (data['guarantorIneligibleReason'] as String?)?.trim();
+            setState(() {
+              _errorMessage = (reason != null && reason.isNotEmpty)
+                  ? reason
+                  : 'You are not eligible to guarantee this loan.';
+              _isProcessing = false;
+              _hasScanned = false;
+            });
+            return;
+          }
+
           // Use backend data if available
           if (mounted) {
             final authState = ref.read(authProvider);

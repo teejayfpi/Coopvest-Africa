@@ -27,6 +27,7 @@ const { authenticate } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const logger = require('../utils/logger');
 const notify = require('../services/notifyService');
+const { evaluateGuarantorEligibility } = require('../lib/guarantorEligibility');
 
 router.use(authenticate);
 
@@ -109,6 +110,19 @@ router.post(
         .maybeSingle();
       if (existing) {
         return res.status(409).json({ success: false, error: 'A pending rollover request already exists for this loan' });
+      }
+
+      // Every guarantor must be eligible before anything is persisted, so a
+      // rejected request leaves no rollover row and no partial set behind.
+      for (const g of guarantors) {
+        const eligibility = await evaluateGuarantorEligibility(
+          supabase,
+          req.user.id,
+          g.guarantorId,
+        );
+        if (!eligibility.eligible) {
+          return res.status(400).json({ success: false, error: eligibility.reason, code: eligibility.code });
+        }
       }
 
       const { data: rollover, error: rErr } = await supabase
@@ -559,6 +573,16 @@ router.patch(
 
       const { newGuarantorId, newGuarantorName, newGuarantorPhone } = req.body;
 
+      // The replacement must satisfy the same channel/organisation rule.
+      const eligibility = await evaluateGuarantorEligibility(
+        supabase,
+        req.user.id,
+        newGuarantorId,
+      );
+      if (!eligibility.eligible) {
+        return res.status(400).json({ success: false, error: eligibility.reason, code: eligibility.code });
+      }
+
       const { data, error } = await supabase
         .from('rollover_guarantors')
         .update({
@@ -649,15 +673,15 @@ router.patch(
         });
       }
 
-      // Notify borrower — fire-and-forget
+      // Notify borrower — fire-and-forget, and only once applied.
       notify.notifyRolloverApproved({
         borrowerProfileId: rollover.profile_id,
         rolloverId: req.params.id,
         extensionMonths: rollover.extension_months,
       }).catch(err => logger.warn('Notification error (rollover approved):', err.message));
 
-      logger.info(`Rollover ${req.params.id} approved by admin ${req.user.id}`);
-      res.json({ success: true, rollover: data });
+      logger.info(`Rollover ${req.params.id} approved and applied by admin ${req.user.id}`);
+      res.json({ success: true, rollover: data, applied });
     } catch (err) {
       logger.error('approve rollover error:', err);
       res.status(500).json({ success: false, error: err.message });
