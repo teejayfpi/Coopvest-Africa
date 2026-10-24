@@ -26,6 +26,7 @@ const newAuthClient = () => createClient(
 );
 const logger = require('../utils/logger');
 const activationGate = require('../lib/activationGate');
+const { planProfileChannelUpdate } = require('../lib/contributionChannel');
 const {
   hasValue,
   buildRegistrationCandidates,
@@ -606,12 +607,24 @@ router.post('/complete-registration', authenticate, async (req, res) => {
     //    partial save, the member has completed onboarding — set the
     //    registration_completed flag so the mobile app no longer re-prompts
     //    the registration flow on every launch.
+    //
+    //    The contribution channel is written here too, using the same helper as
+    //    POST /kyc/contribution-type. The wizard path posts the whole profile to
+    //    this endpoint and never calls that one, so without this a member who
+    //    came through the wizard kept a NULL channel: the registration-fee
+    //    exemption could not fire and guarantor eligibility could not classify
+    //    them.
     const now = new Date().toISOString();
+    const channelUpdate = planProfileChannelUpdate({
+      contributionType: personal_info_candidate.contribution_type,
+      employerName: personal_info_candidate.employer_name || employment_info_candidate.employer_name,
+    });
     const { error: profileError } = await supabase
       .from('profiles')
       .update({
         department: employer_name || null,
         updated_at: now,
+        ...(channelUpdate || {}),
         ...(partial
           ? {}
           : { registration_completed: true, completed_at: now }),

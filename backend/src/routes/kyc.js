@@ -17,6 +17,7 @@ const validate = require('../middleware/validate');
 const logger = require('../utils/logger');
 const notifyService = require('../services/notifyService');
 const { ageInYears, normalizeDateOfBirth, MIN_AGE_YEARS } = require('../services/registrationMerge');
+const { planProfileChannelUpdate } = require('../lib/contributionChannel');
 
 // In-memory file upload (10 MB max) — the file is streamed straight into
 // Supabase Storage, never touching the disk.
@@ -216,52 +217,40 @@ router.post(
       // instead, which also counts as an employer on file (the fee is recovered
       // once they are enrolled and payroll runs).
       try {
-        const profileUpdate = {
-          contribution_method:
-            contribution_type === 'salary_deduction' ? 'payroll' : 'manual',
-          contribution_type,
-          updated_at: now,
-        };
+        const requestedOrgId = employmentInfo?.organization_id ?? null;
+        const employerName =
+          employmentInfo?.employer_name || mergedEmployment.employer_name || '';
 
-        if (contribution_type === 'salary_deduction') {
-          const requestedOrgId = employmentInfo?.organization_id ?? null;
-          const employerName =
-            (employmentInfo?.employer_name || mergedEmployment.employer_name || '')
-              .toString()
-              .trim();
-
-          if (requestedOrgId) {
-            const { data: org } = await supabase
-              .from('organizations')
-              .select('id')
-              .eq('id', requestedOrgId)
-              .eq('status', 'active')
-              .maybeSingle();
-
-            if (org) {
-              profileUpdate.organization_id = org.id;
-              profileUpdate.pending_organization_name = null;
-            } else {
-              logger.warn(
-                `contribution-type: organisation ${requestedOrgId} not found or inactive; not linking profile ${req.user.id}`,
-              );
-              if (employerName) profileUpdate.pending_organization_name = employerName;
-            }
-          } else if (employerName) {
-            profileUpdate.pending_organization_name = employerName;
+        let orgIsActive = false;
+        if (contribution_type === 'salary_deduction' && requestedOrgId) {
+          const { data: org } = await supabase
+            .from('organizations')
+            .select('id')
+            .eq('id', requestedOrgId)
+            .eq('status', 'active')
+            .maybeSingle();
+          orgIsActive = Boolean(org);
+          if (!org) {
+            logger.warn(
+              `contribution-type: organisation ${requestedOrgId} not found or inactive; not linking profile ${req.user.id}`,
+            );
           }
-        } else {
-          // Switching back to self-paid clears the employer linkage so the
-          // exemption cannot linger on a member who is no longer on payroll.
-          profileUpdate.organization_id = null;
-          profileUpdate.pending_organization_name = null;
         }
 
-        const { error: profileErr } = await supabase
-          .from('profiles')
-          .update(profileUpdate)
-          .eq('id', req.user.id);
-        if (profileErr) throw profileErr;
+        const profileUpdate = planProfileChannelUpdate({
+          contributionType: contribution_type,
+          employerName,
+          requestedOrgId,
+          orgIsActive,
+        });
+
+        if (profileUpdate) {
+          const { error: profileErr } = await supabase
+            .from('profiles')
+            .update(profileUpdate)
+            .eq('id', req.user.id);
+          if (profileErr) throw profileErr;
+        }
       } catch (profileErr) {
         // The KYC row is already saved, so the member's choice is not lost.
         // Log loudly: this failing is exactly what leaves them wrongly gated.
