@@ -10,6 +10,7 @@ import '../../../core/utils/utils.dart';
 import '../../widgets/common/buttons.dart';
 import '../../widgets/common/inputs.dart';
 import '../../providers/kyc_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../widgets/common/selfie_capture_field.dart';
 import '../../widgets/common/preferred_payment_date_picker.dart';
 import '../../../core/network/api_client.dart';
@@ -762,6 +763,12 @@ class _RegistrationOnboardingScreenState
       }
 
       if (mounted) {
+        // The channel and employer were just written to the profile by the
+        // endpoint above. Refresh the cached user so the activation screen sees
+        // the payroll exemption rather than a stale "Payment Required".
+        await ref.read(authProvider.notifier).refreshCurrentUser();
+        if (!mounted) return;
+
         // Salary consent is mandatory only for salary-deduction members.
         // Direct-deposit members skip consent and go to account activation.
         final nextRoute = _data.contributionType == _ContributionType.salaryDeduction
