@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
+import '../../../core/utils/utils.dart';
 import '../../../data/models/kyc_models.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/kyc_provider.dart';
@@ -39,9 +40,17 @@ class _ContributionMethodScreenState
   final _workAddressCtrl = TextEditingController();
   String? _employmentType;
 
+  /// The enrolled employer the member has picked, if any. When set, its id is
+  /// sent so the profile links to the organisation (payroll + the
+  /// same-organisation guarantor rule need the link, not just the name). Left
+  /// null for an employer that is not enrolled — that is recorded as a pending
+  /// name instead.
+  Organization? _selectedOrg;
+
   /// The employer originally on file, so an employer-only change is detected
   /// even when the channel is not switched. Captured in [initState].
   late final String _initialEmployer;
+  late final String? _initialOrgId;
 
   @override
   void initState() {
@@ -52,6 +61,7 @@ class _ContributionMethodScreenState
         sub != null && sub.employmentType.isNotEmpty ? sub.employmentType : null;
     _employerCtrl.text = sub?.employerName ?? sub?.organizationName ?? '';
     _initialEmployer = _employerCtrl.text.trim();
+    _initialOrgId = sub?.organizationId;
     _occupationCtrl.text = sub?.occupation ?? '';
     _workAddressCtrl.text = sub?.workAddress ?? '';
   }
@@ -75,9 +85,91 @@ class _ContributionMethodScreenState
   ///
   /// This is the job-change path: the channel is unchanged, so [_changed] is
   /// false, but the employer must still be re-submitted for review.
+  ///
+  /// The organisation id is only compared once the member has actually picked
+  /// one. Comparing it unconditionally would flag the screen dirty on open for
+  /// a member who is already linked, because [_selectedOrg] starts null.
   bool get _employerChanged =>
       _selected == 'salary_deduction' &&
-      _employerCtrl.text.trim() != _initialEmployer;
+      (_employerCtrl.text.trim() != _initialEmployer ||
+          (_selectedOrg != null && _selectedOrg!.id != _initialOrgId));
+
+  Future<void> _pickEmployer() async {
+    final org = await showModalBottomSheet<Organization>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _EmployerPickerSheet(
+        organizations: ref.read(kycProvider).organizations,
+        onLoad: () => ref.read(kycProvider.notifier).loadOrganizations(),
+      ),
+    );
+    if (org == null || !mounted) return;
+    setState(() {
+      _selectedOrg = org;
+      _employerCtrl.text = org.name;
+    });
+  }
+
+  /// Ask us to enrol an employer that is not in the list. Mirrors the sign-up
+  /// employer screen: the request is a courtesy so we can chase enrolment, and
+  /// the name is still saved as a pending employer.
+  Future<void> _requestEmployer() async {
+    final controller = TextEditingController(text: _employerCtrl.text.trim());
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Request your employer'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Your employer is not enrolled with Coopvest yet. Send us the '
+              'name and we will contact them. Your salary deduction can start '
+              'once they are enrolled.',
+              style: TextStyle(color: context.textSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Employer name',
+                hintText: 'e.g. Lagos State Ministry of Finance',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Send request'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+    final name = controller.text.trim();
+    if (name.isEmpty || !mounted) return;
+
+    try {
+      await ref.read(kycProvider.notifier).requestOrganizationApproval(name);
+    } catch (e) {
+      // Non-fatal: the employer is still recorded as pending when saved, which
+      // is what the fee exemption reads.
+      logger.w('Request employer failed (non-fatal): $e');
+    }
+    if (!mounted) return;
+    setState(() {
+      _selectedOrg = null;
+      _employerCtrl.text = name;
+    });
+  }
 
   Future<void> _save() async {
     if (_selected == null) return;
@@ -108,6 +200,11 @@ class _ContributionMethodScreenState
             ? {
                 'employment_type': _employmentType,
                 'employer_name': _employerCtrl.text.trim(),
+                // Only send the id for an employer the member actually picked
+                // from the enrolled list. The backend re-checks that it is a
+                // real, active organisation before linking it, and records a
+                // pending name when it is not.
+                if (_selectedOrg != null) 'organization_id': _selectedOrg!.id,
                 'employer_staff_id': _staffIdCtrl.text.trim(),
                 'occupation': _occupationCtrl.text.trim(),
                 'work_address': _workAddressCtrl.text.trim(),
@@ -207,13 +304,27 @@ class _ContributionMethodScreenState
               const SizedBox(height: 12),
               TextFormField(
                 controller: _employerCtrl,
-                onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(
-                  labelText: 'Employer / Organization Name *',
-                  border: OutlineInputBorder(),
+                readOnly: true,
+                onTap: _pickEmployer,
+                decoration: InputDecoration(
+                  labelText: 'Employer / Organization *',
+                  border: const OutlineInputBorder(),
+                  suffixIcon: const Icon(Icons.arrow_drop_down),
+                  helperText: _selectedOrg == null
+                      ? 'Tap to choose from enrolled employers'
+                      : 'Linked to an enrolled employer',
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 4),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: _requestEmployer,
+                  icon: const Icon(Icons.add_business_outlined, size: 18),
+                  label: const Text('My employer is not listed'),
+                ),
+              ),
+              const SizedBox(height: 8),
               TextFormField(
                 controller: _staffIdCtrl,
                 decoration: const InputDecoration(
@@ -316,6 +427,141 @@ class _OptionCard extends StatelessWidget {
               color: selected
                   ? CoopvestColors.primary
                   : CoopvestColors.mediumGray,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Bottom sheet that lists enrolled employers so a member can link one.
+///
+/// Picking an enrolled employer is what lets the profile store a real
+/// `organization_id` rather than a free-text name: payroll deduction and the
+/// same-organisation guarantor rule both read the link.
+class _EmployerPickerSheet extends StatefulWidget {
+  final List<Organization> organizations;
+  final Future<List<Organization>> Function() onLoad;
+
+  const _EmployerPickerSheet({
+    required this.organizations,
+    required this.onLoad,
+  });
+
+  @override
+  State<_EmployerPickerSheet> createState() => _EmployerPickerSheetState();
+}
+
+class _EmployerPickerSheetState extends State<_EmployerPickerSheet> {
+  final _searchCtrl = TextEditingController();
+  late List<Organization> _organizations;
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _organizations = widget.organizations;
+    if (_organizations.isEmpty) _load();
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      final orgs = await widget.onLoad();
+      if (!mounted) return;
+      setState(() {
+        _organizations = orgs;
+        _loading = false;
+      });
+    } catch (e) {
+      logger.w('Could not load employers: $e');
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  List<Organization> get _filtered {
+    final query = _searchCtrl.text.trim().toLowerCase();
+    if (query.isEmpty) return _organizations;
+    return _organizations
+        .where((o) =>
+            o.name.toLowerCase().contains(query) ||
+            (o.code ?? '').toLowerCase().contains(query))
+        .toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final results = _filtered;
+
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: SizedBox(
+        height: MediaQuery.of(context).size.height * 0.7,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Text('Choose your employer',
+                  style: theme.textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w700)),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: TextField(
+                controller: _searchCtrl,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(
+                  labelText: 'Search employer',
+                  prefixIcon: Icon(Icons.search),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : results.isEmpty
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Text(
+                              _organizations.isEmpty
+                                  ? 'No employers are enrolled yet. Use "My employer is not listed" to request one.'
+                                  : 'No match found.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                  color: context.textSecondary, fontSize: 13),
+                            ),
+                          ),
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          itemCount: results.length,
+                          itemBuilder: (context, index) {
+                            final org = results[index];
+                            return ListTile(
+                              leading:
+                                  const Icon(Icons.business_center_outlined),
+                              title: Text(org.name),
+                              subtitle:
+                                  (org.code != null && org.code!.isNotEmpty)
+                                      ? Text(org.code!)
+                                      : null,
+                              onTap: () => Navigator.of(context).pop(org),
+                            );
+                          },
+                        ),
             ),
           ],
         ),
