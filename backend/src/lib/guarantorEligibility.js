@@ -48,6 +48,14 @@ const REASON = {
  * `contribution_type` from the KYC/sign-up screens; either identifies the
  * member, so they are read as one value (matching activationGate.js).
  *
+ * When neither is set — legacy rows, or a member mid-onboarding — the employer
+ * link decides, exactly as `activationGate.js` derives the fee exemption: an
+ * organisation on file (linked or requested) means the member is paid by salary
+ * deduction, because that is the only reason to hold an employer. A member with
+ * no employer and no explicit channel is self-funded, i.e. direct deposit.
+ * Refusing these members would lock out existing users over a NULL column, so
+ * the channel is derived rather than treated as unknown.
+ *
  * @returns {'salary'|'direct'|'unknown'}
  */
 function contributionChannel(profile) {
@@ -55,6 +63,12 @@ function contributionChannel(profile) {
   const method = profile.contribution_method || profile.contribution_type;
   if (PAYROLL_METHODS.includes(method)) return 'salary';
   if (method === 'direct_deposit' || method === 'manual') return 'direct';
+
+  // No explicit channel: fall back to the employer link.
+  if (profile.organization_id || profile.pending_organization_name) return 'salary';
+  if (method == null) return 'direct';
+
+  // An unrecognised explicit value — refuse rather than guess.
   return 'unknown';
 }
 
@@ -129,7 +143,7 @@ async function evaluateGuarantorEligibility(supabase, borrowerId, guarantorId) {
 
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, contribution_method, contribution_type, organization_id')
+    .select('id, contribution_method, contribution_type, organization_id, pending_organization_name')
     .in('id', [borrowerId, guarantorId]);
   if (error) throw error;
 
