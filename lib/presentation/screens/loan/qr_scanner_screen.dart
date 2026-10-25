@@ -151,10 +151,21 @@ class _QRScannerScreenState extends ConsumerState<QRScannerScreen> {
           // rather than letting them consent to a guarantee that will bounce.
           if (data['guarantorEligible'] == false) {
             final reason = (data['guarantorIneligibleReason'] as String?)?.trim();
+            final help = data['guarantorHelp'] as String?;
+            final pendingEmployer = (data['pendingEmployerName'] as String?)?.trim();
+            var message = (reason != null && reason.isNotEmpty)
+                ? reason
+                : 'You are not eligible to guarantee this loan.';
+            // The borrower's employer is still being enrolled — name it so the
+            // member knows which employer we are waiting on, rather than a bare
+            // "cannot be verified".
+            if (help == 'employer_pending' &&
+                pendingEmployer != null &&
+                pendingEmployer.isNotEmpty) {
+              message = '$message\n\nEmployer: $pendingEmployer';
+            }
             setState(() {
-              _errorMessage = (reason != null && reason.isNotEmpty)
-                  ? reason
-                  : 'You are not eligible to guarantee this loan.';
+              _errorMessage = message;
               _isProcessing = false;
               _hasScanned = false;
             });

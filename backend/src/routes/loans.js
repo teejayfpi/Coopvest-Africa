@@ -630,6 +630,9 @@ router.get(
         guarantorEligible: eligibility.eligible,
         guarantorIneligibleCode: eligibility.code,
         guarantorIneligibleReason: eligibility.reason,
+        guarantorHelp: eligibility.help || null,
+        guarantorHelpUrl: eligibility.helpUrl || null,
+        pendingEmployerName: eligibility.pendingEmployerName || null,
       });
     } catch (err) {
       logger.error('Error fetching loan by QR ID:', err);
@@ -937,7 +940,13 @@ router.post(
         guarantorId,
       );
       if (!eligibility.eligible) {
-        return res.status(400).json({ success: false, error: eligibility.reason, code: eligibility.code });
+        return res.status(400).json({
+          success: false,
+          error: eligibility.reason,
+          code: eligibility.code,
+          help: eligibility.help || null,
+          helpUrl: eligibility.helpUrl || null,
+        });
       }
 
       const now = new Date().toISOString();

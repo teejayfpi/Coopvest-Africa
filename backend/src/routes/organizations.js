@@ -22,6 +22,7 @@ const { authenticate } = require('../middleware/auth');
 const supabase = require('../config/supabase');
 const logger = require('../utils/logger');
 const { notifyAdminsOrganizationApprovalRequest } = require('../services/notifyService');
+const { employerEnrollmentStatus } = require('../lib/employerEnrollment');
 
 /** Fields safe to show a member choosing their employer. */
 const SELECTABLE_FIELDS = 'id, name, code, type, remittance_cycle, deduction_enabled, status';
@@ -188,7 +189,7 @@ router.get('/me', authenticate, async (req, res) => {
   try {
     const { data: profile, error } = await supabase
       .from('profiles')
-      .select('organization_id, contribution_method, contribution_type, pending_organization_name, salary_deduction_consent')
+      .select('organization_id, contribution_method, contribution_type, pending_organization_name, pending_organization_requested_at, salary_deduction_consent')
       .eq('id', req.user.id)
       .maybeSingle();
     if (error) throw error;
@@ -215,6 +216,12 @@ router.get('/me', authenticate, async (req, res) => {
       success: true,
       organization,
       pendingOrganizationName: profile?.pending_organization_name || null,
+      pendingOrganizationRequestedAt: profile?.pending_organization_requested_at || null,
+      // Why the member is blocked and what happens next. A salaried member whose
+      // employer is not enrolled cannot name guarantors (there is no
+      // organisation to match them against), so say so here rather than letting
+      // them discover it at the guarantor step. See lib/guarantorEligibility.js.
+      employerEnrollment: employerEnrollmentStatus(profile, organization),
       contributionMethod: profile?.contribution_method || null,
       contributionType: profile?.contribution_type || null,
       salaryDeductionConsent: profile?.salary_deduction_consent === true,

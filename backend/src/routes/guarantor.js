@@ -422,7 +422,13 @@ router.post(
         req.user.id,
       );
       if (!eligibility.eligible) {
-        return res.status(400).json({ success: false, error: eligibility.reason, code: eligibility.code });
+        return res.status(400).json({
+          success: false,
+          error: eligibility.reason,
+          code: eligibility.code,
+          help: eligibility.help || null,
+          helpUrl: eligibility.helpUrl || null,
+        });
       }
 
       const now = new Date().toISOString();
@@ -714,7 +720,13 @@ router.post(
         guarantorId,
       );
       if (!eligibility.eligible) {
-        return res.status(400).json({ success: false, error: eligibility.reason, code: eligibility.code });
+        return res.status(400).json({
+          success: false,
+          error: eligibility.reason,
+          code: eligibility.code,
+          help: eligibility.help || null,
+          helpUrl: eligibility.helpUrl || null,
+        });
       }
 
       const now = new Date().toISOString();

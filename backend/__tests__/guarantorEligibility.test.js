@@ -169,3 +169,59 @@ describe('self and unknown borrowers', () => {
     expect(guarantorEligibility(direct('b'), null).eligible).toBe(false);
   });
 });
+
+describe('what the member can do about a refusal', () => {
+  const { refusal, helpFor } = require('../src/lib/guarantorEligibility');
+
+  test('a pending employer tells the member to wait, not to give up', () => {
+    const r = guarantorEligibility(
+      salary('b', null),
+      salary('g', null),
+    );
+    expect(r.code).toBe('BORROWER_NO_ORG');
+    expect(r.help).toBe('employer_pending');
+    expect(r.helpUrl).toBe('/organizations/me');
+    expect(r.reason).toMatch(/employer/i);
+  });
+
+  test('the pending employer name is carried when known', () => {
+    const r = guarantorEligibility(
+      { ...salary('b', null), pending_organization_name: 'Acme Ltd' },
+      salary('g', null),
+    );
+    expect(r.pendingEmployerName).toBe('Acme Ltd');
+  });
+
+  test('a mismatch asks the borrower to pick someone else', () => {
+    const r = guarantorEligibility(salary('b', ORG_A), salary('g', ORG_B));
+    expect(r.help).toBe('pick_another');
+    expect(r.helpUrl).toBeNull();
+  });
+
+  test('every refusal carries a help action and an eligible result carries none', () => {
+    const refusals = [
+      guarantorEligibility(null, direct('g')),
+      guarantorEligibility(salary('b', ORG_A), direct('g')),
+      guarantorEligibility(salary('b', null), salary('g', null)),
+      guarantorEligibility(salary('b', ORG_A), salary('g', ORG_B)),
+      guarantorEligibility(direct('b'), salary('g', ORG_A)),
+      guarantorEligibility(direct('b'), unknown('g')),
+      guarantorEligibility(unknown('b'), direct('g')),
+    ];
+    for (const r of refusals) {
+      expect(typeof r.help).toBe('string');
+      expect(r.help.length).toBeGreaterThan(0);
+      expect(r.reason).toBeTruthy();
+    }
+    const ok = guarantorEligibility(salary('b', ORG_A), salary('g', ORG_A));
+    expect(ok.eligible).toBe(true);
+    expect(ok.help).toBeNull();
+  });
+
+  test('an unknown code defaults to contact support', () => {
+    expect(helpFor('NOT_A_REAL_CODE')).toEqual({ action: 'contact_support', url: null });
+    const r = refusal('UNKNOWN', 'something went wrong');
+    expect(r.help).toBe('contact_support');
+    expect(r.eligible).toBe(false);
+  });
+});
