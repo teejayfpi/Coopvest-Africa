@@ -213,7 +213,7 @@ describe('income categorisation', () => {
     expect(metrics.incomeCategoryOf({ fee_type: 'levy', label: 'AGM Levy' })).toBe('agm_levies');
     expect(metrics.incomeCategoryOf({ fee_type: 'levy', label: 'Development Levy' })).toBe('development_levies');
     expect(metrics.incomeCategoryOf({ fee_type: 'registration_fee' })).toBe('registration_fees');
-    expect(metrics.incomeCategoryOf({ fee_type: 'fee', label: 'Mobile App Fee' })).toBe('other_income');
+    expect(metrics.incomeCategoryOf({ fee_type: 'fee', label: 'Administrative Fee' })).toBe('other_income');
     expect(metrics.incomeCategoryOf({ fee_type: 'fine', label: 'Late Repayment Fine' })).toBe('other_income');
   });
 });
