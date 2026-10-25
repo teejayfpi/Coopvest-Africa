@@ -121,7 +121,13 @@ router.post(
           g.guarantorId,
         );
         if (!eligibility.eligible) {
-          return res.status(400).json({ success: false, error: eligibility.reason, code: eligibility.code });
+          return res.status(400).json({
+            success: false,
+            error: eligibility.reason,
+            code: eligibility.code,
+            help: eligibility.help || null,
+            helpUrl: eligibility.helpUrl || null,
+          });
         }
       }
 
@@ -580,7 +586,13 @@ router.patch(
         newGuarantorId,
       );
       if (!eligibility.eligible) {
-        return res.status(400).json({ success: false, error: eligibility.reason, code: eligibility.code });
+        return res.status(400).json({
+          success: false,
+          error: eligibility.reason,
+          code: eligibility.code,
+          help: eligibility.help || null,
+          helpUrl: eligibility.helpUrl || null,
+        });
       }
 
       const { data, error } = await supabase

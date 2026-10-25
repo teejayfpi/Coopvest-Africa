@@ -28,7 +28,7 @@ const REASON = {
   SALARY_GUARANTOR_NOT_SALARY:
     'This borrower contributes by salary deduction, so their guarantors must also be salary-deduction members of the same organisation.',
   BORROWER_NO_ORG:
-    'This borrower contributes by salary deduction but has no organisation on file yet, so guarantors cannot be verified. Please contact support.',
+    'This borrower is paid by salary deduction, but their employer is still being enrolled, so guarantors cannot be verified yet. This usually clears once the employer is on the platform — check back shortly, or contact support if it does not.',
   ORG_MISMATCH:
     'Guarantors for a salary-deduction member must belong to the same organisation as the borrower.',
   DIRECT_GUARANTOR_SALARIED:
@@ -40,6 +40,52 @@ const REASON = {
   UNKNOWN:
     'Member details could not be loaded, so guarantor eligibility could not be verified.',
 };
+
+/**
+ * What the member can actually do about a refusal.
+ *
+ * A blocked borrower needs more than an explanation: the pending-employer case
+ * clears itself once the employer is enrolled, so the app can say "check back"
+ * and link to the employer's status instead of a dead-end "contact support".
+ */
+const HELP = {
+  SELF: { action: 'pick_another', url: null },
+  GUARANTOR_NOT_SALARY: { action: 'pick_another', url: null },
+  BORROWER_NO_ORG: { action: 'employer_pending', url: '/organizations/me' },
+  ORG_MISMATCH: { action: 'pick_another', url: null },
+  GUARANTOR_SALARIED: { action: 'pick_another', url: null },
+  GUARANTOR_CHANNEL_UNKNOWN: { action: 'contact_support', url: null },
+  BORROWER_CHANNEL_UNKNOWN: { action: 'contact_support', url: null },
+  UNKNOWN: { action: 'contact_support', url: null },
+};
+
+/** The help entry for a refusal code, defaulting to contact support. */
+function helpFor(code) {
+  return HELP[code] || HELP.UNKNOWN;
+}
+
+/**
+ * Build a refusal. One shape for every "no", so callers can rely on `help` and
+ * `helpUrl` being present rather than re-deriving what to do from the code.
+ *
+ * @param {string} code    refusal code (also the HELP key)
+ * @param {string} reason  member-facing copy
+ * @param {object|null} [borrower] borrower profile, for the pending-employer name
+ */
+function refusal(code, reason, borrower) {
+  const help = helpFor(code);
+  return {
+    eligible: false,
+    code,
+    reason,
+    help: help.action,
+    helpUrl: help.url,
+    ...(code === 'BORROWER_NO_ORG'
+      ? { pendingEmployerName: (borrower && borrower.pending_organization_name) || null }
+      : {}),
+  };
+}
+
 
 /**
  * The contribution channel a profile belongs to.
@@ -84,40 +130,44 @@ const isDirectChannel = (profile) => contributionChannel(profile) === 'direct';
  */
 function guarantorEligibility(borrower, guarantor) {
   if (!borrower || !guarantor) {
-    return { eligible: false, code: 'UNKNOWN', reason: REASON.UNKNOWN };
+    return refusal('UNKNOWN', REASON.UNKNOWN);
   }
 
   if (borrower.id && guarantor.id && borrower.id === guarantor.id) {
-    return { eligible: false, code: 'SELF', reason: REASON.SELF };
+    return refusal('SELF', REASON.SELF);
   }
 
   const borrowerChannel = contributionChannel(borrower);
 
   if (borrowerChannel === 'salary') {
     if (!isSalaryChannel(guarantor)) {
-      return { eligible: false, code: 'GUARANTOR_NOT_SALARY', reason: REASON.SALARY_GUARANTOR_NOT_SALARY };
+      return refusal('GUARANTOR_NOT_SALARY', REASON.SALARY_GUARANTOR_NOT_SALARY);
     }
     if (!borrower.organization_id) {
-      return { eligible: false, code: 'BORROWER_NO_ORG', reason: REASON.BORROWER_NO_ORG };
+      // The borrower is salaried but their employer is not enrolled yet, so
+      // there is no organisation to match a guarantor against. Carry the
+      // employer name so the app can tell the member which employer we are
+      // waiting on rather than showing a bare "cannot be verified".
+      return refusal('BORROWER_NO_ORG', REASON.BORROWER_NO_ORG, borrower);
     }
     if (!guarantor.organization_id || guarantor.organization_id !== borrower.organization_id) {
-      return { eligible: false, code: 'ORG_MISMATCH', reason: REASON.ORG_MISMATCH };
+      return refusal('ORG_MISMATCH', REASON.ORG_MISMATCH);
     }
-    return { eligible: true, code: null, reason: null };
+    return { eligible: true, code: null, reason: null, help: null, helpUrl: null };
   }
 
   if (borrowerChannel === 'direct') {
     if (isSalaryChannel(guarantor)) {
-      return { eligible: false, code: 'GUARANTOR_SALARIED', reason: REASON.DIRECT_GUARANTOR_SALARIED };
+      return refusal('GUARANTOR_SALARIED', REASON.DIRECT_GUARANTOR_SALARIED);
     }
     if (!isDirectChannel(guarantor)) {
-      return { eligible: false, code: 'GUARANTOR_CHANNEL_UNKNOWN', reason: REASON.GUARANTOR_CHANNEL_UNKNOWN };
+      return refusal('GUARANTOR_CHANNEL_UNKNOWN', REASON.GUARANTOR_CHANNEL_UNKNOWN);
     }
-    return { eligible: true, code: null, reason: null };
+    return { eligible: true, code: null, reason: null, help: null, helpUrl: null };
   }
 
   // Borrower channel unknown — refuse rather than guess which rule applies.
-  return { eligible: false, code: 'BORROWER_CHANNEL_UNKNOWN', reason: REASON.BORROWER_CHANNEL_UNKNOWN };
+  return refusal('BORROWER_CHANNEL_UNKNOWN', REASON.BORROWER_CHANNEL_UNKNOWN);
 }
 
 /** True when the guarantor may stand for this borrower. */
@@ -135,10 +185,10 @@ function canGuarantee(borrower, guarantor) {
  */
 async function evaluateGuarantorEligibility(supabase, borrowerId, guarantorId) {
   if (!borrowerId || !guarantorId) {
-    return { eligible: false, code: 'UNKNOWN', reason: REASON.UNKNOWN };
+    return refusal('UNKNOWN', REASON.UNKNOWN);
   }
   if (borrowerId === guarantorId) {
-    return { eligible: false, code: 'SELF', reason: REASON.SELF };
+    return refusal('SELF', REASON.SELF);
   }
 
   const { data, error } = await supabase
@@ -153,6 +203,9 @@ async function evaluateGuarantorEligibility(supabase, borrowerId, guarantorId) {
 
 module.exports = {
   REASON,
+  HELP,
+  helpFor,
+  refusal,
   contributionChannel,
   isSalaryChannel,
   isDirectChannel,
