@@ -21,6 +21,7 @@ const logger = require('../utils/logger');
 const notifyService = require('../services/notifyService');
 const alertService = require('../services/alertService');
 const { resolveMonthlyContribution } = require('../lib/monthlyContribution');
+const { isAdministrativeFeeExempt } = require('../lib/activationGate');
 
 const newRef = (prefix) => `${prefix}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 
@@ -276,6 +277,31 @@ function applyPaidMonthRule(
   return obligations;
 }
 
+/**
+ * Resolve the `fee_types` id of the monthly administrative fee, so the
+ * exemption can identify the row precisely rather than by its display label.
+ * Memoised: the catalogue changes rarely and `computeObligations` runs on every
+ * wallet load. A lookup failure falls back to the label check in the caller
+ * rather than throwing.
+ */
+let adminFeeTypeIdCache;
+async function resolveAdminFeeTypeId() {
+  if (adminFeeTypeIdCache !== undefined) return adminFeeTypeIdCache;
+  try {
+    const { data } = await supabase
+      .from('fee_types')
+      .select('id')
+      .eq('name', 'Administrative Fee')
+      .eq('category', 'fee')
+      .maybeSingle();
+    adminFeeTypeIdCache = data?.id || null;
+  } catch (err) {
+    logger.warn('obligations: admin fee type lookup failed:', err.message);
+    adminFeeTypeIdCache = null;
+  }
+  return adminFeeTypeIdCache;
+}
+
 async function computeObligations(profileId) {
   const obligations = {
     monthly_savings: 0,
@@ -285,6 +311,21 @@ async function computeObligations(profileId) {
     month_paid_savings: false,
     month_paid_loan: false, // reserved; paid flags evaluated per loan below
   };
+
+  // The member's channel, loaded up-front because the administrative-fee
+  // exemption depends on it and the "joined this month" rule below also needs
+  // `created_at`.
+  let profile = null;
+  try {
+    const { data } = await supabase
+      .from('profiles')
+      .select('created_at, contribution_method, contribution_type, organization_id, pending_organization_name')
+      .eq('id', profileId)
+      .maybeSingle();
+    profile = data || null;
+  } catch (pErr) {
+    logger.warn('obligations: profile lookup failed:', pErr.message);
+  }
 
   // Pledged monthly contribution. contribution_plans is the live value —
   // it is what the member's increase/reduction requests update and what the
@@ -332,10 +373,25 @@ async function computeObligations(profileId) {
   }
 
   // Outstanding fines / fees
+  //
+  // A member whose contributions are withheld by an employer has the monthly
+  // administrative fee recovered from their salary, so it must not also appear
+  // here as an in-app obligation — that would charge them twice for the same
+  // month. Only the administrative fee is skipped; fines and any other fee stay
+  // payable. The fee is identified by its catalogue link (`fee_type_id`), so a
+  // second 'fee' category entry is unaffected, with the label as a fallback for
+  // rows assigned before the link was recorded.
+  const adminFeeExempt = isAdministrativeFeeExempt(profile);
+  const adminFeeTypeId = await resolveAdminFeeTypeId();
+  const isAdministrativeFeeRow = (mf) => {
+    if (mf.fee_type !== 'fee') return false;
+    if (adminFeeTypeId && mf.fee_type_id === adminFeeTypeId) return true;
+    return String(mf.label || '').toLowerCase() === 'administrative fee';
+  };
   try {
     const { data: memberFees } = await supabase
       .from('member_fees')
-      .select('id, fee_type, label, loan_id, amount, created_at')
+      .select('id, fee_type, fee_type_id, label, loan_id, amount, created_at')
       .eq('profile_id', profileId)
       .eq('status', 'outstanding')
       .order('created_at', { ascending: false });
@@ -348,6 +404,7 @@ async function computeObligations(profileId) {
         created_at: mf.created_at,
       };
       if (mf.fee_type === 'fine') obligations.fines.push(row);
+      else if (adminFeeExempt && isAdministrativeFeeRow(mf)) obligations.administrative_fee_exempt = true;
       else obligations.fees.push(row);
     }
   } catch (fErr) {
@@ -370,17 +427,7 @@ async function computeObligations(profileId) {
   // A member who joined this month has no obligation until their first due
   // date passes. Without this, a brand-new account was told its contribution
   // was already N days overdue.
-  let joinedThisMonth = false;
-  try {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('created_at')
-      .eq('id', profileId)
-      .maybeSingle();
-    joinedThisMonth = isSameMonth(profile?.created_at, new Date());
-  } catch (pErr) {
-    logger.warn('obligations: profile lookup failed:', pErr.message);
-  }
+  const joinedThisMonth = isSameMonth(profile?.created_at, new Date());
 
   return applyPaidMonthRule(obligations, { paidThisMonth, joinedThisMonth });
 }

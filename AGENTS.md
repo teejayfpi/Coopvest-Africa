@@ -858,3 +858,16 @@ outstanding fines + outstanding fees. `GET /api/v1/wallet/obligations`
   `test/widget/obligations_payment_test.dart`.
 - A split payment carries `fee_id` per allocation so the backend settles the
   exact `member_fees` row shown as due, not merely the oldest outstanding one.
+
+### Salary-deduction members are exempt from the in-app administrative fee
+A member whose contributions are withheld by an employer has the monthly
+administrative fee recovered from their salary, so `computeObligations`
+(`backend/src/routes/wallet.js`) omits it from `fees` and sets
+`administrative_fee_exempt: true`. Same mechanism as the registration-fee
+exemption (`isAdministrativeFeeExempt` in `backend/src/lib/activationGate.js`):
+the channel must be payroll AND an employer must be on file
+(`organization_id` or `pending_organization_name`) - without an employer there
+is no deduction to recover from, so the in-app obligation stands. Only the
+identified administrative-fee row is hidden (matched on `fee_type_id`, with the
+label as fallback); fines and other fees stay payable. Tests:
+`backend/__tests__/administrativeFeeExemption.test.js`.
