@@ -1,4 +1,4 @@
-# Coopvest-Africa (Flutter mobile app + Node backend)
+# Coopvest — Latest-Coopvest backend
 
 ## ⚠️ TWO REPOS, NOT ONE — read before editing anything
 This application exists as **two separate repositories that must be kept in
@@ -6,8 +6,8 @@ lockstep**:
 
 | Repo | Contents |
 |---|---|
-| `teejayfpi/Coopvest-Africa` | this one — Flutter app + `backend/` |
-| `coopvestafrica-ops/Latest-Coopvest` | the same app and backend, different git history |
+| `coopvestafrica-ops/Latest-Coopvest` | this one — Flutter app + `backend/` |
+| `teejayfpi/Coopvest-Africa` | the same app and backend, different git history |
 
 They are **byte-identical** across `lib/`, `android/`, `assets/`, `ios/` and
 `backend/` (they diverged into 27 differing files once; do not let that happen
@@ -17,35 +17,125 @@ commits — so **cherry-picking between them is unreliable. Copy files.**
 **Every change must land in both.** A one-sided change ships different behaviour
 for the same product, which has already happened twice:
 - the LGA fix landed only in a screen so dead it never ran, and
-- a branding refresh landed only HERE, giving the two apps different splash
+- a branding refresh landed only here, giving the two apps different splash
   screens and icons.
 
 **Before starting work:** `git fetch` both repos. Someone else pushes to these
-regularly, and `Latest-Coopvest` gained 6+ commits mid-session more than once.
+regularly, and this repo has gained 6+ commits mid-session more than once.
 
 **After finishing work:** confirm parity with
-`diff -rq Coopvest-Africa/lib Latest-Coopvest/lib` (expect zero output) and
-`diff -rq Coopvest-Africa/backend/src Latest-Coopvest/backend/src`.
+`diff -rq Latest-Coopvest/lib Coopvest-Africa/lib` (expect zero output) and
+`diff -rq Latest-Coopvest/backend/src Coopvest-Africa/backend/src`.
 
 **One-sided changes are the single most common source of bugs in this project.**
 
-## Authentication — gotrue 2.15.0 API constraints
-The lockfile pins `gotrue 2.15.0` (via `supabase_flutter ^2.3.0`). Its
-`GoTrueClient` API differs from newer gotrue releases:
-- `setSession(String refreshToken)` — ONE positional arg (refresh token only.
-  Do NOT pass `(accessToken, refreshToken)` — that 2-arg form does not exist here.
+## Interest calculation (mobile-aligned)
+The backend interest logic in `src/services/referralService.js` MUST mirror the
+mobile app (`lib/presentation/screens/loan/loan_application_screen.dart`):
 
+- `BASE_RATES` per loan type: Quick Loan 7.5%, Flexi 7.0%, Stable (12m) 5.0%,
+  Stable (18m) 7.0%, Premium 14.0%, Maxi 19.0%. Legacy Micro/Business/Emergency
+  kept for old loans.
+- `MIN_FLOORS` = half of each base rate.
+- Referral tier bonus: 2% / 1% / 0.5% at 10 / 5 / 2 confirmed referrals.
+- Monthly repayment = EMI (reducing balance): `P * r * (1+r)^n / ((1+r)^n - 1)`,
+  `r = effectiveRate / 100 / 12`.
+- Total repayment = SIMPLE interest: `amount + (amount * effectiveRate / 100)`.
+  (NOT EMI * tenure — the mobile app uses simple interest for total.)
+
+`src/routes/loans.js` `LOAN_TYPES` accepts the mobile app's loan type names, and
+`total_repayment` stores the simple-interest value from the calc object.
+
+`src/routes/adminApi.js` GET `/loans` recomputes interest via
+`referralService.calculateInterestWithBonus(loanType, amount, tenure, bonus)`
+so legacy loans created under the old rate table display the same figures the
+member sees in the app.
+
+## Deploy
+- Backend deploys automatically on push to `main` (Render).
+- Admin dashboard is a separate Vite/React app in
+  `../Admin-Dashboard` deployed on Vercel.
+
+## Registration / onboarding (mobile)
+- `POST /api/auth/complete-registration` (auth) saves onboarding data to the
+  `kyc` table. `date_of_birth` and `address` are top-level columns; everything
+  else lives in `personal_info` / `employment_info` JSONB (bank fields inside
+  `personal_info`).
+- Validation and the write both merge the request body over the existing KYC
+  row via `services/registrationMerge.js` (`buildRegistrationCandidates`,
+  `mergeStoredPersonalInfo`): body values win when present, stored values fill
+  gaps. This lets a member resume an interrupted registration without losing
+  already-saved fields, and prevents the earlier bug where a partial resubmit
+  wiped `personal_info`/`employment_info`.
+- Required-field rules are in `REGISTRATION_FIELDS` (`routes/auth.js`); the
+  same `checkCompletion()` drives the POST endpoint, `GET
+  /complete-registration/status`, and `GET /profile-completeness`.
+- Age gate: members must be 18+. `POST /complete-registration` and
+  `POST /api/v1/kyc/submit` both reject an under-18 `date_of_birth` with 422
+  (`ageInYears`/`MIN_AGE_YEARS` in `services/registrationMerge.js`, exact
+  calendar math). The app's DOB picker caps selection at the 18th birthday.
+
+## Auth for live API
+- API base: `https://coopvest-api.onrender.com`
+- Admin login: POST `/api/auth/login` with the admin email/password.
+- Admin loans: GET `/api/admin/loans` with `Authorization: Bearer <token>`.
+
+## Admin Platform Extensions (financial-ops modules)
+`src/routes/adminPlatform.js` is mounted under `/api/admin` (via `router.use` in
+`adminApi.js`, so it inherits `requireAdmin`). Sensitive mutations require the
+Super Admin role (`requireSuperAdmin` from `middleware/auth.js`).
+
+Modules (all additive, no migration required for the core — config is stored in
+the `system_settings` key/value jsonb table):
+1. **Emergency Control Center** — `GET/PUT /api/admin/emergency-controls`,
+   `POST /api/admin/emergency-controls/disable-admin`. Toggles stored as
+   `emergency.*` keys. `middleware/systemStatus.js` reads the same keys (with a
+   15s cache) and blocks matching member-facing writes with HTTP 423. Admin
+   routes are bypassed so a freeze can be lifted.
+2. **Financial Ledger** (source of truth) — `GET /api/admin/ledger` (filters:
+   `id`=txn_no, `profileId`, `reference`, `memberName`, `paymentMethod`,
+   `status`, `from`/`to`), `/ledger/member/:id` (running balance),
+   `POST /api/admin/ledger/:id/reverse` (append-only reversal). Migration 023
+   adds serialized `txn_no` (CV-YYYY-NNNNNN via `next_ledger_txn_no()`),
+   enrichment columns (member/organization/payment-method/bank, `approved_by`,
+   `loan_id`, `payment_proof_id`, `allocation`), `bank_transactions` +
+   `bank_reconciliation` tables, and auto-posts an inflow ledger credit from
+   `handle_payment_proof_approval()` on every verified payment proof. Section 2b
+   of `adminPlatform.js` exposes `/ledger/dashboard` totals + reconciliation
+   status, audited `/ledger/adjust`, `/ledger/export.csv`, and the bank
+   statement import/reconciliation endpoints. The ledger responses UNION
+   stored `ledger_entries` rows (admin-posted: reversals, adjustments,
+   payment-proof auto-posts) with a computed view over `transactions`
+   (`services/ledgerMerge.js`), deduped by `reference`. Union is required:
+   `ledger_entries` exists in production but holds no mirrored activity, so
+   querying it alone renders the ledger empty. Migration:
+   `supabase/migrations/20260814000000_admin_platform.sql`.
+3. **System-Wide Search** — `GET /api/admin/search?q=`.
+4. **Super Admin Attention Required** — `GET /api/admin/attention` (aggregate
+   of pending approvals, payment proofs, fraud flags, overdue loans, KYC,
+   tickets).
+5. **Loan Approval Matrix** — `GET/PUT /api/admin/loan-approval-matrix`,
+   `GET /loan-approval-matrix/my-limit`. Stored as `loan_approval.thresholds`.
+6. **Notification Template Manager** — `GET /api/admin/notification-templates`,
+   `PUT /notification-templates/:key`. Stored as `notification_template.*`.
+7. **Document Vault** — `GET /api/admin/documents`, `POST /documents/:id/access`
+   (view/download audit-logged).
+8. **Payroll Reconciliation** — `GET /api/admin/payroll/:orgId/reconciliation`
+   (expected vs actual variance).
+
+The Approval Center (maker-checker) lives in `src/routes/governance.js` under
+`/api/admin/approvals` (uses `security_events` with the `APPROVAL_` prefix).
+
+## Auth — gotrue 2.15.0 API constraints
+The lockfile pins `gotrue 2.15.0` (`supabase_flutter ^2.3.0`). Its
+`GoTrueClient` differs from newer releases:
+- `setSession(String refreshToken)` — ONE positional arg. Do not pass the
+  2-arg `(accessToken, refreshToken)` form.
 - OTP verification is `verifyOTP({email?, token?, required OtpType type, ...})` —
-  capital **OTP**. The lowercase `verifyOtp(...)` does not exist on `GoTrueClient`.
-  OTP recovery resets use `verifyOTP(token: code, type: OtpType.recovery)`.
-
-
-
-- Deep-link auto-verify (`_verifyFromLink` in
-  `lib/presentation/screens/auth/register_step2_screen.dart`) must parse the
-  fragment at `#access_token=...&refresh_token=...` manually and call
-  `setSession(refreshToken)` + `refreshSession()`. A bare token param goes
-  through `verifyOTP`.
+  capital OTP. Lowercase `verifyOtp(...)` does not exist here.
+- `_verifyFromLink` in `register_step2_screen.dart` uses
+  `setSession(refreshToken)` + `refreshSession()` for fragment links,
+  `verifyOTP` for bare token params.
 
 ### OTP codes are not 6 digits
 `GOTRUE_MAILER_OTP_LENGTH` is a **server setting**, not a constant. This
@@ -55,25 +145,6 @@ silently rejects every valid code — the user cannot even type one in. Use a
 single flexible field (12 chars) and a `>= 6` guard; `verifyOTP` is the
 authority. Only change the length in Dashboard → Authentication → Sign In /
 Providers → Email if you also want 6-digit codes.
-
-## Supabase project
-- Project ref: `nyoauzqezpxeonmrxxgi` (region eu-west-1.
-- Management API SQL endpoint (no DB password needed):
-  `POST https://api.supabase.com/v1/projects/<ref>/database/query`
-  with `Authorization: Bearer sbp_...` and body `{"query": "<sql>"}`.
-- Migrations live in `backend/migrations/*.sql` (idempotent; apply in the
-  numbered pre-fix order). Ones confirmed missing on a fresh clone and
-  applied: 009 (payment_type),014 (ticket categories),025 (paystack),028 (realtime).
-  The live DB already had everything else (83+ tables, admin-platform 001-003,
-  ledger 023, termination 024, loans cancelled 013, mobiles 011-012).
-
-## Flutter analyze
-- `flutter analyze` reports many pre-existing errors unrelated to this
-  fix (missing `firebase_remote_config`, missing `logger_service.dart`,
-  stale `analytics_service.dart`, test Riverpod `ProviderOverride` drift).
-  The auth screens themselves are clean after the gotrue fix.
-
-
 
 ## Monthly savings amount — write it AFTER it is chosen
 
@@ -96,51 +167,16 @@ A member with no plan row self-heals on the next `GET /contributions/plan`,
 which calls `getOrCreatePlan`.
 
 ## Contribution method — no duplicate prompt
-- `ContributionTypeSelectionScreen` (right after email verification) asks
-  direct_deposit vs salary_deduction once. The onboarding `_ContributionStep`
-  NO LONGER re-asks it — the `contribution_method` payload is now derived
-  from `_data.contributionType` (`salary_deduction`→`'payroll'`, else `'manual'`).
-- Removed the unused `_MethodCard` widget from `registration_onboarding_screen.dart`.
+`ContributionTypeSelectionScreen` (post-email-verification) asks
+direct_deposit vs salary_deduction once. The onboarding `_ContributionStep`
+no longer re-asks it — `contribution_method` is derived from `contributionType`
+(`salary_deduction`→`'payroll'`, else `'manual'`). Removed `_MethodCard`.
 
-## Paystack loan-repayment auto-deduction
-- `payments.js` needed the full allocation machinery ported from Latest-Coopvest:
-  `ALLOWED_PAYMENT_TYPES` += loan_repayment/fine/fee/mixed, `DB_PAYMENT_TYPE`
-  map (fine/fee/mixed stored as `'other'` CHECK-compatible), `normalizeAllocations()`,
-  and `applyAllocations(proof)` — which reduces `loans.remaining_balance`,
-  inserts a `loan_repayments` row keyed by `reference = proof.id` (idempotent),
-  and completes the loan when balance hits 0.
-- `/payments/initialize` now accepts `allocation_type` + `allocations`, parks
-  them in proof `metadata`, and stores the DB-compatible `payment_type`.
-- Manual deposits: admin `PATCH /api/admin/deposits/:id/verify` already reduces
-  the loan (alloc.type === 'loan_repayment`) — both repos had it。
-- Admin Dashboard reads `loans.remaining_balance` live → reflects automatically.
-
-## Paystack loan repayment — targeted loan (loan_id)
-- `/payments/initialize` accepts optional `loan_id`; when present it is carried
-  into the `loan_repayment` allocation and persisted in proof `metadata.loan_id`.
-- `applyAllocations()` prefers the targeted loan (`alloc.loan_id`, looked up in
-  statuses active/approved/repaying) and only falls back to the active loan
-  with the highest remaining balance otherwise.
-- Mobile (`deposit_screen.dart`): loan repayment now shows a loan picker
-  (`_selectedLoanId`), passes `loan_id` to both `/payments/initialize` and
-  `/wallet/contribute`, and the Paystack "Pay Instantly" button handles
-  loan_repayment (instant, no admin verification).
-- `loan_details_screen.dart` "Make Repayment" navigates to DepositScreen with
-  `initialAllocationType: 'loan_repayment'` + `initialLoanId`.
-
-## Notifications — live schema column correctness
-- The live `notifications` table uses `is_read`/`is_archived` — there is NO
-  `read` or `archived` column. `notifications.js` must query
-  `.eq('is_read', …)` and update `{ is_read: true }` — never `read`/`archived`.
-- The mobile list (`GET /api/v1/notifications`) originally referenced the
-   nonexistent `read`/`archived` columns → PostgREST PGRST204 → every fetch
-   failed → app showed "No notifications yet" placeholder. Fixed to match
-   `is_read` (ported from Latest-Coopvest).
-- Realtime: `notifications` must be in the `supabase_realtime` publication
-  (and `REPLICA IDENTITY FULL`) or the app's `postgres_changes` channel
-  (INSERT on `notifications` with `profile_id = userId`) never fires.
-  Migration `029_notifications_realtime.sql` does this (applied via Mgmt API).
-- `feature_flag.notifications` = `true` live (fail-open if missing) — not the issue.
+## Notifications realtime
+`notifications` must be in the `supabase_realtime` publication + `REPLICA
+IDENTITY FULL` (see `backend/migrations/029_notifications_realtime.sql`),
+or the app's `postgres_changes` INSERT channel (filter profile_id =
+userId) never fires. Migration 029 handles it (applied via Mgmt API).
 
 ## Admin notifications are push-based now (mobile + website → dashboard)
 
@@ -169,7 +205,8 @@ Every new type a caller passes must survive `normalizeNotifType` onto the
 alert is silently swallowed. `__tests__/adminNotificationCoverage.test.js`
 pins both the wiring (alert present, fire-and-forget, has `.catch`) and the
 type coercion for these events. Deliberately *not* wired: `savings/deposit`
-(wallet → savings, self-directed) and `savings/goals` (no money moves).
+(wallet → savings, self-directed) and `savings/goals` (no money moves) — they
+would be noise, not signal.
 
 `GET /api/admin/notifications` is scoped to admin profile_ids and returns a
 true `unreadCount`; `POST .../read-all` is scoped the same way. The admin
@@ -191,6 +228,48 @@ non-fatal (`logger.warn` + `{status:'failed'}`) the error was swallowed — so
 **no notification was ever stored**, admin alerts included. When adding an
 insert against `notifications`, set `message` as well as `body`. Pinned by
 `backend/__tests__/notificationMessageColumn.test.js`.
+
+## Role note
+The DB uses both `superadmin` and `super_admin` spellings; treat both as Super
+Admin everywhere.
+
+## Gotcha: Express sub-mounts strip the prefix
+Never mount a whole router at a deep path to "expose one route early" (e.g.
+`app.use('/api/v1/bank-accounts/verify', bankAccountRoutes)`): Express strips
+the mount prefix, so `POST .../verify` hits the router's `/` route instead.
+Gate per-route inside the router (see `src/routes/bankAccounts.js`: `gated =
+requireActivated` on every route except POST `/verify`, fixed in ee41ba17).
+
+## Bank verification
+`POST /api/v1/bank-accounts/verify` (and legacy `/api/bank-accounts/verify`)
+resolves account holder names via Paystack (`PAYSTACK_SECRET_KEY`, 503 when
+unconfigured, 422 when Paystack can't resolve). Reachable pre-activation
+because members use it during KYC onboarding.
+
+## Instant Paystack for all payment allocations (mobile)
+`POST /api/v1/payments/initialize` accepts `allocation_type` + `allocations`
+(values: monthly_contribution, loan_repayment, fine, fee, registration_fee,
+mixed). `payment_proofs.payment_type` CHECK only allows monthly_contribution/
+loan_repayment/registration_fee/investment/other, so `payments.js` maps
+fine/fee/mixed → stored `other` and parks the breakdown in proof
+`metadata.allocations/allocation_type`. On Paystack success, settle calls
+`applyAllocations`: savings→wallet credit (skipped when proof is monthly_contribution —
+DB trigger credits it), loan_repayment→loan reduction + `loan_repayments`
+row keyed by `reference = proof.id` (idempotent), fine/fee→member_fees paid. Mirrors admin deposit-verification loop in adminApi.js. Keep the
+`proof.status === 'approved'` early-return guard to avoid double settles.
+
+## Paystack loan repayment — targeted loan (loan_id)
+- `/payments/initialize` accepts optional `loan_id`; when present it is carried
+  into the `loan_repayment` allocation and persisted in proof `metadata.loan_id`.
+- `applyAllocations()` prefers the targeted loan (`alloc.loan_id`, looked up in
+  statuses active/approved/repaying) and only falls back to the active loan
+  with the highest remaining balance otherwise.
+- Mobile (`deposit_screen.dart`): loan repayment now shows a loan picker
+  (`_selectedLoanId`), passes `loan_id` to both `/payments/initialize` and
+  `/wallet/contribute`, and the Paystack "Pay Instantly" button handles
+  loan_repayment (instant, no admin verification).
+- `loan_details_screen.dart` "Make Repayment" navigates to DepositScreen with
+  `initialAllocationType: 'loan_repayment'` + `initialLoanId`.
 
 ## Monthly contribution is the obligations source of truth
 `contribution_plans.current_monthly_amount` is the single source of truth for
@@ -233,6 +312,7 @@ a friendly message when that migration hasn't been applied yet.
   NOT EXISTS profile_id/bank_account_id/description/processed_by/processed_at`.
 - `contribution_plans` has a FK to `profiles(id)` and `UNIQUE (profile_id)`, so
   `.upsert(..., { onConflict: 'profile_id' })` is safe.
+
 
 ## `handle_payment_proof_approval` never wrote a contribution (fixed, 033)
 The trigger inserts into `contributions`
@@ -340,6 +420,7 @@ a loan!" regardless of tenure; that is restored to
 `monthsDone >= monthsRequired`, with `progress` guarded against a 0-month
 requirement (0/0 is NaN and broke the progress ring).
 
+
 ## Never invent a money figure when a fetch fails
 `ContributionPlanApiService.getContributionPlan()` used to swallow every error
 and return a fabricated `CurrentMonthlyAmount: 5000`. A member on ₦10,000
@@ -372,6 +453,298 @@ plan to `requested_amount` and marks the request `applied`. It is best-effort
 and never throws, so plan reads cannot break. `status` has no CHECK constraint,
 so `applied` is safe.
 
+## Money formatting must stay grouped
+`Formatters.formatCurrency` (core/utils/utils.dart) groups thousands and keeps
+2dp. Several screens used `toStringAsFixed(2)` directly, rendering
+`₦100150000.00` next to the header's `₦100,150,000`. Use the shared formatter —
+import it with `show Formatters` in files that also need string extensions, to
+avoid an ambiguous-extension clash with `capitalize`.
+
+## Admin notification broadcast actually sends push now
+`POST /api/admin/notifications/broadcast` (adminApi.js) used to only insert
+`notifications` rows and return `{success, sent}` — it never called FCM, so
+the admin dashboard's "push" channel delivered nothing to devices while the
+UI reported success. The response had no `push` field, so the dashboard toast
+always rendered "Push was not delivered — no registered devices or Firebase is
+not configured", which was also factually wrong (13 active device_tokens
+existed). The route now sends FCM via `notifyService.sendPush({tokens, ...})`
+(one batched multicast), returns
+`push: {targeted, errors, status, reason}`, and honours the `audience` and
+`channels` it is sent. Only `push`/`in_app` are deliverable — `sendEmail`/
+`sendSms` are stubs with no provider, so they come back in `notImplemented`
+rather than being counted as sent. Audience/channel mapping lives in
+`src/lib/notificationBroadcast.js` (unit tested) and reuses the same bucket
+definitions as `GET /dashboard/summary`. Push needs
+FIREBASE_PROJECT_ID/CLIENT_EMAIL/PRIVATE_KEY on Render; without them the send
+is skipped as `no_firebase_credentials` and now says so in the UI.
+
+## Sandbox notes for this backend
+`npm install` then `npx jest --coverage=false` runs in ~1s. Do NOT delete
+`backend/package-lock.json` while cleaning build artifacts — it is tracked.
+The single-device session policy means an admin API token is rejected with
+`SESSION_REPLACED` until `POST /api/auth/sync` is called; the dashboard does
+this after login.
+## Loans table has NO `disbursed_at` column
+Only `disbursed_by` exists. Selecting `disbursed_at` makes PostgREST reject
+the ENTIRE query, so a report silently reads zero rows and looks like it
+worked. `approved_at` is the populated timestamp marking when a loan became
+live (see `loanRecoveryWorker.js`, which documents the same trap). This has
+bitten twice — check `approved_at` first, and never trust a "0 rows" result
+without confirming the query did not 400.
+
+## Reports come from the transaction ledger, not derived tables
+`transactions` is the central ledger. `contributions` is derived and has
+drifted in production: it holds a ₦100,000,000 row that no transaction
+supports. Comparative/reporting code uses the ledger and returns a
+`dataQuality` warning naming the discrepancy. Do NOT "switch back" to
+`contributions` — a headline figure must be traceable to real transactions.
+The stray rows still need deleting from the DB.
+
+### Report fixtures must not pin loan due dates to calendar dates
+`default_report` and `default_statistics` classify a loan as overdue by
+comparing `next_due_date` to "now", so a test fixture with a hardcoded due date
+is a time bomb: it reads "not yet due" the day it is written and "overdue"
+once real time passes it, failing a test whose code is correct. Use a relative
+date (`daysFromNow(n)` in `__tests__/reporting.test.js`), not a literal, for
+any fixture date the report logic compares against the clock.
+
+## Comparative analytics module
+`src/lib/reportPeriods.js` (UTC periods, ISO weeks), `comparativeMetrics.js`
+(ledger-backed flow vs stock metrics), `comparisonEngine.js` (abs + % change,
+insights), `src/routes/comparative.js` (compare / export / drilldown).
+Rules that are easy to regress: a zero base yields `percent: null` (never
+Infinity%); rates compare in percentage POINTS; `higherIsBetter` per metric so
+a falling default rate is not coloured as a decline; stock metrics
+(outstanding, overdue) are rewound to the period END by adding back later
+repayments, because `loans.remaining_balance` is live-only. ISO week 1 can
+start in the previous calendar year — enumerate by ISO week-year or you get
+zero weeks. `ledger_entries` is NOT summed alongside `transactions`; they
+overlap and unioning them double-counts.
+
+Reporting branches stack: `feat/reporting-suite` → `feat/comparative-analytics`.
+
+## Organization finance + member linkage
+`src/lib/organizationFinance.js` (expected/remitted/outstanding per org),
+`src/routes/organizationFinance.js` (positions, pending requests, assign,
+detail, trend), mounted at `/api/admin/organizations` BEFORE adminApi so its
+sub-paths win (adminApi keeps its own GET/POST /organizations and has no
+catch-all).
+
+Money model: **Expected** = Σ linked members' `monthly_amount`; **Remitted** =
+Σ `payroll_batches.total_contribution_amount` for the month; **Outstanding** =
+Expected − Remitted. Remittance is read from `payroll_batches`, NOT from member
+transactions — summing transactions double-counts a direct payment made
+alongside a payroll deduction and cannot represent a remittance that arrived
+before members were allocated.
+
+Rules pinned by tests: over-remittance reports NEGATIVE outstanding (a surplus
+must be reconciled, not clamped); a member with no `monthly_amount` is
+`no_expectation`, not `lapsed`; unlinked members are counted and surfaced (the
+live project has 0 of 6 linked against 411 organizations, so a report built
+only from linked members reads zero and looks broken);
+`organizations.member_count` is a stale counter (0 for every org) — use the
+live count and report the drift; rows sort by what is owed.
+
+The member app could always request an employer
+(`POST /organizations/request-approval`) but nothing could APPROVE it and set
+`profiles.organization_id`. That linkage is now
+`POST /pending-requests/:id/approve` plus `POST /assign|/unassign`. All linkage
+writes go to `audit_logs` with before/after values.
+
+Branch chain: `feat/reporting-suite` → `feat/comparative-analytics` →
+`feat/organization-finance`.
+
+## The anon key is PUBLIC — RLS is the only boundary (migration 047)
+The Supabase anon key is embedded in the mobile app bundle AND in the admin
+dashboard's shipped JS, so treat it as public. Anything without RLS is readable
+by anyone who extracts it, bypassing the app and the API entirely.
+
+This was not theoretical: device_tokens (13 FCM push tokens), profiles (BVN,
+NIN, bank numbers), contributions, member_fees and organizations (411
+remittance account numbers) were all readable with the anon key and no login.
+
+Root causes worth remembering:
+* `device_tokens`, `contributions`, `member_fees` had RLS **disabled entirely**
+  (relrowsecurity = false) — a table with no RLS is world-readable.
+* `profiles` had **three permissive `USING (true)` policies**. Postgres ORs
+  permissive policies, so ONE such policy defeats every restrictive policy
+  beside it. When adding a targeted policy, first DROP the broad ones — this
+  bit twice (also on `announcements`).
+* `organizations` had a single `FOR ALL USING (true)`.
+
+The API is unaffected by RLS because it connects with the service role, which
+bypasses RLS. So "the API works" proves nothing about exposure — probe with the
+anon key directly (`/rest/v1/<table>?select=id`) to check.
+
+Also note `req.path` vs route mounting, and that probing a table returning `[]`
+can mean RLS-filtered OR genuinely empty; check `relrowsecurity` in pg_class to
+tell them apart.
+
+## Beware PRs whose title understates their scope
+`fix/artifact-storage-quota-fix` presented as a small CI workflow change but was
+318 files, +52,865/-30,011. It committed `backend/.env`, `android/keystore/
+release-keystore.jks`, `android/key.properties` and OAuth client secrets into a
+PUBLIC repo, and — being based on a stale commit — would have DELETED the
+reporting suite, RBAC, comparative analytics, org finance and AGENTS.md.
+
+Before merging someone else's PR here: check `changed_files` and `additions`,
+list the files, and look for `.env`, `*.jks`, `*keystore*`, `*client_secret*`,
+`google-services.json`. A `.gitignore` diff that REDUCES ignore coverage is a
+red flag.
+
+## RBAC: server-side permissions (feat/rbac-permissions)
+`src/lib/permissions.js` (role + permission catalog, resolution) and
+`src/middleware/requirePermission.js` (ordered path→permission table + guard),
+mounted ONCE at the `/api/admin` prefix before every router so `req.path` is
+the full sub-path and one table covers all admin routes.
+
+Before this, `requireAdmin` admitted admin/superadmin/staff alike and only 8 of
+67 write endpoints had a further check — a `staff` token could delete
+contributions and reset member passwords. The dashboard's permission map is
+frontend-only; never treat it as the boundary.
+
+Rules: unclassified WRITE fails closed to `settings.write`; unclassified READ
+needs only `dashboard.read` (so tightening writes cannot lock anyone out);
+unknown role = no permissions; unknown permission name = denied even for the
+apex role; row-level grants are additive and validated against the catalog.
+
+`superadmin`/`super_admin` MUST resolve to `ceo` — mapping them anywhere lower
+strips access from the only admin account in production. Dropping a role's
+tier must take the MOST RESTRICTIVE limit, never the highest, or collapsing
+`staff`+`admin` into `manager` would hand a staff approver admin's ceiling.
+
+`approvalMatrix` had to become role-aware for the same reason: it compared raw
+strings, so a user stored as `ceo`/`manager` matched no level and got a limit
+of ZERO (the apex account would route its own loans to the Approval Center).
+Every role holding `loan.approve` needs a configured limit or all its loans
+get routed — a silent operational break caught by a test.
+
+**Path trap:** the RBAC catalog is at `/rbac/catalog`, NOT `/permissions`.
+`adminApi` does `router.use(governance)` and governance owns `/permissions`
+with a legacy display-only list, so a new route at that path is unreachable.
+
+Branch chain: `feat/reporting-suite` → `feat/comparative-analytics` →
+`feat/organization-finance` → `feat/rbac-permissions`.
+
+## Copying files between the two repos
+`backend/src/server.js` DIFFERS between Latest-Coopvest and Coopvest-Africa by
+~142 lines of legitimate divergence. NEVER `cp` it across repos — that silently
+destroyed Coopvest-Africa's `requireActivated` guards and public login-recorder
+once. Apply the specific edit with an editor and verify with
+`git diff | grep "^-"` that only intended lines were removed.
+
+## Verification email / OTP flow
+
+Supabase mints a **new OTP on every send**, and the older code is not removed
+from the inbox. So any path that sends twice leaves the user with two emails
+holding two different codes, and no way to tell which to use.
+
+`RegisterStep2Screen` used to resend on open whenever it was reached without a
+deep link. Every sign-up path arrives there straight from a step that already
+sent (signUp, or an explicit resend), so registration produced exactly that
+duplicate. The screen now takes `emailAlreadySent`, passed through the
+`/register-step2` route args as `email_already_sent: 'true'` by the callers
+that have already sent. Only the login `EMAIL_NOT_VERIFIED` path, where nothing
+is in flight, auto-sends.
+
+Email bodies live in the Supabase dashboard, not this repo, so template changes
+(keeping the mail code-only, with no links) cannot be made from here.
+
+`teejayfpi/Coopvest-Africa` Actions can run; `coopvestafrica-ops/Latest-Coopvest`
+Actions have been billing-blocked since 2026-09-24 (jobs never start, so a red
+check there means nothing about the code), so use the public repo's `build-apk`
+job to verify Dart changes actually compile.
+
+## Registration-fee exemption (salary deduction)
+
+The ₦5,000 registration fee is waived only for a member whose channel is
+payroll/salary deduction **and** who has an employer on file. The rule lives in
+three places and they must agree:
+
+- `backend/src/lib/activationGate.js` → `isRegistrationFeeSettled` (what the API
+  enforces; dependency-free so it can be unit tested standalone)
+- `member_registration_fee_settled()` in the SQL migrations
+- `User.hasSettledRegistrationFee` in `lib/data/models/auth_models.dart`, which
+  reads the server's `activation_gate` flags rather than re-deriving the rule
+
+An employer counts if it is linked (`organization_id`) or only requested
+(`pending_organization_name`); the second case matters because withholding the
+exemption until an admin approves the enrolment request locks the member out
+over admin latency.
+
+`profiles.contribution_method` / `contribution_type` are read by the gate, the
+middleware and several routes but were created by no migration, so a fresh
+environment fails the gate query. Migration 048 creates them and backfills the
+channel from `kyc.personal_info`.
+
+### Both sign-up routes must write the channel, not just the shortened one
+The channel is written to `profiles` in exactly two places, and they must agree:
+
+- `POST /kyc/contribution-type` — the shortened path;
+- `POST /auth/complete-registration` — the full wizard, which posts the whole
+  profile and never calls the former.
+
+Both call `planProfileChannelUpdate()` in
+`backend/src/lib/contributionChannel.js`, which is the single definition of the
+write. It used to live only in `/kyc/contribution-type`, so a member who came
+through the wizard (reachable when Supabase email confirmation is off — step 1
+routes straight to `/register-step3`) kept a NULL channel: the fee exemption
+could not fire and `contributionChannel()` classified them as direct deposit,
+which also breaks guarantor eligibility. Migration 051 backfills those members.
+Keep the two call sites on the one helper rather than re-deriving the mapping.
+
+### Changing employer must not require a channel switch
+`ContributionMethodScreen` used to save only when the channel *changed*, so a
+member already on salary deduction had no way to move to a new employer.
+`organization_id` drives both payroll deduction and the same-organisation
+guarantor rule, so a member who changed jobs stayed attached to the employer
+they left — payroll kept deducting for the old organisation and their guarantors
+were matched against it. The screen now also saves on an employer-only edit
+(`_employerChanged`), and the helper clears the previous `organization_id` when
+a named employer does not resolve to an active organisation, so the old link
+cannot linger. The route already re-flags KYC as `submitted` on any salary
+update, so a new employer still goes through admin review.
+
+Note the channel write is deliberately *not* cleared when salary deduction is
+saved with no employer named: a settings toggle that collects no employer must
+not erase the one already on file.
+
+The screen picks the employer from the enrolled list (`_EmployerPickerSheet` →
+`GET /organizations/selectable`) so the profile stores a real `organization_id`
+rather than a free-text name. An employer that is not enrolled goes through
+`requestOrganizationApproval` and is saved as a pending name. Keep sending the
+id only for a picked employer — the backend re-checks it is a real, active
+organisation before linking, and falls back to a pending name otherwise.
+
+### The gate must be reachable-proof, not just present
+A Direct Deposit member who had not paid could reach the dashboard by pressing
+Back, relaunching, or re-logging in. Two things caused it, and both need to stay
+fixed:
+
+- **`/home` must be wrapped in `AuthGuard`** (`lib/main.dart`). It used to render
+  `MainContainer` directly, so *every* `pushNamed('/home')` — notification tap,
+  deep link, a button on a screen that had already checked the gate — skipped the
+  guard entirely. `AuthGuard.signedOutChild` (defaults to `child`) is the
+  welcome screen on the `/home` route so sign-out does not flash the dashboard.
+- **The guard reads the server, not the cached profile** (`GET /app/home-status`).
+  The profile's `registration_fee_paid` is exactly what goes stale on a
+  back-press, which is the case the gate exists for. `AuthGuard` shows a spinner
+  until the answer arrives and only falls back to the profile after two failed
+  attempts, so a cold Render start does not strand a paying member.
+
+Route the client on `registration_fee_settled`, **not** `activated`: the latter
+also requires KYC approval, and re-using it re-blocks members who paid but are
+awaiting KYC review. That split mirrors `requireRegistrationPaid` vs
+`requireActivated` in `middleware/auth.js`.
+
+### Every gate needs the test that would have caught the bypass
+`backend/__tests__/registrationFeeEnforcement.test.js` and the
+`registration-fee bypass (Direct Deposit)` group in
+`test/unit/registration_gate_test.dart` pin the route-level and payload-level
+shapes. The bug was a *reachability* gap, not a wrong boolean, so a test that
+only asserts the exemption rule would not have caught it — assert the entry
+point, too.
+
 ## KYC status is never null — guard drafts on `isUntouchedServerRow`
 
 `GET /kyc/status` calls getOrCreateKyc, so it always returns a provisional
@@ -384,12 +757,13 @@ a locally saved draft is restored only while the server row is still `pending`
 data the server already holds. Covered by
 `test/unit/kyc_draft_resume_test.dart`.
 
-## Money formatting must stay grouped
-`Formatters.formatCurrency` (core/utils/utils.dart) groups thousands and keeps
-2dp. Several screens used `toStringAsFixed(2)` directly, rendering
-`₦100150000.00` next to the header's `₦100,150,000`. Use the shared formatter —
-import it with `show Formatters` in files that also need string extensions, to
-avoid an ambiguous-extension clash with `capitalize`.
+## Deployment
+
+`coopvest-api` on Render auto-deploys on every commit to `main`
+(`autoDeployTrigger: commit`), so merging is deploying — the failing
+`deploy-backend.yml` job is not what ships the backend. Migrations in this repo
+are not run by CI, so a backend change goes live without anyone applying them:
+check whether a new migration is load-bearing before relying on it.
 
 ## Live payment + push config (as of 2026-09-28)
 
@@ -463,3 +837,24 @@ not in `render.yaml`; only the key name is there, with no value. Supabase's
 the plaintext is rejected by Gmail. Do not paste a password into a commit or a
 shell command; set it in the Render dashboard, then confirm a reply reports
 `emailed: true`.
+
+## Fees & monthly obligations (mobile)
+The member monthly obligation = savings contribution + loan repayment +
+outstanding fines + outstanding fees. `GET /api/v1/wallet/obligations`
+(`backend/src/routes/wallet.js` `computeObligations`) is the single source of
+"amount due"; the app never derives it from the wallet balance.
+
+- The monthly administrative charge is NGN1,500 = AGM levy NGN1,000 +
+  Development levy NGN500 (`AppConfig.totalMonthlyLevies`; `agmLevy`/
+  `developmentLevy` are the parts). The `fee_types` catalogue calls it
+  **Administrative Fee** (renamed from "Mobile App Fee" in migration 055).
+  `member_fees.label` copies the catalogue name at assignment time, so a rename
+  must relabel existing rows too.
+- **Pay Now** (`lib/presentation/widgets/obligations_card.dart`) must charge
+  `savingsDue + monthlyLoanRepayment + finesTotal + feesTotal` and pass a
+  per-obligation `initialAllocations` breakdown to `DepositScreen`. Charging the
+  headline while passing a single allocation type silently drops the fee - the
+  whole payment lands in savings. Regression:
+  `test/widget/obligations_payment_test.dart`.
+- A split payment carries `fee_id` per allocation so the backend settles the
+  exact `member_fees` row shown as due, not merely the oldest outstanding one.
