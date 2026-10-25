@@ -5,9 +5,9 @@
  * tested without a live Supabase connection or an Express request.
  */
 
-// Only these two are actually wired up end to end. SMS/email have no provider
-// configured (notifyService.sendEmail/sendSms are logging stubs), so they must
-// be reported as unimplemented rather than silently counted as delivered.
+// Channels that are always deliverable. Email joins this set at runtime only
+// when a mail transport is actually configured (see `classifyChannels`), since
+// without one `notifyService.sendEmail` can only skip.
 const SUPPORTED_CHANNELS = ['push', 'in_app'];
 
 /**
@@ -15,12 +15,20 @@ const SUPPORTED_CHANNELS = ['push', 'in_app'];
  * those that are not implemented yet.
  *
  * An empty/absent selection keeps the historical default of push-only.
+ *
+ * Email is deliverable only when a transport is configured. The caller passes
+ * that in rather than this module reading the environment, so the mapping stays
+ * pure and unit-testable.
+ *
+ * @param {string[]} [channels]
+ * @param {{emailAvailable?: boolean}} [opts]
  */
-function classifyChannels(channels) {
+function classifyChannels(channels, { emailAvailable = false } = {}) {
   const requested = (Array.isArray(channels) && channels.length > 0) ? channels : ['push'];
+  const supported = emailAvailable ? [...SUPPORTED_CHANNELS, 'email'] : SUPPORTED_CHANNELS;
   return {
-    delivered: requested.filter((c) => SUPPORTED_CHANNELS.includes(c)),
-    notImplemented: requested.filter((c) => !SUPPORTED_CHANNELS.includes(c)),
+    delivered: requested.filter((c) => supported.includes(c)),
+    notImplemented: requested.filter((c) => !supported.includes(c)),
   };
 }
 

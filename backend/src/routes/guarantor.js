@@ -22,6 +22,7 @@ const validate = require('../middleware/validate');
 const logger = require('../utils/logger');
 const notifyService = require('../services/notifyService');
 const { evaluateGuarantorEligibility, contributionChannel, canGuarantee } = require('../lib/guarantorEligibility');
+const { deadlineFrom, DEFAULT_CONSENT_WINDOW_DAYS } = require('../lib/guarantorInvitations');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -134,7 +135,10 @@ function mapStatus(dbStatus) {
   switch (dbStatus) {
     case 'consented': return 'accepted';
     case 'rejected':  return 'declined';
+    // `revoked` (guarantor withdrew) and `expired` (invitation lapsed) both
+    // present as "expired" to the app.
     case 'revoked':   return 'expired';
+    case 'expired':   return 'expired';
     default:          return dbStatus;
   }
 }
@@ -530,7 +534,7 @@ router.post(
       // Always update by the resolved PK (row.id), not the raw requestId param
       const { error: updateErr } = await supabase
         .from('loan_guarantors')
-        .update({ status: 'rejected', updated_at: now })
+        .update({ status: 'rejected', rejected_at: now, rejection_reason: reason || null, updated_at: now })
         .eq('id', row.id);
 
       if (updateErr) throw updateErr;
@@ -855,6 +859,144 @@ router.get(
       res.json({ success: true, channel, organizationId: me.organization_id || null, members });
     } catch (err) {
       logger.error('Error listing eligible guarantors:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// POST /invite
+// Borrower invites a named guarantor. Creates a `pending` row with a
+// `consent_deadline`; the invite worker reminds before it and expires it after.
+// A subsequent QR scan by that guarantor moves the row to `consented` unchanged.
+// ---------------------------------------------------------------------------
+router.post(
+  '/invite',
+  authenticate,
+  async (req, res) => {
+    try {
+      const { loanId: rawLoanId, guarantorId, guarantorName, guarantorPhone, windowDays } = req.body || {};
+      if (!rawLoanId) {
+        return res.status(400).json({ success: false, error: 'loanId is required' });
+      }
+      if (!guarantorId && !guarantorPhone) {
+        return res.status(400).json({ success: false, error: 'Provide a guarantor id or phone number' });
+      }
+
+      const loanId = await resolveLoanUuid(rawLoanId);
+      if (!loanId) {
+        return res.status(400).json({ success: false, error: 'Invalid loan reference format. Please update your app and try again.' });
+      }
+
+      // Only the borrower may invite guarantors to their own loan.
+      const { data: loan, error: loanErr } = await supabase
+        .from('loans')
+        .select('id, profile_id, status')
+        .eq('id', loanId)
+        .maybeSingle();
+      if (loanErr) throw loanErr;
+      if (!loan) return res.status(404).json({ success: false, error: 'Loan not found' });
+      if (loan.profile_id !== req.user.id) {
+        return res.status(403).json({ success: false, error: 'You can only invite guarantors to your own loan' });
+      }
+      if (!['pending', 'under_review'].includes(loan.status)) {
+        return res.status(400).json({ success: false, error: `Guarantors can only be invited while a loan is pending. Current status: ${loan.status}` });
+      }
+
+      // A named guarantor must be eligible, so the borrower is not told an
+      // invitation succeeded when the guarantee could never be accepted.
+      if (guarantorId) {
+        const eligibility = await evaluateGuarantorEligibility(supabase, loan.profile_id, guarantorId);
+        if (!eligibility.eligible) {
+          return res.status(400).json({
+            success: false,
+            error: eligibility.reason,
+            code: eligibility.code,
+            help: eligibility.help || null,
+            helpUrl: eligibility.helpUrl || null,
+          });
+        }
+      }
+
+      const now = new Date();
+      const deadline = deadlineFrom(now, Number(windowDays) > 0 ? Number(windowDays) : DEFAULT_CONSENT_WINDOW_DAYS);
+
+      // One invitation per (loan, guarantor). An existing row is re-issued a
+      // fresh deadline rather than duplicated.
+      let existing = null;
+      if (guarantorId) {
+        const { data } = await supabase
+          .from('loan_guarantors')
+          .select('id, status')
+          .eq('loan_id', loanId)
+          .eq('guarantor_id', guarantorId)
+          .maybeSingle();
+        existing = data;
+      }
+
+      const payload = {
+        status: 'pending',
+        invited_at: now.toISOString(),
+        consent_deadline: deadline,
+        reminder_sent_at: null,
+        expired_at: null,
+        guarantor_name: guarantorName || null,
+        guarantor_phone: guarantorPhone || null,
+        updated_at: now.toISOString(),
+      };
+
+      let row;
+      if (existing) {
+        if (existing.status === 'consented') {
+          return res.status(400).json({ success: false, error: 'This guarantor has already consented to your loan.' });
+        }
+        const { data, error } = await supabase
+          .from('loan_guarantors')
+          .update(payload)
+          .eq('id', existing.id)
+          .select('id, loan_id, guarantor_id, status, consent_deadline')
+          .maybeSingle();
+        if (error) throw error;
+        row = data;
+      } else {
+        const { data, error } = await supabase
+          .from('loan_guarantors')
+          .insert({ loan_id: loanId, guarantor_id: guarantorId || null, ...payload })
+          .select('id, loan_id, guarantor_id, status, consent_deadline')
+          .maybeSingle();
+        if (error) throw error;
+        row = data;
+      }
+
+      if (guarantorId) {
+        await notifyService.broadcast({
+          profileIds: [guarantorId],
+          channels: ['in_app', 'push'],
+          title: 'You have been invited to guarantee a loan',
+          body: 'A member has invited you to guarantee their loan. Open the app to review and respond before the deadline.',
+          type: 'guarantor_request',
+          category: 'action_required',
+          priority: 'high',
+          data: { loanId, guaranteeId: row && row.id },
+        });
+      }
+
+      await supabase.from('audit_logs').insert({
+        actor_id: req.user.id,
+        action: 'GUARANTOR_INVITED',
+        target_model: 'LoanGuarantor',
+        target_id: row && row.id,
+        metadata: { loanId, guarantorId: guarantorId || null, deadline },
+      }).then(() => {}, () => {});
+
+      res.status(201).json({
+        success: true,
+        message: 'Guarantor invited',
+        invitation: row,
+        consentDeadline: deadline,
+      });
+    } catch (err) {
+      logger.error('Error inviting guarantor:', err);
       res.status(500).json({ success: false, error: err.message });
     }
   }

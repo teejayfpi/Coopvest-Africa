@@ -21,6 +21,7 @@ const referralService = require('../services/referralService');
 const adminPlatform = require('./adminPlatform');
 const adminRollovers = require('./adminRollovers');
 const notifyService = require('../services/notifyService');
+const mailer = require('../services/mailer');
 const approvalMatrix = require('../lib/approvalMatrix');
 const approvalRequests = require('../lib/approvalRequests');
 const riskScoring = require('../lib/riskScoring');
@@ -2979,7 +2980,9 @@ router.post(
       const uiType = String(type || '').toLowerCase();
       const dbType = ALLOWED_TYPES.includes(uiType) ? uiType : 'system';
       const dbCategory = category || uiType || 'info';
-      const { delivered, notImplemented } = classifyChannels(channels);
+      const { delivered, notImplemented } = classifyChannels(channels, {
+        emailAvailable: mailer.isConfigured(),
+      });
 
       let targetIds = profileIds;
       if (!Array.isArray(targetIds) || targetIds.length === 0) {
@@ -3037,8 +3040,32 @@ router.post(
         }
       }
 
-      await logAdminAction('NOTIFICATION_BROADCAST', { model: 'Notification' }, { count: rows.length, title, audience: targetGroup, channels: delivered, notImplemented, push });
-      res.status(201).json({ success: true, sent: rows.length, audience: targetGroup, channels: delivered, notImplemented, push });
+      // Deliver the email channel for real. Previously 'email' was reported as
+      // notImplemented, so an admin who ticked it got a false "not sent" while
+      // the mailer was already configured and working. Fetch the recipients'
+      // addresses in one query and send through the shared transport.
+      let email = { targeted: 0, sent: 0, failed: 0 };
+      if (delivered.includes('email')) {
+        const { data: emailRows, error: emailErr } = await supabase
+          .from('profiles')
+          .select('id, email')
+          .in('id', targetIds)
+          .not('email', 'is', null);
+        if (emailErr) {
+          logger.warn('broadcast: profile email lookup failed:', emailErr.message);
+        } else {
+          const recipients = (emailRows || []).filter((r) => r.email);
+          email.targeted = recipients.length;
+          for (const r of recipients) {
+            const result = await notifyService.sendEmail({ to: r.email, subject: title, text: message });
+            if (result.status === 'sent') email.sent += 1;
+            else email.failed += 1;
+          }
+        }
+      }
+
+      await logAdminAction('NOTIFICATION_BROADCAST', { model: 'Notification' }, { count: rows.length, title, audience: targetGroup, channels: delivered, notImplemented, push, email });
+      res.status(201).json({ success: true, sent: rows.length, audience: targetGroup, channels: delivered, notImplemented, push, email });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
     }

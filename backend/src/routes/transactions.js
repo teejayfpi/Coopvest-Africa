@@ -11,6 +11,7 @@ const router = express.Router();
 const supabase = require('../config/supabase');
 const { authenticate } = require('../middleware/auth');
 const logger = require('../utils/logger');
+const { buildCertificate } = require('../lib/annualCertificate');
 
 router.use(authenticate);
 
@@ -198,6 +199,66 @@ router.post('/statement', async (req, res) => {
     if (error) throw error;
     res.json({ success: true, transactions: data || [] });
   } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/v1/transactions/certificate/annual?year=2025
+ *
+ * Annual contribution & interest certificate for the signed-in member. The
+ * figures are aggregated from the transaction ledger (see
+ * lib/annualCertificate.js) so the member's own view and an admin's view of the
+ * same year cannot disagree. Returns JSON; the app renders it as a PDF.
+ */
+router.get('/certificate/annual', async (req, res) => {
+  try {
+    const year = parseInt(req.query.year, 10) || new Date().getUTCFullYear();
+    if (year < 2000 || year > 2100) {
+      return res.status(400).json({ success: false, error: 'Invalid year' });
+    }
+
+    const { data: profile, error: pErr } = await supabase
+      .from('profiles')
+      .select('id, name, email, organization_id')
+      .eq('id', req.user.id)
+      .maybeSingle();
+    if (pErr) throw pErr;
+
+    let organizationName = null;
+    if (profile && profile.organization_id) {
+      const { data: org } = await supabase
+        .from('organizations')
+        .select('name')
+        .eq('id', profile.organization_id)
+        .maybeSingle();
+      organizationName = (org && org.name) || null;
+    }
+
+    // Fetch the ledger for the member. The `transactions` table is not large per
+    // member, and the certificate needs prior-year rows for the opening balance,
+    // so a bounded read of everything before the year end is the simplest
+    // correct source. Cap it so a pathological history cannot exhaust memory.
+    const end = new Date(Date.UTC(year + 1, 0, 1)).toISOString();
+    const { data: txns, error: tErr } = await supabase
+      .from('transactions')
+      .select('id, type, category, amount, status, created_at, description')
+      .eq('profile_id', req.user.id)
+      .lt('created_at', end)
+      .order('created_at', { ascending: true })
+      .limit(20000);
+    if (tErr) throw tErr;
+
+    const certificate = buildCertificate({
+      profile: profile || { id: req.user.id },
+      transactions: txns || [],
+      year,
+      organizationName,
+    });
+
+    res.json({ success: true, certificate });
+  } catch (err) {
+    logger.error('Annual certificate error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
