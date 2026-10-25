@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
+import '../../../core/extensions/number_extensions.dart';
 import '../../../core/utils/utils.dart';
 import '../../../data/models/wallet_models.dart';
 import '../../../data/models/loan_models.dart';
@@ -143,7 +144,10 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
       onRefresh: _loadData,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(24),
+        // Extra bottom padding so the last section (Savings Goals / Recent
+        // Transactions) clears the bottom navigation bar instead of sitting
+        // behind it.
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 96),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -173,10 +177,9 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
   Widget _buildBalanceCard(BuildContext context, Wallet? wallet, LoansState loansState) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
-    // Total Balance (headline) = lifetime monthly savings. `total_savings` is
-    // only ever incremented by approved monthly savings contributions/deposits,
-    // never by loans or fees.
     final totalSavings = wallet?.totalSavings ?? 0.0;
+    final available = wallet?.availableForWithdrawal ?? 0.0;
+    final pending = wallet?.pendingContributions ?? 0.0;
     final outstandingLoan = loansState.loans
         .where((l) => isLoanActive(l.status))
         .fold(0.0, (sum, l) => sum + l.remainingBalance);
@@ -184,9 +187,17 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
         .where((l) => !const ['completed', 'rejected', 'cancelled'].contains(l.status))
         .fold(0.0, (sum, l) => sum + l.amount);
 
-    final displayBalance = _isBalanceHidden ? '••••••' : Formatters.formatCurrency(totalSavings);
+    // Spendable balance = available + pending. The headline previously showed
+    // lifetime savings, which is not money the member can spend and did not
+    // reconcile with the Available/Pending figures shown underneath it.
+    final totalBalance = available + pending;
+
+    final displayBalance = _isBalanceHidden
+        ? NumberExtensions.hiddenAmount
+        : Formatters.formatCurrency(totalBalance);
 
     return Container(
+      key: const Key('wallet-balance-card'),
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -209,29 +220,38 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Total Balance',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: isDarkMode ? context.textSecondary : Colors.white.withValues(alpha: 0.8),
+              // The amount takes the space it can and the Hide pill keeps its
+              // intrinsic size, so a long balance shrinks instead of pushing
+              // the pill past the card edge (which clipped it to "Hid").
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Total Balance',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: isDarkMode ? context.textSecondary : Colors.white.withValues(alpha: 0.8),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    displayBalance,
-                    style: TextStyle(
-                      fontSize: 28,
-                      color: isDarkMode ? context.textPrimary : Colors.white,
-                      fontWeight: FontWeight.bold,
+                    const SizedBox(height: 8),
+                    Text(
+                      displayBalance,
+                      key: const Key('wallet-total-balance'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 28,
+                        color: isDarkMode ? context.textPrimary : Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
+              const SizedBox(width: 12),
               GestureDetector(
                 onTap: () {
                   setState(() {
@@ -282,7 +302,9 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      _isBalanceHidden ? '••••••' : Formatters.formatCurrency(wallet?.availableForWithdrawal ?? 0),
+                      _isBalanceHidden ? NumberExtensions.hiddenAmount : Formatters.formatCurrency(available),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: isDarkMode ? context.textPrimary : Colors.white,
                         fontWeight: FontWeight.bold,
@@ -292,6 +314,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
                   ],
                 ),
               ),
+              const SizedBox(width: 24),
               Container(width: 1, height: 40, color: isDarkMode ? context.dividerColor : Colors.white.withValues(alpha: 0.2)),
               const SizedBox(width: 24),
               Expanded(
@@ -307,7 +330,9 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      _isBalanceHidden ? '••••••' : Formatters.formatCurrency(wallet?.pendingContributions ?? 0),
+                      _isBalanceHidden ? NumberExtensions.hiddenAmount : Formatters.formatCurrency(pending),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: isDarkMode ? context.textPrimary : Colors.white,
                         fontWeight: FontWeight.bold,
@@ -326,7 +351,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
             context,
             isDarkMode,
             'Total Savings',
-            _isBalanceHidden ? '••••••' : '₦${totalSavings.toStringAsFixed(0)}',
+            _isBalanceHidden ? NumberExtensions.hiddenAmount : Formatters.formatCurrency(totalSavings),
             icon: Icons.savings_outlined,
           ),
           const SizedBox(height: 12),
@@ -334,7 +359,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
             context,
             isDarkMode,
             'Outstanding Loan',
-            _isBalanceHidden ? '••••••' : '₦${outstandingLoan.toStringAsFixed(0)}',
+            _isBalanceHidden ? NumberExtensions.hiddenAmount : Formatters.formatCurrency(outstandingLoan),
             icon: Icons.account_balance_wallet_outlined,
             valueColor: outstandingLoan > 0
                 ? (isDarkMode ? const Color(0xFFFFCC80) : const Color(0xFFFFE0B2))
@@ -345,7 +370,7 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
             context,
             isDarkMode,
             'Total Loan Applied',
-            _isBalanceHidden ? '••••••' : '₦${totalLoanApplied.toStringAsFixed(0)}',
+            _isBalanceHidden ? NumberExtensions.hiddenAmount : Formatters.formatCurrency(totalLoanApplied),
             icon: Icons.description_outlined,
           ),
         ],
@@ -364,30 +389,42 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Row(
-          children: [
-            Icon(
-              icon,
-              color: isDarkMode ? context.textSecondary : Colors.white.withValues(alpha: 0.7),
-              size: 16,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                color: isDarkMode ? context.textSecondary : Colors.white.withValues(alpha: 0.8),
-                fontWeight: FontWeight.w500,
+        Expanded(
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                color: isDarkMode ? context.textSecondary : Colors.white.withValues(alpha: 0.7),
+                size: 16,
               ),
-            ),
-          ],
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDarkMode ? context.textSecondary : Colors.white.withValues(alpha: 0.8),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 14,
-            color: valueColor ?? (isDarkMode ? context.textPrimary : Colors.white),
-            fontWeight: FontWeight.bold,
+        const SizedBox(width: 12),
+        Flexible(
+          child: Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.right,
+            style: TextStyle(
+              fontSize: 14,
+              color: valueColor ?? (isDarkMode ? context.textPrimary : Colors.white),
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ),
       ],
@@ -503,13 +540,23 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
                 const SizedBox(height: 12),
                 Text(
                   'No savings goals yet',
-                  style: TextStyle(color: context.textSecondary),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: context.textSecondary, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Set a target and track your progress towards it.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: context.textSecondary, fontSize: 12),
                 ),
                 const SizedBox(height: 12),
                 OutlinedButton(
-                  onPressed: () {
-                    // Create goal
-                  },
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => SavingsGoalsScreen(userId: widget.userId),
+                    ),
+                  ),
                   child: const Text('Create Goal'),
                 ),
               ],
