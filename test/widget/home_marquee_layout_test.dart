@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:coopvest_mobile/data/api/loan_api_service.dart';
 import 'package:coopvest_mobile/data/models/announcement_models.dart';
+import 'package:coopvest_mobile/data/models/loan_models.dart';
+import 'package:coopvest_mobile/data/models/wallet_models.dart';
 import 'package:coopvest_mobile/data/repositories/auth_repository.dart';
 import 'package:coopvest_mobile/presentation/providers/announcement_provider.dart';
 import 'package:coopvest_mobile/presentation/providers/auth_provider.dart';
@@ -39,7 +41,11 @@ void main() {
   /// realtime-notification work is gated on a signed-in member, and both reach
   /// for native plugins that do not exist in a widget test. With no user those
   /// paths return early, so the pump stays hermetic without stubbing services.
-  List<Override> overrides({required bool withMarquee}) {
+  List<Override> overrides({
+    required bool withMarquee,
+    WalletState? walletSeed,
+    LoansState? loansSeed,
+  }) {
     final announcements = withMarquee
         ? [
             Announcement(
@@ -55,8 +61,8 @@ void main() {
 
     return [
       currentUserProvider.overrideWithValue(null),
-      walletProvider.overrideWith((ref) => _StubWalletNotifier()),
-      loanProvider.overrideWith((ref) => _StubLoanNotifier()),
+      walletProvider.overrideWith((ref) => _StubWalletNotifier(walletSeed)),
+      loanProvider.overrideWith((ref) => _StubLoanNotifier(loansSeed)),
       contributionProvider.overrideWith((ref) => _StubContributionNotifier()),
       notificationsProvider
           .overrideWith((ref) => _StubNotificationsNotifier()),
@@ -73,14 +79,24 @@ void main() {
     ];
   }
 
-  Future<void> pumpHome(WidgetTester tester, {required bool withMarquee}) async {
-    tester.view.physicalSize = surface;
+  Future<void> pumpHome(
+    WidgetTester tester, {
+    required bool withMarquee,
+    WalletState? walletSeed,
+    LoansState? loansSeed,
+    Size size = surface,
+  }) async {
+    tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: overrides(withMarquee: withMarquee),
+        overrides: overrides(
+          withMarquee: withMarquee,
+          walletSeed: walletSeed,
+          loansSeed: loansSeed,
+        ),
         child: const MaterialApp(home: HomeDashboardScreen()),
       ),
     );
@@ -132,6 +148,100 @@ void main() {
     expect(tops[2], closeTo(tops[0], 0.5));
   });
 
+  testWidgets('the cards are the same height when only Loans shows a hint',
+      (tester) async {
+    // The reported bug: Wallet and Savings are funded (label + amount, no
+    // hint) while Loans is zero (label + amount + "Apply" line). The extra
+    // line made the Loans card taller. Seeding exactly that state reproduces
+    // it; equal heights is the fix.
+    final wallet = Wallet(
+      id: 'w1',
+      userId: 'u1',
+      balance: 250000,
+      totalContributions: 250000,
+      totalSavings: 120000,
+      pendingContributions: 0,
+      availableForWithdrawal: 250000,
+      updatedAt: DateTime(2026, 2, 1),
+    );
+
+    await pumpHome(
+      tester,
+      withMarquee: true,
+      walletSeed: WalletState(wallet: wallet),
+      loansSeed: const LoansState(loans: []),
+    );
+
+    // Scope the finder to the stat-card row: the dashboard also has a quick
+    // action labelled "Add money" further down, which is not part of this bug.
+    final row = find.byKey(const Key('dashboard-stat-cards'));
+
+    // Guard the premise: the hint line must actually be rendered, otherwise
+    // this test would pass vacuously. Match on the arrow icon the hint row
+    // always draws rather than the label text, so the assertion does not pin
+    // the exact wording.
+    final hintIcons =
+        find.descendant(of: row, matching: find.byIcon(Icons.arrow_forward_rounded));
+    expect(hintIcons, findsOneWidget,
+        reason: 'only the zero Loans card should show its hint row');
+
+    final heights = ['Wallet', 'Savings', 'Loans']
+        .map((label) =>
+            tester.getSize(find.byKey(ValueKey('stat-card-$label'))).height)
+        .toList();
+
+    expect(heights[1], closeTo(heights[0], 0.5),
+        reason: 'Wallet and Savings must match (heights=$heights)');
+    expect(heights[2], closeTo(heights[0], 0.5),
+        reason: 'Loans must not be taller than its neighbours (heights=$heights)');
+  });
+
+  testWidgets('the zero-state hint stays inside its card',
+      (tester) async {
+    final wallet = Wallet(
+      id: 'w1',
+      userId: 'u1',
+      balance: 0,
+      totalContributions: 0,
+      totalSavings: 0,
+      pendingContributions: 0,
+      availableForWithdrawal: 0,
+      updatedAt: DateTime(2026, 2, 1),
+    );
+
+    // Narrow enough that a hint label plus an arrow can only fit if the label
+    // is allowed to shrink. The Ahem test font gives every glyph a square
+    // advance, so the hint is far wider than in production — the exact
+    // condition that used to push the second arrow past the card edge.
+    await pumpHome(
+      tester,
+      withMarquee: true,
+      walletSeed: WalletState(wallet: wallet),
+      loansSeed: const LoansState(loans: []),
+      size: const Size(360, 900),
+    );
+
+    // Other rows elsewhere on the dashboard overflow at this width under the
+    // Ahem font; drain those so they do not mask the geometry under test.
+    while (tester.takeException() != null) {}
+
+    for (final label in ['Wallet', 'Savings', 'Loans']) {
+      final card = find.byKey(ValueKey('stat-card-$label'));
+      final cardRect = tester.getRect(card);
+      final arrow = find.descendant(
+          of: card, matching: find.byIcon(Icons.arrow_forward_rounded));
+      expect(arrow, findsOneWidget, reason: '$label should show its hint arrow');
+
+      final arrowRect = tester.getRect(arrow);
+      expect(
+        arrowRect.right,
+        lessThanOrEqualTo(cardRect.right + 0.5),
+        reason: '$label hint arrow must stay inside the card '
+            '(arrow right=${arrowRect.right}, card right=${cardRect.right})',
+      );
+    }
+  });
+
   testWidgets('no news configured leaves no empty gap where the ticker was',
       (tester) async {
     await pumpHome(tester, withMarquee: false);
@@ -161,7 +271,9 @@ class _MockNotificationRepository extends Mock implements NotificationRepository
 /// Riverpod forbids mutating a provider while the tree is building, so the
 /// stubs make every load a no-op: this test only cares about layout.
 class _StubWalletNotifier extends WalletNotifier {
-  _StubWalletNotifier() : super(_MockWalletRepository());
+  _StubWalletNotifier(WalletState? seed) : super(_MockWalletRepository()) {
+    if (seed != null) state = seed;
+  }
 
   @override
   Future<void> loadWallet() async {}
@@ -176,8 +288,10 @@ class _StubWalletNotifier extends WalletNotifier {
 }
 
 class _StubLoanNotifier extends LoanNotifier {
-  _StubLoanNotifier()
-      : super(_MockLoanAuthRepository(), _MockLoanApiService());
+  _StubLoanNotifier(LoansState? seed)
+      : super(_MockLoanAuthRepository(), _MockLoanApiService()) {
+    if (seed != null) state = seed;
+  }
 
   @override
   Future<void> getLoans() async {}

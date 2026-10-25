@@ -264,59 +264,63 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
                     // instead and painted the cards over it. Normal flow spacing
                     // now: no offset, so nothing overlaps regardless of whether
                     // the marquee renders.
-                    Row(
-                      // Cards can differ in height once one shows a "zero"
-                      // hint line and another does not; top-align them so the
-                      // row reads as a level set instead of a stagger.
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: _buildCompactStatCard(
-                            context,
-                            'Wallet',
-                            walletBalance.formatCurrencyCompact(),
-                            Icons.account_balance_wallet_outlined,
-                            () => Navigator.push(context, MaterialPageRoute(builder: (context) => WalletDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? ''))),
-                            accentColor: CoopvestColors.primary,
-                            chipTint: CoopvestColors.iconTintGreen,
-                            isZero: walletBalance <= 0,
-                            zeroHint: 'Add money →',
-                            onZeroTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => DepositScreen(userId: user?.id ?? ''))),
+                    IntrinsicHeight(
+                      key: const Key('dashboard-stat-cards'),
+                      child: Row(
+                        // The "zero" hint line makes one card taller than its
+                        // neighbours. Stretching the row equalises all three
+                        // heights, so the row reads as a level set instead of
+                        // a stagger.
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(
+                            child: _buildCompactStatCard(
+                              context,
+                              'Wallet',
+                              walletBalance.formatCurrencyCompact(),
+                              Icons.account_balance_wallet_outlined,
+                              () => Navigator.push(context, MaterialPageRoute(builder: (context) => WalletDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? ''))),
+                              accentColor: CoopvestColors.primary,
+                              chipTint: CoopvestColors.iconTintGreen,
+                              isZero: walletBalance <= 0,
+                              zeroHint: 'Add money',
+                              onZeroTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => DepositScreen(userId: user?.id ?? ''))),
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _buildCompactStatCard(
-                            context,
-                            'Savings',
-                            (wallet?.totalSavings ?? 0.0).formatCurrencyCompact(),
-                            Icons.savings_outlined,
-                            () => Navigator.push(context, MaterialPageRoute(builder: (context) => const MonthlyContributionsScreen())),
-                            accentColor: CoopvestColors.primaryLight,
-                            chipTint: CoopvestColors.iconTintMint,
-                            isZero: (wallet?.totalSavings ?? 0.0) <= 0,
-                            zeroHint: 'Start saving →',
-                            onZeroTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => DepositScreen(userId: user?.id ?? ''))),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildCompactStatCard(
+                              context,
+                              'Savings',
+                              (wallet?.totalSavings ?? 0.0).formatCurrencyCompact(),
+                              Icons.savings_outlined,
+                              () => Navigator.push(context, MaterialPageRoute(builder: (context) => const MonthlyContributionsScreen())),
+                              accentColor: CoopvestColors.primaryLight,
+                              chipTint: CoopvestColors.iconTintMint,
+                              isZero: (wallet?.totalSavings ?? 0.0) <= 0,
+                              zeroHint: 'Start saving',
+                              onZeroTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => DepositScreen(userId: user?.id ?? ''))),
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _buildCompactStatCard(
-                            context,
-                            'Loans',
-                            activeLoans.formatCurrencyCompact(),
-                            Icons.monetization_on_outlined,
-                            () => Navigator.push(context, MaterialPageRoute(builder: (context) => LoanDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? '', userPhone: user?.phone ?? ''))),
-                            // Loans is the gold card: gold chip, deepened
-                            // gold icon and link so it stays legible on white.
-                            accentColor: CoopvestColors.accentIcon,
-                            chipTint: CoopvestColors.iconTintGold,
-                            isZero: activeLoans <= 0,
-                            zeroHint: 'Apply now →',
-                            onZeroTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => LoanDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? '', userPhone: user?.phone ?? ''))),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildCompactStatCard(
+                              context,
+                              'Loans',
+                              activeLoans.formatCurrencyCompact(),
+                              Icons.monetization_on_outlined,
+                              () => Navigator.push(context, MaterialPageRoute(builder: (context) => LoanDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? '', userPhone: user?.phone ?? ''))),
+                              // Loans is the gold card: gold chip, deepened
+                              // gold icon and link so it stays legible on white.
+                              accentColor: CoopvestColors.accentIcon,
+                              chipTint: CoopvestColors.iconTintGold,
+                              isZero: activeLoans <= 0,
+                              zeroHint: 'Apply',
+                              onZeroTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => LoanDashboardScreen(userId: user?.id ?? '', userName: user?.name ?? '', userPhone: user?.phone ?? ''))),
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                     
                     const SizedBox(height: 20),
@@ -876,6 +880,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
     return GestureDetector(
       onTap: isZero && onZeroTap != null ? onZeroTap : onTap,
       child: Container(
+        key: ValueKey('stat-card-$title'),
         padding: const EdgeInsets.all(16),
         // Flat, bordered card — the brief's single card style. No shadow and
         // no coloured gradient: only the icon tint and the link colour vary
@@ -917,14 +922,20 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
               const SizedBox(height: CoopvestShape.gapSm),
               // The link uses its own AA-safe colour: emerald reads fine on
               // white, but gold must darken to #8A6300 to stay legible.
+              // The arrow is drawn by the icon only — never as a "→" in the
+              // label, which used to render twice and overflow the card edge.
               Row(
                 children: [
-                  Text(
-                    zeroHint,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: effectiveLink,
+                  Flexible(
+                    child: Text(
+                      zeroHint,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: effectiveLink,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   const SizedBox(width: 2),
