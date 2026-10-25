@@ -217,6 +217,12 @@ const ROUTE_PERMISSIONS = [
   { method: 'DELETE', pattern: /^\/fraud-detection/, permission: 'fraud.manage' },
   { method: 'PATCH', pattern: /^\/fraud-detection/, permission: 'fraud.manage' },
   { method: 'GET', pattern: /^\/fraud-detection/, permission: 'fraud.read' },
+  // Fraud/AML case queue. Without these the fail-closed default would require the
+  // highest permission and lock the queue out of the ordinary fraud reviewer's
+  // reach. `POST /fraud-cases/scan` runs detection, so it is a manage action.
+  { method: 'POST', pattern: /^\/fraud-cases/, permission: 'fraud.manage' },
+  { method: 'PATCH', pattern: /^\/fraud-cases/, permission: 'fraud.manage' },
+  { method: 'GET', pattern: /^\/fraud-cases/, permission: 'fraud.read' },
   { method: 'DELETE', pattern: /^\/sessions/, permission: 'session.manage' },
   { method: 'POST', pattern: /^\/sessions/, permission: 'session.manage' },
   { method: 'GET', pattern: /^\/sessions/, permission: 'session.manage' },
