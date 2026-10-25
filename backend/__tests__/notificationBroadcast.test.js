@@ -22,13 +22,20 @@ describe('notification broadcast channel classification', () => {
     });
   });
 
-  test('sms and email are reported as not implemented rather than delivered', () => {
-    // notifyService.sendEmail/sendSms are stubs with no provider wired up.
-    // Counting them as delivered would tell the admin members were texted when
-    // no SMS was ever sent.
+  test('email is reported as not implemented when no transport is configured', () => {
+    // Without a mail transport notifyService.sendEmail can only skip, so
+    // counting email as delivered would tell the admin members were emailed
+    // when nothing was sent.
     const result = classifyChannels(['push', 'sms', 'email']);
     expect(result.delivered).toEqual(['push']);
     expect(result.notImplemented).toEqual(['sms', 'email']);
+  });
+
+  test('email is deliverable once a mail transport is configured', () => {
+    const result = classifyChannels(['push', 'email', 'sms'], { emailAvailable: true });
+    expect(result.delivered).toEqual(['push', 'email']);
+    // SMS still has no provider wired up at all.
+    expect(result.notImplemented).toEqual(['sms']);
   });
 
   test('an empty selection keeps the historical push default', () => {

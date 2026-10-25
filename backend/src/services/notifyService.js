@@ -3,7 +3,7 @@
  *
  * Channels supported:
  *   in_app  — persists a row to the `notifications` Supabase table
- *   email   — delegates to EMAIL_PROVIDER (resend|postmark|sendgrid|ses)
+ *   email   — delegates to services/mailer.js (Resend over HTTPS, else SMTP)
  *   sms     — delegates to SMS_PROVIDER (termii|africastalking|twilio)
  *   push    — Firebase Cloud Messaging via Firebase Admin SDK
  *
@@ -22,6 +22,7 @@
 const logger = require('../utils/logger');
 const supabase = require('../config/supabase');
 const alertService = require('./alertService');
+const mailer = require('./mailer');
 
 // ── Firebase Admin SDK (lazy-init so the server starts without credentials) ──
 let _firebaseApp = null;
@@ -162,15 +163,32 @@ async function sendInApp({
 
 // ── email ─────────────────────────────────────────────────────────────────────
 
-async function sendEmail({ to, subject, html, text }) {
-  const provider = (process.env.EMAIL_PROVIDER || '').toLowerCase();
-  if (!provider || !process.env.EMAIL_API_KEY) {
-    logger.info(`notifyService.sendEmail skipped (no provider): to=${to} subject="${subject}"`);
+/**
+ * Send an email through the real transport.
+ *
+ * This used to only *log*: it checked for EMAIL_PROVIDER/EMAIL_API_KEY and then
+ * returned `{status:'sent'}` without sending anything. Every caller that asked
+ * for the email channel — a receipt, a reminder, a heads-up — believed it had
+ * been delivered. `services/mailer.js` already has a working transport (Resend
+ * over HTTPS, which the Render free plan allows; SMTP otherwise), so delegate
+ * to it and report what actually happened.
+ *
+ * @returns {Promise<{status:'sent'|'skipped'|'failed', provider?:string, reason?:string, error?:string}>}
+ */
+async function sendEmail({ to, subject, html, text, replyTo }) {
+  if (!to) {
+    return { status: 'skipped', reason: 'no_recipient' };
+  }
+  if (!mailer.isConfigured()) {
+    logger.info(`notifyService.sendEmail skipped (no mail transport configured): to=${to} subject="${subject}"`);
     return { status: 'skipped', reason: 'no_provider' };
   }
   try {
-    logger.info(`notifyService.sendEmail via ${provider}: to=${to} subject="${subject}"`);
-    return { status: 'sent', provider };
+    const result = await mailer.send({ to, subject, html, text, replyTo });
+    if (result.sent) {
+      return { status: 'sent', provider: mailer.hasResend() ? 'resend' : 'smtp' };
+    }
+    return { status: result.reason === 'not_configured' ? 'skipped' : 'failed', reason: result.reason, error: result.error };
   } catch (err) {
     logger.warn('notifyService.sendEmail error:', err.message);
     return { status: 'failed', error: err.message };

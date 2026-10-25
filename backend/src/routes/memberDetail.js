@@ -23,6 +23,7 @@ const supabase = require('../config/supabase');
 const { authenticate, requireAdmin } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const logger = require('../utils/logger');
+const { buildCertificate } = require('../lib/annualCertificate');
 
 // Use authenticate middleware to verify Supabase JWT
 router.use(authenticate);
@@ -484,5 +485,63 @@ function calculateMaxLoanAmount(totalSavings, activeLoans) {
   // Theoretical ceiling: the highest product multiplier (Maxi Loan, 5x).
   return totalSavings * 5;
 }
+
+/**
+ * GET /api/v2/admin/members/:profileId/certificate/annual?year=2025
+ *
+ * The same annual certificate a member can pull for themselves, for a chosen
+ * member. Used by admin/HR to answer "what did this member contribute and earn
+ * this year". Shares lib/annualCertificate.js with the member route so the two
+ * cannot disagree.
+ */
+router.get(
+  '/:profileId/certificate/annual',
+  requireAdmin,
+  [param('profileId').notEmpty()],
+  validate,
+  async (req, res) => {
+    try {
+      const year = parseInt(req.query.year, 10) || new Date().getUTCFullYear();
+      if (year < 2000 || year > 2100) {
+        return res.status(400).json({ success: false, error: 'Invalid year' });
+      }
+      const profileId = req.params.profileId;
+
+      const { data: profile, error: pErr } = await supabase
+        .from('profiles')
+        .select('id, name, email, organization_id')
+        .eq('id', profileId)
+        .maybeSingle();
+      if (pErr) throw pErr;
+      if (!profile) return res.status(404).json({ success: false, error: 'Member not found' });
+
+      let organizationName = null;
+      if (profile.organization_id) {
+        const { data: org } = await supabase
+          .from('organizations')
+          .select('name')
+          .eq('id', profile.organization_id)
+          .maybeSingle();
+        organizationName = (org && org.name) || null;
+      }
+
+      const end = new Date(Date.UTC(year + 1, 0, 1)).toISOString();
+      const { data: txns, error: tErr } = await supabase
+        .from('transactions')
+        .select('id, type, category, amount, status, created_at, description')
+        .eq('profile_id', profileId)
+        .lt('created_at', end)
+        .order('created_at', { ascending: true })
+        .limit(20000);
+      if (tErr) throw tErr;
+
+      const certificate = buildCertificate({ profile, transactions: txns || [], year, organizationName });
+      res.json({ success: true, certificate });
+    } catch (err) {
+      logger.error('Admin annual certificate error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+);
 
 module.exports = router;

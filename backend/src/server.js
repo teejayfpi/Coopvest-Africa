@@ -55,6 +55,8 @@ const adminContactRoutes = require('./routes/adminContact');
 const adminAnnouncementRoutes = require('./routes/adminAnnouncements');
 const directMessageRoutes = require('./routes/directMessages');
 const reportsRoutes = require('./routes/reports');
+const reconciliationOpsRoutes = require('./routes/reconciliationOps');
+const fraudCasesRoutes = require('./routes/fraudCases');
 const comparativeRoutes = require('./routes/comparative');
 const organizationFinanceRoutes = require('./routes/organizationFinance');
 const kycAdminRoutes = require('./routes/kycAdmin');
@@ -351,6 +353,10 @@ app.use('/api/admin/direct-messages', directMessageRoutes);
 // Ad-hoc reporting suite (catalog / run / export). Mounted before adminApi so
 // these paths resolve here.
 app.use('/api/admin/reports', reportsRoutes);
+// Money-integrity reconciliation runner (read-only checks + run history).
+app.use('/api/admin/reconciliation-ops', reconciliationOpsRoutes);
+// Fraud/AML case queue (rules + case lifecycle).
+app.use('/api/admin/fraud-cases', fraudCasesRoutes);
 // Comparative analytics — period-over-period comparison and drill-down.
 app.use('/api/admin/comparative', comparativeRoutes);
 // Organization finance + member↔organization linkage. Mounted before adminApi
@@ -445,6 +451,22 @@ contributionReminderWorker.start();
 // possible debit but whose webhook never arrives or is missed.
 const failedChargeReconcileWorker = require('./workers/failedChargeReconcileWorker');
 failedChargeReconcileWorker.start();
+
+// Money-integrity Worker — read-only checks that the money tables still agree
+// (wallet balance vs ledger, duplicate settled charges, outstanding mirror).
+// Persists each run and alerts admins on a critical discrepancy.
+const moneyIntegrityWorker = require('./workers/moneyIntegrityWorker');
+moneyIntegrityWorker.start();
+
+// Guarantor-invitation Worker — reminds a named guarantor before their consent
+// deadline and expires the invitation after it, so a stalled loan is visible.
+const guarantorInviteWorker = require('./workers/guarantorInviteWorker');
+guarantorInviteWorker.start();
+
+// Fraud/AML Worker — runs the rule engine over recent activity and upserts
+// findings into the case queue. Alerts admins on a new critical case.
+const fraudDetectionWorker = require('./workers/fraudDetectionWorker');
+fraudDetectionWorker.start();
 
 // Surface a misconfigured payment gateway at boot instead of letting members
 // discover it as an opaque "online payment failed" at checkout.
