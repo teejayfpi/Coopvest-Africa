@@ -29,6 +29,22 @@ regularly, and `Latest-Coopvest` gained 6+ commits mid-session more than once.
 
 **One-sided changes are the single most common source of bugs in this project.**
 
+## Pushing — open a PR, do not push `main` directly
+`main` is shared. Other agents (Manus, Replit, Kortix, v0) and the maintainer
+push to it, and the backend auto-deploys on every `main` push (Render), so a
+direct push ships to production un-reviewed.
+
+- **Never `git push` to `main`.** Work on a branch, open a PR, and merge it.
+- **`main` is not protected** — nothing will stop you. The rule is on you.
+  Do not enable branch protection to enforce it: it would break the other
+  agents' workflows, which rely on direct pushes.
+- **Do not merge a PR unless the user asks.** Opening the PR is the default
+  hand-off. Merge only on an explicit instruction like "merge it".
+- **One branch per change, deleted after merge.** Reusing the branch of an
+  already-merged PR silently produces no new PR — start a fresh branch off
+  current `main`.
+- Prefer squash merges so `main` stays linear and easy to bisect.
+
 ## Authentication — gotrue 2.15.0 API constraints
 The lockfile pins `gotrue 2.15.0` (via `supabase_flutter ^2.3.0`). Its
 `GoTrueClient` API differs from newer gotrue releases:
