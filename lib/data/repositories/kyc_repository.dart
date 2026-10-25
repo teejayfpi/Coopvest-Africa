@@ -11,6 +11,23 @@ final kycRepositoryProvider = Provider<KYCRepository>((ref) {
   return KYCRepository(apiClient);
 });
 
+/// Outcome of setting a contribution channel.
+///
+/// `guarantorReviewRequired` is set by the backend when the change affects an
+/// active loan — the member's stored guarantors consented under the previous
+/// employer/channel and may no longer satisfy the same-organisation rule.
+class ContributionTypeResult {
+  final KYCSubmission submission;
+  final bool guarantorReviewRequired;
+  final String? warning;
+
+  const ContributionTypeResult({
+    required this.submission,
+    this.guarantorReviewRequired = false,
+    this.warning,
+  });
+}
+
 /// KYC Repository
 class KYCRepository {
   final ApiClient _apiClient;
@@ -183,7 +200,7 @@ class KYCRepository {
   /// `termsVersion`/`termsAcceptedAt` are forwarded when supplied so the
   /// policy acceptance given at sign-up is recorded on this, the first
   /// authenticated non-Supabase call of the shortened onboarding path.
-  Future<KYCSubmission> setContributionType(
+  Future<ContributionTypeResult> setContributionType(
     String contributionType, {
     Map<String, dynamic>? employmentInfo,
     String? termsVersion,
@@ -191,7 +208,7 @@ class KYCRepository {
     double? monthlyAmount,
   }) async {
     try {
-      await _apiClient.post(
+      final response = await _apiClient.post(
         '/kyc/contribution-type',
         data: {
           'contribution_type': contributionType,
@@ -201,6 +218,13 @@ class KYCRepository {
           if (monthlyAmount != null) 'monthly_amount': monthlyAmount,
         },
       );
+      // The backend flags a change that affects an active loan: the member's
+      // guarantors consented under the previous employer/channel and may no
+      // longer satisfy the same-organisation rule. Surface the warning to the
+      // member rather than swallowing it.
+      final body = response is Map ? response : const {};
+      final reviewRequired = body['guarantor_review_required'] == true;
+      final warning = body['warning']?.toString();
       // Refresh from the authoritative status endpoint so the caller gets
       // the fully-mapped submission (same shape as getKYCStatus).
       //
@@ -209,7 +233,11 @@ class KYCRepository {
       // request completed, so any failure from getKYCStatus() bypassed the
       // catch below entirely and surfaced to the caller as an unhandled
       // error with no log line. Awaiting makes the catch actually catch it.
-      return await getKYCStatus();
+      return ContributionTypeResult(
+        submission: await getKYCStatus(),
+        guarantorReviewRequired: reviewRequired,
+        warning: warning,
+      );
     } catch (e) {
       logger.e('Set contribution type error: $e');
       rethrow;

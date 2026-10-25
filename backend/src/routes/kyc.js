@@ -18,6 +18,10 @@ const logger = require('../utils/logger');
 const notifyService = require('../services/notifyService');
 const { ageInYears, normalizeDateOfBirth, MIN_AGE_YEARS } = require('../services/registrationMerge');
 const { planProfileChannelUpdate } = require('../lib/contributionChannel');
+const { contributionChannel } = require('../lib/guarantorEligibility');
+const { ACTIVE_LOAN_STATUSES } = require('../lib/loanPolicy');
+const { assessEmployerChangeImpact } = require('../lib/employerChangeImpact');
+const { createApprovalRequest } = require('../lib/approvalRequests');
 
 // In-memory file upload (10 MB max) — the file is streamed straight into
 // Supabase Storage, never touching the disk.
@@ -131,6 +135,11 @@ router.post(
   ],
   validate,
   async (req, res) => {
+    // Set when this change affects an active loan, so the response can carry the
+    // member-facing warning. Declared out here because the profile update that
+    // decides it runs inside a try/catch.
+    let impactFlag = false;
+    let impactWarning = null;
     try {
       const { contribution_type, employmentInfo } = req.body;
       const kyc = await getOrCreateKyc(req.user.id);
@@ -221,6 +230,15 @@ router.post(
         const employerName =
           employmentInfo?.employer_name || mergedEmployment.employer_name || '';
 
+        // Snapshot the employer link and channel BEFORE the update, so we can
+        // tell whether this change moves the member off their current employer.
+        // Read first: once the profile is updated the previous values are gone.
+        const { data: beforeProfile } = await supabase
+          .from('profiles')
+          .select('organization_id, contribution_method, contribution_type')
+          .eq('id', req.user.id)
+          .maybeSingle();
+
         let orgIsActive = false;
         if (contribution_type === 'salary_deduction' && requestedOrgId) {
           const { data: org } = await supabase
@@ -251,6 +269,63 @@ router.post(
             .eq('id', req.user.id);
           if (profileErr) throw profileErr;
         }
+
+        // An active loan depends on the employer link: a salary-deduction
+        // borrower's guarantors must share the organisation, and recovery runs
+        // through that employer's payroll. Both are read from the profile, and
+        // stored guarantees are not re-derived — so a change here can silently
+        // invalidate guarantors who consented under the old details. Raise it
+        // for admin review and warn the member; do not block the correction.
+        if (profileUpdate) {
+          const { data: activeLoan } = await supabase
+            .from('loans')
+            .select('id, loan_id')
+            .eq('profile_id', req.user.id)
+            .in('status', ACTIVE_LOAN_STATUSES)
+            .limit(1)
+            .maybeSingle();
+
+          const impact = assessEmployerChangeImpact({
+            hasActiveLoan: Boolean(activeLoan),
+            previousOrgId: beforeProfile?.organization_id ?? null,
+            nextOrgId: profileUpdate.organization_id ?? null,
+            previousChannel: contributionChannel(beforeProfile),
+            nextChannel: contributionChannel({ ...beforeProfile, ...profileUpdate }),
+          });
+
+          if (impact.reviewRequired) {
+            try {
+              await createApprovalRequest({
+                requestType: 'guarantor_review',
+                title: 'Employer change on an active loan — review guarantors',
+                reason: impact.reason,
+                payload: {
+                  loanId: activeLoan.id,
+                  loanReference: activeLoan.loan_id ?? null,
+                  codes: impact.codes,
+                  previousOrgId: beforeProfile?.organization_id ?? null,
+                  nextOrgId: profileUpdate.organization_id ?? null,
+                  employerName,
+                },
+                user: req.user,
+              });
+            } catch (approvalErr) {
+              // Non-fatal: the member's correction is already saved, and the
+              // member is still warned. Log so the review is not lost silently.
+              logger.error(
+                'contribution-type: guarantor review request failed:',
+                approvalErr.message,
+              );
+            }
+
+            logger.warn(
+              `contribution-type: employer change on active loan ${activeLoan.id} for ${req.user.id} (${impact.codes.join(', ')}) — guarantor review raised`,
+            );
+          }
+
+          impactFlag = impact.reviewRequired;
+          impactWarning = impact.memberWarning;
+        }
       } catch (profileErr) {
         // The KYC row is already saved, so the member's choice is not lost.
         // Log loudly: this failing is exactly what leaves them wrongly gated.
@@ -261,7 +336,14 @@ router.post(
       }
 
       logger.info(`contribution type set to ${contribution_type} for ${req.user.id}`);
-      res.json({ success: true, kyc: data, contribution_type });
+      res.json({
+        success: true,
+        kyc: data,
+        contribution_type,
+        ...(impactFlag
+          ? { guarantor_review_required: true, warning: impactWarning }
+          : {}),
+      });
     } catch (err) {
       logger.error('contribution-type switch error:', err);
       res.status(500).json({ success: false, error: err.message });

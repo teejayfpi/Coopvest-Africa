@@ -194,7 +194,7 @@ class _ContributionMethodScreenState
 
     setState(() => _saving = true);
     try {
-      await ref.read(kycProvider.notifier).switchContributionType(
+      final result = await ref.read(kycProvider.notifier).switchContributionType(
         _selected!,
         employmentInfo: _selected == 'salary_deduction'
             ? {
@@ -215,15 +215,40 @@ class _ContributionMethodScreenState
       // without a relaunch — the same reason the sign-up employer screen does.
       await ref.read(authProvider.notifier).refreshCurrentUser();
       if (!mounted) return;
+
+      final successMessage = wasChannelChange
+          ? (_selected == 'salary_deduction'
+              ? 'Switched to Salary Deduction — your employment details were sent for review.'
+              : 'Switched to Direct Deposit.')
+          : 'Employer updated — your new employment details were sent for review.';
+
+      // A change that affects an active loan is flagged by the backend: the
+      // member's guarantors consented under the previous details and may need
+      // re-sourcing. Show it prominently and keep it up longer than a toast.
+      if (result.guarantorReviewRequired) {
+        await showDialog<void>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Your guarantors may need updating'),
+            content: Text(
+              result.warning ??
+                  'Because you have an active loan, our team will review your '
+                      'guarantors. They may need to be replaced.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Understood'),
+              ),
+            ],
+          ),
+        );
+        if (!mounted) return;
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            wasChannelChange
-                ? (_selected == 'salary_deduction'
-                    ? 'Switched to Salary Deduction — your employment details were sent for review.'
-                    : 'Switched to Direct Deposit.')
-                : 'Employer updated — your new employment details were sent for review.',
-          ),
+          content: Text(successMessage),
           backgroundColor: CoopvestColors.success,
         ),
       );
