@@ -172,7 +172,11 @@ class MonthlyContribution extends Equatable {
     return MonthlyContribution(
       id: json['id'] as String,
       userId: (json['profile_id'] ?? json['user_id'] ?? json['userId']) as String? ?? '',
-      contributionMonth: json['contribution_month'] as String,
+      // contribution_month is nullable in the schema and the screen formats it,
+      // so fall back to the month the row was created rather than crash.
+      contributionMonth: (json['contribution_month'] as String?) ??
+          '${createdAt.year.toString().padLeft(4, '0')}-'
+              '${createdAt.month.toString().padLeft(2, '0')}',
       amount: (json['amount'] as num).toDouble(),
       type: ContributionType.values.firstWhere(
         (e) => e.name == (json['contribution_type'] as String? ?? 'monthly'),

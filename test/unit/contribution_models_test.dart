@@ -269,6 +269,12 @@ void main() {
       expect(c.updatedAt, DateTime.parse('2026-09-01T08:00:00Z'));
     });
 
+    test('derives the month from created_at when contribution_month is null', () {
+      final row = backendRow()..['contribution_month'] = null;
+      final c = MonthlyContribution.fromJson(row);
+      expect(c.contributionMonth, '2026-09');
+    });
+
     test('defaults contribution_type to monthly when absent', () {
       final c = MonthlyContribution.fromJson(backendRow());
       expect(c.type, ContributionType.monthly);
