@@ -195,6 +195,12 @@ jobs:
       - name: Upload release APK artifact
         id: upload_release
         uses: actions/upload-artifact@v4
+        # Artifact storage is account-wide and can be exhausted (the run then
+        # fails with "Artifact storage quota has been hit" even though the APK
+        # built fine). Publishing to a Release below is the delivery path that
+        # does not depend on that quota, so a quota failure here must not fail
+        # the build.
+        continue-on-error: true
         if: ${{ steps.locate_apk.outputs.apk_found == 'true' && github.event.inputs.build_type != 'debug' }}
         with:
           name: coopvest-release-universal-apk-${{ github.run_number }}
@@ -206,6 +212,7 @@ jobs:
       - name: Upload debug APK artifact
         id: upload_debug
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         if: ${{ steps.locate_apk.outputs.apk_found == 'true' && github.event.inputs.build_type == 'debug' }}
         with:
           name: coopvest-debug-apk-${{ github.run_number }}
@@ -213,6 +220,56 @@ jobs:
           retention-days: 3
           if-no-files-found: error
           compression-level: 6
+
+      # ── Publish the release APK ────────────────────────────────────────────
+      # Workflow artifacts require a GitHub login and share an account-wide
+      # storage quota that can be exhausted. Every successful release build
+      # therefore also publishes a GitHub Release with the APK attached, giving
+      # a stable URL that survives both problems:
+      #
+      #   https://github.com/<owner>/<repo>/releases/latest/download/Coopvest-Africa.apk
+      #
+      # The tag is fixed (`latest-apk`) and the existing release is replaced, so
+      # the download URL never changes.
+      - name: Publish APK release
+        if: ${{ steps.locate_apk.outputs.apk_found == 'true' && github.event.inputs.build_type != 'debug' && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          TAG="latest-apk"
+          APK="${{ steps.locate_apk.outputs.apk_path }}"
+          SHA=$(sha256sum "$APK" | cut -d' ' -f1)
+          SIZE=$(du -h "$APK" | cut -f1)
+
+          # Replace the previous release so the asset name and tag stay fixed.
+          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+
+          gh release create "$TAG" \
+            --title "Latest Coopvest Africa APK" \
+            --target "${{ github.sha }}" \
+            --notes "$(cat <<EOF
+          Direct download for Android. Tap the APK link below on your phone to install.
+
+          - **Version**: 1.0.0 (build ${{ github.run_number }})
+          - **Built from**: \`${GITHUB_SHA:0:8}\` on \`${{ github.ref_name }}\`
+          - **Size**: $SIZE
+          - **Requires**: Android 7.0 (API 24) or newer
+          - **SHA-256**: \`$SHA\`
+
+          This is a universal build, so it installs on both older 32-bit and modern 64-bit devices.
+
+          Because this is installed outside the Play Store, Android will ask you to allow installation from your browser. That prompt is normal for a direct APK download.
+
+          _Published automatically by the Build Flutter APK workflow._
+          EOF
+          )"
+
+          gh release upload "$TAG" "$APK#Coopvest-Africa.apk" --clobber
+
+          echo "Published: release $TAG"
+          echo "Public URL: ${{ github.server_url }}/${{ github.repository }}/releases/latest/download/Coopvest-Africa.apk"
 
       - name: Create GitHub Release (on tag push)
         if: startsWith(github.ref, 'refs/tags/') && steps.locate_apk.outputs.apk_found == 'true'
