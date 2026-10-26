@@ -160,9 +160,18 @@ class MonthlyContribution extends Equatable {
   });
 
   factory MonthlyContribution.fromJson(Map<String, dynamic> json) {
+    // GET /contributions returns raw `contributions` rows, so the member column
+    // is `profile_id` (not `user_id`) and there is no `updated_at`. Casting
+    // either as a non-null String threw "type 'Null' is not a subtype of type
+    // 'String'" for every real row, which is what broke the Monthly
+    // Contributions screen. Accept both key names, and fall back to
+    // created_at when updated_at is absent.
+    final createdAt = DateTime.parse(json['created_at'] as String);
+    final updatedRaw = json['updated_at'] ?? json['updatedAt'];
+
     return MonthlyContribution(
       id: json['id'] as String,
-      userId: json['user_id'] as String,
+      userId: (json['profile_id'] ?? json['user_id'] ?? json['userId']) as String? ?? '',
       contributionMonth: json['contribution_month'] as String,
       amount: (json['amount'] as num).toDouble(),
       type: ContributionType.values.firstWhere(
@@ -183,8 +192,8 @@ class MonthlyContribution extends Equatable {
       processedDate: json['processed_date'] != null
           ? DateTime.parse(json['processed_date'] as String)
           : null,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      createdAt: createdAt,
+      updatedAt: updatedRaw != null ? DateTime.parse(updatedRaw as String) : createdAt,
       notes: json['notes'] as String?,
       // Accept both snake_case (raw row) and camelCase (normalised payload),
       // and fall back to payment_method so entries posted before the source
@@ -382,9 +391,15 @@ class ContributionDetail extends Equatable {
   });
 
   factory ContributionDetail.fromJson(Map<String, dynamic> json) {
+    // GET /contributions/:id returns the contribution row at the top level
+    // (`{ success: true, ...row }`), not nested under `contribution`. Accepting
+    // only the nested envelope made `json['contribution'] as Map` a null cast
+    // that crashed the detail screen on every row tap. Fall back to the object
+    // itself so both shapes work.
+    final contributionJson =
+        (json['contribution'] as Map<String, dynamic>?) ?? json;
     return ContributionDetail(
-      contribution: MonthlyContribution.fromJson(
-          json['contribution'] as Map<String, dynamic>),
+      contribution: MonthlyContribution.fromJson(contributionJson),
       receiptUrl: json['receipt_url'] as String?,
       auditTrailId: json['audit_trail_id'] as String?,
       processingLogs: json['processing_logs'] != null
