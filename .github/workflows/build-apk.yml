@@ -195,6 +195,10 @@ jobs:
       - name: Upload release APK artifact
         id: upload_release
         uses: actions/upload-artifact@v4
+        # Artifact storage is account-wide and can be exhausted; publishing to a
+        # Release below is the delivery path that does not depend on that quota,
+        # so a quota failure here must not fail the build.
+        continue-on-error: true
         if: ${{ steps.locate_apk.outputs.apk_found == 'true' && github.event.inputs.build_type != 'debug' }}
         with:
           name: coopvest-release-universal-apk-${{ github.run_number }}
@@ -206,6 +210,7 @@ jobs:
       - name: Upload debug APK artifact
         id: upload_debug
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         if: ${{ steps.locate_apk.outputs.apk_found == 'true' && github.event.inputs.build_type == 'debug' }}
         with:
           name: coopvest-debug-apk-${{ github.run_number }}
@@ -225,7 +230,7 @@ jobs:
       # the download URL never changes and the site does not need updating on
       # each build.
       - name: Publish APK release
-        if: ${{ github.ref == 'refs/heads/main' && github.event.inputs.build_type != 'debug' && steps.locate_apk.outputs.apk_found == 'true' }}
+        if: ${{ steps.locate_apk.outputs.apk_found == 'true' && github.event.inputs.build_type != 'debug' && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
