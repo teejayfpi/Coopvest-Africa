@@ -6,6 +6,7 @@ import '../../../config/theme_extension.dart';
 import '../../../core/extensions/number_extensions.dart';
 import '../../../data/models/contributions/monthly_contribution.dart';
 import '../../../presentation/providers/contributions/contribution_provider.dart';
+import '../home/notifications_screen.dart';
 import 'contribution_detail_screen.dart';
 
 /// Monthly Contributions Screen
@@ -121,13 +122,49 @@ class _MonthlyContributionsScreenState
       actions: [
         IconButton(
           icon: const Icon(Icons.notifications_outlined, color: Colors.white),
-          onPressed: () {},
+          tooltip: 'Notifications',
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+          ),
         ),
         IconButton(
           icon: const Icon(Icons.help_outline, color: Colors.white),
-          onPressed: () {},
+          tooltip: 'About monthly contributions',
+          onPressed: () => _showHelpDialog(context),
         ),
       ],
+    );
+  }
+
+  /// Explains what the screen shows. Mirrors the contextual help dialog other
+  /// screens use for their "?" action.
+  void _showHelpDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: context.cardBackground,
+        title: Text(
+          'About Monthly Contributions',
+          style: TextStyle(color: context.textPrimary),
+        ),
+        content: Text(
+          'This screen shows every contribution recorded against your account.\n\n'
+          '- Use the search and filter chips to narrow the list.\n'
+          '- Tap a contribution to see its full detail and receipt.\n'
+          '- "Salary deduction" entries were paid by your employer through '
+          'payroll; the rest you paid yourself.\n\n'
+          'If an entry looks wrong, open Help & Support from your profile and '
+          'raise a ticket.',
+          style: TextStyle(color: context.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Got it'),
+          ),
+        ],
+      ),
     );
   }
 
