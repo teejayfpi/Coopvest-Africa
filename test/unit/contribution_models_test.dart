@@ -281,7 +281,7 @@ void main() {
     });
 
     test('still accepts the legacy user_id/updated_at shape', () {
-      final c = MonthlyContribution.fromJson({
+      final row = <String, dynamic>{
         'id': 'row-2',
         'user_id': 'user-2',
         'profile_id': 'profile-2',
@@ -291,7 +291,8 @@ void main() {
         'contribution_type': 'voluntary',
         'created_at': '2026-08-01T00:00:00Z',
         'updated_at': '2026-08-02T00:00:00Z',
-      });
+      };
+      final c = MonthlyContribution.fromJson(row);
       // profile_id wins when both are present — it is the live column.
       expect(c.userId, 'profile-2');
       expect(c.updatedAt, DateTime.parse('2026-08-02T00:00:00Z'));
@@ -303,7 +304,7 @@ void main() {
   // (`{ success: true, ...row }`), not wrapped in a `contribution` key.
   group('ContributionDetail parses a flat backend payload', () {
     test('reads the contribution row from the top level', () {
-      final detail = ContributionDetail.fromJson({
+      final flat = <String, dynamic>{
         'success': true,
         'id': 'row-7',
         'profile_id': 'profile-7',
@@ -311,15 +312,16 @@ void main() {
         'status': 'successful',
         'contribution_month': '2026-09',
         'created_at': '2026-09-03T09:30:00Z',
-      });
+      };
+      final detail = ContributionDetail.fromJson(flat);
       expect(detail.contribution.id, 'row-7');
       expect(detail.contribution.userId, 'profile-7');
       expect(detail.contribution.amount, 2500.0);
     });
 
     test('still reads the nested envelope shape', () {
-      final detail = ContributionDetail.fromJson({
-        'contribution': {
+      final nested = <String, dynamic>{
+        'contribution': <String, dynamic>{
           'id': 'row-8',
           'profile_id': 'profile-8',
           'amount': 100,
@@ -328,7 +330,8 @@ void main() {
           'created_at': '2026-09-04T00:00:00Z',
         },
         'receipt_url': 'https://example.test/r.pdf',
-      });
+      };
+      final detail = ContributionDetail.fromJson(nested);
       expect(detail.contribution.id, 'row-8');
       expect(detail.receiptUrl, 'https://example.test/r.pdf');
     });
