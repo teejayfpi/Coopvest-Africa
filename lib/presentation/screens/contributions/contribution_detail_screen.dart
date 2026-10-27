@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/extensions/number_extensions.dart';
@@ -62,6 +63,30 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
     }
   }
 
+  /// Shares a short receipt summary. The backend exposes a receipt URL but the
+  /// app has no PDF downloader, so share the key facts plus the reference.
+  Future<void> _shareContribution() async {
+    final detail = ref.read(contributionProvider).selectedDetail;
+    final contribution = detail?.contribution;
+    if (contribution == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nothing to share yet')),
+      );
+      return;
+    }
+
+    final lines = <String>[
+      'Coopvest Africa contribution',
+      'Month: ${contribution.contributionMonth}',
+      'Amount: ${contribution.amount.formatCurrency()}',
+      'Status: ${contribution.status.displayName}',
+      if (contribution.transactionReference != null)
+        'Reference: ${contribution.transactionReference}',
+    ];
+
+    await Share.share(lines.join('\n'));
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(contributionProvider);
@@ -92,7 +117,8 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
       actions: [
         IconButton(
           icon: const Icon(Icons.share, color: Colors.white),
-          onPressed: () {},
+          tooltip: 'Share contribution',
+          onPressed: _shareContribution,
         ),
         IconButton(
           icon: _isLoadingReceipt

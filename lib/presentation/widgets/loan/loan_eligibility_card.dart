@@ -34,12 +34,10 @@ class LoanEligibilityCard extends ConsumerWidget {
     final monthsDone = user?.membershipDurationMonths ?? 0;
     const monthsRequired = AppConfig.loanEligibilityMonths;
     final monthsLeft = (monthsRequired - monthsDone).clamp(0, monthsRequired);
-    // The 6-month minimum is deliberately waived while the platform is in
-    // testing (`AppConfig.loanEligibilityMonths = 0`, and loanPolicy.js says the
-    // rule is "intentionally NOT enforced here yet"). Guard the division — 0/0
-    // is NaN, which renders as a broken progress ring — and treat a waived
-    // requirement as "no minimum" rather than a 100% milestone, so the copy
-    // below does not claim progress the member has not made.
+    // `loanEligibilityMonths` is 6 in production. The waived branch is a
+    // safety net so a future 0 value cannot divide by zero (0/0 is NaN and
+    // renders a broken progress ring): treat "no minimum" as fully met rather
+    // than as a milestone the member has not reached.
     const requirementWaived = monthsRequired <= 0;
     final progress = requirementWaived
         ? 1.0

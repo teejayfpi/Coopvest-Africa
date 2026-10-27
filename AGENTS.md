@@ -837,3 +837,37 @@ not in `render.yaml`; only the key name is there, with no value. Supabase's
 the plaintext is rejected by Gmail. Do not paste a password into a commit or a
 shell command; set it in the Render dashboard, then confirm a reply reports
 `emailed: true`.
+
+## Fees & monthly obligations (mobile)
+The member monthly obligation = savings contribution + loan repayment +
+outstanding fines + outstanding fees. `GET /api/v1/wallet/obligations`
+(`backend/src/routes/wallet.js` `computeObligations`) is the single source of
+"amount due"; the app never derives it from the wallet balance.
+
+- The monthly administrative charge is NGN1,500 = AGM levy NGN1,000 +
+  Development levy NGN500 (`AppConfig.totalMonthlyLevies`; `agmLevy`/
+  `developmentLevy` are the parts). The `fee_types` catalogue calls it
+  **Administrative Fee** (renamed from "Mobile App Fee" in migration 055).
+  `member_fees.label` copies the catalogue name at assignment time, so a rename
+  must relabel existing rows too.
+- **Pay Now** (`lib/presentation/widgets/obligations_card.dart`) must charge
+  `savingsDue + monthlyLoanRepayment + finesTotal + feesTotal` and pass a
+  per-obligation `initialAllocations` breakdown to `DepositScreen`. Charging the
+  headline while passing a single allocation type silently drops the fee - the
+  whole payment lands in savings. Regression:
+  `test/widget/obligations_payment_test.dart`.
+- A split payment carries `fee_id` per allocation so the backend settles the
+  exact `member_fees` row shown as due, not merely the oldest outstanding one.
+
+### Salary-deduction members are exempt from the in-app administrative fee
+A member whose contributions are withheld by an employer has the monthly
+administrative fee recovered from their salary, so `computeObligations`
+(`backend/src/routes/wallet.js`) omits it from `fees` and sets
+`administrative_fee_exempt: true`. Same mechanism as the registration-fee
+exemption (`isAdministrativeFeeExempt` in `backend/src/lib/activationGate.js`):
+the channel must be payroll AND an employer must be on file
+(`organization_id` or `pending_organization_name`) - without an employer there
+is no deduction to recover from, so the in-app obligation stands. Only the
+identified administrative-fee row is hidden (matched on `fee_type_id`, with the
+label as fallback); fines and other fees stay payable. Tests:
+`backend/__tests__/administrativeFeeExemption.test.js`.

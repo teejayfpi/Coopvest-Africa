@@ -2,41 +2,107 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
+import '../../../core/network/api_client.dart';
 
 /// Login History Screen - Shows where and when the account was accessed
-class LoginHistoryScreen extends ConsumerWidget {
+class LoginHistoryScreen extends ConsumerStatefulWidget {
   const LoginHistoryScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // Mock login history data - in production, this would come from an API
-    final loginHistory = _getMockLoginHistory();
+  ConsumerState<LoginHistoryScreen> createState() => _LoginHistoryScreenState();
+}
 
+class _LoginHistoryScreenState extends ConsumerState<LoginHistoryScreen> {
+  late Future<List<LoginRecord>> _historyFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _historyFuture = _load();
+  }
+
+  Future<List<LoginRecord>> _load() async {
+    final response = await ref.read(apiClientProvider).get('/auth/login-history');
+    final records = (response is Map && response['records'] is List)
+        ? response['records'] as List
+        : const [];
+    return records
+        .whereType<Map>()
+        .map((e) => LoginRecord.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+
+  void _refresh() {
+    setState(() {
+      _historyFuture = _load();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: context.scaffoldBackground,
       appBar: AppBar(
         title: const Text('Login History'),
         elevation: 0,
       ),
-      body: loginHistory.isEmpty
-          ? _buildEmptyState(context)
-          : _buildLoginList(context, loginHistory),
+      body: RefreshIndicator(
+        onRefresh: () async => _refresh(),
+        child: FutureBuilder<List<LoginRecord>>(
+          future: _historyFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snapshot.hasError) {
+              return _buildMessageState(
+                context,
+                icon: Icons.cloud_off,
+                title: 'Could not load login history',
+                subtitle: 'Pull down to try again.',
+              );
+            }
+            final records = snapshot.data ?? const <LoginRecord>[];
+            if (records.isEmpty) {
+              return _buildEmptyState(context);
+            }
+            return _buildLoginList(context, records);
+          },
+        ),
+      ),
     );
   }
 
   Widget _buildEmptyState(BuildContext context) {
+    return ListView(
+      // Keep the list scrollable so RefreshIndicator still works when empty.
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: [
+        SizedBox(height: MediaQuery.of(context).size.height * 0.25),
+        _buildMessageState(
+          context,
+          icon: Icons.history,
+          title: 'No login history',
+          subtitle: 'Your login history will appear here',
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMessageState(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required String subtitle,
+  }) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.history,
-            size: 64,
-            color: context.textSecondary,
-          ),
+          Icon(icon, size: 64, color: context.textSecondary),
           const SizedBox(height: 16),
           Text(
-            'No login history',
+            title,
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -44,10 +110,7 @@ class LoginHistoryScreen extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 8),
-          Text(
-            'Your login history will appear here',
-            style: TextStyle(color: context.textSecondary),
-          ),
+          Text(subtitle, style: TextStyle(color: context.textSecondary)),
         ],
       ),
     );
@@ -186,61 +249,6 @@ class LoginHistoryScreen extends ConsumerWidget {
         return Colors.grey;
     }
   }
-
-  List<LoginRecord> _getMockLoginHistory() {
-    return [
-      LoginRecord(
-        id: '1',
-        deviceName: 'iPhone 14 Pro',
-        deviceType: 'Mobile',
-        location: 'Lagos, Nigeria',
-        ipAddress: '102.88.XXX.XXX',
-        date: DateTime.now().subtract(const Duration(hours: 1)),
-        isSuccessful: true,
-        isCurrentSession: true,
-      ),
-      LoginRecord(
-        id: '2',
-        deviceName: 'MacBook Pro',
-        deviceType: 'Desktop',
-        location: 'Lagos, Nigeria',
-        ipAddress: '102.88.XXX.XXX',
-        date: DateTime.now().subtract(const Duration(days: 1)),
-        isSuccessful: true,
-        isCurrentSession: false,
-      ),
-      LoginRecord(
-        id: '3',
-        deviceName: 'Samsung Galaxy S23',
-        deviceType: 'Mobile',
-        location: 'Abuja, Nigeria',
-        ipAddress: '197.210.XXX.XXX',
-        date: DateTime.now().subtract(const Duration(days: 3)),
-        isSuccessful: true,
-        isCurrentSession: false,
-      ),
-      LoginRecord(
-        id: '4',
-        deviceName: 'iPad Air',
-        deviceType: 'Tablet',
-        location: 'Lagos, Nigeria',
-        ipAddress: '102.88.XXX.XXX',
-        date: DateTime.now().subtract(const Duration(days: 5)),
-        isSuccessful: false,
-        isCurrentSession: false,
-      ),
-      LoginRecord(
-        id: '5',
-        deviceName: 'Chrome Browser',
-        deviceType: 'Web',
-        location: 'Lagos, Nigeria',
-        ipAddress: '102.88.XXX.XXX',
-        date: DateTime.now().subtract(const Duration(days: 7)),
-        isSuccessful: true,
-        isCurrentSession: false,
-      ),
-    ];
-  }
 }
 
 class LoginRecord {
@@ -263,6 +271,28 @@ class LoginRecord {
     required this.isSuccessful,
     required this.isCurrentSession,
   });
+
+  /// Parses one record from `GET /auth/login-history`.
+  ///
+  /// Every field is read defensively: a missing device, a null IP or an
+  /// unparseable timestamp must not crash the screen. `date` falls back to
+  /// `now` only as a last resort so the "x ago" label stays sane.
+  factory LoginRecord.fromJson(Map<String, dynamic> json) {
+    final rawDevice = (json['deviceName'] ?? json['device_type'] ?? '').toString();
+    final rawType = (json['deviceType'] ?? '').toString();
+    final parsedDate = DateTime.tryParse((json['date'] ?? '').toString());
+
+    return LoginRecord(
+      id: (json['id'] ?? '').toString(),
+      deviceName: rawDevice.isEmpty ? 'Unknown device' : rawDevice,
+      deviceType: rawType.isEmpty ? 'unknown' : rawType,
+      location: (json['location'] ?? '').toString(),
+      ipAddress: (json['ipAddress'] ?? '').toString(),
+      date: parsedDate?.toLocal() ?? DateTime.now(),
+      isSuccessful: json['isSuccessful'] == true,
+      isCurrentSession: json['isCurrentSession'] == true,
+    );
+  }
 
   String get formattedDate {
     final now = DateTime.now();
