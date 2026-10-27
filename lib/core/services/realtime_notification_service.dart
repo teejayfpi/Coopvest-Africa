@@ -34,11 +34,27 @@ class RealtimeNotificationService {
     _localInit = true;
   }
 
+  /// Ask for the Android 13+ notification permission.
+  ///
+  /// Without a granted POST_NOTIFICATIONS permission the OS silently discards
+  /// everything we post, so the pop-ups appear to "not work" even though the
+  /// code runs. No-op on older Android and on iOS (handled at FCM init).
+  Future<void> _requestPermission() async {
+    try {
+      final android = _localNotifications
+          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+      await android?.requestNotificationsPermission();
+    } catch (e) {
+      logger.w('RealtimeNotificationService._requestPermission error: $e');
+    }
+  }
+
   /// Start listening for notifications for [userId].
   /// Call this after the user is authenticated.
   Future<void> subscribe(String userId) async {
     await unsubscribe(); // clean up any previous subscription
     await _ensureLocalInit();
+    await _requestPermission();
 
     final client = sb.Supabase.instance.client;
 
@@ -81,7 +97,10 @@ class RealtimeNotificationService {
 
   void _handleNewRow(Map<String, dynamic> row) {
     final title = (row['title'] as String?) ?? 'Coopvest Africa';
-    final body = (row['body'] as String?) ?? '';
+    // The `notifications` table stores the text in `message`; older rows may
+    // use `body`. Reading only `body` rendered every realtime pop-up with an
+    // empty body.
+    final body = (row['message'] as String?) ?? (row['body'] as String?) ?? '';
     final type = (row['type'] as String?) ?? 'general';
 
     logger.i('Realtime notification received: $title ($type)');
