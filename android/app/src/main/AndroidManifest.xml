@@ -26,7 +26,7 @@
         android:name=".Application"
         android:label="Coopvest Africa"
         android:icon="@mipmap/ic_launcher"
-        android:usesCleartextTraffic="true">
+        android:networkSecurityConfig="@xml/network_security_config">
 
         <!-- Native full-logo handoff. Android 12 shows its mandatory system icon splash first, then this activity shows the complete wordmark and tagline while Flutter initializes. -->
         <activity

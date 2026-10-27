@@ -189,12 +189,85 @@ class _SavingsGoalsScreenState extends ConsumerState<SavingsGoalsScreen> {
     );
   }
 
+  /// Shows the full detail for a savings goal.
+  ///
+  /// The card is tappable, so it must do something. There is no goal-detail
+  /// screen and no per-goal deposit endpoint in this app, so this surfaces the
+  /// goal's stored fields rather than inventing a transfer flow.
+  void _showGoalDetails(SavingsGoal goal) {
+    final progress = goal.targetAmount <= 0
+        ? 0.0
+        : (goal.currentAmount / goal.targetAmount).clamp(0.0, 1.0);
+    final remaining = (goal.targetAmount - goal.currentAmount).clamp(0.0, double.infinity);
+    final daysLeft = goal.targetDate.difference(DateTime.now()).inDays;
+
+    Widget row(String label, String value) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(label, style: TextStyle(color: context.textSecondary)),
+              Text(value, style: TextStyle(fontWeight: FontWeight.w600, color: context.textPrimary)),
+            ],
+          ),
+        );
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: context.cardBackground,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                goal.name,
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: context.textPrimary),
+              ),
+              if (goal.description != null && goal.description!.trim().isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(goal.description!, style: TextStyle(color: context.textSecondary)),
+              ],
+              const SizedBox(height: 16),
+              LinearProgressIndicator(
+                value: progress,
+                backgroundColor: context.dividerColor,
+                valueColor: const AlwaysStoppedAnimation<Color>(CoopvestColors.primary),
+              ),
+              const SizedBox(height: 16),
+              row('Saved', '₦${goal.currentAmount.formatNumber()}'),
+              row('Target', '₦${goal.targetAmount.formatNumber()}'),
+              row('Remaining', '₦${remaining.formatNumber()}'),
+              row('Monthly contribution', '₦${goal.monthlyContribution.formatNumber()}'),
+              row('Target date', goal.targetDate.toFormattedDate()),
+              if (daysLeft >= 0) row('Days left', '$daysLeft'),
+              row('Status', goal.status),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: SecondaryButton(
+                  label: 'Close',
+                  onPressed: () => Navigator.of(sheetContext).pop(),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildGoalCard(BuildContext context, SavingsGoal goal) {
     final progress = goal.currentAmount / goal.targetAmount;
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: AppCard(
-        onTap: () {},
+        onTap: () => _showGoalDetails(goal),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

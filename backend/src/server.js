@@ -176,18 +176,30 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
-// Stricter rate limiting for auth endpoints
+// Stricter rate limiting for auth endpoints.
+//
+// Only *failed* attempts count: `skipSuccessfulRequests` refunds a normal
+// sign-in, so a member who logs in, refreshes a token and resets a password
+// cannot lock themselves out by simply using the app. What remains throttled
+// is the brute-force case — repeated wrong credentials. The key combines the
+// submitted email with the client IP so one member's failures neither block
+// another member behind the same carrier NAT nor can a single IP spray many
+// accounts unbounded.
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // 10 requests per window
+  max: parseInt(process.env.AUTH_RATE_LIMIT_MAX) || 10, // failed attempts per window
+  skipSuccessfulRequests: true,
   message: {
     success: false,
-    error: 'Too many authentication attempts, please try again later.'
+    error: 'Too many failed sign-in attempts. Please wait 15 minutes and try again, or reset your password.',
+    retryAfter: 900
   },
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => {
-    return req.body?.email || req.ip || req.connection.remoteAddress;
+    const email = typeof req.body?.email === 'string' ? req.body.email.toLowerCase().trim() : '';
+    const ip = req.headers['x-forwarded-for'] || req.ip || req.connection?.remoteAddress || 'unknown';
+    return email ? `${email}|${ip}` : `ip:${ip}`;
   }
 });
 
@@ -320,6 +332,10 @@ app.use('/api/v1/organizations', organizationRoutes);
 // ==============================================================================
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/auth', emailVerificationRoutes);
+// The app's Dio baseUrl is /api, so the activation-gate call lands on
+// /api/app/home-status. Without this mount that request 404s and AuthGuard
+// falls back to the (possibly stale) cached profile it exists to overrule.
+app.use('/api/app', appRoutes);
 app.use('/api/referrals', requireFeatureFlag('referralSystem'), referralRoutes);
 app.use('/api/tickets', ticketRoutes);
 // Public website contact form (no auth by design — the visitor is anonymous).

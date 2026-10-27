@@ -1066,4 +1066,48 @@ router.post('/change-password', authenticate, [
   }
 });
 
+/**
+ * GET /auth/login-history
+ *
+ * The member's own recent sign-in activity (successes and failures) from the
+ * `login_history` table. Backs the app's Login History screen, which previously
+ * rendered hardcoded fake devices. Scoped to the caller — a member never sees
+ * another member's rows.
+ */
+router.get('/login-history', authenticate, async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 20, 50);
+    const currentSessionId = decodeSessionId(req.token);
+
+    const { data, error } = await supabase
+      .from('login_history')
+      .select('id, ip_address, user_agent, success, failure_reason, location, device_type, device_name, browser, os, created_at, session_id')
+      .eq('profile_id', req.user.id)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+
+    const records = (data || []).map((r) => ({
+      id: r.id,
+      ipAddress: r.ip_address || '',
+      deviceName: r.device_name || r.device_type || 'Unknown device',
+      deviceType: r.device_type || 'unknown',
+      location: r.location || '',
+      browser: r.browser || '',
+      os: r.os || '',
+      date: r.created_at,
+      isSuccessful: r.success === true,
+      failureReason: r.failure_reason || null,
+      // Mark the session the current token belongs to so the UI can badge it.
+      isCurrentSession: !!(currentSessionId && r.session_id === currentSessionId),
+    }));
+
+    res.json({ success: true, records });
+  } catch (err) {
+    logger.error('Login history error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;

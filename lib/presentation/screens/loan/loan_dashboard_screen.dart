@@ -156,7 +156,13 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
                         '${quickStats['activeLoans']}',
                         Icons.trending_up,
                         CoopvestColors.success,
-                        onTap: () {},
+                        onTap: () => _showLoansSheet(
+                          'Active Loans',
+                          (l) {
+                            final s = l.status.toLowerCase();
+                            return s == 'active' || s == 'disbursed';
+                          },
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -166,7 +172,10 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
                         '\u20a6${(quickStats['totalBorrowed'] as num).toDouble().toStringAsFixed(0)}',
                         Icons.account_balance,
                         CoopvestColors.primary,
-                        onTap: () {},
+                        onTap: () => _showLoansSheet(
+                          'Borrowed Loans',
+                          (l) => l.status.toLowerCase() == 'disbursed',
+                        ),
                       ),
                     ),
                   ],
@@ -180,7 +189,10 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
                         '\u20a6${(quickStats['totalRepaid'] as num).toDouble().toStringAsFixed(0)}',
                         Icons.payments,
                         CoopvestColors.info,
-                        onTap: () {},
+                        onTap: () => _showLoansSheet(
+                          'Repaid Loans',
+                          (l) => l.status.toLowerCase() == 'disbursed',
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -190,7 +202,7 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
                         '${quickStats['totalLoans']}',
                         Icons.description,
                         Colors.orange,
-                        onTap: () {},
+                        onTap: () => _showLoansSheet('All Loan Applications', (_) => true),
                       ),
                     ),
                   ],
@@ -266,6 +278,71 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  /// Shows the loans matching a stat card in a bottom sheet.
+  ///
+  /// The four quick-stat cards are summary figures; tapping one should reveal
+  /// the loans behind the number rather than doing nothing. The borrower's
+  /// existing [_buildLoanCard] rows are reused so the sheet matches the list.
+  void _showLoansSheet(String title, bool Function(Loan) filter) {
+    final matches = ref.read(loanProvider).loans.where(filter).toList();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: context.cardBackground,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.6,
+        maxChildSize: 0.9,
+        minChildSize: 0.3,
+        builder: (context, scrollController) => Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: context.textPrimary,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    '${matches.length}',
+                    style: TextStyle(color: context.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: matches.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No loans in this category',
+                        style: TextStyle(color: context.textSecondary),
+                      ),
+                    )
+                  : ListView.builder(
+                      controller: scrollController,
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                      itemCount: matches.length,
+                      itemBuilder: (context, index) =>
+                          _buildLoanCard(context, matches[index]),
+                    ),
+            ),
+          ],
         ),
       ),
     );
