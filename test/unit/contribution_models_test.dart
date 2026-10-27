@@ -236,4 +236,105 @@ void main() {
       expect(ContributionStatus.processing.color, 'info');
     });
   });
+
+  // The backend returns raw `contributions` rows (GET /contributions does
+  // `select('*')`): the member column is `profile_id`, and the table has no
+  // `updated_at` and no `contribution_type`. The model used to cast `user_id`
+  // and `updated_at` as non-null Strings, so every real row threw
+  // "type 'Null' is not a subtype of type 'String' in type cast" and the
+  // Monthly Contributions screen failed to load. These tests pin the shape the
+  // API actually sends.
+  group('parses the raw backend contributions row', () {
+    Map<String, dynamic> backendRow() => {
+          'id': 'row-1',
+          'profile_id': 'profile-9',
+          'amount': 5000,
+          'status': 'successful',
+          'contribution_month': '2026-09',
+          'created_at': '2026-09-01T08:00:00Z',
+          // No `user_id`, no `updated_at`, no `contribution_type`.
+        };
+
+    test('maps profile_id onto userId', () {
+      final c = MonthlyContribution.fromJson(backendRow());
+      expect(c.userId, 'profile-9');
+    });
+
+    test('does not require user_id', () {
+      expect(() => MonthlyContribution.fromJson(backendRow()), returnsNormally);
+    });
+
+    test('falls back to created_at when updated_at is absent', () {
+      final c = MonthlyContribution.fromJson(backendRow());
+      expect(c.updatedAt, DateTime.parse('2026-09-01T08:00:00Z'));
+    });
+
+    test('derives the month from created_at when contribution_month is null', () {
+      final row = backendRow()..['contribution_month'] = null;
+      final c = MonthlyContribution.fromJson(row);
+      expect(c.contributionMonth, '2026-09');
+    });
+
+    test('defaults contribution_type to monthly when absent', () {
+      final c = MonthlyContribution.fromJson(backendRow());
+      expect(c.type, ContributionType.monthly);
+    });
+
+    test('still accepts the legacy user_id/updated_at shape', () {
+      final row = <String, dynamic>{
+        'id': 'row-2',
+        'user_id': 'user-2',
+        'profile_id': 'profile-2',
+        'amount': 1000,
+        'status': 'pending',
+        'contribution_month': '2026-08',
+        'contribution_type': 'voluntary',
+        'created_at': '2026-08-01T00:00:00Z',
+        'updated_at': '2026-08-02T00:00:00Z',
+      };
+      final c = MonthlyContribution.fromJson(row);
+      // profile_id wins when both are present — it is the live column.
+      expect(c.userId, 'profile-2');
+      expect(c.updatedAt, DateTime.parse('2026-08-02T00:00:00Z'));
+      expect(c.type, ContributionType.voluntary);
+    });
+  });
+
+  // GET /contributions/:id returns the row at the top level
+  // (`{ success: true, ...row }`), not wrapped in a `contribution` key.
+  group('ContributionDetail parses a flat backend payload', () {
+    test('reads the contribution row from the top level', () {
+      final flat = <String, dynamic>{
+        'success': true,
+        'id': 'row-7',
+        'profile_id': 'profile-7',
+        'amount': 2500,
+        'status': 'successful',
+        'contribution_month': '2026-09',
+        'created_at': '2026-09-03T09:30:00Z',
+      };
+      final detail = ContributionDetail.fromJson(flat);
+      expect(detail.contribution.id, 'row-7');
+      expect(detail.contribution.userId, 'profile-7');
+      expect(detail.contribution.amount, 2500.0);
+    });
+
+    test('still reads the nested envelope shape', () {
+      final nested = <String, dynamic>{
+        'contribution': <String, dynamic>{
+          'id': 'row-8',
+          'profile_id': 'profile-8',
+          'amount': 100,
+          'status': 'pending',
+          'contribution_month': '2026-09',
+          'created_at': '2026-09-04T00:00:00Z',
+        },
+        'receipt_url': 'https://example.test/r.pdf',
+      };
+      final detail = ContributionDetail.fromJson(nested);
+      expect(detail.contribution.id, 'row-8');
+      expect(detail.receiptUrl, 'https://example.test/r.pdf');
+    });
+  });
+
 }

@@ -58,6 +58,37 @@ function isRegistrationFeeExempt(profile) {
 }
 
 /**
+ * True when the member's contributions are withheld by an employer.
+ *
+ * The app writes `contribution_method` from the settings screen and
+ * `contribution_type` from the KYC/sign-up screens; either identifies the
+ * member, so accept both.
+ */
+function isPayrollMember(profile) {
+  if (!profile) return false;
+  const method = profile.contribution_method || profile.contribution_type;
+  return PAYROLL_METHODS.includes(method);
+}
+
+/**
+ * True when the monthly administrative fee is recovered from the member's
+ * salary rather than paid in-app.
+ *
+ * Same mechanism as the registration-fee exemption above: the employer
+ * deduction is the channel, so showing the fee as an in-app obligation would
+ * charge the member a second time for money their employer already withholds.
+ * An employer must be on file for the same reason — without one there is no
+ * deduction to recover the fee from, so the in-app obligation stands.
+ *
+ * Fines are deliberately NOT covered: a penalty is not part of the standard
+ * monthly deduction, so it stays payable in the app.
+ */
+function isAdministrativeFeeExempt(profile) {
+  if (!profile) return false;
+  return isPayrollMember(profile) && Boolean(profile.organization_id || profile.pending_organization_name);
+}
+
+/**
  * Build the machine-readable gate summary returned to the app, so it can route
  * to the right onboarding step instead of showing a generic 403.
  */
@@ -83,5 +114,7 @@ module.exports = {
   PAYROLL_METHODS,
   isRegistrationFeeSettled,
   isRegistrationFeeExempt,
+  isPayrollMember,
+  isAdministrativeFeeExempt,
   gateStatusFor,
 };

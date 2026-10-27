@@ -33,12 +33,22 @@ class DepositScreen extends ConsumerStatefulWidget {
   /// the member pays the exact monthly figure without retyping it.
   final double? initialAmount;
 
+  /// A full allocation breakdown to pre-fill, e.g. from the obligations card
+  /// when more than one obligation is due this month (savings + loan + a fee).
+  /// Each entry is `{ 'type': 'savings'|'loan_repayment'|'fine'|'fee', 'amount': num }`.
+  /// When supplied the screen opens on the matching allocation — a single
+  /// obligation keeps its own type, several open the split view pre-filled —
+  /// so the member's payment is settled against each obligation rather than
+  /// being credited wholly to savings.
+  final List<Map<String, dynamic>>? initialAllocations;
+
   const DepositScreen({
     super.key,
     this.userId,
     this.initialAllocationType,
     this.initialLoanId,
     this.initialAmount,
+    this.initialAllocations,
   });
 
   @override
@@ -56,6 +66,11 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
   final _splitLoanController = TextEditingController();
   final _splitFineController = TextEditingController();
   final _splitFeeController = TextEditingController();
+  // Exact member_fees ids carried in from the obligations card, per type, in
+  // order. The split payload rebuilds allocations from the amount fields and
+  // would otherwise lose them, leaving the backend to settle the *oldest*
+  // outstanding fee of that type — which may not be the one shown as due.
+  final Map<String, List<String>> _pendingFeeIds = {'fine': [], 'fee': []};
   bool _isProcessing = false;
   // MANUAL DEPOSIT DISABLED — proof-of-payment upload removed.
   // File? _proofFile;
@@ -71,6 +86,48 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
     final initialAmount = widget.initialAmount;
     if (initialAmount != null && initialAmount > 0) {
       _amountController.text = initialAmount.toStringAsFixed(0);
+    }
+    // Pre-fill a breakdown from the obligations "Pay Now" action. A single
+    // obligation keeps its own allocation type; several open the split view so
+    // each part settles the right record. Types are mapped back to the split
+    // fields (savings / loan / fine / fee).
+    final initialAllocations = widget.initialAllocations;
+    if (initialAllocations != null && initialAllocations.isNotEmpty) {
+      double amtOf(String t) => initialAllocations
+          .where((a) => a['type'] == t)
+          .fold<double>(0, (s, a) => s + ((a['amount'] as num?)?.toDouble() ?? 0));
+      final savings = amtOf('savings');
+      final loan = amtOf('loan_repayment');
+      final fine = amtOf('fine');
+      final fee = amtOf('fee');
+      if (savings > 0) _splitSavingsController.text = savings.toStringAsFixed(0);
+      if (loan > 0) _splitLoanController.text = loan.toStringAsFixed(0);
+      if (fine > 0) _splitFineController.text = fine.toStringAsFixed(0);
+      if (fee > 0) _splitFeeController.text = fee.toStringAsFixed(0);
+      // Remember which exact fee rows these amounts correspond to.
+      for (final entry in initialAllocations) {
+        final t = entry['type'];
+        final id = entry['fee_id'];
+        if ((t == 'fine' || t == 'fee') && id != null) {
+          _pendingFeeIds[t]!.add(id.toString());
+        }
+      }
+
+      final nonZero = [savings, loan, fine, fee].where((v) => v > 0).toList();
+      if (nonZero.length == 1) {
+        // One obligation only — keep the dedicated single-type flow.
+        if (loan > 0) {
+          _allocationType = 'loan_repayment';
+        } else if (fine > 0) {
+          _allocationType = 'fine';
+        } else if (fee > 0) {
+          _allocationType = 'fee';
+        } else {
+          _allocationType = 'monthly_contribution';
+        }
+      } else {
+        _allocationType = 'mixed';
+      }
     }
     Future.microtask(() {
       // MANUAL DEPOSIT DISABLED — the Opay bank details panel that consumed
@@ -436,7 +493,21 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
               {'type': 'loan_repayment', 'amount': double.tryParse(_splitLoanController.text.replaceAll(',', '')) ?? 0},
               {'type': 'fine', 'amount': double.tryParse(_splitFineController.text.replaceAll(',', '')) ?? 0},
               {'type': 'fee', 'amount': double.tryParse(_splitFeeController.text.replaceAll(',', '')) ?? 0},
-            ].where((a) => (a['amount'] as double) > 0).toList()
+            ]
+              // Carry the exact fee row through, when the breakdown came from a
+              // known obligation (obligations "Pay Now"). Without it the backend
+              // settles the oldest outstanding fee of that type. Zero-amount
+              // rows are dropped first so they cannot consume a pending id.
+              .where((a) => (a['amount'] as double) > 0)
+              .map((a) {
+                final t = a['type'] as String;
+                final ids = _pendingFeeIds[t];
+                if (ids != null && ids.isNotEmpty) {
+                  return {...a, 'fee_id': ids.removeAt(0)};
+                }
+                return a;
+              })
+              .toList()
           : null;
 
       final apiClient = ref.read(apiClientProvider);

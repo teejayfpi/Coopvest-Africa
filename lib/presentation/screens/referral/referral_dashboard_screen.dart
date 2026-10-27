@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
@@ -83,11 +84,34 @@ class ReferralDashboardScreen extends ConsumerWidget {
               // Both buttons in an unbounded Row: wrap them so a long label or
               // a large text scale cannot overflow the row.
               Expanded(
-                child: SecondaryButton(label: 'Copy', onPressed: () {}, icon: const Icon(Icons.copy)),
+                child: SecondaryButton(
+                  label: 'Copy',
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: referralCode));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Referral code copied!'),
+                        backgroundColor: CoopvestColors.success,
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.copy),
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: SecondaryButton(label: 'Share QR', onPressed: () {}, icon: const Icon(Icons.qr_code)),
+                child: SecondaryButton(
+                  label: 'Share QR',
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => ReferralSharingScreen(
+                        referralCode: referralCode,
+                      ),
+                    ),
+                  ),
+                  icon: const Icon(Icons.qr_code),
+                ),
               ),
             ],
           ),

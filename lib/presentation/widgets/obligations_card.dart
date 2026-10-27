@@ -67,8 +67,17 @@ class ObligationsCard extends ConsumerWidget {
         final totalDue = savingsDue + monthlyLoanRepayment + finesTotal + feesTotal;
 
         final hasLoanObligation = loansData.isNotEmpty;
+
+        // What "Pay Now" actually charges. Fines and fees are part of this
+        // month's obligations and are listed in the rows above, so leaving them
+        // out meant the card said "Total due ₦6,500" and then charged ₦5,000 —
+        // the outstanding fee was silently dropped from the payment.
+        //
+        // Still deliberately excludes this month's savings once it is paid or
+        // when the member is new (`savingsDue` is already 0 in those cases) and
+        // excludes the running loan balance, which is not payable this month.
         final payableNow =
-            hasLoanObligation ? monthlyLoanRepayment : savingsDue;
+            savingsDue + monthlyLoanRepayment + finesTotal + feesTotal;
 
         // Nothing due: show the "all caught up" state rather than a card of
         // ₦0 rows, which reads like a broken screen. The green check plus the
@@ -238,22 +247,45 @@ class ObligationsCard extends ConsumerWidget {
                   label: 'Pay Now',
                   icon: const Icon(Icons.bolt, color: Colors.white, size: 18),
                   width: double.infinity,
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => DepositScreen(
-                        initialAllocationType:
-                            hasLoanObligation ? 'loan_repayment' : 'monthly_contribution',
-                        initialAmount: payableNow,
+                  onPressed: () {
+                    // Build the allocation breakdown for every obligation the
+                    // member is being asked to settle. A single obligation keeps
+                    // its dedicated type; several open the split view, so the
+                    // fee is actually applied to the fee record instead of the
+                    // whole payment landing in savings.
+                    final allocations = <Map<String, dynamic>>[
+                      if (savingsDue > 0)
+                        {'type': 'savings', 'amount': savingsDue},
+                      if (monthlyLoanRepayment > 0)
+                        {'type': 'loan_repayment', 'amount': monthlyLoanRepayment},
+                      ...fines.map((f) => {
+                            'type': 'fine',
+                            'amount': _entryAmount(f),
+                            if ((f as Map)['id'] != null) 'fee_id': f['id'],
+                          }),
+                      ...fees.map((f) => {
+                            'type': 'fee',
+                            'amount': _entryAmount(f),
+                            if ((f as Map)['id'] != null) 'fee_id': f['id'],
+                          }),
+                    ];
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => DepositScreen(
+                          initialAmount: payableNow,
+                          initialAllocations: allocations,
+                          initialAllocationType:
+                              hasLoanObligation ? 'loan_repayment' : 'monthly_contribution',
+                        ),
                       ),
-                    ),
-                  ),
+                    );
+                  },
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  hasLoanObligation
-                      ? 'Pays your loan repayment of \u20a6${payableNow.formatNumber()} instantly.'
-                      : 'Pays your monthly savings of \u20a6${payableNow.formatNumber()} instantly.',
+                  'Pays ₦${payableNow.formatNumber()} — your monthly savings, '
+                  'loan repayment, fines and fees combined.',
                   style: TextStyle(fontSize: 11, color: context.textSecondary),
                 ),
               ],

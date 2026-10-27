@@ -160,8 +160,18 @@ jobs:
         # Universal (fat) APK — bundles arm64-v8a + armeabi-v7a + x86 so the
         # same file installs on both old 32-bit Androids and modern 64-bit
         # ones. Slightly larger than a single-ABI split, but the only way to
-        # guarantee "install anywhere".
-        run: flutter build apk --release --dart-define=ENV=prod --no-tree-shake-icons --android-skip-build-dependency-validation
+        # guarantee "install anywhere". This APK is for direct/side-load
+        # distribution; the App Bundle below is what Play consumes.
+        #
+        # versionCode comes from the CI run number so every build is a strictly
+        # higher code than the last — Play rejects a re-upload at the same code.
+        run: flutter build apk --release --build-name=1.0.0 --build-number=${{ github.run_number }} --dart-define=ENV=prod --no-tree-shake-icons --android-skip-build-dependency-validation
+
+      - name: Build release App Bundle (Google Play)
+        if: ${{ github.event.inputs.build_type != 'debug' }}
+        # Google Play requires an .aab, not an .apk. Play then derives per-device
+        # APKs and re-signs with its own upload key.
+        run: flutter build appbundle --release --build-name=1.0.0 --build-number=${{ github.run_number }} --dart-define=ENV=prod --no-tree-shake-icons
 
       - name: Locate built APK
         id: locate_apk
@@ -195,6 +205,12 @@ jobs:
       - name: Upload release APK artifact
         id: upload_release
         uses: actions/upload-artifact@v4
+        # Artifact storage is account-wide and can be exhausted (the run then
+        # fails with "Artifact storage quota has been hit" even though the APK
+        # built fine). Publishing to a Release below is the delivery path that
+        # does not depend on that quota, so a quota failure here must not fail
+        # the build.
+        continue-on-error: true
         if: ${{ steps.locate_apk.outputs.apk_found == 'true' && github.event.inputs.build_type != 'debug' }}
         with:
           name: coopvest-release-universal-apk-${{ github.run_number }}
@@ -206,6 +222,7 @@ jobs:
       - name: Upload debug APK artifact
         id: upload_debug
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         if: ${{ steps.locate_apk.outputs.apk_found == 'true' && github.event.inputs.build_type == 'debug' }}
         with:
           name: coopvest-debug-apk-${{ github.run_number }}
@@ -214,28 +231,60 @@ jobs:
           if-no-files-found: error
           compression-level: 6
 
+      # ── App Bundle (Google Play) ───────────────────────────────────────────
+      - name: Locate built App Bundle
+        id: locate_aab
+        if: always()
+        run: |
+          AAB="build/app/outputs/bundle/release/app-release.aab"
+          if [ -f "$AAB" ]; then
+            echo "aab_path=$AAB" >> $GITHUB_OUTPUT
+            echo "aab_found=true" >> $GITHUB_OUTPUT
+            echo "AAB found at: $AAB ($(du -sh "$AAB" | cut -f1))"
+          else
+            echo "aab_found=false" >> $GITHUB_OUTPUT
+            find build -name "*.aab" 2>/dev/null || echo "(no aab files found)"
+          fi
+
+      - name: Upload release App Bundle artifact
+        uses: actions/upload-artifact@v4
+        continue-on-error: true
+        if: ${{ steps.locate_aab.outputs.aab_found == 'true' }}
+        with:
+          name: coopvest-release-aab-${{ github.run_number }}
+          path: ${{ steps.locate_aab.outputs.aab_path }}
+          retention-days: 7
+          if-no-files-found: error
+          compression-level: 6
+
       # ── Publish the release APK ────────────────────────────────────────────
-      # Workflow artifacts require a GitHub login, so the website cannot link to
-      # them. Every successful release build on main therefore also publishes a
-      # GitHub Release with the APK attached, giving a stable, public URL:
+      # Workflow artifacts require a GitHub login and share an account-wide
+      # storage quota that can be exhausted. Every successful release build
+      # therefore also publishes a GitHub Release with the APK attached, giving
+      # a stable URL that survives both problems:
       #
-      #   https://github.com/<owner>/<repo>/releases/latest/download/<asset>
+      #   https://github.com/<owner>/<repo>/releases/latest/download/Coopvest-Africa.apk
       #
       # The tag is fixed (`latest-apk`) and the existing release is replaced, so
-      # the download URL never changes and the site does not need updating on
-      # each build.
+      # the download URL never changes.
       - name: Publish APK release
-        if: ${{ github.ref == 'refs/heads/main' && github.event.inputs.build_type != 'debug' && steps.locate_apk.outputs.apk_found == 'true' }}
+        if: ${{ steps.locate_apk.outputs.apk_found == 'true' && github.event.inputs.build_type != 'debug' && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
 
           TAG="latest-apk"
-          ASSET="Coopvest-Africa-v1.0.0-build${{ github.run_number }}.apk"
           APK="${{ steps.locate_apk.outputs.apk_path }}"
-          SHA=$(sha256sum "$APK" | cut -d' ' -f1)
-          SIZE=$(du -h "$APK" | cut -f1)
+          # `gh release upload file#name` sets the asset *label*, not its name;
+          # the download URL is built from the name, so the file must actually
+          # be named what the stable URL advertises. Stage a copy under that
+          # name rather than relying on the `#` suffix.
+          ASSET="Coopvest-Africa.apk"
+          STAGE="/tmp/$ASSET"
+          cp "$APK" "$STAGE"
+          SHA=$(sha256sum "$STAGE" | cut -d' ' -f1)
+          SIZE=$(du -h "$STAGE" | cut -f1)
 
           # Replace the previous release so the asset name and tag stay fixed.
           gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
@@ -247,7 +296,7 @@ jobs:
           Direct download for Android. Tap the APK link below on your phone to install.
 
           - **Version**: 1.0.0 (build ${{ github.run_number }})
-          - **Built from**: \`${GITHUB_SHA:0:8}\` on \`main\`
+          - **Built from**: \`${GITHUB_SHA:0:8}\` on \`${{ github.ref_name }}\`
           - **Size**: $SIZE
           - **Requires**: Android 7.0 (API 24) or newer
           - **SHA-256**: \`$SHA\`
@@ -260,10 +309,10 @@ jobs:
           EOF
           )"
 
-          gh release upload "$TAG" "$APK#Coopvest-Africa.apk" --clobber
+          gh release upload "$TAG" "$STAGE" --clobber
 
           echo "Published: release $TAG with asset $ASSET"
-          echo "Public URL: ${{ github.server_url }}/${{ github.repository }}/releases/latest/download/Coopvest-Africa.apk"
+          echo "Public URL: ${{ github.server_url }}/${{ github.repository }}/releases/latest/download/$ASSET"
 
       - name: Create GitHub Release (on tag push)
         if: startsWith(github.ref, 'refs/tags/') && steps.locate_apk.outputs.apk_found == 'true'
