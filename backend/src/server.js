@@ -32,6 +32,8 @@ const emailVerificationRoutes = require('./routes/emailVerification');
 const referralRoutes = require('./routes/referrals');
 const ticketRoutes = require('./routes/tickets');
 const adminTicketRoutes = require('./routes/adminTickets');
+const contactRoutes = require('./routes/contact');
+const adminContactRoutes = require('./routes/adminContact');
 const adminRoutes = require('./routes/admin');
 const organizationRoutes = require('./routes/organizations');
 const loanRoutes = require('./routes/loans');
@@ -50,8 +52,6 @@ const settingsRoutes = require('./routes/settings');
 const watchlistRoutes = require('./routes/watchlist');
 const analyticsRoutes = require('./routes/analytics');
 const adminApiRoutes = require('./routes/adminApi');
-const contactRoutes = require('./routes/contact');
-const adminContactRoutes = require('./routes/adminContact');
 const adminAnnouncementRoutes = require('./routes/adminAnnouncements');
 const directMessageRoutes = require('./routes/directMessages');
 const reportsRoutes = require('./routes/reports');
@@ -70,7 +70,8 @@ const documentRoutes = require('./routes/documents');
 const terminationRoutes = require('./routes/termination');
 const adminTerminationRoutes = require('./routes/adminTermination');
 const featuresRoutes = require('./routes/features');
-
+const { ensureGovernanceSchema, runGovernanceDiagnostics } = require('./config/governanceSchema');
+const securityRoutes = require('./routes/security');
 // Import middleware
 const errorHandler = require('./middleware/errorHandler');
 const { enforceHTTPS, securityHeaders, securityLogger } = require('./middleware/httpsEnforcement');
@@ -175,18 +176,30 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
-// Stricter rate limiting for auth endpoints
+// Stricter rate limiting for auth endpoints.
+//
+// Only *failed* attempts count: `skipSuccessfulRequests` refunds a normal
+// sign-in, so a member who logs in, refreshes a token and resets a password
+// cannot lock themselves out by simply using the app. What remains throttled
+// is the brute-force case — repeated wrong credentials. The key combines the
+// submitted email with the client IP so one member's failures neither block
+// another member behind the same carrier NAT nor can a single IP spray many
+// accounts unbounded.
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // 10 requests per window
+  max: parseInt(process.env.AUTH_RATE_LIMIT_MAX) || 10, // failed attempts per window
+  skipSuccessfulRequests: true,
   message: {
     success: false,
-    error: 'Too many authentication attempts, please try again later.'
+    error: 'Too many failed sign-in attempts. Please wait 15 minutes and try again, or reset your password.',
+    retryAfter: 900
   },
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => {
-    return req.body?.email || req.ip || req.connection.remoteAddress;
+    const email = typeof req.body?.email === 'string' ? req.body.email.toLowerCase().trim() : '';
+    const ip = req.headers['x-forwarded-for'] || req.ip || req.connection?.remoteAddress || 'unknown';
+    return email ? `${email}|${ip}` : `ip:${ip}`;
   }
 });
 
@@ -277,7 +290,17 @@ app.use('/api/v1/savings', requireFeatureFlag('savingsModule'), requireRegistrat
 app.use('/api/v1/rollover', requireActivated, rolloverRoutes);
 app.use('/api/v1/investments', requireFeatureFlag('investmentModule'), requireRegistrationPaid, investmentsRoutes);
 app.use('/api/v1/notifications', requireFeatureFlag('notifications'), notificationRoutes);
-app.use('/api/v1/bank-accounts', requireActivated, bankAccountRoutes);
+// Account-name resolution (POST /verify) is part of KYC onboarding, so it must
+// be reachable BEFORE the member is activated. requireActivated is applied
+// per-route inside bankAccountRoutes — mounting it here too would shadow
+// /verify with the add-account handler.
+//
+// Payout accounts deliberately stay on requireActivated (KYC required): a
+// member can see and use their wallet after paying the registration fee, but
+// adding a bank account we will pay money OUT to still needs a verified
+// identity. That is the one place the old KYC gate is worth keeping for a
+// non-credit route.
+app.use('/api/v1/bank-accounts', bankAccountRoutes);
 app.use('/api/v1/banks', banksRoutes);
 app.use('/api/v1/terms', termsRoutes);
 app.use('/api/v1/transactions', requireRegistrationPaid, transactionRoutes);
@@ -288,17 +311,17 @@ app.use('/api/v1/guarantor', requireActivated, guarantorRoutes);
 app.use('/api/v1/announcements', announcementRoutes);
 app.use('/api/v1/contributions', requireRegistrationPaid, contributionRoutes);
 app.use('/api/v1/documents', documentRoutes);
+app.use('/api/v1/termination', requireRegistrationPaid, terminationRoutes);
 app.use('/api/v1/admin-termination', adminTerminationRoutes);
 // Admin portal path (mounted under the /api/admin prefix the dashboard uses).
 app.use('/api/admin/termination', adminTerminationRoutes);
-app.use('/api/v1/termination', requireRegistrationPaid, terminationRoutes);
 app.use('/api/v1/payment-proofs', paymentProofRoutes);
 app.use('/api/v1/payments', require('./routes/payments'));
 
-// Partner organisations — member-facing. `selectable` backs the employer picker
-// in the app (replacing the hardcoded list) and `request-approval` is the
-// endpoint the app has always called but which never existed, so the request
-// 404'd silently.
+// Partner organisations — member-facing. `selectable` backs the
+// employer picker in the app (replacing the hardcoded list) and
+// `request-approval` is the endpoint the app has always called but which
+// never existed, so the request 404'd silently.
 app.use('/api/v1/organizations', organizationRoutes);
 
 // ==============================================================================
@@ -309,8 +332,16 @@ app.use('/api/v1/organizations', organizationRoutes);
 // ==============================================================================
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/auth', emailVerificationRoutes);
+// The app's Dio baseUrl is /api, so the activation-gate call lands on
+// /api/app/home-status. Without this mount that request 404s and AuthGuard
+// falls back to the (possibly stale) cached profile it exists to overrule.
+app.use('/api/app', appRoutes);
 app.use('/api/referrals', requireFeatureFlag('referralSystem'), referralRoutes);
 app.use('/api/tickets', ticketRoutes);
+// Public website contact form (no auth by design — the visitor is anonymous).
+// Same handler at both prefixes so the site and any v1 caller resolve.
+app.use('/api/contact', contactRoutes);
+app.use('/api/v1/contact', contactRoutes);
 app.use('/api/loans', requireFeatureFlag('loanModule'), requireActivated, loanRoutes);
 app.use('/api/wallet', requireRegistrationPaid, walletRoutes);
 app.use('/api/user', userRoutes);
@@ -320,16 +351,13 @@ app.use('/api/savings', requireFeatureFlag('savingsModule'), requireRegistration
 app.use('/api/rollover', requireActivated, rolloverRoutes);
 app.use('/api/investments', requireFeatureFlag('investmentModule'), requireRegistrationPaid, investmentsRoutes);
 app.use('/api/notifications', requireFeatureFlag('notifications'), notificationRoutes);
-app.use('/api/bank-accounts', requireActivated, bankAccountRoutes);
+app.use('/api/bank-accounts', bankAccountRoutes);
 app.use('/api/transactions', requireRegistrationPaid, transactionRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/watchlist', watchlistRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/guarantor', requireActivated, guarantorRoutes);
 app.use('/api/announcements', announcementRoutes);
-// Public website contact form (no auth by design — the visitor is anonymous).
-app.use('/api/contact', contactRoutes);
-app.use('/api/v1/contact', contactRoutes);
 app.use('/api/contributions', requireRegistrationPaid, contributionRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/termination', requireRegistrationPaid, terminationRoutes);
@@ -338,13 +366,81 @@ app.use('/api/payments', require('./routes/payments'));
 app.use('/api/kyc', kycAdminRoutes);
 app.use('/api', featuresRoutes);
 app.use('/api/mobile-features', featuresRoutes);
+// ─────────────────────────────────────────────────────────────────────────────
+// PUBLIC login-event recorder (no JWT) — MUST be registered BEFORE the guarded
+// /api/admin router below. The adminApi router applies router.use(requireAdmin)
+// to every request that enters it, so if this route were registered after the
+// mount (or inside the router), failed logins — where no session token exists
+// yet — would be rejected with 401 and login_history would stay empty, breaking
+// the Sessions / Login History pages. Registering it first lets Express match
+// the POST here before the guarded router ever runs.
+// ─────────────────────────────────────────────────────────────────────────────
+app.post('/api/admin/login-history/log', async (req, res) => {
+  try {
+    const { email, success, failure_reason, device_type, browser, os, profile_id } = req.body || {};
+    const ua = req.headers['user-agent'] || '';
+    const ip = (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim();
+    const governanceMod = require('./routes/governance');
+    const { recordLogin, raiseSecurityAlert } = governanceMod;
+
+    let pid = profile_id || null;
+    if (!pid && email) {
+      const { data: prof } = await supabase.from('profiles').select('id, role, is_active').ilike('email', email).maybeSingle();
+      pid = prof?.id || null;
+    }
+
+    await recordLogin({ profileId: pid, email, success: !!success, failureReason: failure_reason, req });
+
+    if (success === false && pid) {
+      const { data: prof } = await supabase.from('profiles').select('is_active').eq('id', pid).maybeSingle();
+      if (prof && prof.is_active === false) {
+        await raiseSecurityAlert({
+          alertType: 'disabled_account_login', severity: 'critical',
+          title: 'Disabled account login attempt',
+          description: `Account ${email || pid} attempted to log in while disabled.`,
+          profileId: pid, email, ip, device: device_type,
+        });
+      }
+    }
+
+    if (success === false && ip) {
+      const since = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+      const { count } = await supabase.from('login_history').select('id', { count: 'exact', head: true }).eq('ip_address', ip).eq('success', false).gte('created_at', since);
+      if ((count || 0) >= 3) {
+        await raiseSecurityAlert({
+          alertType: 'multiple_failed_logins', severity: 'high',
+          title: 'Multiple failed login attempts',
+          description: `${count} failed logins from ${ip} in the last 10 minutes.`,
+          profileId: pid, email, ip, device: device_type,
+        });
+      }
+    }
+
+    try {
+      await supabase.from('audit_logs').insert({
+        actor_id: pid || null,
+        action: success ? 'LOGIN_SUCCESS' : 'LOGIN_FAILED',
+        target_model: 'auth',
+        metadata: { email, device_type, browser, os, failure_reason: failure_reason || null },
+        ip_address: ip,
+        user_agent: ua,
+      });
+    } catch (_) {}
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Admin API routes mounted at /api/admin AFTER other routes to avoid conflicts
 // Provides /api/admin/dashboard/*, /api/admin/contributions/monthly, /api/admin/loans/status-breakdown
 //
 // Server-side authorisation for EVERY admin request runs first. It is mounted at
 // the prefix (not per-router) so `req.path` is the full sub-path and one rule
 // table covers all of them, including the specialised routers below. Ordering
-// matters: this must come before any router that should be guarded.
+// matters: this must come before any router that should be guarded — an
+// announcement mount placed above it would bypass the permission check.
 app.use('/api/admin', require('./middleware/requirePermission').requirePermission);
 // Announcement publishing and direct messaging. Guarded by the requirePermission
 // mount above; their paths map to notification.send / notification.read.
@@ -363,10 +459,33 @@ app.use('/api/admin/comparative', comparativeRoutes);
 // so its /organizations/* sub-paths win; adminApi has no catch-all and keeps
 // serving its own GET/POST /organizations list+create.
 app.use('/api/admin/organizations', organizationFinanceRoutes);
-// Website enquiry management. Mounted before adminApi so its
-// /contact-messages sub-paths resolve here first.
+// Website enquiry management. Mounted before adminApi for the same reason as
+// the routers above: its /contact-messages sub-paths resolve here first.
 app.use('/api/admin/contact-messages', adminContactRoutes);
 app.use('/api/admin', adminApiRoutes);
+
+// Security & Access page routes (consumed by /pages/security-access). Mounted
+// at /api/security so the frontend's relative calls resolve.
+app.use('/api/security', securityRoutes);
+
+// ───────────────────────────────────────────────────────────────────────────
+// Governance schema bootstrap diagnostic (Super Admin only).
+// Returns which DB connection candidate worked and which migration statements
+// applied/failed, so schema-bootstrap issues are diagnosable without Render
+// log access. Also re-runs the (idempotent) migration, so it doubles as a
+// self-heal endpoint.
+// ───────────────────────────────────────────────────────────────────────────
+app.get('/api/admin/governance-bootstrap-debug', require('./middleware/auth').requireAdmin, async (req, res) => {
+  if (!['super_admin', 'superadmin'].includes(req.user?.role)) {
+    return res.status(403).json({ success: false, error: 'Super Admin access required' });
+  }
+  try {
+    const result = await runGovernanceDiagnostics();
+    res.json({ success: true, data: result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 // Root-level alias in case Dio resolves absolute paths from host root
 app.use('/guarantor', guarantorRoutes);
 
@@ -408,6 +527,11 @@ app.use('/api/v2/admin/members', memberDetailRoutes);
 app.use('/api/v2/admin/payment-proofs', paymentProofAdminRoutes);
 
 // In-app admin console endpoints (member JWT + IP whitelist)
+// The Admin Dashboard frontend calls /api/v1/admin/<path> directly with the
+// logged-in admin's JWT, so the full adminApi router (member deletion,
+// notifications, dashboard stats, ...) must be reachable here too — the
+// narrower adminRoutes only covers payment settings/organizations/deposits.
+app.use('/api/v1/admin', adminIPWhitelist, adminApiRoutes);
 app.use('/api/v1/admin', adminIPWhitelist, adminRoutes);
 app.use('/api/v1/admin-tickets', adminIPWhitelist, adminTicketRoutes);
 
@@ -486,6 +610,12 @@ server.listen(PORT, '0.0.0.0', () => {
   logger.info(`📦 Environment: ${process.env.NODE_ENV || 'development'}`);
   logger.info(`🔒 HTTPS Enforced: ${process.env.NODE_ENV === 'production'}`);
   logger.info(`🛡️ IP Whitelisting: ${process.env.ADMIN_IP_WHITELIST ? 'Enabled' : 'Disabled'}`);
+});
+
+// Apply governance schema (idempotent) once the server is up. Non-fatal on
+// failure — endpoints degrade gracefully if the pooler is unreachable.
+ensureGovernanceSchema().catch((err) => {
+  logger.warn('governance schema bootstrap threw:', err.message);
 });
 
 // ==============================================================================

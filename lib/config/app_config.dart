@@ -55,7 +55,11 @@ class AppConfig {
     'Premium Loan': 4.0,
     'Maxi Loan': 5.0,
   };
-  static const int loanEligibilityMonths = 0; // TEMP: set to 0 for testing (restore to 6)
+  /// Minimum months of membership before a member may apply for a loan.
+  ///
+  /// Was temporarily 0 during platform testing; restored to the policy value
+  /// of 6 for release. Keep in sync with the server-side rule.
+  static const int loanEligibilityMonths = 6;
   static const List<int> loanTenures = [3, 6, 12];
   static const double baseInterestRate = 10.0;
   static const int guarantorsRequired = 3;
