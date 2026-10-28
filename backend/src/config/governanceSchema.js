@@ -24,6 +24,9 @@ const MIGRATIONS = [
   // Without this the public /api/contact ingest cannot store an enquiry, so the
   // website contact form returns 502 and nothing is recorded anywhere.
   '049_contact_messages.sql',
+  // Makes `notifications.profile_id` NOT NULL so a notification can never be
+  // global again (a NULL row leaked into every member's feed).
+  '056_notifications_profile_id_not_null.sql',
 ];
 
 const { Client } = require('pg');
