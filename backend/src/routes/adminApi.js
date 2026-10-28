@@ -468,6 +468,34 @@ function contributionFromRow(c, profile) {
   };
 }
 
+// Sum contribution amounts from the authoritative `contributions` table,
+// falling back to legacy `transactions` rows only when it is empty. `fromMonth`
+// and `toMonth` are inclusive `YYYY-MM` bounds (both optional).
+async function sumContributions(fromMonth, toMonth) {
+  const { count } = await supabase.from('contributions').select('id', { count: 'exact', head: true });
+  if ((count || 0) > 0) {
+    const { data } = await supabase.from('contributions').select('amount, status, contribution_month');
+    return (data || [])
+      .filter((c) => normalizeContributionStatus(c.status) === 'paid')
+      .filter((c) => {
+        const k = c.contribution_month || '';
+        return (!fromMonth || k >= fromMonth) && (!toMonth || k <= toMonth);
+      })
+      .reduce((s, c) => s + Number(c.amount || 0), 0);
+  }
+  const { data } = await supabase
+    .from('transactions')
+    .select('amount, created_at')
+    .in('type', CONTRIBUTION_TYPES)
+    .eq('status', 'completed');
+  return (data || [])
+    .filter((t) => {
+      const k = t.created_at ? String(t.created_at).slice(0, 7) : '';
+      return (!fromMonth || k >= fromMonth) && (!toMonth || k <= toMonth);
+    })
+    .reduce((s, t) => s + Number(t.amount || 0), 0);
+}
+
 // Insert an audit_logs row capturing a contribution change. Never throws.
 async function logContributionAudit({ action, contributionId, previous, next, reason, admin }) {
   try {
@@ -3256,8 +3284,6 @@ router.get('/dashboard/summary', async (req, res) => {
       totalLoans,
       activeLoans,
       defaulters,
-      totalSavings,
-      monthlyContributions,
       totalInvestments,
       openTickets
     ] = await Promise.all([
@@ -3280,15 +3306,6 @@ router.get('/dashboard/summary', async (req, res) => {
       supabase.from('loans').select('id', { count: 'exact', head: true })
         .in('status', ['active', 'disbursed'])
         .lt('next_due_date', new Date().toISOString()),
-      // Total contributions (sum of all completed contribution transactions).
-      supabase.from('transactions').select('amount')
-        .in('type', CONTRIBUTION_TYPES)
-        .eq('status', 'completed'),
-      // This month's contributions (from transactions)
-      supabase.from('transactions').select('amount')
-        .in('type', ['deposit', 'savings_deposit', 'transfer_in'])
-        .eq('status', 'completed')
-        .gte('created_at', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()),
       // Total investments
       supabase.from('investment_participations').select('amount', { count: 'exact' }),
       // Open tickets
@@ -3311,21 +3328,14 @@ router.get('/dashboard/summary', async (req, res) => {
 
     // Calculate monthly growth (compare this month vs last month)
     const lastMonthStart = new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1);
-    const lastMonthEnd = new Date(new Date().getFullYear(), new Date().getMonth(), 0);
-    const { data: lastMonthContributions } = await supabase.from('transactions')
-      .select('amount')
-      .in('type', ['deposit', 'savings_deposit', 'transfer_in'])
-      .eq('status', 'completed')
-      .gte('created_at', lastMonthStart.toISOString())
-      .lte('created_at', lastMonthEnd.toISOString());
-    
-    const lastMonthTotal = (lastMonthContributions || []).reduce((sum, c) => sum + Number(c.amount || 0), 0);
-    const thisMonthTotal = (monthlyContributions.data || []).reduce((sum, c) => sum + Number(c.amount || 0), 0);
+    const thisMonthKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+    const lastMonthKey = `${lastMonthStart.getFullYear()}-${String(lastMonthStart.getMonth() + 1).padStart(2, '0')}`;
+    const [lastMonthTotal, thisMonthTotal, totalContribSum] = await Promise.all([
+      sumContributions(lastMonthKey, lastMonthKey),
+      sumContributions(thisMonthKey, thisMonthKey),
+      sumContributions(),
+    ]);
     const monthlyGrowth = lastMonthTotal > 0 ? ((thisMonthTotal - lastMonthTotal) / lastMonthTotal * 100) : (thisMonthTotal > 0 ? 100 : 0);
-
-    // Total contributions sum (from completed contribution transactions)
-    const contributionsData = totalSavings.data || [];
-    const totalContribSum = contributionsData.reduce((sum, s) => sum + Number(s.amount || 0), 0);
 
     // Investments sum
     const investmentsData = totalInvestments.data || [];
