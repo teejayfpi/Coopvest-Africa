@@ -113,9 +113,25 @@ function ageInYears(dob, now = new Date()) {
   return age;
 }
 
+/**
+ * Normalize a date-of-birth string to YYYY-MM-DD for Postgres date columns.
+ * Accepts YYYY-MM-DD or DD/MM/YYYY (what some app versions persist in
+ * personal_info); returns null when unparseable so callers can drop the
+ * value instead of writing a date Postgres rejects with "out of range".
+ */
+function normalizeDateOfBirth(dob) {
+  if (!hasValue(dob)) return null;
+  const s = String(dob).trim();
+  let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(s);
+  if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+  return null;
+}
+
 function isAdult(dob, now = new Date()) {
   const age = ageInYears(dob, now);
   return age !== null && age >= MIN_AGE_YEARS;
 }
 
-module.exports = { hasValue, buildRegistrationCandidates, mergeStoredPersonalInfo, ageInYears, isAdult, MIN_AGE_YEARS };
+module.exports = { hasValue, buildRegistrationCandidates, mergeStoredPersonalInfo, ageInYears, isAdult, normalizeDateOfBirth, MIN_AGE_YEARS };

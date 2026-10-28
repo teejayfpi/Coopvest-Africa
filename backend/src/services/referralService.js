@@ -9,19 +9,37 @@
 const supabase = require('../config/supabase');
 const logger = require('../utils/logger');
 
-// Interest rate table keyed by loan type
-const BASE_RATES = { 'Quick Loan': 15, 'Micro Loan': 18, 'Business Loan': 20, 'Emergency Loan': 12 };
-const MIN_FLOORS = { 'Quick Loan': 5, 'Micro Loan': 7, 'Business Loan': 8, 'Emergency Loan': 4 };
+// Interest rate table keyed by loan type.
+// Mirrors the mobile app (lib/presentation/screens/loan/loan_application_screen.dart)
+// so the admin dashboard and the member's app always show identical figures.
+const BASE_RATES = {
+  'Quick Loan': 7.5,
+  'Flexi Loan': 7.0,
+  'Stable Loan (12 months)': 5.0,
+  'Stable Loan (18 months)': 7.0,
+  'Premium Loan': 14.0,
+  'Maxi Loan': 19.0,
+  // Legacy types kept for backward compatibility with older loans.
+  'Micro Loan': 18,
+  'Business Loan': 20,
+  'Emergency Loan': 12,
+};
+const DEFAULT_BASE_RATE = 7.5;
+// Minimum interest floor = half of each type's base rate (never drops below 50% off).
+const MIN_FLOORS = Object.fromEntries(
+  Object.entries(BASE_RATES).map(([k, v]) => [k, v / 2])
+);
+const DEFAULT_MIN_FLOOR = 2.5;
 
 class ReferralService {
-  getBaseInterestRate(loanType) { return BASE_RATES[loanType] ?? 15; }
-  getMinimumInterestFloor(loanType) { return MIN_FLOORS[loanType] ?? 5; }
+  getBaseInterestRate(loanType) { return BASE_RATES[loanType] ?? DEFAULT_BASE_RATE; }
+  getMinimumInterestFloor(loanType) { return MIN_FLOORS[loanType] ?? DEFAULT_MIN_FLOOR; }
 
+  // Referral tiers mirror the mobile app: 2% / 1% / 0.5% at 10 / 5 / 2 confirmed referrals.
   calculateTierBonus(count) {
-    if (count >= 50) return 5;
-    if (count >= 20) return 3;
     if (count >= 10) return 2;
     if (count >= 5) return 1;
+    if (count >= 2) return 0.5;
     return 0;
   }
 
@@ -32,6 +50,7 @@ class ReferralService {
       ? Math.max(baseRate - bonusPercent, minimumFloor)
       : baseRate;
 
+    // Monthly repayment: EMI (reducing balance) — matches the mobile app.
     const mRate = effectiveRate / 100 / 12;
     const emi = mRate === 0
       ? loanAmount / tenureMonths
@@ -42,6 +61,12 @@ class ReferralService {
       ? loanAmount / tenureMonths
       : loanAmount * mRateBase * Math.pow(1 + mRateBase, tenureMonths) / (Math.pow(1 + mRateBase, tenureMonths) - 1);
 
+    // Total repayment: simple interest — matches the mobile app
+    // (amount + amount * rate / 100), NOT EMI * tenure.
+    const totalRepayment = loanAmount + (loanAmount * effectiveRate / 100);
+    const totalRepaymentBase = loanAmount + (loanAmount * baseRate / 100);
+    const totalSavingsFromBonus = Math.max(0, totalRepaymentBase - totalRepayment);
+
     return {
       loanType,
       baseInterestRate: baseRate,
@@ -51,7 +76,9 @@ class ReferralService {
       tenureMonths,
       monthlyRepaymentBeforeBonus: emiBase,
       monthlyRepaymentAfterBonus: emi,
-      totalSavingsFromBonus: Math.max(0, (emiBase - emi) * tenureMonths),
+      totalRepayment,
+      totalRepaymentBeforeBonus: totalRepaymentBase,
+      totalSavingsFromBonus,
       minimumInterestFloor: minimumFloor,
       bonusApplied: bonusPercent > 0,
     };

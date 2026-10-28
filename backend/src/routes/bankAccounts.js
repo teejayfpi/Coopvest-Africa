@@ -10,16 +10,21 @@ const { body, param } = require('express-validator');
 const router = express.Router();
 
 const supabase = require('../config/supabase');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, requireActivated } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const logger = require('../utils/logger');
 
 router.use(authenticate);
 
+// Every route except POST /verify requires an activated account (KYC approved
+// + registration fee paid). /verify is part of KYC onboarding, so it must stay
+// reachable before activation. Do not gate this whole router in server.js.
+const gated = requireActivated;
+
 /**
  * GET /api/v1/bank-accounts
  */
-router.get('/', async (req, res) => {
+router.get('/', gated, async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('bank_accounts')
@@ -39,6 +44,7 @@ router.get('/', async (req, res) => {
  */
 router.post(
   '/',
+  gated,
   [
     body('bankName').isString().isLength({ min: 1, max: 120 }),
     body('accountNumber').isString().isLength({ min: 6, max: 20 }),
@@ -74,6 +80,31 @@ router.post(
     }
   }
 );
+
+/**
+ * PATCH /api/v1/bank-accounts/:id
+ */
+router.patch('/:id', gated, [param('id').isUUID()], validate, async (req, res) => {
+  try {
+    const update = {};
+    if (req.body.bankName !== undefined) update.bank_name = req.body.bankName;
+    if (req.body.accountNumber !== undefined) update.account_number = req.body.accountNumber;
+    if (req.body.accountName !== undefined) update.account_name = req.body.accountName;
+    if (req.body.bankCode !== undefined) update.bank_code = req.body.bankCode;
+    const { data, error } = await supabase
+      .from('bank_accounts')
+      .update(update)
+      .eq('id', req.params.id)
+      .eq('profile_id', req.user.id)
+      .select('*')
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ success: false, error: 'Account not found' });
+    res.json({ success: true, account: data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 /**
  * POST /api/v1/bank-accounts/verify
@@ -113,6 +144,26 @@ router.post(
       const payload = await response.json();
 
       if (!response.ok || !payload.status || !payload.data?.account_name) {
+        const paystackMsg = payload?.message || `HTTP ${response.status}`;
+        logger.error(`bank verify: Paystack resolve failed: ${paystackMsg}`);
+
+        // Invalid/test keys, daily test-mode resolve limits and provider
+        // outages are availability problems, not a wrong account number —
+        // tell the client to retry later instead of blaming the member.
+        const msg = paystackMsg.toLowerCase();
+        const providerIssue =
+          response.status === 401 ||
+          response.status === 403 ||
+          msg.includes('limit') ||
+          msg.includes('test mode') ||
+          msg.includes('invalid key');
+        if (providerIssue) {
+          return res.status(503).json({
+            success: false,
+            error: 'Account verification is temporarily unavailable. Please try again later.',
+          });
+        }
+
         return res.status(422).json({
           success: false,
           error: 'Could not verify this account. Check the bank and account number, then try again.',
@@ -133,34 +184,9 @@ router.post(
 );
 
 /**
- * PATCH /api/v1/bank-accounts/:id
- */
-router.patch('/:id', [param('id').isUUID()], validate, async (req, res) => {
-  try {
-    const update = {};
-    if (req.body.bankName !== undefined) update.bank_name = req.body.bankName;
-    if (req.body.accountNumber !== undefined) update.account_number = req.body.accountNumber;
-    if (req.body.accountName !== undefined) update.account_name = req.body.accountName;
-    if (req.body.bankCode !== undefined) update.bank_code = req.body.bankCode;
-    const { data, error } = await supabase
-      .from('bank_accounts')
-      .update(update)
-      .eq('id', req.params.id)
-      .eq('profile_id', req.user.id)
-      .select('*')
-      .maybeSingle();
-    if (error) throw error;
-    if (!data) return res.status(404).json({ success: false, error: 'Account not found' });
-    res.json({ success: true, account: data });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-/**
  * PATCH /api/v1/bank-accounts/:id/default
  */
-router.patch('/:id/default', [param('id').isUUID()], validate, async (req, res) => {
+router.patch('/:id/default', gated, [param('id').isUUID()], validate, async (req, res) => {
   try {
     const { error: clearErr } = await supabase
       .from('bank_accounts')
@@ -185,7 +211,7 @@ router.patch('/:id/default', [param('id').isUUID()], validate, async (req, res) 
 /**
  * DELETE /api/v1/bank-accounts/:id
  */
-router.delete('/:id', [param('id').isUUID()], validate, async (req, res) => {
+router.delete('/:id', gated, [param('id').isUUID()], validate, async (req, res) => {
   try {
     const { error } = await supabase
       .from('bank_accounts')

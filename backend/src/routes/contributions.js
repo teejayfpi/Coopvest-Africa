@@ -31,6 +31,51 @@ router.use(authenticate);
 
 const MINIMUM_MONTHLY_AMOUNT = 5000;
 
+const notifyService = require('../services/notifyService');
+
+const fmtNaira = (n) => `₦${Number(n).toLocaleString('en-NG')}`;
+
+// Alert every admin when a member raises or lowers their monthly contribution
+// so the change is visible on the admin dashboard notification feed.
+async function notifyAdminsOfContributionChange({ profileId, kind, oldAmount, newAmount, effectiveDate }) {
+  try {
+    const { data: member } = await supabase
+      .from('profiles')
+      .select('name, email, user_id')
+      .eq('id', profileId)
+      .maybeSingle();
+    const { data: admins } = await supabase
+      .from('profiles')
+      .select('id')
+      .in('role', ['admin', 'super_admin', 'superadmin'])
+      .eq('is_active', true);
+    if (!admins || admins.length === 0) return;
+
+    const who = member?.name || member?.email || 'A member';
+    const title = kind === 'increase'
+      ? 'Contribution Increased'
+      : kind === 'reduction_request'
+        ? 'Contribution Reduction Requested'
+        : 'Contribution Reduction Cancelled';
+    const body = kind === 'increase'
+      ? `${who} (${member?.email}) increased their monthly contribution from ${fmtNaira(oldAmount)} to ${fmtNaira(newAmount)}.`
+      : kind === 'reduction_request'
+        ? `${who} (${member?.email}) requested to reduce their monthly contribution from ${fmtNaira(oldAmount)} to ${fmtNaira(newAmount)}, effective ${new Date(effectiveDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} (3-month notice).`
+        : `${who} (${member?.email}) cancelled their pending contribution reduction request.`;
+
+    await Promise.all(admins.map((a) => notifyService.sendInApp({
+      profileId: a.id,
+      title,
+      body,
+      type: 'savings',
+      category: kind === 'increase' ? 'success' : 'action_required',
+      priority: 'normal',
+    })));
+  } catch (err) {
+    logger.warn('notifyAdminsOfContributionChange failed:', err.message);
+  }
+}
+
 async function getOrCreatePlan(profileId) {
   const { data } = await supabase
     .from('contribution_plans')
@@ -293,6 +338,13 @@ router.patch(
         .single();
       if (error) throw error;
 
+      await notifyAdminsOfContributionChange({
+        profileId: req.user.id,
+        kind: 'increase',
+        oldAmount: plan.current_monthly_amount,
+        newAmount: new_monthly_amount,
+      });
+
       res.json({
         success: true,
         current_monthly_amount: updated.current_monthly_amount,
@@ -378,6 +430,14 @@ router.post(
         .single();
       if (error) throw error;
 
+      await notifyAdminsOfContributionChange({
+        profileId: req.user.id,
+        kind: 'reduction_request',
+        oldAmount: plan.current_monthly_amount,
+        newAmount: requested_amount,
+        effectiveDate: reduction.effective_date,
+      });
+
       res.status(201).json({
         success: true,
         id: reduction.id,
@@ -422,6 +482,11 @@ router.delete(
         .update({ status: 'cancelled', updated_at: new Date().toISOString() })
         .eq('id', req.params.id);
       if (error) throw error;
+
+      await notifyAdminsOfContributionChange({
+        profileId: req.user.id,
+        kind: 'reduction_cancelled',
+      });
 
       res.json({ success: true, message: 'Reduction request cancelled.' });
     } catch (err) {

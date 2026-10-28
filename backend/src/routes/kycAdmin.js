@@ -210,7 +210,7 @@ router.get('/:profileId', async (req, res) => {
       .from('kyc_documents')
       .select('*')
       .eq('profile_id', profileId)
-      .order('created_at', { ascending: false });
+      .order('uploaded_at', { ascending: false });
     if (docsError) throw docsError;
 
     // Get member documents

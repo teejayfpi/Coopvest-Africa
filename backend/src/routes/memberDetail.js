@@ -77,7 +77,7 @@ router.get('/:profileId/profile', async (req, res) => {
       // KYC
       supabase.from('kyc').select('*').eq('profile_id', profileId).maybeSingle(),
       // KYC Documents
-      supabase.from('kyc_documents').select('*').eq('profile_id', profileId).order('created_at', { ascending: false }),
+      supabase.from('kyc_documents').select('*').eq('profile_id', profileId).order('uploaded_at', { ascending: false }),
       // Member Documents
       supabase.from('member_documents').select('*').eq('profile_id', profileId).order('uploaded_at', { ascending: false }),
       // Bank Accounts

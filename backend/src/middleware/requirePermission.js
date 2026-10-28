@@ -193,12 +193,15 @@ const ROUTE_PERMISSIONS = [
   { method: 'POST', pattern: /^\/support/, permission: 'ticket.write' },
   { method: 'PATCH', pattern: /^\/support/, permission: 'ticket.write' },
   { method: 'GET', pattern: /^\/support/, permission: 'ticket.read' },
-  { method: 'POST', pattern: /^\/contact-messages/, permission: 'ticket.write' },
-  { method: 'PATCH', pattern: /^\/contact-messages/, permission: 'ticket.write' },
-  { method: 'GET', pattern: /^\/contact-messages/, permission: 'ticket.read' },
   { method: 'POST', pattern: /^\/tickets/, permission: 'ticket.write' },
   { method: 'PATCH', pattern: /^\/tickets/, permission: 'ticket.write' },
   { method: 'GET', pattern: /^\/tickets/, permission: 'ticket.read' },
+  // Website enquiries are the same work as support tickets — an admin reads and
+  // replies — so they share the ticket permissions rather than inventing a new
+  // one that every existing role would then have to be granted.
+  { method: 'POST', pattern: /^\/contact-messages/, permission: 'ticket.write' },
+  { method: 'PATCH', pattern: /^\/contact-messages/, permission: 'ticket.write' },
+  { method: 'GET', pattern: /^\/contact-messages/, permission: 'ticket.read' },
   { method: 'PUT', pattern: /^\/referrals/, permission: 'referral.manage' },
   { method: 'POST', pattern: /^\/referrals/, permission: 'referral.manage' },
   { method: 'GET', pattern: /^\/referrals/, permission: 'referral.read' },

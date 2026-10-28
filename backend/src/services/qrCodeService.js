@@ -351,34 +351,50 @@ class QRCodeService {
   }
 
   /**
+   * The compact payload actually encoded in the loan QR image: just the
+   * lookup keys. The full signed record lives in loan_qrs.qr_data and is
+   * served to the scanner app by GET /loans/qr/:qrId. Embedding the whole
+   * record (600+ bytes with purpose/signature) produced codes too dense
+   * for phone cameras to detect.
+   */
+  buildLoanQrPayload(qrId, loanId) {
+    return JSON.stringify({ version: '1.0', type: 'loan_guarantor', qrId, loanId });
+  }
+
+  /**
+   * Render the scannable loan QR image for an existing qrId/loanId pair.
+   */
+  async renderLoanQrImage(qrId, loanId, options = {}) {
+    const qrOptions = {
+      width: options.size || this.sizePresets.medium,
+      errorCorrectionLevel: options.errorCorrection || 'H', // High error correction
+      margin: options.margin || 2,
+      color: options.color || {
+        dark: '#1B5E20',  // Coopvest green
+        light: '#FFFFFF'
+      }
+    };
+    const result = await this.generateDataURL(this.buildLoanQrPayload(qrId, loanId), qrOptions);
+    return result.data;
+  }
+
+  /**
    * Generate QR code image for loan guarantor request
    */
   async generateLoanQRCode(loanDetails, options = {}) {
     try {
-      // Generate QR data with signature
+      // Generate QR data with signature (persisted in loan_qrs.qr_data)
       const qrData = this.generateLoanQRData(loanDetails);
-      const qrJsonString = JSON.stringify(qrData);
 
-      // QR options for loan QR (higher error correction for reliability)
-      const qrOptions = {
-        width: options.size || this.sizePresets.medium,
-        errorCorrectionLevel: options.errorCorrection || 'H', // High error correction
-        margin: options.margin || 2,
-        color: options.color || {
-          dark: '#1B5E20',  // Coopvest green
-          light: '#FFFFFF'
-        }
-      };
-
-      // Generate QR code as data URL
-      const result = await this.generateDataURL(qrJsonString, qrOptions);
+      // The image encodes only the lookup keys — see buildLoanQrPayload.
+      const qrImage = await this.renderLoanQrImage(qrData.qrId, qrData.loanId, options);
 
       return {
         success: true,
         qrData: qrData,
-        qrCode: result.data,
+        qrCode: qrImage,
         format: 'png',
-        size: qrOptions.width,
+        size: options.size || this.sizePresets.medium,
         message: 'QR code generated successfully. Valid for 7 days.'
       };
     } catch (error) {

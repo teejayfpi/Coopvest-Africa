@@ -14,7 +14,6 @@
 
 const supabase = require('../config/supabase');
 const logger = require('../utils/logger');
-const { gateStatusFor } = require('../lib/activationGate');
 
 /**
  * Extract the Supabase session_id from an already-verified JWT payload.
@@ -259,6 +258,7 @@ async function loadGateProfile(profileId) {
     // NOTE: profiles table has NO membership_status column (termination state
     // lives in termination_requests). Selecting it made this query fail and
     // the gate treated every member as inactive.
+    //
     // organization_id, contribution_method and contribution_type are read so
     // the registration-fee exemption can be derived: a salary-deduction member
     // with an employer on file is exempt because their fee is recovered from
@@ -269,6 +269,11 @@ async function loadGateProfile(profileId) {
     .maybeSingle();
   return data;
 }
+
+// Activation-gate rules live in lib/activationGate.js so they can be unit
+// tested; the gate, the /auth payload and the migration all share one
+// definition of when a registration fee counts as settled.
+const { gateStatusFor, isRegistrationFeeSettled } = require('../lib/activationGate');
 
 /**
  * Attach the member's activation-gate summary to req so downstream handlers
@@ -289,11 +294,6 @@ async function attachGateStatus(req, res, next) {
   }
   next();
 }
-
-/** Build a stable, machine-readable gate summary from a profiles row. */
-// Activation-gate rules live in lib/activationGate.js so they can be unit
-// tested; the gate, the /auth payload and the migration all share one
-// definition of when a registration fee counts as settled.
 
 /**
  * Require the member to have passed the activation gate (KYC approved AND
@@ -327,9 +327,9 @@ function requireActivated(req, res, next) {
  *
  * Members complained the onboarding was too long: they were forced through the
  * full KYC form *and* the registration payment before they could see the
- * dashboard at all. The dashboard, wallet and savings carry no credit risk,
- * and gating them on KYC locked out paying members indefinitely while an admin
- * reviewed their documents.
+ * dashboard at all. The dashboard, wallet and savings are all read-from-server
+ * surfaces that carry no credit risk, and gating them on KYC locked out paying
+ * members indefinitely while an admin reviewed their documents.
  *
  * So the gate is split by risk:
  *   - requireRegistrationPaid — dashboard / wallet / savings / contributions.
@@ -374,5 +374,6 @@ module.exports = {
   requireRegistrationPaid,
   attachGateStatus,
   gateStatusFor,
+  isRegistrationFeeSettled,
   ACTIVATION_BLOCKED,
 };
