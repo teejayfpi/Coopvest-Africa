@@ -580,7 +580,7 @@ class _TimelineTile extends StatelessWidget {
                       fontWeight: FontWeight.w600,
                       fontSize: 13,
                       color: step.done || step.active || step.failed
-                          ? const Color(0xFF1B3A6B)
+                          ? CoopvestColors.primary
                           : Colors.grey.shade400,
                     ),
                   ),

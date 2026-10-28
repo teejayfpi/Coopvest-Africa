@@ -274,7 +274,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen>
                     width: 100,
                     height: 100,
                     decoration: const BoxDecoration(
-                      color: Color(0xFF0F7A5C),
+                      color: CoopvestColors.gradientMid,
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
@@ -390,10 +390,10 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen>
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1B3A6B).withValues(alpha: 0.06),
+                    color: CoopvestColors.primary.withValues(alpha: 0.06),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: const Color(0xFF1B3A6B).withValues(alpha: 0.12),
+                      color: CoopvestColors.primary.withValues(alpha: 0.12),
                     ),
                   ),
                   child: Row(
@@ -402,7 +402,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen>
                       const Icon(
                         Icons.info_outline_rounded,
                         size: 18,
-                        color: Color(0xFF1B3A6B),
+                        color: CoopvestColors.primary,
                       ),
                       const SizedBox(width: 10),
                       Expanded(
@@ -456,7 +456,7 @@ class _CountdownRing extends StatelessWidget {
               strokeWidth: 5,
               backgroundColor: Colors.grey.shade200,
               valueColor: const AlwaysStoppedAnimation<Color>(
-                Color(0xFF0F7A5C),
+                CoopvestColors.gradientMid,
               ),
             ),
           ),
@@ -465,7 +465,7 @@ class _CountdownRing extends StatelessWidget {
             style: const TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
-              color: Color(0xFF1B3A6B),
+              color: CoopvestColors.primary,
             ),
           ),
         ],

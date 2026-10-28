@@ -341,10 +341,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1B3A6B).withValues(alpha: 0.05),
+                  color: CoopvestColors.primary.withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: const Color(0xFF1B3A6B).withValues(alpha: 0.10),
+                    color: CoopvestColors.primary.withValues(alpha: 0.10),
                   ),
                 ),
                 child: Row(
@@ -353,27 +353,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     const _TrustBadgeItem(
                       icon: Icons.lock_outline_rounded,
                       label: 'SSL Encrypted',
-                      color: Color(0xFF1B3A6B),
+                      color: CoopvestColors.primary,
                     ),
                     Container(
                       width: 1,
                       height: 32,
-                      color: const Color(0xFF1B3A6B).withValues(alpha: 0.15),
+                      color: CoopvestColors.primary.withValues(alpha: 0.15),
                     ),
                     const _TrustBadgeItem(
                       icon: Icons.verified_user_outlined,
                       label: 'Secure Login',
-                      color: Color(0xFF0F7A5C),
+                      color: CoopvestColors.gradientMid,
                     ),
                     Container(
                       width: 1,
                       height: 32,
-                      color: const Color(0xFF1B3A6B).withValues(alpha: 0.15),
+                      color: CoopvestColors.primary.withValues(alpha: 0.15),
                     ),
                     const _TrustBadgeItem(
                       icon: Icons.shield_outlined,
                       label: 'Data Protected',
-                      color: Color(0xFF1B3A6B),
+                      color: CoopvestColors.primary,
                     ),
                   ],
                 ),
