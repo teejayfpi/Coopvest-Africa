@@ -143,9 +143,16 @@ router.delete('/fcm-token', async (req, res) => {
 /**
  * GET /api/v1/notifications
  *
- * Returns the member's own notifications AND broadcast notifications
- * (profile_id IS NULL) sent by admins, serialised into the shape the
+ * Returns ONLY the member's own notifications, serialised into the shape the
  * Flutter AppNotification model expects.
+ *
+ * `profile_id IS NULL` rows are global, not per-member: the RLS policy
+ * (`profile_id = auth.uid() OR is_staff()`) already treats them as visible to
+ * everyone, and admin fan-out writes one row per recipient, so a NULL row is a
+ * message nobody was addressed by. Including them (`... OR profile_id IS NULL`)
+ * meant a single global row — e.g. a stray insert, or an admin alert written
+ * without a profile — surfaced in every member's feed. A member must only ever
+ * see notifications addressed to them.
  */
 router.get('/', async (req, res) => {
   try {
@@ -153,7 +160,7 @@ router.get('/', async (req, res) => {
     let q = supabase
       .from('notifications')
       .select('*', { count: 'exact' })
-      .or(`profile_id.eq.${req.user.id},profile_id.is.null`)
+      .eq('profile_id', req.user.id)
       .order('created_at', { ascending: false })
       .range((page - 1) * limit, page * limit - 1);
     if (req.query.type) q = q.eq('type', req.query.type);
@@ -180,8 +187,8 @@ router.get('/unread-count', async (req, res) => {
     const { count, error } = await supabase
       .from('notifications')
       .select('id', { count: 'exact', head: true })
-      .or(`profile_id.eq.${req.user.id},profile_id.is.null`)
-      .eq('is_read', false);
+      .eq('profile_id', req.user.id)
+      .eq('is_read', false)
     if (error) throw error;
     res.json({ success: true, count: count || 0 });
   } catch (err) {
@@ -197,7 +204,7 @@ router.get('/unread', async (req, res) => {
     const { data, error } = await supabase
       .from('notifications')
       .select('*')
-      .or(`profile_id.eq.${req.user.id},profile_id.is.null`)
+      .eq('profile_id', req.user.id)
       .eq('is_read', false)
       .order('created_at', { ascending: false });
     if (error) throw error;
@@ -216,7 +223,7 @@ router.get('/:id', async (req, res) => {
       .from('notifications')
       .select('*')
       .eq('id', req.params.id)
-      .or(`profile_id.eq.${req.user.id},profile_id.is.null`)
+      .eq('profile_id', req.user.id)
       .maybeSingle();
     if (error) throw error;
     if (!data) return res.status(404).json({ success: false, error: 'Notification not found' });
