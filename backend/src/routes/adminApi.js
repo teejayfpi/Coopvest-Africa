@@ -5412,7 +5412,7 @@ router.get('/guarantors', async (req, res) => {
   try {
     const { data: rels, error: relErr } = await supabase
       .from('loan_guarantors')
-      .select('id, loan_id, guarantor_id, guarantor_profile_id, guarantor_name, status, request_status, created_at')
+      .select('id, loan_id, guarantor_id, guarantor_profile_id, guarantor_name, status, created_at')
       .order('created_at', { ascending: false })
       .limit(100);
     if (relErr) throw relErr;

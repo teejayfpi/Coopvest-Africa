@@ -137,9 +137,12 @@ router.get('/:profileId/profile', async (req, res) => {
 
     // Process guarantor data
     const guarantorData = loanGuarantors.data || [];
-    const pendingGuarantees = guarantorData.filter(g => g.request_status === 'pending');
-    const approvedGuarantees = guarantorData.filter(g => g.request_status === 'approved');
-    const rejectedGuarantees = guarantorData.filter(g => g.request_status === 'rejected');
+    // `loan_guarantors` carries a single `status` column; there is no
+    // `request_status`, so reading it left every guarantee counted as neither
+    // pending nor approved nor rejected.
+    const pendingGuarantees = guarantorData.filter(g => g.status === 'pending');
+    const approvedGuarantees = guarantorData.filter(g => g.status === 'approved');
+    const rejectedGuarantees = guarantorData.filter(g => g.status === 'rejected');
 
     // Calculate missed contributions (simplified - based on consecutive months)
     const savingsData = savings.data;
@@ -288,7 +291,7 @@ router.get('/:profileId/profile', async (req, res) => {
           rejected: rejectedGuarantees.length,
           requests: guarantorData.map(g => ({
             loanId: g.loan_id,
-            status: g.request_status,
+            status: g.status,
             approvedAt: g.approved_at,
             rejectedAt: g.rejected_at,
           })),

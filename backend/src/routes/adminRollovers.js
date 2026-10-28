@@ -95,8 +95,12 @@ router.get('/rollovers', async (req, res) => {
       .from('rollovers')
       .select(
         // Join the loan so the page can show what is being rolled over without
-        // a second round-trip per row.
-        '*, loan:loans(id, loan_id, amount, remaining_balance, total_repayment, tenure_months, monthly_repayment, status)',
+        // a second round-trip per row. The embed names the FK explicitly:
+        // rollovers has four FKs to loans (loan_id, new_loan_id,
+        // settled_loan_id, reviewed_by), so a bare `loans(...)` embed is
+        // ambiguous and PostgREST answers "more than one relationship was
+        // found", 500-ing the whole list.
+        '*, loan:loans!rollovers_loan_id_fkey(id, loan_id, amount, remaining_balance, total_repayment, tenure_months, monthly_repayment, status)',
         { count: 'exact' },
       )
       .order('created_at', { ascending: false })
