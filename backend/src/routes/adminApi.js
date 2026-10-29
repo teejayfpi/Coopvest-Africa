@@ -769,6 +769,21 @@ router.post('/members/:id/verify', async (req, res) => {
       `(kyc=true, feeProof=${feeProof ? feeProof.id : 'none'})`
     );
 
+    // Tell the member — until now an approval was only visible by reopening
+    // the app and noticing the activation gate had cleared.
+    notifyService
+      .notifyMember({
+        profileId,
+        title: 'Account Verified',
+        body: feeProof
+          ? 'Your identity check and registration fee are confirmed — your Coopvest membership is now active.'
+          : 'Your identity check was approved. Pay your registration fee to activate your membership.',
+        type: 'kyc',
+        category: 'success',
+        priority: 'high',
+      })
+      .catch((e) => logger.warn('member verify notify failed (non-fatal):', e.message));
+
     res.json({
       success: true,
       member: updatedProfile,
@@ -1074,6 +1089,21 @@ router.post('/members/:id/reset-password', async (req, res) => {
     }
 
     await logAdminAction('MEMBER_PASSWORD_RESET', { model: 'Profile', id: profile.id }, { email: profile.email });
+
+    // Security heads-up: the member gets the reset email, but an in-app record
+    // means they see the request even if the email lands in spam — and can
+    // notice it if they did not ask for it.
+    notifyService
+      .notifyMember({
+        profileId: profile.id,
+        title: 'Password Reset Requested',
+        body: 'A password reset was requested for your account. Check your email for the reset link. If this was not you, contact Coopvest support.',
+        type: 'security',
+        category: 'warning',
+        priority: 'high',
+      })
+      .catch((e) => logger.warn('reset-password notify failed (non-fatal):', e.message));
+
     res.json({ success: true, message: 'Password reset email sent to member.' });
   } catch (err) {
     logger.error('admin reset-password error:', err);
@@ -2248,6 +2278,21 @@ router.patch('/deposits/:id/verify', async (req, res) => {
     if (results.savings_credited > 0) parts.push(`₦${results.savings_credited.toLocaleString()} to savings`);
     if (results.loan_paid > 0) parts.push(`₦${results.loan_paid.toLocaleString()} to loan`);
     if (results.fees_paid > 0) parts.push(`₦${results.fees_paid.toLocaleString()} to fines/fees`);
+
+    // Tell the member their deposit was verified and where the money landed.
+    const primaryAlloc = (allocations || []).find((a) => Number(a.amount) > 0) || allocations?.[0];
+    notifyService
+      .notifyMember({
+        profileId: deposit.profile_id,
+        title: 'Deposit Verified',
+        body: `Your deposit of ₦${amount.toLocaleString()} was verified${parts.length ? ' — allocated ' + parts.join(' + ') : ''}.`,
+        type: txTypeMap[primaryAlloc?.type] || 'transaction',
+        category: 'credit',
+        priority: 'high',
+        data: { depositId: id },
+      })
+      .catch((e) => logger.warn('deposit verify notify failed (non-fatal):', e.message));
+
     res.json({
       success: true,
       message: `Deposit of ₦${amount.toLocaleString()} verified${parts.length ? ' — allocated ' + parts.join(' + ') : ''}.`,
@@ -2291,6 +2336,18 @@ router.patch('/deposits/:id/reject', async (req, res) => {
     if (deposit.transaction_id) {
       await supabase.from('transactions').update({ status: 'failed', failure_reason: adminNotes || 'Rejected by admin' }).eq('id', deposit.transaction_id);
     }
+
+    notifyService
+      .notifyMember({
+        profileId: deposit.profile_id,
+        title: 'Deposit Rejected',
+        body: `Your deposit of ₦${Number(deposit.amount).toLocaleString()} could not be verified. ${adminNotes || 'Please check the details and try again.'}`,
+        type: 'transaction',
+        category: 'warning',
+        priority: 'high',
+        data: { depositId: id },
+      })
+      .catch((e) => logger.warn('deposit reject notify failed (non-fatal):', e.message));
 
     res.json({ success: true, message: 'Deposit rejected.', deposit: updated });
   } catch (err) {
@@ -2584,6 +2641,16 @@ router.post('/compliance/:id/approve', async (req, res) => {
       .single();
     if (error) throw error;
     await logAdminAction('KYC_APPROVE', { model: 'Profile', id }, { member: data?.name || id });
+    notifyService
+      .notifyMember({
+        profileId: id,
+        title: 'Verification Approved',
+        body: 'Your identity verification was approved. Welcome to Coopvest!',
+        type: 'kyc',
+        category: 'success',
+        priority: 'high',
+      })
+      .catch((e) => logger.warn('compliance approve notify failed (non-fatal):', e.message));
     res.json({ success: true, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -2601,6 +2668,16 @@ router.post('/compliance/:id/reject', async (req, res) => {
       .single();
     if (error) throw error;
     await logAdminAction('KYC_REJECT', { model: 'Profile', id }, { member: data?.name || id });
+    notifyService
+      .notifyMember({
+        profileId: id,
+        title: 'Verification Not Approved',
+        body: 'We could not verify your documents. Please review them and submit again.',
+        type: 'kyc',
+        category: 'warning',
+        priority: 'high',
+      })
+      .catch((e) => logger.warn('compliance reject notify failed (non-fatal):', e.message));
     res.json({ success: true, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -5754,9 +5831,40 @@ router.put('/guarantors/settings', async (req, res) => {
 
 router.post('/guarantors/requests/:id/approve', async (req, res) => {
   try {
+    const { data: row } = await supabase
+      .from('loan_guarantors')
+      .select('id, guarantor_id, loan_id, loans(profile_id, loan_type, amount)')
+      .eq('id', req.params.id)
+      .maybeSingle();
+
     const { error } = await supabase.from('loan_guarantors').update({ status: 'approved' }).eq('id', req.params.id);
     if (error) throw error;
     await logAdminAction('GUARANTOR_APPROVE', { model: 'Guarantor', id: req.params.id }, {});
+
+    // Guarantor and borrower both act on this decision, so tell both.
+    notifyService
+      .notifyMember({
+        profileId: row?.guarantor_id,
+        title: 'Guarantor Request Approved',
+        body: 'Your guarantee for a Coopvest loan was approved.',
+        type: 'guarantor_request',
+        category: 'success',
+        priority: 'high',
+        data: { loanId: row?.loan_id },
+      })
+      .catch((e) => logger.warn('guarantor approve notify (guarantor) failed:', e.message));
+    notifyService
+      .notifyMember({
+        profileId: row?.loans?.profile_id,
+        title: 'Guarantor Approved',
+        body: 'A guarantor on your loan was approved by the Coopvest team.',
+        type: 'guarantor_confirmed',
+        category: 'status_change',
+        priority: 'normal',
+        data: { loanId: row?.loan_id },
+      })
+      .catch((e) => logger.warn('guarantor approve notify (borrower) failed:', e.message));
+
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -5765,9 +5873,39 @@ router.post('/guarantors/requests/:id/approve', async (req, res) => {
 
 router.post('/guarantors/requests/:id/reject', async (req, res) => {
   try {
+    const { data: row } = await supabase
+      .from('loan_guarantors')
+      .select('id, guarantor_id, loan_id, loans(profile_id, loan_type, amount)')
+      .eq('id', req.params.id)
+      .maybeSingle();
+
     const { error } = await supabase.from('loan_guarantors').update({ status: 'rejected' }).eq('id', req.params.id);
     if (error) throw error;
     await logAdminAction('GUARANTOR_REJECT', { model: 'Guarantor', id: req.params.id }, {});
+
+    notifyService
+      .notifyMember({
+        profileId: row?.guarantor_id,
+        title: 'Guarantor Request Not Approved',
+        body: 'Your guarantee for a Coopvest loan was not approved.',
+        type: 'guarantor_request',
+        category: 'warning',
+        priority: 'high',
+        data: { loanId: row?.loan_id },
+      })
+      .catch((e) => logger.warn('guarantor reject notify (guarantor) failed:', e.message));
+    notifyService
+      .notifyMember({
+        profileId: row?.loans?.profile_id,
+        title: 'Guarantor Not Approved',
+        body: 'A guarantor on your loan was not approved by the Coopvest team.',
+        type: 'guarantor_confirmed',
+        category: 'warning',
+        priority: 'normal',
+        data: { loanId: row?.loan_id },
+      })
+      .catch((e) => logger.warn('guarantor reject notify (borrower) failed:', e.message));
+
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -5831,14 +5969,36 @@ router.get('/fraud-detection', async (req, res) => {
 
 router.patch('/fraud-detection/:id', async (req, res) => {
   try {
-    const { action } = req.body || {};
-    if (action === 'freeze' || action === 'flag') {
-      // best-effort: flag the profile if id resolves
-      await supabase.from('profiles').update({ is_flagged: true }).eq('id', req.params.id).then(() => {}, () => {});
-    } else if (action === 'clear') {
-      await supabase.from('profiles').update({ is_flagged: false }).eq('id', req.params.id).then(() => {}, () => {});
+    const { action, userId, refId } = req.body || {};
+    // `:id` is a positional index into the derived alert list, NOT a profile id.
+    // Freeze/flag/clear must target the profile the alert belongs to, which the
+    // client sends as `userId` (refId accepted as an alias). Without it we do
+    // not guess, so we can never flag the wrong member.
+    const targetId = refId || userId || null;
+
+    if (targetId && (action === 'freeze' || action === 'flag' || action === 'clear')) {
+      const isFlagged = action !== 'clear';
+      await supabase
+        .from('profiles')
+        .update({ is_flagged: isFlagged })
+        .eq('id', targetId)
+        .then(() => {}, () => {});
+
+      notifyService
+        .notifyMember({
+          profileId: targetId,
+          title: isFlagged ? 'Account Under Review' : 'Account Review Cleared',
+          body: isFlagged
+            ? 'Your account has been flagged for a security review. Please contact Coopvest support if you have questions.'
+            : 'The security review on your account is complete — no further action is needed.',
+          type: 'security',
+          category: isFlagged ? 'warning' : 'success',
+          priority: 'high',
+        })
+        .catch((e) => logger.warn('fraud alert notify failed (non-fatal):', e.message));
     }
-    await logAdminAction('FRAUD_ALERT_ACTION', { model: 'FraudAlert', id: req.params.id }, { action });
+
+    await logAdminAction('FRAUD_ALERT_ACTION', { model: 'FraudAlert', id: req.params.id }, { action, targetId });
     res.json({ success: true, action });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -5894,6 +6054,16 @@ router.post('/verification/:id/verify', async (req, res) => {
     const { error } = await supabase.from('profiles').update({ kyc_verified: true, kyc_status: 'verified' }).eq('id', req.params.id);
     if (error) throw error;
     await logAdminAction('KYC_VERIFY', { model: 'Profile', id: req.params.id }, req.body || {});
+    notifyService
+      .notifyMember({
+        profileId: req.params.id,
+        title: 'Verification Approved',
+        body: 'Your identity verification was approved. Welcome to Coopvest!',
+        type: 'kyc',
+        category: 'success',
+        priority: 'high',
+      })
+      .catch((e) => logger.warn('verification verify notify failed (non-fatal):', e.message));
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -5905,6 +6075,16 @@ router.post('/verification/:id/reject', async (req, res) => {
     const { error } = await supabase.from('profiles').update({ kyc_verified: false, kyc_status: 'rejected' }).eq('id', req.params.id);
     if (error) throw error;
     await logAdminAction('KYC_REJECT', { model: 'Profile', id: req.params.id }, req.body || {});
+    notifyService
+      .notifyMember({
+        profileId: req.params.id,
+        title: 'Verification Not Approved',
+        body: 'We could not verify your documents. Please review them and submit again.',
+        type: 'kyc',
+        category: 'warning',
+        priority: 'high',
+      })
+      .catch((e) => logger.warn('verification reject notify failed (non-fatal):', e.message));
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -5916,6 +6096,16 @@ router.post('/verification/:id/request_resubmission', async (req, res) => {
     const { error } = await supabase.from('profiles').update({ kyc_status: 'resubmission_requested' }).eq('id', req.params.id);
     if (error) throw error;
     await logAdminAction('KYC_RESUBMISSION', { model: 'Profile', id: req.params.id }, req.body || {});
+    notifyService
+      .notifyMember({
+        profileId: req.params.id,
+        title: 'More Information Needed',
+        body: 'Please resubmit your verification documents — we need a clearer copy to finish your check.',
+        type: 'kyc',
+        category: 'action_required',
+        priority: 'high',
+      })
+      .catch((e) => logger.warn('verification resubmission notify failed (non-fatal):', e.message));
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

@@ -24,6 +24,7 @@ class NotificationService {
   static const String _channelSavingsId    = 'savings_notifications';
   static const String _channelWalletId     = 'wallet_notifications';
   static const String _channelOtpId        = 'otp_notifications';
+  static const String _channelKycId        = 'kyc_notifications';
   static const String _channelGeneralId    = 'coopvest_notifications';
 
   // ── Init ─────────────────────────────────────────────────────────────────────
@@ -160,6 +161,13 @@ class NotificationService {
           enableVibration: true,
         ),
         const AndroidNotificationChannel(
+          _channelKycId,
+          'Verification Notifications',
+          description: 'KYC, registration and account review alerts',
+          importance: Importance.high,
+          enableVibration: true,
+        ),
+        const AndroidNotificationChannel(
           _channelGeneralId,
           'General Notifications',
           description: 'General Coopvest Africa alerts',
@@ -228,6 +236,11 @@ class NotificationService {
       case 'withdrawal':
       case 'deposit_rejected':
         return _channelWalletId;
+      // Admin decisions on the member's account: KYC/registration approvals,
+      // account review (fraud flag) and admin-triggered password resets.
+      case 'kyc':
+      case 'security':
+        return _channelKycId;
       case 'otp':
       case 'otp_sent':
         return _channelOtpId;
@@ -302,15 +315,25 @@ class NotificationService {
           navigatorKey.currentState?.pushNamed('/savings-goal');
           break;
         case 'wallet_credited':
-        case 'deposit_rejected':
-          // Take user to the deposit status tracker so they can see full timeline + admin notes
-          navigatorKey.currentState?.pushNamed('/deposit-status');
-          break;
         case 'wallet_debited':
         case 'deposit':
         case 'withdrawal':
+        case 'deposit_rejected':
+          // The manual-deposit status screen was retired with the manual
+          // payment flow, so route to the wallet, which shows the ledger entry
+          // the admin action just created.
           navigatorKey.currentState?.pushNamed('/home');
           break;
+
+        // ── Admin decisions on the member's account ─────────────────────────
+        case 'kyc':
+        case 'security':
+          // KYC / registration approvals, account-review (fraud flag) and
+          // admin-triggered password resets all land on the profile, where the
+          // membership/verification status is shown.
+          navigatorKey.currentState?.pushNamed('/profile');
+          break;
+
         case 'otp':
         case 'otp_sent':
           break;

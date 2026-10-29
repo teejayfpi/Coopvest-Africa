@@ -117,11 +117,11 @@ class _ReferralSharingScreenState extends ConsumerState<ReferralSharingScreen> {
             backgroundColor: Colors.white, 
             eyeStyle: const QrEyeStyle(
               eyeShape: QrEyeShape.square, 
-              color: Color(0xFF0B5D46),
+              color: CoopvestColors.gradientStart,
             ), 
             dataModuleStyle: const QrDataModuleStyle(
               dataModuleShape: QrDataModuleShape.square, 
-              color: Color(0xFF0B5D46),
+              color: CoopvestColors.gradientStart,
             ),
             errorStateBuilder: (ctx, err) => Center(
               child: Column(

@@ -213,17 +213,17 @@ class _GuarantorResponseScreenState
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: const Color(0xFF1B3A6B).withValues(alpha: 0.07),
+              color: CoopvestColors.primary.withValues(alpha: 0.07),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: const Color(0xFF1B3A6B).withValues(alpha: 0.15),
+                color: CoopvestColors.primary.withValues(alpha: 0.15),
               ),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Icon(Icons.info_outline_rounded,
-                    color: Color(0xFF1B3A6B), size: 20),
+                    color: CoopvestColors.primary, size: 20),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
@@ -611,7 +611,7 @@ class _DetailRow extends StatelessWidget {
             style: TextStyle(
               fontSize: 13,
               fontWeight: bold ? FontWeight.bold : FontWeight.w600,
-              color: valueColor ?? const Color(0xFF1B3A6B),
+              color: valueColor ?? CoopvestColors.primary,
             ),
           ),
         ],

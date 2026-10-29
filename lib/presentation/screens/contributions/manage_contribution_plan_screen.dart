@@ -137,8 +137,8 @@ class _CurrentAmountCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [CoopvestColors.primary, Color(0xFF1A6B4A)],
+        gradient: LinearGradient(
+          colors: CoopvestColors.brandGradient,
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
