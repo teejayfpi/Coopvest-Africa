@@ -484,6 +484,15 @@ is skipped as `no_firebase_credentials` and now says so in the UI.
 The single-device session policy means an admin API token is rejected with
 `SESSION_REPLACED` until `POST /api/auth/sync` is called; the dashboard does
 this after login.
+## Flutter toolchain — use a current stable
+`pubspec.yaml` declares `sdk: '>=3.2.0 <4.0.0'`, but the code already uses APIs
+that only exist in recent Dart: `Color.withValues`, `Color.toARGB32`,
+`RadioGroup`, `Switch.activeThumbColor`, and `CardThemeData`. On an old SDK
+(3.24.x / Dart 3.5) `flutter analyze` reports ~400 phantom errors such as
+"The method 'withValues' isn't defined for the type 'Color'" — these are SDK
+gaps, not code defects. Use Flutter 3.47.x (Dart 3.13) or newer; there the
+project analyzes with 0 errors / 0 warnings.
+
 ## Loans table has NO `disbursed_at` column
 Only `disbursed_by` exists. Selecting `disbursed_at` makes PostgREST reject
 the ENTIRE query, so a report silently reads zero rows and looks like it

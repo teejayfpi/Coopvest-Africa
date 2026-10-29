@@ -26,6 +26,16 @@ class CoopvestColors {
   static const Color secondary = Color(0xFF2E7D32);
   static const Color tertiary = Color(0xFF16A34A);
 
+  // Brand gradient ramp. Onboarding, wallet hero cards and the manage-plan
+  // header all draw an emerald gradient; these stops are the sanctioned ones so
+  // screens stop inventing their own (and drifting into navy/blue).
+  static const Color gradientStart = Color(0xFF0B5D46);
+  static const Color gradientMid = Color(0xFF0F7A5C);
+  static const Color gradientEnd = Color(0xFF16A34A);
+  static const Color gradientLight = Color(0xFF43A047);
+  static const List<Color> brandGradient = [gradientStart, gradientMid];
+  static const List<Color> brandGradientWide = [gradientStart, gradientMid, gradientEnd];
+
   // Accent — gold. Exactly one primary action per screen uses `accent`.
   // `onAccent` is dark by design: white on gold is only 1.82:1, so gold
   // buttons must never use white text.

@@ -812,11 +812,11 @@ class _GuarantorDashboardScreenState
                     backgroundColor: Colors.white,
                     eyeStyle: const QrEyeStyle(
                       eyeShape: QrEyeShape.square,
-                      color: Color(0xFF0B5D46),
+                      color: CoopvestColors.gradientStart,
                     ),
                     dataModuleStyle: const QrDataModuleStyle(
                       dataModuleShape: QrDataModuleShape.square,
-                      color: Color(0xFF0B5D46),
+                      color: CoopvestColors.gradientStart,
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -825,7 +825,7 @@ class _GuarantorDashboardScreenState
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF0B5D46),
+                      color: CoopvestColors.gradientStart,
                     ),
                   ),
                   const SizedBox(height: 4),

@@ -324,7 +324,13 @@ function _androidChannelForType(type) {
     case 'wallet_debited':
     case 'deposit':
     case 'withdrawal':
+    case 'deposit_rejected':
       return 'wallet_notifications';
+    // Admin decisions on the member's account (KYC/registration approvals,
+    // account-review flags, admin-triggered password resets).
+    case 'kyc':
+    case 'security':
+      return 'kyc_notifications';
     case 'otp':
     case 'otp_sent':
       return 'otp_notifications';
@@ -366,6 +372,31 @@ async function pushToProfile({ profileId, title, body, data = {}, type }) {
 }
 
 // ── Existing high-level helpers ───────────────────────────────────────────────
+
+/**
+ * Tell a member about an admin decision that affects them (KYC approved,
+ * deposit verified, account blocked, …). In-app + push, non-fatal by design —
+ * callers fire-and-forget with a `.catch` so a notification failure can never
+ * fail the admin's action.
+ */
+async function notifyMember({ profileId, title, body, type = 'system', category = 'info', priority = 'normal', data }) {
+  if (!profileId) return { status: 'skipped', reason: 'no_profile' };
+  try {
+    return await broadcast({
+      profileIds: [profileId],
+      channels: ['in_app', 'push'],
+      title,
+      body,
+      type,
+      category,
+      priority,
+      data,
+    });
+  } catch (err) {
+    logger.warn('notifyService.notifyMember failed:', err.message);
+    return { status: 'failed', error: err.message };
+  }
+}
 
 async function notifyLoanApproved({ profileId, loanId, loanType, amount }) {
   const title = 'Loan Approved!';
@@ -834,6 +865,7 @@ module.exports = {
   sendPush,
   pushToProfile,
   broadcast,
+  notifyMember,
   notifyLoanApproved,
   notifyOtpSent,
   notifyWalletCredited,
