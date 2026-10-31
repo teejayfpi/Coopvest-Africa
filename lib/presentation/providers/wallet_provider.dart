@@ -17,39 +17,32 @@ class WalletRepository {
   WalletRepository(this._apiClient);
 
   /// Get wallet
+  ///
+  /// Throws when the balance cannot be read.
+  ///
+  /// It used to swallow the error and return a wallet of zeros. That made a
+  /// failed fetch indistinguishable from a genuinely empty account: the
+  /// dashboard rendered "₦0.00 available" and the withdrawal screen refused
+  /// every amount with "Maximum is ₦0". A member must never be told they have
+  /// no money because a request failed — the caller shows an error instead.
   Future<Wallet> getWallet() async {
-    try {
-      final response = await _apiClient.get('/wallet/balance');
-      // Backend returns { success: true, balance: ..., recentTransactions: ... }
-      // We need to map this to the Wallet model
-      if (response is Map<String, dynamic>) {
-        return Wallet(
-          id: response['id']?.toString() ?? 'mock_wallet_id',
-          userId: response['user_id']?.toString() ?? 'mock_user_id',
-          balance: (response['balance'] as num?)?.toDouble() ?? 0.0,
-          totalContributions: (response['total_contributions'] as num?)?.toDouble() ?? 0.0,
-          totalSavings: (response['total_savings'] as num?)?.toDouble() ?? 0.0,
-          monthlySavings: (response['monthly_savings'] as num?)?.toDouble() ?? 0.0,
-          pendingContributions: (response['pending_contributions'] as num?)?.toDouble() ?? 0.0,
-          availableForWithdrawal: (response['available_for_withdrawal'] as num?)?.toDouble() ?? (response['balance'] as num?)?.toDouble() ?? 0.0,
-          updatedAt: response['lastUpdated'] != null ? DateTime.parse(response['lastUpdated'] as String) : DateTime.now(),
-        );
-      }
-      return Wallet.fromJson(response as Map<String, dynamic>);
-    } catch (e) {
-      logger.e('Get wallet error: $e');
-      // Return empty wallet with zero values when backend fails
+    final response = await _apiClient.get('/wallet/balance');
+    // Backend returns { success: true, balance: ..., recentTransactions: ... }
+    // We need to map this to the Wallet model
+    if (response is Map<String, dynamic>) {
       return Wallet(
-        id: '',
-        userId: '',
-        balance: 0.0,
-        totalContributions: 0.0,
-        totalSavings: 0.0,
-        pendingContributions: 0.0,
-        availableForWithdrawal: 0.0,
-        updatedAt: DateTime.now(),
+        id: response['id']?.toString() ?? 'mock_wallet_id',
+        userId: response['user_id']?.toString() ?? 'mock_user_id',
+        balance: (response['balance'] as num?)?.toDouble() ?? 0.0,
+        totalContributions: (response['total_contributions'] as num?)?.toDouble() ?? 0.0,
+        totalSavings: (response['total_savings'] as num?)?.toDouble() ?? 0.0,
+        monthlySavings: (response['monthly_savings'] as num?)?.toDouble() ?? 0.0,
+        pendingContributions: (response['pending_contributions'] as num?)?.toDouble() ?? 0.0,
+        availableForWithdrawal: (response['available_for_withdrawal'] as num?)?.toDouble() ?? (response['balance'] as num?)?.toDouble() ?? 0.0,
+        updatedAt: response['lastUpdated'] != null ? DateTime.parse(response['lastUpdated'] as String) : DateTime.now(),
       );
     }
+    return Wallet.fromJson(response as Map<String, dynamic>);
   }
 
   /// Get obligations breakdown (savings / loans / fines / fees / total_due)

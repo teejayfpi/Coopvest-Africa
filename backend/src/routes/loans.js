@@ -18,6 +18,7 @@ const referralService = require('../services/referralService');
 const qrCodeService = require('../services/qrCodeService');
 const notifyService = require('../services/notifyService');
 const loanPolicy = require('../lib/loanPolicy');
+const { kycGateFor } = require('../lib/kycGate');
 const { evaluateGuarantorEligibility } = require('../lib/guarantorEligibility');
 const logger = require('../utils/logger');
 
@@ -109,6 +110,36 @@ router.post(
         });
       }
 
+      // ── KYC gate ──────────────────────────────────────────────────────────
+      // A loan is credit: the member's identity must be verified before an
+      // application can be reviewed. This was enforced only in the app, and
+      // the app treated a `rejected` submission as "submitted" — so a rejected
+      // member could submit, and the server accepted it. Checked here, first,
+      // because it is the cheapest rule and the most fundamental.
+      const { data: kycProfile, error: kycProfileErr } = await supabase
+        .from('profiles')
+        .select('id, kyc_verified')
+        .eq('id', profileId)
+        .maybeSingle();
+      if (kycProfileErr) throw kycProfileErr;
+
+      const { data: kycRow, error: kycRowErr } = await supabase
+        .from('kyc')
+        .select('status')
+        .eq('profile_id', profileId)
+        .maybeSingle();
+      if (kycRowErr) throw kycRowErr;
+
+      const kycGate = kycGateFor(kycProfile, kycRow);
+      if (!kycGate.allowed) {
+        return res.status(403).json({
+          success: false,
+          code: 'KYC_REQUIRED',
+          kycStatus: kycGate.reason,
+          error: kycGate.message,
+        });
+      }
+
       // ── Active default restriction (Policy §4) ────────────────────────────
       // Flagged accounts and members with overdue/defaulted/in-recovery loans
       // cannot take a new loan until obligations are regularized.
@@ -145,6 +176,46 @@ router.post(
           error: 'You have an overdue or defaulted loan. New loan applications are restricted until your outstanding obligations are resolved.',
           outstandingObligations: outstanding,
         });
+      }
+
+      // ── Minimum membership & contribution history (Loan Policy §3) ─────────
+      // A new loan requires six months of membership AND six months of
+      // successful contributions. The app used to be the only place that
+      // checked this, and its check was disabled with a `TESTING ONLY` flag, so
+      // the rule was enforced nowhere. The server is now authoritative.
+      if (!loanPolicy.minEligibilityDisabled()) {
+        const { data: profileDates, error: datesErr } = await supabase
+          .from('profiles')
+          .select('created_at')
+          .eq('id', profileId)
+          .maybeSingle();
+        if (datesErr) throw datesErr;
+
+        const { data: memberContributions, error: contribErr } = await supabase
+          .from('contributions')
+          .select('status, contribution_month, created_at')
+          .eq('profile_id', profileId);
+        if (contribErr) throw contribErr;
+
+        const membershipMonths = loanPolicy.monthsBetween(profileDates?.created_at);
+        const contributionMonths = loanPolicy.countContributionMonths(memberContributions);
+
+        if (membershipMonths < loanPolicy.MIN_MEMBERSHIP_MONTHS
+          || contributionMonths < loanPolicy.MIN_CONTRIBUTION_MONTHS) {
+          return res.status(403).json({
+            success: false,
+            code: 'LOAN_ELIGIBILITY_NOT_MET',
+            error: 'A new loan requires at least '
+              + `${loanPolicy.MIN_MEMBERSHIP_MONTHS} months of membership and `
+              + `${loanPolicy.MIN_CONTRIBUTION_MONTHS} months of consistent contributions.`,
+            eligibility: {
+              membershipMonths,
+              contributionMonths,
+              membershipRequired: loanPolicy.MIN_MEMBERSHIP_MONTHS,
+              contributionsRequired: loanPolicy.MIN_CONTRIBUTION_MONTHS,
+            },
+          });
+        }
       }
 
       // ── Savings-based eligibility cap (Policy §3) ─────────────────────────

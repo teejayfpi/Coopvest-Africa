@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/network/api_client.dart';
 import '../../core/services/notification_service.dart';
+import '../../core/services/registration_fee_status_store.dart';
 import '../../core/utils/utils.dart';
 import '../../data/models/auth_models.dart';
 import '../../data/models/kyc_models.dart';
@@ -199,9 +200,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> logout() async {
     state = state.copyWith(status: AuthStatus.loading);
     try {
+      final userId = state.user?.id;
       await _authRepository.logout();
       _apiClient.clearAuthToken();
       clearGateStatus();
+      // Drop the device's "fee settled" confirmation with the session, so it
+      // cannot carry over to the next member who signs in on this device.
+      if (userId != null) await RegistrationFeeStatusStore.clear(userId);
       state = const AuthState(status: AuthStatus.unauthenticated);
     } catch (e) {
       logger.e('Logout error: $e');
@@ -284,16 +289,26 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<bool> refreshGateStatus() async {
     try {
       final gate = await _authRepository.getHomeStatus();
-      _feeSettledOnServer = gate['registration_fee_settled'] as bool? ?? false;
+      final settled = gate['registration_fee_settled'] as bool? ?? false;
+      _feeSettledOnServer = settled;
       state = state.copyWith(
         user: state.user?.copyWith(
           registrationFeePaid: gate['registration_fee_paid'] as bool? ?? false,
-          registrationFeeSettled:
-              gate['registration_fee_settled'] as bool? ?? false,
-          registrationFeeExempt:
-              gate['registration_fee_exempt'] as bool? ?? false,
+          registrationFeeSettled: settled,
+          registrationFeeExempt: gate['registration_fee_exempt'] as bool? ?? false,
         ),
       );
+
+      // Remember a *settled* answer on this device so a later cold start with no
+      // network does not fall back to the profile (whose fee flags default to
+      // false) and show a paying member the payment screen. Only the settled
+      // case is persisted: an unsettled answer is never cached, because a local
+      // "unpaid" would let a member clear the gate by going offline.
+      if (settled) {
+        final userId = state.user?.id;
+        if (userId != null) await RegistrationFeeStatusStore.markSettled(userId);
+      }
+
       return true;
     } catch (e) {
       logger.w('Gate status unavailable: $e');

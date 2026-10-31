@@ -4,7 +4,6 @@ import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/utils/utils.dart';
 import '../../../data/api/loan_api_service.dart';
-import '../../../data/models/loan_models.dart';
 import '../../../presentation/providers/loan_provider.dart';
 import '../../../presentation/widgets/common/buttons.dart';
 import '../../../presentation/widgets/common/cards.dart';
@@ -40,28 +39,19 @@ class LoanDetailsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final loanState = ref.watch(loanProvider);
-    final now = DateTime.now();
-    final loan = loanState.loans.firstWhere(
-      (l) => l.id == loanId,
-      orElse: () => Loan(
-        id: loanId,
-        userId: 'demo-user',
-        type: 'Personal Loan',
-        amount: 50000,
-        tenure: 4,
-        interestRate: 5.0,
-        monthlyRepayment: 13125,
-        totalRepayment: 52500,
-        status: 'Active',
-        purpose: 'Business expansion',
-        guarantorsAccepted: 3,
-        guarantorsRequired: 3,
-        createdAt: now.subtract(const Duration(days: 30)),
-        updatedAt: now.subtract(const Duration(days: 25)),
-        approvedAt: now.subtract(const Duration(days: 25)),
-        disbursedAt: now.subtract(const Duration(days: 24)),
-      ),
-    );
+    final loan = loanState.loans.where((l) => l.id == loanId).firstOrNull;
+
+    // A loan the provider has not loaded is not a loan with invented numbers.
+    // The previous fallback silently substituted a ₦50,000 "Personal Loan" for
+    // any unknown id, so a stale link — or an id from a list that had not
+    // finished loading — rendered a full, convincing loan detail page for a
+    // loan that does not exist. Show the real state instead.
+    if (loan == null) {
+      return _LoanUnavailable(
+        isLoading: loanState.isLoading,
+        error: loanState.error,
+      );
+    }
 
     final scheduleAsync = ref.watch(loanRepaymentScheduleProvider(loanId));
     final guarantorsAsync = ref.watch(loanGuarantorsProvider(loanId));
@@ -519,5 +509,73 @@ class LoanDetailsScreen extends ConsumerWidget {
   String _formatDate(DateTime? date) {
     if (date == null) return 'N/A';
     return '${date.day}/${date.month}/${date.year}';
+  }
+}
+
+/// Shown when the requested loan is not in the provider's list.
+///
+/// Distinguishes "still loading" from "no such loan" so a slow fetch does not
+/// look like a missing loan, and offers a retry for the genuine failure case.
+class _LoanUnavailable extends ConsumerWidget {
+  final bool isLoading;
+  final String? error;
+
+  const _LoanUnavailable({required this.isLoading, this.error});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Scaffold(
+      backgroundColor: context.scaffoldBackground,
+      appBar: AppBar(
+        elevation: 0,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back, color: context.iconPrimary),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        title: Text(
+          'Loan Details',
+          style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold),
+        ),
+      ),
+      body: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: isLoading
+                ? const CircularProgressIndicator()
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.search_off,
+                          size: 56, color: context.textSecondary),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Loan not found',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: context.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        error ??
+                            'This loan is no longer available. It may have been '
+                                'closed, or the link is out of date.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: context.textSecondary),
+                      ),
+                      const SizedBox(height: 24),
+                      PrimaryButton(
+                        label: 'Try again',
+                        width: double.infinity,
+                        onPressed: () => ref.read(loanProvider.notifier).getLoans(),
+                      ),
+                    ],
+                  ),
+          ),
+        ),
+      ),
+    );
   }
 }

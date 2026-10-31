@@ -60,6 +60,15 @@ import 'presentation/screens/savings/savings_goals_screen.dart';
 // import 'presentation/screens/contributions/payment_proof_upload_screen.dart';
 // import 'presentation/screens/contributions/payment_proofs_status_screen.dart';
 import 'presentation/screens/search/global_search_screen.dart';
+import 'presentation/screens/route_not_found_screen.dart';
+import 'presentation/screens/wallet/wallet_dashboard_screen.dart';
+import 'presentation/screens/wallet/withdrawal_screen.dart';
+import 'presentation/screens/contributions/monthly_contributions_screen.dart';
+import 'presentation/screens/guarantor/guarantor_dashboard_screen.dart';
+import 'presentation/screens/profile/bank_accounts_screen.dart';
+import 'presentation/screens/profile/notifications_screen.dart';
+import 'presentation/screens/referral/referral_dashboard_screen.dart';
+import 'presentation/screens/support/live_chat_screen.dart';
 import 'config/env_config.dart';
 import 'presentation/providers/theme_provider.dart';
 import 'presentation/screens/splash_screen.dart';
@@ -407,6 +416,10 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
           );
         },
       ),
+      onUnknownRoute: (settings) => MaterialPageRoute(
+        settings: settings,
+        builder: (_) => RouteNotFoundScreen(routeName: settings.name),
+      ),
       routes: {
         '/welcome': (context) => const WelcomeScreen(),
         '/login': (context) => const LoginScreen(),
@@ -561,6 +574,30 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
         },
 
         '/search': (context) => const GlobalSearchScreen(),
+
+        // Destinations the global search and deep links resolve to. These were
+        // previously absent from the route table, so tapping the matching
+        // search result (or opening a `receive funds` deep link) called
+        // `pushNamed` on a route that did not exist and threw.
+        '/wallet': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments
+              as Map<String, dynamic>?;
+          final user = ref.read(currentUserProvider);
+          return WalletDashboardScreen(
+            userId: args?['userId'] ?? user?.id ?? '',
+            userName: args?['userName'] ?? user?.name ?? '',
+          );
+        },
+        '/withdrawals': (context) {
+          final user = ref.read(currentUserProvider);
+          return WithdrawalScreen(userId: user?.id ?? '');
+        },
+        '/contributions': (context) => const MonthlyContributionsScreen(),
+        '/guarantors': (context) => const GuarantorDashboardScreen(),
+        '/bank-accounts': (context) => const BankAccountsScreen(),
+        '/notifications': (context) => const NotificationsScreen(),
+        '/referrals': (context) => const ReferralDashboardScreen(),
+        '/live-chat': (context) => const LiveChatScreen(),
 
         '/rollover/eligibility': (context) {
           final loan =

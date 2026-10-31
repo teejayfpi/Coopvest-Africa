@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -83,6 +85,10 @@ class _WithdrawalScreenState extends ConsumerState<WithdrawalScreen> {
       _isLoadingAccounts = true;
       _accountsError = null;
     });
+    // Refresh the balance alongside the accounts. The form is gated on a
+    // loaded wallet, so entering this screen directly (e.g. from a
+    // notification) must not leave it stuck on "no balance".
+    unawaited(ref.read(walletProvider.notifier).loadWallet());
     try {
       final response = await ref.read(apiClientProvider).get('/bank-accounts');
       final raw = (response is Map<String, dynamic>) ? response['accounts'] : null;
@@ -210,7 +216,68 @@ class _WithdrawalScreenState extends ConsumerState<WithdrawalScreen> {
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(walletProvider);
+    final walletState = ref.watch(walletProvider);
+    final wallet = walletState.wallet;
+
+    // The balance must be real before the member can type an amount against it.
+    // With the old zero-fallback a failed fetch rendered "₦0.00 available" and
+    // refused every amount as over the limit; show the actual state instead.
+    if (wallet == null) {
+      return Scaffold(
+        backgroundColor: context.scaffoldBackground,
+        appBar: AppBar(
+          elevation: 0,
+          leading: IconButton(
+            icon: Icon(Icons.arrow_back, color: context.iconPrimary),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          title: Text(
+            'Withdraw Funds',
+            style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold),
+          ),
+        ),
+        body: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: walletState.isLoading
+                  ? const CircularProgressIndicator(color: CoopvestColors.primary)
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.account_balance_wallet_outlined,
+                            size: 56, color: CoopvestColors.error),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Could not load your balance',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: context.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'We could not confirm your available balance, so we '
+                          'will not let you request a withdrawal yet.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: context.textSecondary),
+                        ),
+                        const SizedBox(height: 24),
+                        PrimaryButton(
+                          label: 'Retry',
+                          onPressed: () {
+                            ref.read(walletProvider.notifier).loadWallet();
+                            _loadAccounts();
+                          },
+                        ),
+                      ],
+                    ),
+            ),
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: context.scaffoldBackground,
