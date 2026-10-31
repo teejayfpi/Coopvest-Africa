@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/services/registration_fee_status_store.dart';
 import '../../data/models/auth_models.dart';
 import '../../data/models/kyc_models.dart';
 import '../providers/auth_provider.dart';
 import '../providers/kyc_provider.dart';
 import '../screens/membership/account_activation_screen.dart';
+import 'offline_gate_screen.dart';
 
 /// AuthGuard determines where to send the user based on their auth state:
 /// - Not authenticated → child (Welcome/Login)
@@ -53,6 +55,17 @@ class _AuthGuardState extends ConsumerState<AuthGuard> {
   /// genuinely unreachable.
   static const int _maxGateAttempts = 2;
 
+  /// The device's durable "the server once confirmed this fee is settled"
+  /// flag, loaded once per guard lifetime. Null until the read completes.
+  ///
+  /// This is the only thing that can resolve the gate without the server, and
+  /// it can only ever resolve it to *active* — see [_activationGate].
+  bool? _settledConfirmedOnDevice;
+
+  /// Which member [_settledConfirmedOnDevice] belongs to, so a change of
+  /// account does not reuse the previous member's confirmation.
+  String? _settledConfirmedForUserId;
+
   /// Ask the server for its activation-gate decision, at most [_maxGateAttempts]
   /// times, and rebuild once it lands.
   ///
@@ -71,6 +84,38 @@ class _AuthGuardState extends ConsumerState<AuthGuard> {
       await ref.read(authProvider.notifier).refreshGateStatus();
       _gateCheckInFlight = false;
       if (mounted) setState(() {});
+    });
+  }
+
+  /// Re-ask the server for the offline screen's "Try again".
+  ///
+  /// Returns whether a server answer was obtained, so the screen can say so
+  /// instead of appearing to do nothing. The attempt budget is deliberately not
+  /// reset here: on success the server decision resolves the gate outright, and
+  /// on failure the budget is already spent, which is what keeps the guard on
+  /// the offline screen rather than looping back to the spinner.
+  Future<bool> _retryGateCheck() async {
+    if (_gateCheckInFlight) return false;
+    _gateCheckInFlight = true;
+    final reached = await ref.read(authProvider.notifier).refreshGateStatus();
+    _gateCheckInFlight = false;
+    if (mounted) setState(() {});
+    return reached;
+  }
+
+  /// Load the device's settled-fee confirmation for [userId], once per member.
+  void _ensureSettledConfirmedLoaded(String? userId) {
+    if (userId == null || userId.isEmpty) return;
+    if (_settledConfirmedForUserId == userId) return;
+    _settledConfirmedForUserId = userId;
+    _settledConfirmedOnDevice = null;
+    Future.microtask(() async {
+      final confirmed = await RegistrationFeeStatusStore.isSettledConfirmed(userId);
+      if (!mounted) return;
+      // Guard against a late read landing after a different member signed in.
+      if (_settledConfirmedForUserId != userId) return;
+      if (_settledConfirmedOnDevice == confirmed) return;
+      setState(() => _settledConfirmedOnDevice = confirmed);
     });
   }
 
@@ -131,12 +176,22 @@ class _AuthGuardState extends ConsumerState<AuthGuard> {
     // So route on the fee alone. The server is authoritative and mirrors this
     // split (requireRegistrationPaid on wallet/savings, requireActivated on
     // loans), so the client gate matches what the API will actually allow.
+    _ensureSettledConfirmedLoaded(user?.id);
     final activation = _activationGate(user);
-    if (activation == _GateDecision.checking) {
+    if (activation == GateDecision.checking) {
       // No decision yet — wait for the server's answer rather than guessing.
       return const _GateLoadingScreen();
     }
-    if (activation == _GateDecision.feePending) {
+    if (activation == GateDecision.unreachable) {
+      // Signed in, but we could not reach the server and have no confirmation
+      // that the fee is settled. This is deliberately NOT the payment screen:
+      // "unknown" is not "owes money". See OfflineGateScreen.
+      return OfflineGateScreen(
+        onRetry: _retryGateCheck,
+        onSignOut: () => ref.read(authProvider.notifier).logout(),
+      );
+    }
+    if (activation == GateDecision.feePending) {
       return const AccountActivationScreen();
     }
 
@@ -159,8 +214,8 @@ class _AuthGuardState extends ConsumerState<AuthGuard> {
   }
 
   /// Determines the membership-activation stage from the server's
-  /// registration-fee decision, falling back to the profile only if the server
-  /// stays unreachable.
+  /// registration-fee decision, falling back only to a *durable* settled
+  /// confirmation when the server is unreachable.
   ///
   /// The activation screen only renders when the registration fee is not
   /// settled. Salary-deduction members are exempt: their fee is recovered from
@@ -175,35 +230,98 @@ class _AuthGuardState extends ConsumerState<AuthGuard> {
   /// whose `registration_fee_paid` no longer matches the server. The server
   /// derives the salary-deduction exemption itself, so the app never applies a
   /// second, client-side rule.
-  _GateDecision _activationGate(User? user) {
-    final serverDecision = ref.read(authProvider.notifier).isFeeSettledOnServer;
+  ///
+  /// ## Why the fallback is asymmetric
+  ///
+  /// When the server is unreachable the gate must not read the cached profile's
+  /// fee flags, because those flags default to `false` on a cold start: doing so
+  /// told a member who had paid that they still owed the fee, and sent them to
+  /// the payment screen on any bad connection. The two outcomes are not
+  /// symmetric, so the fallbacks are not either:
+  ///
+  ///   - **Settled can be believed offline.** A fee, once settled, stays
+  ///     settled. [_settledConfirmedOnDevice] records a *past server
+  ///     confirmation* of that, so it can safely route the member to the
+  ///     dashboard without the network.
+  ///   - **Unsettled cannot.** "Not settled" is the claim the server re-check
+  ///     exists to make, so no local state may assert it. If we cannot reach the
+  ///     server and have no settled confirmation, the answer is "unknown" —
+  ///     [GateDecision.unreachable] — which is neither the dashboard nor an
+  ///     accusation of non-payment.
+  ///
+  /// The dashboard this unlocks is not a bypass: the backend still enforces
+  /// `requireRegistrationPaid`, so an unpaid member who somehow got past the
+  /// client gate would be refused by every gated endpoint anyway.
+  GateDecision _activationGate(User? user) {
+    final decision = decideRegistrationFeeGate(
+      serverDecision: ref.read(authProvider.notifier).isFeeSettledOnServer,
+      canAskServer: _gateAttempts < _maxGateAttempts,
+      settledConfirmedOnDevice: _settledConfirmedOnDevice == true,
+      profileClaimsSettled: user?.hasSettledRegistrationFee ?? false,
+    );
+    if (decision == GateDecision.checking) _requestGateCheck();
+    return decision;
+  }
+}
 
-    if (serverDecision == null) {
-      // No server answer yet: ask, and wait. Two cold-start attempts are
-      // absorbed; after that, if the backend is still unreachable, fall back to
-      // the profile flag so a paying member on a bad network is not stranded.
-      if (_gateAttempts < _maxGateAttempts) {
-        _requestGateCheck();
-        return _GateDecision.checking;
-      }
-      return (user?.hasSettledRegistrationFee ?? false)
-          ? _GateDecision.active
-          : _GateDecision.feePending;
-    }
-
-    return serverDecision ? _GateDecision.active : _GateDecision.feePending;
+/// The registration-fee gate decision, as a pure function of everything the
+/// guard knows.
+///
+/// Pulled out of the widget so it can be tested directly. The offline
+/// false-payment bug lived entirely in this decision, and reaching it through a
+/// widget test would have required standing up a fake server and a fake auth
+/// session; here each rule is one call with plain booleans. Every branch is
+/// pinned in `test/unit/registration_fee_gate_test.dart`.
+///
+/// [serverDecision] is the server's answer, or null when it has not been
+/// obtained (unreachable, or not asked yet). [canAskServer] is false once the
+/// attempt budget is spent. [settledConfirmedOnDevice] is a *past* server
+/// confirmation of settlement, loaded from disk. [profileClaimsSettled] is the
+/// cached profile's own claim.
+///
+/// The asymmetry that fixes the bug: an unreachable server may be resolved to
+/// [GateDecision.active] (permissive) but never to [GateDecision.feePending]
+/// (accusatory). When nothing permissive applies the result is
+/// [GateDecision.unreachable] — "unknown", which the guard renders as a retry
+/// screen rather than a payment demand.
+GateDecision decideRegistrationFeeGate({
+  required bool? serverDecision,
+  required bool canAskServer,
+  required bool settledConfirmedOnDevice,
+  required bool profileClaimsSettled,
+}) {
+  // The server answered — it is authoritative, in both directions.
+  if (serverDecision != null) {
+    return serverDecision ? GateDecision.active : GateDecision.feePending;
   }
 
+  // No answer yet and budget remains: wait on the server rather than guess.
+  if (canAskServer) return GateDecision.checking;
+
+  // Unreachable. A settled fee, once the server confirmed it, stays settled —
+  // believe the device's record so a paying member on a bad connection is not
+  // asked to pay again.
+  if (settledConfirmedOnDevice) return GateDecision.active;
+
+  // A cached profile claiming paid is still only ever permissive, so accept it.
+  // It is never used to conclude the opposite.
+  if (profileClaimsSettled) return GateDecision.active;
+
+  // Genuinely unknown. Never guess "unpaid" — that is the bug this fixes.
+  return GateDecision.unreachable;
 }
 
 /// Result of the registration-fee gate.
-enum _GateDecision {
+enum GateDecision {
   /// Waiting on the server's activation answer.
   checking,
   /// Registration fee not settled and no exemption → Account Activation screen.
   feePending,
   /// Fee settled (or salary-deduction exempt) → dashboard.
   active,
+  /// Signed in, but the server could not be reached and no settled
+  /// confirmation exists → offline retry screen, NOT the payment screen.
+  unreachable,
 }
 
 /// Shown while the server's activation answer is in flight, so the guard never

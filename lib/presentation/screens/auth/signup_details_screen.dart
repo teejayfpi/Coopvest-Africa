@@ -125,7 +125,7 @@ class _SignupDetailsScreenState extends ConsumerState<SignupDetailsScreen> {
     await _persistMonthlyAmount(updated['contribution_type']);
 
     if (!mounted) return;
-    _continueFromPaymentStep(updated);
+    _continueFromPaymentStep();
   }
 
   /// Send the amount chosen here to the plan that drives obligations.
@@ -156,14 +156,18 @@ class _SignupDetailsScreenState extends ConsumerState<SignupDetailsScreen> {
   /// Route on whether there is actually a fee to pay.
   ///
   /// A salary-deduction member's fee is recovered from salary, so there is
-  /// nothing to pay in-app and they go straight into the app. Sending them to
-  /// the payment screen is the bug this guards against: it demands ₦5,000 they
-  /// have already committed to have deducted.
+  /// nothing to pay in-app and they get the welcome message instead. Everyone
+  /// else is handed to the dashboard gate rather than sent to the payment
+  /// screen from here.
   ///
-  /// Read from the live profile, which the employer screen refreshes before
-  /// routing here, and which AuthGuard also gates on — so the client decision
-  /// matches what the server will allow.
-  void _continueFromPaymentStep(Map<String, String> registrationData) {
+  /// The gate is deliberately NOT decided on this screen. AuthGuard re-asks the
+  /// server and owns all three outcomes this screen cannot tell apart: unpaid
+  /// -> the payment screen, settled -> the dashboard, and *unreachable* -> the
+  /// offline screen. Pushing `/account-activation` directly assumed the third
+  /// case was the first, so a member finishing sign-up on a flaky connection
+  /// was shown the "pay ₦5,000" screen with no evidence they owed it — the
+  /// exact "unknown is not owes money" failure the gate exists to prevent.
+  void _continueFromPaymentStep() {
     final exempt =
         ref.read(authProvider).user?.hasSettledRegistrationFee ?? false;
 
@@ -176,14 +180,9 @@ class _SignupDetailsScreenState extends ConsumerState<SignupDetailsScreen> {
           duration: Duration(seconds: 5),
         ),
       );
-      Navigator.of(context).pushReplacementNamed('/home');
-      return;
     }
 
-    Navigator.of(context).pushReplacementNamed(
-      '/account-activation',
-      arguments: registrationData,
-    );
+    Navigator.of(context).pushReplacementNamed('/home');
   }
 
   @override

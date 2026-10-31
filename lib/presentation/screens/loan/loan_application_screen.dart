@@ -185,11 +185,12 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
         ? contributionMonths 
         : summaryContributionMonths;
     
-    // Determine eligibility
-    // TESTING ONLY: 6-month membership & contribution requirement bypassed for loan testing.
-    // Restore the original check below when testing is complete:
-    // final isEligible = membershipMonths >= 6 && finalContributionMonths >= 6;
-    const isEligible = true;
+    // Determine eligibility — Loan Policy: six months of membership AND six
+    // months of consistent contributions. This must stay a real check: the
+    // client gate is what stops an ineligible member at the form, and a
+    // hardcoded `true` here shipped a working loan application to every member
+    // on day one.
+    final isEligible = membershipMonths >= 6 && finalContributionMonths >= 6;
     
     return {
       'isEligible': isEligible,
