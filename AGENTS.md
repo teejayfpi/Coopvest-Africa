@@ -754,6 +754,37 @@ shapes. The bug was a *reachability* gap, not a wrong boolean, so a test that
 only asserts the exemption rule would not have caught it — assert the entry
 point, too.
 
+### Offline is "unknown", never "unpaid" — the false payment screen
+Members with no network (or an unstable one) were landing on the ₦5,000 payment
+screen for a fee they had already settled. The cause was the gate's fallback:
+when `GET /app/home-status` failed, `AuthGuard` fell back to the cached profile's
+fee flags, and those default to `false` on a cold start. The app was answering
+"unpaid" when it meant "I could not ask".
+
+The fix is an asymmetry, and it must stay asymmetric:
+
+- **Settled is sticky.** `RegistrationFeeStatusStore` records a *server
+  confirmation* of settlement on the device (keyed by member id). Offline, that
+  is believed, so a paying member reaches the dashboard.
+- **Unsettled is never cached.** There is deliberately no `markUnsettled`. A
+  local "unpaid" would let a member clear the gate by going offline, which is the
+  exact bypass the server re-check exists to stop.
+- **When nothing permissive is known, the result is `GateDecision.unreachable`**
+  — a retry screen (`OfflineGateScreen`), not the payment screen. An unreachable
+  server may resolve to `active` or `unreachable`, **never** to `feePending`.
+
+The decision is a pure function, `decideRegistrationFeeGate` in
+`lib/presentation/widgets/auth_guard.dart`, so each rule is one testable call.
+`test/unit/registration_fee_gate_test.dart` pins it, including an exhaustive
+check that no offline combination yields `feePending`; reverting the fix makes
+that test fail, which is how it was validated. The store is pinned separately in
+`test/unit/registration_fee_status_store_test.dart` (survives relaunch, does not
+leak between accounts on a shared device).
+
+This is a UX false-negative, not a security hole: the backend still enforces
+`requireRegistrationPaid`, so the dashboard this unlocks is refused by every
+gated endpoint for a genuinely unpaid member.
+
 ## KYC status is never null — guard drafts on `isUntouchedServerRow`
 
 `GET /kyc/status` calls getOrCreateKyc, so it always returns a provisional
