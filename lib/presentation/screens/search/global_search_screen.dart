@@ -24,9 +24,7 @@ class _GlobalSearchScreenState extends ConsumerState<GlobalSearchScreen> {
       items: [
         SearchItem(title: 'Contributions', subtitle: 'Monthly savings payments', route: '/contributions'),
         SearchItem(title: 'Withdrawals', subtitle: 'Savings withdrawal history', route: '/withdrawals'),
-        SearchItem(title: 'Loan Repayments', subtitle: 'Loan payment history', route: '/loan-repayments'),
-        SearchItem(title: 'Bank Transfer', subtitle: 'Transfer to bank account', route: '/transfer'),
-        SearchItem(title: 'Airtime & Bills', subtitle: 'Buy airtime and pay bills', route: '/bills'),
+        SearchItem(title: 'Wallet Balance', subtitle: 'View your total balance', route: '/wallet'),
       ],
     ),
     SearchCategory(
@@ -36,7 +34,6 @@ class _GlobalSearchScreenState extends ConsumerState<GlobalSearchScreen> {
       items: [
         SearchItem(title: 'Apply for Loan', subtitle: 'Request a new loan', route: '/loan-application'),
         SearchItem(title: 'My Loans', subtitle: 'View active loans', route: '/loan-dashboard'),
-        SearchItem(title: 'Loan Calculator', subtitle: 'Calculate monthly payments', route: '/loan-calculator'),
         SearchItem(title: 'Guarantors', subtitle: 'Manage guarantor requests', route: '/guarantors'),
       ],
     ),
@@ -47,8 +44,6 @@ class _GlobalSearchScreenState extends ConsumerState<GlobalSearchScreen> {
       items: [
         SearchItem(title: 'Savings Goals', subtitle: 'Set and track savings targets', route: '/savings-goal'),
         SearchItem(title: 'Total Savings', subtitle: 'View your total balance', route: '/wallet'),
-        SearchItem(title: 'Auto-Save', subtitle: 'Set up automatic savings', route: '/auto-save'),
-        SearchItem(title: 'Interest Earned', subtitle: 'View interest earnings', route: '/interest'),
       ],
     ),
     SearchCategory(
@@ -72,7 +67,6 @@ class _GlobalSearchScreenState extends ConsumerState<GlobalSearchScreen> {
         SearchItem(title: 'Help Center', subtitle: 'FAQs and user guides', route: '/support'),
         SearchItem(title: 'Live Chat', subtitle: 'Talk to support team', route: '/live-chat'),
         SearchItem(title: 'Submit Ticket', subtitle: 'Create a support ticket', route: '/create-ticket'),
-        SearchItem(title: 'Contact Us', subtitle: 'Email and phone support', route: '/contact'),
       ],
     ),
   ];

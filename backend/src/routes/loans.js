@@ -147,6 +147,46 @@ router.post(
         });
       }
 
+      // ── Minimum membership & contribution history (Loan Policy §3) ─────────
+      // A new loan requires six months of membership AND six months of
+      // successful contributions. The app used to be the only place that
+      // checked this, and its check was disabled with a `TESTING ONLY` flag, so
+      // the rule was enforced nowhere. The server is now authoritative.
+      if (!loanPolicy.minEligibilityDisabled()) {
+        const { data: profileDates, error: datesErr } = await supabase
+          .from('profiles')
+          .select('created_at')
+          .eq('id', profileId)
+          .maybeSingle();
+        if (datesErr) throw datesErr;
+
+        const { data: memberContributions, error: contribErr } = await supabase
+          .from('contributions')
+          .select('status, contribution_month, created_at')
+          .eq('profile_id', profileId);
+        if (contribErr) throw contribErr;
+
+        const membershipMonths = loanPolicy.monthsBetween(profileDates?.created_at);
+        const contributionMonths = loanPolicy.countContributionMonths(memberContributions);
+
+        if (membershipMonths < loanPolicy.MIN_MEMBERSHIP_MONTHS
+          || contributionMonths < loanPolicy.MIN_CONTRIBUTION_MONTHS) {
+          return res.status(403).json({
+            success: false,
+            code: 'LOAN_ELIGIBILITY_NOT_MET',
+            error: 'A new loan requires at least '
+              + `${loanPolicy.MIN_MEMBERSHIP_MONTHS} months of membership and `
+              + `${loanPolicy.MIN_CONTRIBUTION_MONTHS} months of consistent contributions.`,
+            eligibility: {
+              membershipMonths,
+              contributionMonths,
+              membershipRequired: loanPolicy.MIN_MEMBERSHIP_MONTHS,
+              contributionsRequired: loanPolicy.MIN_CONTRIBUTION_MONTHS,
+            },
+          });
+        }
+      }
+
       // ── Savings-based eligibility cap (Policy §3) ─────────────────────────
       // The cap is the member's savings × the product multiplier.
       //
