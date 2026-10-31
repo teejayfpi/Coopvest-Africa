@@ -135,3 +135,11 @@ uploads/
 
 # Node.js
 node_modules/
+
+# TypeScript build output from the unused Replit scaffold (lib/api-*, lib/db).
+# Declaration files and tsbuildinfo are generated; nothing in the Flutter app
+# or backend imports them, and they churned on every codegen run.
+lib/api-client-react/dist/
+lib/api-zod/dist/
+lib/db/dist/
+*.tsbuildinfo

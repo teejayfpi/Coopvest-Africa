@@ -18,6 +18,7 @@ const referralService = require('../services/referralService');
 const qrCodeService = require('../services/qrCodeService');
 const notifyService = require('../services/notifyService');
 const loanPolicy = require('../lib/loanPolicy');
+const { kycGateFor } = require('../lib/kycGate');
 const { evaluateGuarantorEligibility } = require('../lib/guarantorEligibility');
 const logger = require('../utils/logger');
 
@@ -106,6 +107,36 @@ router.post(
           success: false,
           code: 'AGREEMENT_REQUIRED',
           error: 'You must read and accept the Digital Loan Agreement before applying.',
+        });
+      }
+
+      // ── KYC gate ──────────────────────────────────────────────────────────
+      // A loan is credit: the member's identity must be verified before an
+      // application can be reviewed. This was enforced only in the app, and
+      // the app treated a `rejected` submission as "submitted" — so a rejected
+      // member could submit, and the server accepted it. Checked here, first,
+      // because it is the cheapest rule and the most fundamental.
+      const { data: kycProfile, error: kycProfileErr } = await supabase
+        .from('profiles')
+        .select('id, kyc_verified')
+        .eq('id', profileId)
+        .maybeSingle();
+      if (kycProfileErr) throw kycProfileErr;
+
+      const { data: kycRow, error: kycRowErr } = await supabase
+        .from('kyc')
+        .select('status')
+        .eq('profile_id', profileId)
+        .maybeSingle();
+      if (kycRowErr) throw kycRowErr;
+
+      const kycGate = kycGateFor(kycProfile, kycRow);
+      if (!kycGate.allowed) {
+        return res.status(403).json({
+          success: false,
+          code: 'KYC_REQUIRED',
+          kycStatus: kycGate.reason,
+          error: kycGate.message,
         });
       }
 

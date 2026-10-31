@@ -499,42 +499,63 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
   /// approved). A loan is credit, so KYC must be on file before we lend —
   /// this is the point the onboarding KYC was moved to, instead of blocking
   /// the whole app up front.
+  ///
+  /// A `rejected` submission is deliberately NOT "submitted": the member has
+  /// to fix what the reviewer flagged and resubmit. Treating it as done sent a
+  /// rejected member straight past this gate into loan submission, where the
+  /// server accepted the application. The server now rejects that too, so the
+  /// two layers agree.
   bool _kycIsSubmitted() {
     final status = (ref.read(kycProvider).submission?.status ?? '').toLowerCase();
     if (status == 'submitted' ||
         status == 'in_review' ||
         status == 'verified' ||
-        status == 'approved' ||
-        status == 'rejected') {
+        status == 'approved') {
       return true;
     }
     // Fall back to the profile: a member whose KYC the admin has already
     // approved is obviously cleared, even if the local probe hasn't landed.
     final profileStatus =
         (ref.read(authProvider).user?.kycStatus ?? '').toLowerCase();
-    return profileStatus == 'approved' ||
-        profileStatus == 'verified' ||
-        profileStatus == 'submitted' ||
-        profileStatus == 'in_review';
+    return profileStatus == 'approved' || profileStatus == 'verified';
+  }
+
+  /// True when the member's most recent KYC attempt was rejected, so we can
+  /// tell them to fix it rather than re-run the whole flow.
+  bool _kycWasRejected() {
+    final status = (ref.read(kycProvider).submission?.status ?? '').toLowerCase();
+    if (status == 'rejected') return true;
+    final profileStatus =
+        (ref.read(authProvider).user?.kycStatus ?? '').toLowerCase();
+    return profileStatus == 'rejected';
   }
 
   /// Send the member into the KYC flow. Returns once they have been told why.
   Future<void> _promptForKyc() async {
+    final rejected = _kycWasRejected();
     final proceed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.verified_user_outlined, color: CoopvestColors.primary),
-            SizedBox(width: 8),
-            Expanded(child: Text('Complete your KYC first')),
+            const Icon(Icons.verified_user_outlined, color: CoopvestColors.primary),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(rejected
+                  ? 'Your verification needs attention'
+                  : 'Complete your KYC first'),
+            ),
           ],
         ),
-        content: const Text(
-          'A loan is credit, so we need to verify who you are before we can '
-          'review an application.\n\n'
-          'Filling in your verification details takes a few minutes and only '
-          'has to be done once.',
+        content: Text(
+          rejected
+              ? 'Your identity verification was not approved. Please review '
+                  'what was flagged and submit it again — we cannot review a '
+                  'loan application until your KYC is approved.'
+              : 'A loan is credit, so we need to verify who you are before we can '
+                  'review an application.\n\n'
+                  'Filling in your verification details takes a few minutes and only '
+                  'has to be done once.',
         ),
         actions: [
           TextButton(
@@ -543,7 +564,7 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Start verification'),
+            child: Text(rejected ? 'Fix verification' : 'Start verification'),
           ),
         ],
       ),
