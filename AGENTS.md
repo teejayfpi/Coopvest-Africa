@@ -59,10 +59,42 @@ mobile app (`lib/presentation/screens/loan/loan_application_screen.dart`):
   kept for old loans.
 - `MIN_FLOORS` = half of each base rate.
 - Referral tier bonus: 2% / 1% / 0.5% at 10 / 5 / 2 confirmed referrals.
-- Monthly repayment = EMI (reducing balance): `P * r * (1+r)^n / ((1+r)^n - 1)`,
-  `r = effectiveRate / 100 / 12`.
-- Total repayment = SIMPLE interest: `amount + (amount * effectiveRate / 100)`.
-  (NOT EMI * tenure — the mobile app uses simple interest for total.)
+- **Total repayment is the authoritative figure** = SIMPLE interest:
+  `amount + (amount * effectiveRate / 100)`. This is what `loans.total_repayment`
+  holds and what `remaining_balance` is drawn down against.
+- **Monthly repayment is DERIVED from the total**: `totalRepayment / tenureMonths`.
+
+### The invariant: `monthlyRepayment × tenureMonths === totalRepayment`, exactly
+
+These two were once computed independently — a reducing-balance EMI for the
+instalment and simple interest for the total — so they disagreed. At ₦900,000 /
+5% / 12 months the instalments summed to ₦924,560.76 against a ₦945,000 total
+(₦20,439 short); on a ₦1,000,000 Maxi loan they over-repaid by ₦129,617. The
+summary, repayment schedule, wallet monthly obligation and admin reports all
+read `monthly_repayment`, while arrears and the balance read `total_repayment`,
+so the two must reconcile **by construction**. Do not reintroduce a separate
+EMI formula here.
+
+`backend/__tests__/referralService.test.js` asserts this invariant across all
+six products. It previously did **not** — it defined a private
+`ReferralServiceTestHelper` with a different rate table (`PERSONAL: 15,
+EMERGENCY: 12, BUSINESS: 18`) and tested that copy, so the real maths had zero
+coverage. Always `require('../src/services/referralService')` directly.
+
+### Fixed tenure per product
+`isTenureAllowed` (`loanPolicy.js`) pins the tenure to the product: Quick 4,
+Flexi 6, Stable 12/18, Premium 24, Maxi 36. `POST /loans/apply` rejects a
+mismatch with `INVALID_TENURE`; legacy products (Micro/Business/Emergency) accept
+1–60.
+
+### Contribution status vocabulary must match everywhere
+`loanPolicy.countContributionMonths` counts the settled set — `successful`,
+`completed`, `approved`, `paid`. The app's eligibility check
+(`loan_application_screen.dart`) and the wallet balance count the same set. They
+once disagreed (server: `successful` only), so a contribution stored as
+`completed` made the app say "eligible" and the server answer 403. Note
+`bulk/import-contributions` still writes to `transactions`, not `contributions`,
+so imported history does not count toward eligibility.
 
 `src/routes/loans.js` `LOAN_TYPES` accepts the mobile app's loan type names, and
 `total_repayment` stores the simple-interest value from the calc object.
