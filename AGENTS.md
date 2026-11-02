@@ -964,3 +964,30 @@ is no deduction to recover from, so the in-app obligation stands. Only the
 identified administrative-fee row is hidden (matched on `fee_type_id`, with the
 label as fallback); fines and other fees stay payable. Tests:
 `backend/__tests__/administrativeFeeExemption.test.js`.
+
+## Client IP must come from Express, and `trust proxy` must be a hop count
+The rate limiters, the admin IP whitelist and the login-history recorder all
+depend on the client IP. Two ways that was wrong, both now pinned by
+`backend/__tests__/ipWhitelist.test.js` and `routeExposure.test.js`:
+
+- `app.set('trust proxy', true)` trusts the entire `X-Forwarded-For` chain and
+  resolves `req.ip` to its **left-most** entry, which any caller can forge. A
+  client could then send a fresh fake IP per request and bypass the limiters.
+  Render's load balancer is a single hop, so the setting is the hop count `1`
+  (override with `TRUST_PROXY`). Never set it to `true`.
+- The code read `req.headers['x-forwarded-for']` directly in several places
+  (both limiters, the whitelist's `getClientIP`, the login recorder). Those must
+  use `req.ip`. The whitelist's header fallback takes the **right-most** entry
+  (what the trusted proxy appended), never the left-most.
+
+`cleanIP` had a latent bug: `!ip.startsWith['[']` indexed the function with
+`'['` (always `undefined`), so the port-strip branch never excluded bracketed
+IPv6. Fixed to `!ip.startsWith('[')`.
+
+## The public login recorder is unauthenticated by design - keep it bounded
+`POST /api/admin/login-history/log` cannot require a JWT: a *failed* login has no
+session, and the dashboard calls it before sign-in completes. It is therefore
+rate-limited (`PUBLIC_LOG_RATE_LIMIT_MAX`, keyed on `req.ip`) and attributes the
+event by the submitted **email only** - the body's `profile_id` is ignored, so a
+caller cannot attach a forged login event or a disabled-account alert to an
+arbitrary profile. Do not reintroduce trust in a body-supplied profile id here.
