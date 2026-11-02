@@ -105,12 +105,16 @@ class LoanApplicationRequest {
   final double loanAmount;
   final int tenureMonths;
   final String purpose;
+  final bool agreementAccepted;
+  final String agreementVersion;
 
   LoanApplicationRequest({
     required this.loanType,
     required this.loanAmount,
     required this.tenureMonths,
     required this.purpose,
+    this.agreementAccepted = true,
+    this.agreementVersion = 'v1.0',
   });
 
   Map<String, dynamic> toJson() => {
@@ -118,6 +122,10 @@ class LoanApplicationRequest {
         'amount': loanAmount,
         'tenureMonths': tenureMonths,
         'purpose': purpose,
+        // The server rejects an application that does not carry the Digital
+        // Loan Agreement acceptance, so this must always be sent.
+        'agreementAccepted': agreementAccepted,
+        'agreementVersion': agreementVersion,
       };
 }
 

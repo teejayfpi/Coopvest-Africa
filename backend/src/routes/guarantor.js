@@ -410,6 +410,24 @@ router.post(
         return res.status(400).json({ success: false, error: `Request is already ${mapStatus(row.status)}` });
       }
 
+      // A QR is valid for 7 days. The app refuses an expired code, but the
+      // server must too — otherwise a client that ignores `isExpired` (or a
+      // replayed request) could still consent on a stale invitation.
+      if (row.qr_id) {
+        const { data: qrExpiry } = await supabase
+          .from('loan_qrs')
+          .select('expires_at')
+          .eq('id', row.qr_id)
+          .maybeSingle();
+        if (qrExpiry?.expires_at && new Date() > new Date(qrExpiry.expires_at)) {
+          return res.status(400).json({
+            success: false,
+            code: 'QR_EXPIRED',
+            error: 'This loan invitation has expired. Ask the borrower to generate a new QR code.',
+          });
+        }
+      }
+
       // A guarantor must share the borrower's contribution channel (same
       // organisation for salary-deduction, direct-deposit for direct-deposit),
       // and can never guarantee their own loan.

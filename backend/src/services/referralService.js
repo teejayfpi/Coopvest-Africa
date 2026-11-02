@@ -50,21 +50,25 @@ class ReferralService {
       ? Math.max(baseRate - bonusPercent, minimumFloor)
       : baseRate;
 
-    // Monthly repayment: EMI (reducing balance) — matches the mobile app.
-    const mRate = effectiveRate / 100 / 12;
-    const emi = mRate === 0
-      ? loanAmount / tenureMonths
-      : loanAmount * mRate * Math.pow(1 + mRate, tenureMonths) / (Math.pow(1 + mRate, tenureMonths) - 1);
-
-    const mRateBase = baseRate / 100 / 12;
-    const emiBase = mRateBase === 0
-      ? loanAmount / tenureMonths
-      : loanAmount * mRateBase * Math.pow(1 + mRateBase, tenureMonths) / (Math.pow(1 + mRateBase, tenureMonths) - 1);
-
-    // Total repayment: simple interest — matches the mobile app
-    // (amount + amount * rate / 100), NOT EMI * tenure.
+    // Total repayment is the authoritative figure: simple interest
+    // (amount + amount * rate / 100). This is what `loans.total_repayment`
+    // holds and what `remaining_balance` is drawn down against.
     const totalRepayment = loanAmount + (loanAmount * effectiveRate / 100);
     const totalRepaymentBase = loanAmount + (loanAmount * baseRate / 100);
+
+    // The instalment is derived FROM the total, not from a separate
+    // reducing-balance EMI. Those two used to be computed independently and
+    // disagreed — at ₦900,000 / 5% / 12 months the EMI instalment summed to
+    // ₦924,560.76 against a ₦945,000 total (₦20,439 short), and on a Maxi loan
+    // it over-repaid by ₦129,617. The member's summary, the repayment
+    // schedule, the wallet's monthly obligation and the admin reports all read
+    // `monthly_repayment`, while arrears and the balance read
+    // `total_repayment`, so the two must reconcile by construction:
+    // `monthlyRepayment × tenureMonths === totalRepayment`, exactly.
+    const tenure = Number(tenureMonths) > 0 ? Number(tenureMonths) : 1;
+    const monthlyRepayment = totalRepayment / tenure;
+    const monthlyRepaymentBase = totalRepaymentBase / tenure;
+
     const totalSavingsFromBonus = Math.max(0, totalRepaymentBase - totalRepayment);
 
     return {
@@ -74,8 +78,8 @@ class ReferralService {
       effectiveInterestRate: effectiveRate,
       loanAmount,
       tenureMonths,
-      monthlyRepaymentBeforeBonus: emiBase,
-      monthlyRepaymentAfterBonus: emi,
+      monthlyRepaymentBeforeBonus: monthlyRepaymentBase,
+      monthlyRepaymentAfterBonus: monthlyRepayment,
       totalRepayment,
       totalRepaymentBeforeBonus: totalRepaymentBase,
       totalSavingsFromBonus,

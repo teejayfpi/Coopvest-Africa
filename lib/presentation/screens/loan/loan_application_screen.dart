@@ -155,9 +155,12 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
     final now = DateTime.now();
     final sixMonthsAgo = DateTime(now.year, now.month - 6, 1);
     
-    // Count successful contributions in the last 6 months
+    // Count settled contributions in the last 6 months. The settled set must
+    // match the server's loanPolicy.countContributionMonths, or the app says
+    // "eligible" and the server answers 403 (or the reverse).
+    const settledStatuses = {'successful', 'completed', 'approved', 'paid'};
     final successfulContributions = contributions.where((c) {
-      if (c.status.name != 'successful' && c.status.name != 'completed') {
+      if (!settledStatuses.contains(c.status.name)) {
         return false;
       }
       // Check if contribution is from the last 6 months
@@ -727,49 +730,32 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
         debugPrint('Backend QR generation failed, using fallback: $e');
       }
 
-      // Simple approval logic (15%+ savings = Approved, 10–15% = Pending Review)
+      // The server accepted the application and stored it as `pending` — it is
+      // NOT approved. Approval requires three guarantor consents and then an
+      // admin decision (guarantor.js → promoteLoanIfReady, then the admin loan
+      // decision route). This used to label the loan "Approved" purely from a
+      // client-side monthly-savings ratio, telling a member they had a loan
+      // before a single guarantor or admin had acted.
       const bool showQr = true; // Always show QR code
       
       // Generate local QR data if backend didn't provide one
       if (qrCodeData == null || qrCodeData.isEmpty) {
         // Create a local QR data with all loan info
-        final loanStatusText = monthlySavings >= requestedAmount * 0.15 ? 'Approved' : 'Pending Review';
-        qrCodeData = 'COOPVEST_LOAN|$backendLoanId|$_selectedLoanType|₦$requestedAmount|${widget.userName}|${widget.userPhone}|$loanStatusText';
+        qrCodeData = 'COOPVEST_LOAN|$backendLoanId|$_selectedLoanType|₦$requestedAmount|${widget.userName}|${widget.userPhone}|Pending Review';
         qrId = backendLoanId;
       }
       
-      if (monthlySavings >= requestedAmount * 0.15) {
-        setState(() {
-          _loanId = backendLoanId ?? 'LOCAL-${DateTime.now().millisecondsSinceEpoch}';
-          _qrId = qrId;
-          _qrCodeData = qrCodeData;
-          _loanStatus = 'Approved';
-          _rejectionReason = null;
-          _showQrCode = showQr;
-          _isSubmitting = false;
-        });
+      setState(() {
+        _loanId = backendLoanId ?? 'LOCAL-${DateTime.now().millisecondsSinceEpoch}';
+        _qrId = qrId;
+        _qrCodeData = qrCodeData;
+        _loanStatus = 'Pending Review';
+        _rejectionReason = null;
+        _showQrCode = showQr;
+        _isSubmitting = false;
+      });
 
-        // Show success dialog
-        _showSuccessDialog(showQr: showQr);
-      } else if (monthlySavings >= requestedAmount * 0.1) {
-        setState(() {
-          _loanId = backendLoanId ?? 'LOCAL-${DateTime.now().millisecondsSinceEpoch}';
-          _qrId = qrId;
-          _qrCodeData = qrCodeData;
-          _loanStatus = 'Pending Review';
-          _rejectionReason = null;
-          _showQrCode = showQr;
-          _isSubmitting = false;
-        });
-
-        _showPendingDialog(showQr: showQr);
-      } else {
-        setState(() {
-          _loanStatus = 'Rejected';
-          _rejectionReason = 'Monthly savings commitment is too low. Minimum 10% required.';
-          _isSubmitting = false;
-        });
-      }
+      _showPendingDialog(showQr: showQr);
 
     } catch (e) {
       setState(() {
@@ -778,58 +764,6 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
         _isSubmitting = false;
       });
     }
-  }
-
-  void _showSuccessDialog({bool showQr = true}) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.check_circle, color: CoopvestColors.success),
-            SizedBox(width: 8),
-            Text('Success!'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Your $_selectedLoanType application has been APPROVED!', style: const TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 16),
-            Text(
-              showQr 
-                ? 'To complete the process, please share the QR code (now visible at the bottom of the screen) with your 3 guarantors.'
-                : 'Your loan has been approved. QR code generation is temporarily unavailable. Please try again later or contact support.',
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-        actions: [
-          if (showQr)
-            PrimaryButton(
-              label: 'View QR Code',
-              onPressed: () {
-                Navigator.of(context).pop();
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (_scrollController.hasClients) {
-                    _scrollController.animateTo(
-                      _scrollController.position.maxScrollExtent,
-                      duration: const Duration(milliseconds: 600),
-                      curve: Curves.easeInOut,
-                    );
-                  }
-                });
-              },
-            )
-          else
-            PrimaryButton(
-              label: 'OK',
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-        ],
-      ),
-    );
   }
 
   void _showPendingDialog({bool showQr = true}) {

@@ -59,15 +59,24 @@ function monthsBetween(from, to = new Date()) {
 }
 
 /**
- * Count distinct months in which the member made a *successful* contribution.
+ * Count distinct months in which the member made a *settled* contribution.
  *
- * Only 'successful' counts, matching how the app's own summary treats
- * contributions: pending, failed and rejected rows are not history.
+ * Only settled contributions are history; pending, failed and rejected rows
+ * are not. The settled set must match the other layers or a member is told
+ * they are eligible by one and refused by another: the app's own eligibility
+ * check counts 'successful' and 'completed', and the wallet balance counts
+ * 'completed', 'successful' and 'approved'. This check used to accept only
+ * 'successful', so a member whose contributions were recorded as 'completed'
+ * (which the admin bulk import and several payment paths write) saw
+ * "You are eligible" in the app and then a 403 from the server.
  */
+const SETTLED_CONTRIBUTION_STATUSES = new Set(['successful', 'completed', 'approved', 'paid']);
+
 function countContributionMonths(contributions) {
   const months = new Set();
   for (const c of contributions || []) {
-    if (c.status !== 'successful') continue;
+    const status = String(c.status || '').toLowerCase();
+    if (!SETTLED_CONTRIBUTION_STATUSES.has(status)) continue;
     const key = (c.contribution_month || '').slice(0, 7)
       || (c.created_at ? String(c.created_at).slice(0, 7) : '');
     if (key) months.add(key);
@@ -79,6 +88,30 @@ function multiplierFor(loanType) {
   return LOAN_MULTIPLIERS[loanType] || DEFAULT_MULTIPLIER;
 }
 
+/**
+ * Fixed tenure, in months, for each product. The app sends exactly this value
+ * for the selected product; the server previously accepted any 1–60, so a
+ * crafted or stale client could take a 36-month tenure on a 4-month product
+ * and get the wrong interest rate. Legacy products have no fixed tenure and
+ * accept the general range.
+ */
+const LOAN_TENURES = {
+  'Quick Loan': 4,
+  'Flexi Loan': 6,
+  'Stable Loan (12 months)': 12,
+  'Stable Loan (18 months)': 18,
+  'Premium Loan': 24,
+  'Maxi Loan': 36,
+};
+
+function isTenureAllowed(loanType, tenureMonths) {
+  const tenure = Number(tenureMonths);
+  if (!Number.isInteger(tenure) || tenure < 1 || tenure > 60) return false;
+  const fixed = LOAN_TENURES[loanType];
+  if (fixed == null) return true;
+  return tenure === fixed;
+}
+
 function maxLoanAmount(loanType, totalSavings) {
   return (Number(totalSavings) || 0) * multiplierFor(loanType);
 }
@@ -86,13 +119,16 @@ function maxLoanAmount(loanType, totalSavings) {
 module.exports = {
   LOAN_MULTIPLIERS,
   DEFAULT_MULTIPLIER,
+  LOAN_TENURES,
   DEFAULT_BLOCKING_STATUSES,
   ACTIVE_LOAN_STATUSES,
   MIN_MEMBERSHIP_MONTHS,
   MIN_CONTRIBUTION_MONTHS,
+  SETTLED_CONTRIBUTION_STATUSES,
   minEligibilityDisabled,
   monthsBetween,
   countContributionMonths,
   multiplierFor,
+  isTenureAllowed,
   maxLoanAmount,
 };
