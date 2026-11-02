@@ -21,8 +21,15 @@ const { authenticate, requireAdmin } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const logger = require('../utils/logger');
 
-// Use authenticate middleware to verify Supabase JWT
-router.use(authenticate);
+// Admin-only surface: every handler returns other members' PII (profiles.*,
+// kyc, documents, bank accounts, next of kin) and several can approve or
+// reactivate a member. This router is mounted at /api/v2/admin/kyc (behind
+// requirePermission) AND historically at the member prefix /api/kyc, where the
+// member router /api/kyc/kyc.js has no catch-all — so any path it did not
+// define fell through to here with nothing but a valid *member* token, which
+// let a member read any other member's KYC record and self-approve. A plain
+// authenticate() is not enough; require an admin role.
+router.use(requireAdmin);
 
 function paging(req) {
   const page = Math.max(1, parseInt(req.query.page, 10) || 1);

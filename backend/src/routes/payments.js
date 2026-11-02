@@ -586,7 +586,13 @@ router.post('/webhook', async (req, res) => {
     const raw = req.rawBody || Buffer.from(JSON.stringify(req.body || {}));
     const signature = req.headers['x-paystack-signature'];
     const expected = crypto.createHmac('sha512', key).update(raw).digest('hex');
-    if (!signature || signature !== expected) {
+    // Constant-time compare: a plain !== short-circuits on the first differing
+    // byte and leaks timing information about the expected signature.
+    const signatureBuf = Buffer.from(String(signature || ''), 'utf8');
+    const expectedBuf = Buffer.from(expected, 'utf8');
+    const signatureValid = signatureBuf.length === expectedBuf.length
+      && crypto.timingSafeEqual(signatureBuf, expectedBuf);
+    if (!signatureValid) {
       logger.warn('paystack webhook: signature mismatch — rejected');
       return res.sendStatus(401);
     }
@@ -609,10 +615,11 @@ router.post('/webhook', async (req, res) => {
     res.sendStatus(200);
   } catch (err) {
     logger.error('paystack webhook error:', err);
-    // 200 anyway — a 5xx would make Paystack retry a charge we may have
-    // already settled (settleSuccessfulCharge is idempotent, but keep the
-    // noise down).
-    res.sendStatus(200);
+    // 500, not 200: a genuine failure (e.g. signature verify threw, or the
+    // settle write failed) must be retried by Paystack. Swallowing it as 200
+    // meant a real error looked like success and the charge was never settled.
+    // settleSuccessfulCharge is idempotent, so a retry cannot double-credit.
+    res.sendStatus(500);
   }
 });
 
