@@ -57,7 +57,9 @@ const errorHandler = async (err, req, res, next) => {
 
   res.status(statusCode).json({
     success: false,
-    error: err.message || 'Internal server error',
+    // Only unexpected (5xx) errors are masked: their message can carry internal
+    // detail (SQL text, file paths). 4xx messages are deliberate and stay.
+    error: statusCode >= 500 ? 'Internal server error' : (err.message || 'Request failed'),
   });
 };
 
