@@ -170,8 +170,11 @@ const limiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => {
-    // Use X-Forwarded-For for proxied requests
-    return req.headers['x-forwarded-for'] || req.ip || req.connection.remoteAddress;
+    // Key on req.ip, which Express derives from the socket and the trusted
+    // proxy chain ('trust proxy' is on). Never key on the raw X-Forwarded-For
+    // header: it is attacker-controlled, so a client could rotate it per
+    // request and defeat the limit entirely.
+    return req.ip || req.socket?.remoteAddress || 'unknown';
   }
 });
 app.use('/api/', limiter);
@@ -198,7 +201,8 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req) => {
     const email = typeof req.body?.email === 'string' ? req.body.email.toLowerCase().trim() : '';
-    const ip = req.headers['x-forwarded-for'] || req.ip || req.connection?.remoteAddress || 'unknown';
+    // req.ip, not the raw X-Forwarded-For header — see the global limiter note.
+    const ip = req.ip || req.socket?.remoteAddress || 'unknown';
     return email ? `${email}|${ip}` : `ip:${ip}`;
   }
 });
@@ -363,7 +367,11 @@ app.use('/api/documents', documentRoutes);
 app.use('/api/termination', requireRegistrationPaid, terminationRoutes);
 app.use('/api/payment-proofs', paymentProofRoutes);
 app.use('/api/payments', require('./routes/payments'));
-app.use('/api/kyc', kycAdminRoutes);
+// The admin KYC router used to be mounted here too. That exposed every admin
+// handler — other members' PII, and the self-approve/verify endpoint — on the
+// member prefix: member kyc.js defines no catch-all, so any path it did not
+// define fell through to kycAdmin with only a member token. Admin KYC now lives
+// solely at /api/v2/admin/kyc, behind requirePermission.
 app.use('/api', featuresRoutes);
 app.use('/api/mobile-features', featuresRoutes);
 // ─────────────────────────────────────────────────────────────────────────────

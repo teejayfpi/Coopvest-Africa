@@ -152,9 +152,15 @@ router.post('/upload', upload.single('document'), async (req, res) => {
 
     if (uploadError) throw uploadError;
 
-    const { data: { publicUrl } } = supabase.storage
+    // Signed URL, not getPublicUrl: an ID card or passport photo must not be
+    // readable by anyone who learns the path. The URL is long-lived because it
+    // is persisted on the row; the admin dashboard re-signs before display.
+    const { data: signed, error: signError } = await supabase.storage
       .from('kyc-documents')
-      .getPublicUrl(storagePath);
+      .createSignedUrl(storagePath, 60 * 60 * 24 * 365 * 10);
+
+    if (signError) throw signError;
+    const publicUrl = signed.signedUrl;
 
     const { data: doc, error: insertError } = await supabase
       .from('documents')
