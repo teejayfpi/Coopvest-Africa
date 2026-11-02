@@ -96,3 +96,16 @@ describe('client IP cannot be forged', () => {
   });
 });
 
+describe('the error handler masks unexpected errors', () => {
+  test('a 5xx response does not echo the raw error message', () => {
+    const src = fs.readFileSync(
+      path.join(__dirname, '..', 'src', 'middleware', 'errorHandler.js'),
+      'utf8',
+    );
+    // The 5xx branch must substitute a generic message rather than pass
+    // err.message straight through.
+    expect(src).toMatch(/statusCode >= 500/);
+    expect(src).toMatch(/Internal server error/);
+  });
+});
+
