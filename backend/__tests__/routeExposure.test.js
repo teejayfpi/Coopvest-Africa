@@ -78,3 +78,21 @@ describe('the Paystack webhook compares the signature in constant time', () => {
     expect(catchBlock.slice(0, 400)).not.toMatch(/sendStatus\(200\)/);
   });
 });
+
+describe('client IP cannot be forged', () => {
+  test('trust proxy is a hop count, not `true`', () => {
+    // `true` trusts the whole X-Forwarded-For chain and takes the left-most,
+    // caller-supplied entry, defeating the rate limiters and the IP whitelist.
+    expect(serverSrc).not.toMatch(/app\.set\(\s*['"]trust proxy['"]\s*,\s*true\s*\)/);
+    expect(serverSrc).toMatch(/app\.set\(\s*['"]trust proxy['"]\s*,\s*parseInt\(/);
+  });
+
+  test('the public login recorder derives the IP from req.ip, not the header', () => {
+    const start = serverSrc.indexOf("'/api/admin/login-history/log'");
+    expect(start).toBeGreaterThan(-1);
+    const handler = serverSrc.slice(start, start + 700);
+    expect(handler).not.toMatch(/req\.headers\[\s*['"]x-forwarded-for['"]\s*\]/);
+    expect(handler).toMatch(/req\.ip/);
+  });
+});
+

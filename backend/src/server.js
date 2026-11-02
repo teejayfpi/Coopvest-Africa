@@ -97,8 +97,16 @@ websocketService.initialize(server);
 
 // ==============================================================================
 // TRUST PROXY (Required for proper IP detection behind load balancer/proxy)
+//
+// Must be the hop count, not `true`. Render's load balancer terminates TLS and
+// forwards over HTTP to the service — one hop (render.com/docs/web-services).
+// With `true`, Express trusts the whole X-Forwarded-For chain and takes the
+// left-most entry, which any caller can forge; that would let a client rotate a
+// fake IP per request and defeat the rate limiters and the admin IP whitelist.
+// With 1, Express takes the entry Render itself appended and ignores anything
+// the client prepended. Override with TRUST_PROXY if the topology changes.
 // ==============================================================================
-app.set('trust proxy', true);
+app.set('trust proxy', parseInt(process.env.TRUST_PROXY, 10) || 1);
 
 // ==============================================================================
 // HTTPS ENFORCEMENT & SECURITY HEADERS
@@ -205,6 +213,18 @@ const authLimiter = rateLimit({
     const ip = req.ip || req.socket?.remoteAddress || 'unknown';
     return email ? `${email}|${ip}` : `ip:${ip}`;
   }
+});
+
+// Limiter for the PUBLIC login-event recorder (see the route further down).
+// That endpoint cannot require a JWT — a *failed* login has no session yet — so
+// it is throttled instead, to bound audit-log injection and security-alert spam.
+const publicLogLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: parseInt(process.env.PUBLIC_LOG_RATE_LIMIT_MAX) || 60,
+  message: { success: false, error: 'Too many requests, please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.ip || req.socket?.remoteAddress || 'unknown'
 });
 
 // ==============================================================================
@@ -383,16 +403,25 @@ app.use('/api/mobile-features', featuresRoutes);
 // the Sessions / Login History pages. Registering it first lets Express match
 // the POST here before the guarded router ever runs.
 // ─────────────────────────────────────────────────────────────────────────────
-app.post('/api/admin/login-history/log', async (req, res) => {
+app.post('/api/admin/login-history/log', publicLogLimiter, async (req, res) => {
   try {
-    const { email, success, failure_reason, device_type, browser, os, profile_id } = req.body || {};
+    const { email, success, failure_reason, device_type, browser, os } = req.body || {};
     const ua = req.headers['user-agent'] || '';
-    const ip = (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim();
+    // req.ip, not X-Forwarded-For: the header is caller-controlled, and this
+    // endpoint is public, so trusting it let anyone forge the recorded IP and
+    // frame an arbitrary address for the "multiple failed logins" alert.
+    const ip = (req.ip || req.socket?.remoteAddress || '').trim();
     const governanceMod = require('./routes/governance');
     const { recordLogin, raiseSecurityAlert } = governanceMod;
 
-    let pid = profile_id || null;
-    if (!pid && email) {
+    // Attribute the event by email only. `profile_id` arrives in the request
+    // body from an unauthenticated caller, so it is not trusted for attribution
+    // — otherwise anyone could attach a forged login event (and a
+    // disabled-account alert) to any profile they name. The dashboard always
+    // sends the email, and a disabled account still has a profiles row, so the
+    // email lookup is sufficient for the alerts below.
+    let pid = null;
+    if (email) {
       const { data: prof } = await supabase.from('profiles').select('id, role, is_active').ilike('email', email).maybeSingle();
       pid = prof?.id || null;
     }

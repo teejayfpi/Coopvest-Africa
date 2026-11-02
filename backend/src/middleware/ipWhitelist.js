@@ -74,16 +74,20 @@ const ipToNumber = (ip) => {
  * @returns {string} Client IP address
  */
 const getClientIP = (req) => {
-  // Check X-Forwarded-For header (for proxied requests)
-  const forwardedFor = req.headers['x-forwarded-for'];
+  // Prefer Express's req.ip: it respects the `trust proxy` hop count, so a
+  // client cannot forge it by prepending X-Forwarded-For. The header fallback
+  // is only for bare objects (unit tests) that never went through Express.
+  if (req.ip) return req.ip;
+
+  const forwardedFor = req.headers && req.headers['x-forwarded-for'];
   if (forwardedFor) {
-    // Get the first IP in the chain (original client)
+    // Right-most entry is what the nearest trusted proxy appended; anything to
+    // its left is caller-supplied and unverifiable.
     const ips = forwardedFor.split(',').map(ip => ip.trim());
-    return ips[0];
+    return ips[ips.length - 1];
   }
-  
-  // Check X-Real-IP header
-  const realIP = req.headers['x-real-ip'];
+
+  const realIP = req.headers && req.headers['x-real-ip'];
   if (realIP) {
     return realIP;
   }
@@ -107,8 +111,11 @@ const cleanIP = (ip) => {
     ip = ip.substring(7);
   }
   
-  // Remove port if present (e.g., 192.168.1.1:8080)
-  if (ip.includes(':') && !ip.startsWith['[']) {
+  // Remove port if present (e.g., 192.168.1.1:8080). Bracketed IPv6
+  // ([::1]:8080) keeps its colons, so it is excluded — the previous
+  // `!ip.startsWith['[']` indexed the function with '[' (always undefined,
+  // so always falsy) and never excluded anything.
+  if (ip.includes(':') && !ip.startsWith('[')) {
     ip = ip.split(':')[0];
   }
   
@@ -143,7 +150,7 @@ const createIPWhitelist = (options = {}) => {
     // If no whitelist configured, decide based on option
     if (whitelist.length === 0) {
       if (allowWithoutWhitelist) {
-        logger.warn('IP whitelist is empty - allowing all access. NOT RECOMMENDED FOR PRODUCTION!');
+        logger.warn('ADMIN_IP_WHITELIST is empty — admin IP filtering is OFF. Set it to enable.');
         return next();
       } else {
         logger.error('IP whitelist is empty but filtering is enabled. Access denied.');
