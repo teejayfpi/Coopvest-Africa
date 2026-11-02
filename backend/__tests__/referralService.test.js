@@ -1,178 +1,118 @@
 /**
- * Tests for ReferralService - Financial Logic
- * 
- * Tests the core loan interest calculation and tier bonus logic
- * without requiring database connections.
+ * Tests for ReferralService — financial logic.
+ *
+ * These exercise the REAL service, not a copy of it. The previous version of
+ * this file defined its own `ReferralServiceTestHelper` with a different rate
+ * table ('PERSONAL': 15, 'EMERGENCY': 12, 'BUSINESS': 18) and asserted against
+ * that, so the loan maths that actually writes to production `loans` rows had
+ * no coverage at all — which is how a reducing-balance instalment and a
+ * simple-interest total shipped side by side and disagreed.
  */
 
-// Extract the pure calculation methods for unit testing
-// We test the service's calculation logic directly
+const referralService = require('../src/services/referralService');
 
-class ReferralServiceTestHelper {
-  getBaseInterestRate(loanType) {
-    const rates = { 'PERSONAL': 15, 'EMERGENCY': 12, 'BUSINESS': 18 };
-    return rates[loanType] || 15;
-  }
-
-  getMinimumInterestFloor(loanType) {
-    const floors = { 'PERSONAL': 5, 'EMERGENCY': 4, 'BUSINESS': 7 };
-    return floors[loanType] || 5;
-  }
-
-  calculateTierBonus(count) {
-    if (count >= 50) return 5;
-    if (count >= 20) return 3;
-    if (count >= 10) return 2;
-    if (count >= 5) return 1;
-    return 0;
-  }
-
-  calculateInterestWithBonus(loanType, loanAmount, tenureMonths, bonusPercent) {
-    const baseRate = this.getBaseInterestRate(loanType);
-    const minimumFloor = this.getMinimumInterestFloor(loanType);
-    
-    const effectiveRate = bonusPercent > 0 
-      ? Math.max(baseRate - bonusPercent, minimumFloor)
-      : baseRate;
-
-    const monthlyRate = effectiveRate / 100 / 12;
-    const emi = loanAmount * monthlyRate * Math.pow(1 + monthlyRate, tenureMonths) / 
-                (Math.pow(1 + monthlyRate, tenureMonths) - 1);
-
-    const monthlyRateBefore = baseRate / 100 / 12;
-    const emiBeforeBonus = loanAmount * monthlyRateBefore * Math.pow(1 + monthlyRateBefore, tenureMonths) / 
-                           (Math.pow(1 + monthlyRateBefore, tenureMonths) - 1);
-
-    const totalSavingsFromBonus = (emiBeforeBonus - emi) * tenureMonths;
-
-    return {
-      loanType,
-      baseInterestRate: baseRate,
-      referralBonusPercent: bonusPercent,
-      effectiveInterestRate: effectiveRate,
-      loanAmount,
-      tenureMonths,
-      monthlyRepaymentBeforeBonus: emiBeforeBonus,
-      monthlyRepaymentAfterBonus: emi,
-      totalSavingsFromBonus,
-      minimumInterestFloor: minimumFloor,
-      bonusApplied: bonusPercent > 0
-    };
-  }
-}
-
-const service = new ReferralServiceTestHelper();
-
-describe('ReferralService - Interest Rate Calculations', () => {
-  describe('getBaseInterestRate', () => {
-    test('returns correct rate for PERSONAL loans', () => {
-      expect(service.getBaseInterestRate('PERSONAL')).toBe(15);
+describe('ReferralService.calculateInterestWithBonus (real service)', () => {
+  describe('base rates match the product table', () => {
+    it.each([
+      ['Quick Loan', 7.5],
+      ['Flexi Loan', 7.0],
+      ['Stable Loan (12 months)', 5.0],
+      ['Stable Loan (18 months)', 7.0],
+      ['Premium Loan', 14.0],
+      ['Maxi Loan', 19.0],
+    ])('%s carries a %s%% base rate', (loanType, rate) => {
+      expect(referralService.getBaseInterestRate(loanType)).toBe(rate);
     });
 
-    test('returns correct rate for EMERGENCY loans', () => {
-      expect(service.getBaseInterestRate('EMERGENCY')).toBe(12);
-    });
-
-    test('returns correct rate for BUSINESS loans', () => {
-      expect(service.getBaseInterestRate('BUSINESS')).toBe(18);
-    });
-
-    test('returns default rate for unknown loan types', () => {
-      expect(service.getBaseInterestRate('UNKNOWN')).toBe(15);
+    it('falls back to 7.5%% for an unknown product', () => {
+      expect(referralService.getBaseInterestRate('Some Future Loan')).toBe(7.5);
     });
   });
 
-  describe('getMinimumInterestFloor', () => {
-    test('returns correct floor for PERSONAL loans', () => {
-      expect(service.getMinimumInterestFloor('PERSONAL')).toBe(5);
-    });
+  describe('instalment and total reconcile', () => {
+    // The regression this file exists to prevent: the instalment was a
+    // reducing-balance EMI while the total was simple interest, so
+    // `monthly × tenure` did not equal `total` — short by ₦20,439 on a
+    // ₦900,000 / 5% / 12-month loan, and over by ₦129,617 on a Maxi loan.
+    const cases = [
+      ['Quick Loan', 900000, 4],
+      ['Flexi Loan', 500000, 6],
+      ['Stable Loan (12 months)', 900000, 12],
+      ['Stable Loan (18 months)', 750000, 18],
+      ['Premium Loan', 2000000, 24],
+      ['Maxi Loan', 1000000, 36],
+    ];
 
-    test('returns correct floor for EMERGENCY loans', () => {
-      expect(service.getMinimumInterestFloor('EMERGENCY')).toBe(4);
-    });
+    it.each(cases)(
+      '%s: monthlyRepayment × tenure === totalRepayment (%i / %i months)',
+      (loanType, amount, tenure) => {
+        const r = referralService.calculateInterestWithBonus(loanType, amount, tenure, 0);
+        expect(r.monthlyRepaymentAfterBonus * tenure).toBeCloseTo(r.totalRepayment, 2);
+      },
+    );
 
-    test('returns correct floor for BUSINESS loans', () => {
-      expect(service.getMinimumInterestFloor('BUSINESS')).toBe(7);
-    });
+    it.each(cases)(
+      '%s: the pre-bonus figures reconcile too',
+      (loanType, amount, tenure) => {
+        const r = referralService.calculateInterestWithBonus(loanType, amount, tenure, 0);
+        expect(r.monthlyRepaymentBeforeBonus * tenure).toBeCloseTo(r.totalRepaymentBeforeBonus, 2);
+      },
+    );
 
-    test('returns default floor for unknown loan types', () => {
-      expect(service.getMinimumInterestFloor('UNKNOWN')).toBe(5);
-    });
-  });
-
-  describe('calculateTierBonus', () => {
-    test('returns 0 for fewer than 5 referrals', () => {
-      expect(service.calculateTierBonus(0)).toBe(0);
-      expect(service.calculateTierBonus(4)).toBe(0);
-    });
-
-    test('returns 1% for 5-9 referrals', () => {
-      expect(service.calculateTierBonus(5)).toBe(1);
-      expect(service.calculateTierBonus(9)).toBe(1);
-    });
-
-    test('returns 2% for 10-19 referrals', () => {
-      expect(service.calculateTierBonus(10)).toBe(2);
-      expect(service.calculateTierBonus(19)).toBe(2);
-    });
-
-    test('returns 3% for 20-49 referrals', () => {
-      expect(service.calculateTierBonus(20)).toBe(3);
-      expect(service.calculateTierBonus(49)).toBe(3);
-    });
-
-    test('returns 5% for 50+ referrals', () => {
-      expect(service.calculateTierBonus(50)).toBe(5);
-      expect(service.calculateTierBonus(100)).toBe(5);
+    it('reconciles with a referral bonus applied', () => {
+      const r = referralService.calculateInterestWithBonus('Stable Loan (12 months)', 900000, 12, 1);
+      expect(r.monthlyRepaymentAfterBonus * 12).toBeCloseTo(r.totalRepayment, 2);
+      expect(r.monthlyRepaymentBeforeBonus * 12).toBeCloseTo(r.totalRepaymentBeforeBonus, 2);
     });
   });
 
-  describe('calculateInterestWithBonus', () => {
-    test('calculates correctly without bonus', () => {
-      const result = service.calculateInterestWithBonus('PERSONAL', 500000, 12, 0);
-      
-      expect(result.baseInterestRate).toBe(15);
-      expect(result.effectiveInterestRate).toBe(15);
-      expect(result.bonusApplied).toBe(false);
-      expect(result.totalSavingsFromBonus).toBe(0);
-      expect(result.monthlyRepaymentAfterBonus).toBeGreaterThan(0);
+  describe('known figures', () => {
+    it('prices ₦900,000 over 12 months at 5% as ₦945,000 total / ₦78,750 monthly', () => {
+      const r = referralService.calculateInterestWithBonus('Stable Loan (12 months)', 900000, 12, 0);
+      expect(r.totalRepayment).toBeCloseTo(945000, 2);
+      expect(r.monthlyRepaymentAfterBonus).toBeCloseTo(78750, 2);
     });
 
-    test('applies bonus correctly to reduce effective rate', () => {
-      const result = service.calculateInterestWithBonus('PERSONAL', 500000, 12, 3);
-      
-      expect(result.baseInterestRate).toBe(15);
-      expect(result.effectiveInterestRate).toBe(12); // 15 - 3
-      expect(result.bonusApplied).toBe(true);
-      expect(result.totalSavingsFromBonus).toBeGreaterThan(0);
+    it('prices ₦900,000 over 4 months at 7.5% as ₦967,500 total / ₦241,875 monthly', () => {
+      const r = referralService.calculateInterestWithBonus('Quick Loan', 900000, 4, 0);
+      expect(r.totalRepayment).toBeCloseTo(967500, 2);
+      expect(r.monthlyRepaymentAfterBonus).toBeCloseTo(241875, 2);
+    });
+  });
+
+  describe('referral bonus', () => {
+    it('lowers both the total and the instalment', () => {
+      const withBonus = referralService.calculateInterestWithBonus('Quick Loan', 500000, 4, 2);
+      const withoutBonus = referralService.calculateInterestWithBonus('Quick Loan', 500000, 4, 0);
+      expect(withBonus.effectiveInterestRate).toBe(5.5);
+      expect(withBonus.totalRepayment).toBeLessThan(withoutBonus.totalRepayment);
+      expect(withBonus.monthlyRepaymentAfterBonus).toBeLessThan(withoutBonus.monthlyRepaymentAfterBonus);
     });
 
-    test('respects minimum interest floor', () => {
-      // PERSONAL floor is 5%, base is 15%. Applying 12% bonus should floor at 5%.
-      const result = service.calculateInterestWithBonus('PERSONAL', 500000, 12, 12);
-      
-      expect(result.effectiveInterestRate).toBe(5); // floored at 5%, not 3%
+    it('never drops below the product floor (half the base rate)', () => {
+      const r = referralService.calculateInterestWithBonus('Premium Loan', 1000000, 24, 12);
+      expect(r.effectiveInterestRate).toBe(7); // floor, not 2
+      expect(r.minimumInterestFloor).toBe(7);
     });
 
-    test('monthly repayment with bonus is less than without', () => {
-      const result = service.calculateInterestWithBonus('BUSINESS', 1000000, 24, 2);
-      
-      expect(result.monthlyRepaymentAfterBonus).toBeLessThan(result.monthlyRepaymentBeforeBonus);
+    it('reports totalSavingsFromBonus as the difference between the two totals', () => {
+      const r = referralService.calculateInterestWithBonus('Flexi Loan', 600000, 6, 1);
+      expect(r.totalSavingsFromBonus).toBeCloseTo(r.totalRepaymentBeforeBonus - r.totalRepayment, 2);
+      expect(r.totalSavingsFromBonus).toBeGreaterThan(0);
     });
 
-    test('total savings equals difference over tenure', () => {
-      const result = service.calculateInterestWithBonus('EMERGENCY', 300000, 6, 1);
-      
-      const expectedSavings = (result.monthlyRepaymentBeforeBonus - result.monthlyRepaymentAfterBonus) * 6;
-      expect(result.totalSavingsFromBonus).toBeCloseTo(expectedSavings, 2);
+    it('marks bonusApplied only when a bonus was passed', () => {
+      expect(referralService.calculateInterestWithBonus('Quick Loan', 100000, 4, 0).bonusApplied).toBe(false);
+      expect(referralService.calculateInterestWithBonus('Quick Loan', 100000, 4, 1).bonusApplied).toBe(true);
     });
+  });
 
-    test('handles large loan amounts correctly', () => {
-      const result = service.calculateInterestWithBonus('BUSINESS', 50000000, 60, 5);
-      
-      expect(result.monthlyRepaymentAfterBonus).toBeGreaterThan(0);
-      expect(result.loanAmount).toBe(50000000);
-      expect(result.tenureMonths).toBe(60);
+  describe('defensive tenure handling', () => {
+    it('does not divide by zero for a zero or missing tenure', () => {
+      const zero = referralService.calculateInterestWithBonus('Quick Loan', 100000, 0, 0);
+      expect(Number.isFinite(zero.monthlyRepaymentAfterBonus)).toBe(true);
+      const missing = referralService.calculateInterestWithBonus('Quick Loan', 100000, undefined, 0);
+      expect(Number.isFinite(missing.monthlyRepaymentAfterBonus)).toBe(true);
     });
   });
 });

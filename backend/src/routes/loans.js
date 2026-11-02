@@ -110,6 +110,24 @@ router.post(
         });
       }
 
+      // ── Tenure must match the product ─────────────────────────────────────
+      // Each product has a fixed tenure (Quick 4, Flexi 6, Stable 12/18,
+      // Premium 24, Maxi 36). The route previously accepted any 1–60, so a
+      // stale or crafted client could pair a 36-month tenure with a 4-month
+      // product and be priced at the wrong rate. The app always sends the
+      // product's own tenure, so this rejects only malformed requests.
+      if (!loanPolicy.isTenureAllowed(loanType, tenureMonths)) {
+        const expected = loanPolicy.LOAN_TENURES[loanType];
+        return res.status(400).json({
+          success: false,
+          code: 'INVALID_TENURE',
+          error: expected
+            ? `A ${loanType} has a fixed tenure of ${expected} months.`
+            : `The tenure for a ${loanType} must be between 1 and 60 months.`,
+          expectedTenureMonths: expected ?? null,
+        });
+      }
+
       // ── KYC gate ──────────────────────────────────────────────────────────
       // A loan is credit: the member's identity must be verified before an
       // application can be reviewed. This was enforced only in the app, and

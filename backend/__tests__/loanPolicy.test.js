@@ -102,6 +102,60 @@ describe('loanPolicy', () => {
       expect(loanPolicy.countContributionMonths([])).toBe(0);
       expect(loanPolicy.countContributionMonths(undefined)).toBe(0);
     });
+
+    it('counts a settled contribution recorded as completed, approved or paid', () => {
+      // The server used to accept only 'successful' while the app and the
+      // wallet counted 'completed' too, so a member saw "eligible" and then a
+      // 403. The settled sets must agree.
+      const months = loanPolicy.countContributionMonths([
+        { status: 'completed', contribution_month: '2026-01' },
+        { status: 'approved', contribution_month: '2026-02' },
+        { status: 'paid', contribution_month: '2026-03' },
+        { status: 'successful', contribution_month: '2026-04' },
+      ]);
+      expect(months).toBe(4);
+    });
+
+    it('still ignores pending, failed, rejected and reversed contributions', () => {
+      const months = loanPolicy.countContributionMonths([
+        { status: 'pending', contribution_month: '2026-01' },
+        { status: 'failed', contribution_month: '2026-02' },
+        { status: 'rejected', contribution_month: '2026-03' },
+        { status: 'reversed', contribution_month: '2026-04' },
+      ]);
+      expect(months).toBe(0);
+    });
+  });
+
+  describe('isTenureAllowed', () => {
+    it('accepts the fixed tenure for each product', () => {
+      expect(loanPolicy.isTenureAllowed('Quick Loan', 4)).toBe(true);
+      expect(loanPolicy.isTenureAllowed('Flexi Loan', 6)).toBe(true);
+      expect(loanPolicy.isTenureAllowed('Stable Loan (12 months)', 12)).toBe(true);
+      expect(loanPolicy.isTenureAllowed('Stable Loan (18 months)', 18)).toBe(true);
+      expect(loanPolicy.isTenureAllowed('Premium Loan', 24)).toBe(true);
+      expect(loanPolicy.isTenureAllowed('Maxi Loan', 36)).toBe(true);
+    });
+
+    it('rejects a tenure that does not belong to the product', () => {
+      // The regression: a 36-month tenure could be paired with a 4-month
+      // product and be priced at the wrong rate.
+      expect(loanPolicy.isTenureAllowed('Quick Loan', 36)).toBe(false);
+      expect(loanPolicy.isTenureAllowed('Maxi Loan', 4)).toBe(false);
+      expect(loanPolicy.isTenureAllowed('Stable Loan (12 months)', 18)).toBe(false);
+    });
+
+    it('allows the general range for legacy products with no fixed tenure', () => {
+      expect(loanPolicy.isTenureAllowed('Micro Loan', 1)).toBe(true);
+      expect(loanPolicy.isTenureAllowed('Micro Loan', 60)).toBe(true);
+    });
+
+    it('rejects non-integers and out-of-range tenures', () => {
+      expect(loanPolicy.isTenureAllowed('Micro Loan', 0)).toBe(false);
+      expect(loanPolicy.isTenureAllowed('Micro Loan', 61)).toBe(false);
+      expect(loanPolicy.isTenureAllowed('Micro Loan', 6.5)).toBe(false);
+      expect(loanPolicy.isTenureAllowed('Micro Loan', 'x')).toBe(false);
+    });
   });
 
   describe('minEligibilityDisabled', () => {
