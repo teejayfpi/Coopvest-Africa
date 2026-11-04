@@ -991,3 +991,69 @@ rate-limited (`PUBLIC_LOG_RATE_LIMIT_MAX`, keyed on `req.ip`) and attributes the
 event by the submitted **email only** - the body's `profile_id` is ignored, so a
 caller cannot attach a forged login event or a disabled-account alert to an
 arbitrary profile. Do not reintroduce trust in a body-supplied profile id here.
+
+## CI runs the suite from a backend-only checkout under Node 22
+The test suite is run by `.github/workflows/backend-tests.yml` on `push` to
+`main`. Three constraints, each learned from a red run:
+
+- **Node 22, not 20.** `@supabase/realtime-js` throws at `createClient` without
+  a native `WebSocket`, which Node 20 lacks. Every suite that imports the
+  Supabase client failed to load under Node 20 — while passing locally and in
+  production, both of which run Node 22+. If you pin Node in a workflow, pin 22.
+- **Only this repository is checked out.** Suites must not read files from a
+  sibling checkout at module load. `adminWalletOperations.test.js` read the
+  Admin-Dashboard page and `clientEndpointContracts.test.js` read the Flutter
+  loan screen; both threw `ENOENT` at require time and failed the whole suite.
+  Guard such reads with `fs.existsSync` and `describe.skip`, or the assertions
+  will never run in CI. Do not add a cross-repo read without a guard.
+- **`npm ci` against the committed lockfile.** A test that passes against a
+  local `node_modules` can still fail here. Reproduce with a clean install in a
+  copy of `backend/` before trusting a local green.
+
+`deploy-backend.yml` (Render) depends on the Backend Tests job, so a failing
+suite blocks the deploy.
+
+## Production serves every dependency version - the app is Node 22+
+`render.yaml` pins no Node version, so Render uses its current default (22+).
+This is why the app works in production but the suite failed under Node 20.
+If you ever need to lower the Node version, `ws` is already a dependency and
+must be passed to `createClient` as the Realtime transport.
+
+## The Admin-Dashboard deploys through Vercel's Git integration, not Actions
+Vercel builds every push to `main` for `coopvestafrica-ops/Admin-Dashboard`
+(the project `admin-dashboard-api-server` is Git-linked to that repo). The
+GitHub Actions workflow does **not** deploy: it previously ran `vercel --prod`
+with a `VERCEL_TOKEN` secret that is invalid, so it failed on every run from at
+least 2026-10-28 while the site kept deploying normally.
+
+Consequences to preserve:
+- The deploy gate lives in `vercel.json` as
+  `buildCommand: npm run typecheck && npm run build`. Putting a gate in the
+  Actions workflow does nothing for this repo — it is not on the deploy path.
+  `vite build` uses esbuild, which strips types without checking them, so
+  without the typecheck in the build command a type error deploys happily.
+- Do not reintroduce a second deploy path. Two paths race and the one inside
+  Vercel cannot be skipped.
+
+The `VERCEL_TOKEN` in the repository is valid (account `coopvestafrica-ops`);
+the stored GitHub secret is stale. Update it only if a Vercel API call from
+Actions is actually needed.
+
+## Server errors alert operators over the webhook
+`errorHandler` calls `alertService.sendSystemErrorAlert` for 5xx responses.
+This uses the existing `ALERT_WEBHOOK_URL` channel, not email, so it does not
+depend on SMTP. Alerts are throttled to one per `SYSTEM_ALERT_MIN_INTERVAL_MS`
+(default 5 minutes) and the next alert reports how many were suppressed — a
+failing dependency makes every request fail at once, and an unthrottled channel
+gets muted exactly when it is needed. The method never throws: it runs on the
+error path, so a failed alert must not become a second error. 4xx does not
+alert — a bad request is not an incident.
+
+## The secret scanner must match the real leak, not a longer shape
+The connection-string pattern in `.github/workflows/secret-scanning.yml` is
+`postgresql://postgres\.[A-Za-z0-9_.%-]{12,}@`. It previously required 100+
+characters, which is longer than a real leaked password, so it never fired. The
+same shape is in the history scan, which otherwise only looked for a JWT-style
+service key. Test a new pattern against the actual value before committing it,
+and confirm it does not match `governanceSchema.js`, which builds the URL from
+`encodeURIComponent(DB_PASSWORD)` and must not be flagged.
