@@ -237,11 +237,13 @@ describe('admin referral settings', () => {
     expect(fs.existsSync(path.join(__dirname, '..', 'migrations', '058_referral_settings.sql'))).toBe(true);
   });
 
-  it('the settings write persists the enabled flag', () => {
+  it('the settings write persists the enabled flag to the real column', () => {
     const src = read('src/routes/adminApi.js');
     const idx = src.indexOf("router.put('/referrals/settings'");
-    const region = src.slice(idx, idx + 900);
-    expect(region).toContain('enabled:');
+    const region = src.slice(idx, idx + 1600);
+    // Persisted via the production column name, with a fallback probe.
+    expect(region).toContain('program_enabled');
+    expect(region).toContain('flagColumn');
   });
 
   it('the admin overview reports the tier table, not just a cash bonus', () => {
@@ -313,5 +315,40 @@ describe('member summary contract (must match the Flutter client)', () => {
     for (const key of ['referrals:', 'total:', 'page,', 'limit,']) {
       expect(routes).toContain(key);
     }
+  });
+});
+
+describe('referral_settings uses the production column name', () => {
+  const service = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'services', 'referralService.js'),
+    'utf8'
+  );
+  const admin = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'routes', 'adminApi.js'),
+    'utf8'
+  );
+
+  it('reads the program_enabled flag', () => {
+    expect(service).toContain('program_enabled');
+  });
+
+  it('writes program_enabled, not a bare enabled column', () => {
+    const idx = admin.indexOf("router.put('/referrals/settings'");
+    const region = admin.slice(idx, idx + 1600);
+    expect(region).toContain("program_enabled");
+    // `enabled` must only appear as the fallback probe, never as a literal
+    // payload key — writing it raised "column does not exist" in production.
+    expect(region).not.toMatch(/payload\s*=\s*\{\s*\n\s*enabled:/);
+  });
+
+  it('the migration and base schema agree with production', () => {
+    const migration = fs.readFileSync(
+      path.join(__dirname, '..', 'migrations', '058_referral_settings.sql'),
+      'utf8'
+    );
+    expect(migration).toContain('program_enabled');
+    expect(migration).toContain('INTEGER PRIMARY KEY');
+    expect(fs.readFileSync(path.join(__dirname, '..', 'supabase_schema.sql'), 'utf8'))
+      .toContain('program_enabled');
   });
 });

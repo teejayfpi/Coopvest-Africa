@@ -165,15 +165,17 @@ CREATE INDEX IF NOT EXISTS idx_referral_events_confirmed ON public.referral_even
 CREATE INDEX IF NOT EXISTS idx_referral_events_flagged ON public.referral_events(is_flagged);
 
 -- Single-row program configuration (see REFERRAL.md §6). Read/written by the
--- admin API only; `bonus_per_referral` is a notional reporting value, not a
--- wallet credit.
+-- admin API only. The flag column is `program_enabled` to match production.
+-- `bonus_per_referral` is a notional reporting value, not a wallet credit.
 CREATE TABLE IF NOT EXISTS public.referral_settings (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  enabled BOOLEAN NOT NULL DEFAULT true,
-  bonus_per_referral DECIMAL(18, 2) NOT NULL DEFAULT 0,
-  max_referrals_per_user INTEGER NOT NULL DEFAULT 0,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
+  id INTEGER PRIMARY KEY DEFAULT 1,
+  program_enabled BOOLEAN DEFAULT true,
+  bonus_per_referral DECIMAL(18, 2) DEFAULT 2000,
+  max_referrals_per_user INTEGER DEFAULT 50,
+  minimum_deposit_for_bonus DECIMAL(18, 2) DEFAULT 5000,
+  bonus_payout_delay_days INTEGER DEFAULT 7,
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  CONSTRAINT referral_settings_single_row CHECK (id = 1)
 );
 
 -- -----------------------------------------------------------------------------

@@ -171,7 +171,14 @@ class ReferralService {
     };
   }
 
-  /** Read the single-row program settings. Defaults to enabled with no bonus. */
+  /**
+   * Read the single-row program settings. Defaults to enabled with no bonus.
+   *
+   * The live table uses `program_enabled` (the older column name); `enabled` is
+   * accepted too so the code works against either. Writing `enabled` to the
+   * live table fails with "column does not exist", which is why the admin
+   * settings page could not save.
+   */
   async getProgramSettings() {
     try {
       const { data, error } = await supabase
@@ -180,8 +187,9 @@ class ReferralService {
         .limit(1)
         .maybeSingle();
       if (error && error.code !== 'PGRST116') throw error;
+      const enabledFlag = data?.program_enabled ?? data?.enabled;
       return {
-        enabled: data ? data.enabled !== false : true,
+        enabled: enabledFlag !== false,
         bonusPerReferral: Number(data?.bonus_per_referral) || 0,
         maxReferralsPerUser: Number(data?.max_referrals_per_user) || 0,
       };
