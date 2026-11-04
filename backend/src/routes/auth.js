@@ -864,7 +864,13 @@ router.post('/sync', (req, res, next) => { req.skipSingleSessionCheck = true; ne
 // ─────────────────────────────────────────────────────────────────────────────
 router.post('/logout', authenticate, async (req, res) => {
   try {
-    await supabase.auth.admin.signOut(req.token);
+    // Scope `local`, not the SDK default `global`. Global revokes every refresh
+    // token for the account, so signing out on a laptop also killed a phone
+    // that was still in use — and with staff exempt from single-device login,
+    // that was the remaining thing stopping an admin using two devices.
+    // Ending the other devices is a deliberate act with its own control
+    // (DELETE /admin/sessions/user/:userId), not a side effect of logging out.
+    await supabase.auth.admin.signOut(req.token, 'local');
   } catch (err) {
     logger.warn('Admin signOut error (non-fatal):', err.message);
   }
