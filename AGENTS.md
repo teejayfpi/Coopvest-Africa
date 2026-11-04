@@ -1057,3 +1057,38 @@ same shape is in the history scan, which otherwise only looked for a JWT-style
 service key. Test a new pattern against the actual value before committing it,
 and confirm it does not match `governanceSchema.js`, which builds the URL from
 `encodeURIComponent(DB_PASSWORD)` and must not be flagged.
+
+## Supabase grants every table to anon and authenticated - revoke per table
+`ALTER DEFAULT PRIVILEGES` in `public` grants INSERT/UPDATE/DELETE to `anon` and
+`authenticated`, so **every new table arrives client-writable**. A table is only
+safe once its grants are revoked; enabling RLS alone does not do it, because a
+permissive policy on a row the caller owns still lets the caller rewrite every
+column in that row.
+
+Migration 059 fixed `profiles` by revoking table-level UPDATE and granting back
+only the columns a member may change. Migration 061 generalises that: it revokes
+write grants on all tables except a short list of user-owned, non-financial ones,
+drops the now-inert write policies, and clears the default privileges.
+
+The live audit found 96 tables still client-writable. On `wallets`,
+`transactions`, `savings` and `loans` the policy is
+`FOR ALL USING/WITH CHECK (profile_id = auth.uid())`, which a caller satisfies
+with a row they own — so a signed-in member could set their own `balance` and
+insert a `completed` deposit. Verified on the live database before the fix.
+
+When adding a table, or a column that holds money or a privilege:
+- do not assume RLS protects it; check `has_table_privilege('authenticated', ...)`;
+- a `FOR ALL` policy on an owned row is a write grant to that row, not a guard;
+- guard money columns with a trigger or a `SECURITY DEFINER` function if a client
+  ever needs to write the row.
+
+Verify a change the way migration 061 was verified: `SET LOCAL role authenticated`
+plus `set_config('request.jwt.claims', ...)` inside a transaction that is rolled
+back, so the assertion runs under the real policy without changing data.
+
+## Only migrations listed in MIGRATIONS are applied automatically
+`backend/src/config/governanceSchema.js` applies the files in its `MIGRATIONS`
+array on every boot, using the `postgres` owner role. Every other file in
+`backend/migrations/` has to be applied by hand, so a new table a route depends
+on will not exist in production just because its SQL was merged. Add the file to
+the array, and keep it idempotent - it runs on each start.
