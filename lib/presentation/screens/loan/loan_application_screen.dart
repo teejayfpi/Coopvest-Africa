@@ -9,6 +9,7 @@ import '../../../core/network/api_client.dart';
 import '../../../presentation/providers/auth_provider.dart';
 import '../../../presentation/providers/contributions/contribution_provider.dart';
 import '../../../presentation/providers/kyc_provider.dart';
+import '../../../data/models/referral_models.dart';
 import '../../../presentation/providers/referral_provider.dart';
 import '../../../presentation/providers/wallet_provider.dart';
 import '../../../presentation/widgets/common/buttons.dart';
@@ -1179,22 +1180,18 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
 
   Widget _buildReferralBonusSection(BuildContext context, WidgetRef ref, Map<String, dynamic> loanInfo) {
     final referralState = ref.watch(referralProvider);
-    final referrals = referralState.referrals;
-    final activeReferralsCount = referrals.where((r) => r.confirmed && !r.isFlagged).length;
-    
-    // Tiered interest reduction based on active referrals
-    double reduction = 0;
-    if (activeReferralsCount >= 10) {
-      reduction = 2.0;
-    } else if (activeReferralsCount >= 5) {
-      reduction = 1.0;
-    }
-    else if (activeReferralsCount >= 2) {
-      reduction = 0.5;
-    }
+    // Prefer the server-computed confirmed count; fall back to the loaded list.
+    final activeReferralsCount = referralState.confirmedCount > 0
+        ? referralState.confirmedCount
+        : referralState.referrals.where((r) => r.confirmed && !r.isFlagged).length;
+
+    // Tiered interest reduction based on confirmed referrals (REFERRAL.md §1).
+    final reduction = Referral.calculateTierBonus(activeReferralsCount);
 
     final originalInterest = (loanInfo['interest'] as num).toDouble();
-    final finalInterest = max(0.0, originalInterest - reduction);
+    // The discount can never take the rate below half the product's base rate.
+    final floor = originalInterest / 2;
+    final finalInterest = max(floor, originalInterest - reduction);
 
     return AppCard(
       backgroundColor: CoopvestColors.primary.withAlpha((255 * 0.1).toInt()),

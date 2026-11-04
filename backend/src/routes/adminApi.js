@@ -6188,36 +6188,68 @@ router.get('/analytics', async (req, res) => {
  */
 router.get('/referrals', async (req, res) => {
   try {
-    const [refs, settingsRow] = await Promise.all([
-      supabase.from('referrals').select('id, profile_id, my_referral_code, referred_by_code, referral_count, confirmed_referral_count, created_at').order('created_at', { ascending: false }).limit(100),
-      supabase.from('referral_settings').select('*').limit(1).single(),
+    const [refs, settings] = await Promise.all([
+      supabase.from('referrals').select('id, profile_id, my_referral_code, referred_by_code, referral_count, confirmed_referral_count, current_tier_bonus, created_at').order('created_at', { ascending: false }).limit(100),
+      referralService.getProgramSettings(),
     ]);
     if (refs.error) throw refs.error;
     const names = await profileNames((refs.data || []).map((r) => r.profile_id));
-    const bonusPer = settingsRow.data?.bonus_per_referral ?? 0;
-    const maxRef = settingsRow.data?.max_referrals_per_user ?? 0;
+    const bonusPer = settings.bonusPerReferral;
+
+    // Confirmed referrals recorded in the current calendar month.
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+    let confirmedThisMonth = 0;
+    try {
+      const { count } = await supabase
+        .from('referral_events')
+        .select('id', { count: 'exact', head: true })
+        .eq('confirmed', true)
+        .eq('is_flagged', false)
+        .gte('confirmed_at', monthStart.toISOString());
+      confirmedThisMonth = count || 0;
+    } catch (e) {
+      logger.warn('admin referrals: monthly confirmed lookup failed:', e.message);
+    }
+
     const leaderboard = (refs.data || [])
-      .map((r) => ({
-        rank: 0,
-        userId: r.profile_id,
-        userName: names[r.profile_id] || 'Unknown',
-        referralsMade: r.referral_count || 0,
-        bonusEarned: (r.confirmed_referral_count || 0) * bonusPer,
-        status: 'active',
-      }))
-      .sort((a, b) => b.referralsMade - a.referralsMade)
+      .map((r) => {
+        const confirmed = Number(r.confirmed_referral_count) || 0;
+        return {
+          rank: 0,
+          userId: r.profile_id,
+          userName: names[r.profile_id] || 'Unknown',
+          referralsMade: r.referral_count || 0,
+          confirmedReferrals: confirmed,
+          // The reward is a % interest discount; bonusPercent is the tier the
+          // member is on, bonusEarned is its notional cash value for reporting.
+          bonusPercent: Number(r.current_tier_bonus) || referralService.calculateTierBonus(confirmed),
+          bonusEarned: confirmed * bonusPer,
+          status: 'active',
+        };
+      })
+      .sort((a, b) => b.confirmedReferrals - a.confirmedReferrals || b.referralsMade - a.referralsMade)
       .slice(0, 10)
       .map((e, i) => ({ ...e, rank: i + 1 }));
 
-    const totalThisMonth = (refs.data || []).reduce((s, r) => s + (r.referral_count || 0), 0);
+    const totalReferrals = (refs.data || []).reduce((s, r) => s + (r.referral_count || 0), 0);
+    const totalConfirmed = (refs.data || []).reduce((s, r) => s + (Number(r.confirmed_referral_count) || 0), 0);
     res.json({
       success: true,
-      settings: { enabled: bonusPer > 0, bonusAmount: bonusPer, maxReferralsPerUser: maxRef },
+      settings: {
+        enabled: settings.enabled,
+        bonusAmount: bonusPer,
+        maxReferralsPerUser: settings.maxReferralsPerUser,
+        tiers: referralService.getTierTable(),
+      },
       leaderboard,
       analytics: {
-        totalThisMonth,
+        totalThisMonth: confirmedThisMonth,
+        totalReferrals,
+        totalConfirmed,
         totalBonusPaid: leaderboard.reduce((s, e) => s + e.bonusEarned, 0),
-        conversionRate: totalThisMonth > 0 ? Math.round(((refs.data || []).reduce((s, r) => s + (r.confirmed_referral_count || 0), 0) / totalThisMonth) * 100) : 0,
+        conversionRate: totalReferrals > 0 ? Math.round((totalConfirmed / totalReferrals) * 100) : 0,
       },
     });
   } catch (err) {
@@ -6229,10 +6261,12 @@ router.put('/referrals/settings', async (req, res) => {
   try {
     const { enabled, bonusAmount, maxReferralsPerUser } = req.body || {};
     const payload = {
+      enabled: enabled !== false,
       bonus_per_referral: bonusAmount ?? 0,
       max_referrals_per_user: maxReferralsPerUser ?? 0,
+      updated_at: new Date().toISOString(),
     };
-    const existing = await supabase.from('referral_settings').select('id').limit(1).single();
+    const existing = await supabase.from('referral_settings').select('id').limit(1).maybeSingle();
     let result;
     if (existing.data?.id) {
       result = await supabase.from('referral_settings').update(payload).eq('id', existing.data.id);

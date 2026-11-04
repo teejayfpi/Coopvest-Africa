@@ -98,9 +98,13 @@ class ReferralNotifier extends StateNotifier<ReferralState> {
     try {
       final result = await _repository.getReferralSummary();
       if (result.isSuccess && result.data != null) {
+        // confirmedCount / currentBonus drive the tier card. They were never
+        // populated, so the dashboard always rendered "None / 0% discount".
         state = state.copyWith(
           status: ReferralStatus.loaded,
           summary: result.data,
+          confirmedCount: result.data!.confirmedReferrals,
+          currentBonus: result.data!.currentTierBonus,
         );
       } else {
         state = state.copyWith(
@@ -247,9 +251,9 @@ class ReferralNotifier extends StateNotifier<ReferralState> {
     final confirmed = state.confirmedCount;
     final currentBonus = state.currentBonus;
 
-    if (currentBonus >= 4.0) {
+    if (currentBonus >= 2.0) {
       return TierProgress(
-        currentTier: 4.0,
+        currentTier: 2.0,
         tierName: 'Gold',
         nextTier: null,
         referralsToNext: 0,
@@ -258,24 +262,24 @@ class ReferralNotifier extends StateNotifier<ReferralState> {
       );
     }
 
-    if (currentBonus >= 3.0) {
+    if (currentBonus >= 1.0) {
       return TierProgress(
-        currentTier: 3.0,
+        currentTier: 1.0,
         tierName: 'Silver',
-        nextTier: 4.0,
-        referralsToNext: 6 - confirmed,
-        progress: confirmed / 6,
+        nextTier: 2.0,
+        referralsToNext: 10 - confirmed,
+        progress: (confirmed / 10).clamp(0, 1),
         isMaxTier: false,
       );
     }
 
-    if (currentBonus >= 2.0) {
+    if (currentBonus >= 0.5) {
       return TierProgress(
-        currentTier: 2.0,
+        currentTier: 0.5,
         tierName: 'Bronze',
-        nextTier: 3.0,
-        referralsToNext: 4 - confirmed,
-        progress: confirmed / 4,
+        nextTier: 1.0,
+        referralsToNext: 5 - confirmed,
+        progress: (confirmed / 5).clamp(0, 1),
         isMaxTier: false,
       );
     }
@@ -284,11 +288,11 @@ class ReferralNotifier extends StateNotifier<ReferralState> {
     return TierProgress(
       currentTier: 0,
       tierName: 'None',
-      nextTier: 2.0,
+      nextTier: 0.5,
       referralsToNext: 2 - confirmed,
-      progress: confirmed / 2,
+      progress: (confirmed / 2).clamp(0, 1),
       isMaxTier: false,
-      );
+    );
   }
 
   /// Clear error
