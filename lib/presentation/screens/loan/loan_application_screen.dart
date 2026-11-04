@@ -104,6 +104,9 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
   String? _rejectionReason;
   bool _showQrCode = false;
   bool _isSubmitting = false;
+  // The referral discount is spent per loan, so the member opts in explicitly.
+  // Defaults to on when they have one available.
+  bool _useReferralBonus = true;
   final ScrollController _scrollController = ScrollController();
 
   // Calculate monthly repayment.
@@ -673,6 +676,11 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
       // application we stop here and show the server's reason.
       final apiClient = ref.read(apiClientProvider);
       try {
+        // Without applyReferralBonus the server records the loan at full
+        // interest and the member's discount is silently unused.
+        final referralState = ref.read(referralProvider);
+        final hasBonus = referralState.currentBonus > 0 &&
+            (referralState.summary?.isBonusAvailable ?? false);
         final applyResponse = await apiClient.post('/loans/apply', data: {
           'loanType': _selectedLoanType,
           'amount': requestedAmount,
@@ -680,6 +688,7 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
           'purpose': _purposeController.text.trim(),
           'agreementAccepted': true,
           'agreementVersion': 'v1.0',
+          'applyReferralBonus': _useReferralBonus && hasBonus,
         });
 
         // /loans/apply returns { success, loan, interest, bonus }.
@@ -1207,15 +1216,29 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
           ),
           const SizedBox(height: 8),
           Text('Active Referrals: $activeReferralsCount', style: const TextStyle(fontSize: 12)),
-          if (reduction > 0)
+          if (reduction > 0) ...[
             Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Text(
                 'Interest reduced by $reduction%! (Original: $originalInterest%, New: $finalInterest%)',
                 style: const TextStyle(color: CoopvestColors.success, fontWeight: FontWeight.bold, fontSize: 12),
               ),
-            )
-          else
+            ),
+            // The discount is spent on this loan, so let the member keep it for
+            // a later loan if they would rather not use it now.
+            SwitchListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              value: _useReferralBonus,
+              onChanged: (v) => setState(() => _useReferralBonus = v),
+              title: Text(
+                _useReferralBonus
+                    ? 'Apply the discount to this loan'
+                    : 'Keep the discount for a later loan',
+                style: const TextStyle(fontSize: 12),
+              ),
+            ),
+          ] else
             const Padding(
               padding: EdgeInsets.only(top: 4),
               child: Text(

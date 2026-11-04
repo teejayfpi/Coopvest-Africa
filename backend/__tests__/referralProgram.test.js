@@ -352,3 +352,128 @@ describe('referral_settings uses the production column name', () => {
       .toContain('program_enabled');
   });
 });
+
+describe('summary key consumers', () => {
+  const files = ['src/services/referralService.js', 'src/routes/loans.js', 'src/routes/referrals.js'];
+
+  it('never read camelCase keys off the summary object', () => {
+    // getReferralSummary returns snake_case for the Flutter client. A consumer
+    // reading `summary.currentTierBonus` gets undefined, which silently became
+    // a 0% bonus instead of an error — the loan was granted at full interest.
+    const offenders = [];
+    for (const f of files) {
+      const src = fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+      const matches = src.match(/summary\.(isBonusAvailable|currentTierBonus|myReferralCode|referralCount|confirmedReferralCount|spendableReferrals)\b/g);
+      if (matches) offenders.push(`${f}: ${matches.join(', ')}`);
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('every summary key a consumer reads is one the service actually returns', () => {
+    const service = fs.readFileSync(
+      path.join(__dirname, '..', 'src', 'services', 'referralService.js'), 'utf8'
+    );
+    const returned = new Set(
+      [...service.matchAll(/^\s{8}([a-z_]+):/gm)].map((m) => m[1])
+    );
+    for (const f of files) {
+      const src = fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+      for (const m of src.matchAll(/summary\.([a-z_]+)\b/g)) {
+        expect(returned.has(m[1])).toBe(true);
+      }
+    }
+  });
+});
+
+describe('referral cap (was read from settings but never enforced)', () => {
+  it('never caps when the setting is 0 or unset', () => {
+    expect(referralService.isAtReferralCap(500, 0)).toBe(false);
+    expect(referralService.isAtReferralCap(500, undefined)).toBe(false);
+    expect(referralService.isAtReferralCap(500, null)).toBe(false);
+  });
+
+  it('caps once the existing count reaches the limit', () => {
+    expect(referralService.isAtReferralCap(4, 5)).toBe(false);
+    expect(referralService.isAtReferralCap(5, 5)).toBe(true);
+    expect(referralService.isAtReferralCap(6, 5)).toBe(true);
+  });
+
+  it('coerces string counts, since the DB returns counts as text', () => {
+    expect(referralService.isAtReferralCap('5', '5')).toBe(true);
+    expect(referralService.isAtReferralCap('4', 5)).toBe(false);
+  });
+
+  it('is actually consulted by attributeReferral', () => {
+    const src = read('src/services/referralService.js');
+    const fn = src.slice(src.indexOf('async attributeReferral'));
+    expect(fn).toContain('isAtReferralCap');
+  });
+});
+
+describe('invite landing page (/join?ref=)', () => {
+  const { renderInvitePage, sanitiseReferralCode } = require('../src/lib/invitePage');
+
+  it('is served by the app, so share links stop 404ing', () => {
+    const src = read('src/server.js');
+    expect(src).toContain("app.get('/join'");
+    expect(src).toContain('renderInvitePage');
+  });
+
+  it('carries the code through to the deep link', () => {
+    const html = renderInvitePage('ABC123');
+    expect(html).toContain('ABC123');
+    expect(html).toContain('coopvest://register?ref=ABC123');
+  });
+
+  it('still renders a usable page when no code is supplied', () => {
+    const html = renderInvitePage(undefined);
+    expect(html).toContain('coopvest://register');
+    expect(html).not.toContain('undefined');
+  });
+
+  it('escapes a hostile ref instead of injecting it into the page', () => {
+    const html = renderInvitePage('"><script>alert(1)</script>');
+    expect(html).not.toContain('<script>');
+    expect(sanitiseReferralCode('"><script>alert(1)</script>')).toBe('');
+  });
+
+  it('drops codes that are too long or contain odd characters', () => {
+    expect(sanitiseReferralCode('A'.repeat(40))).toBe('A'.repeat(20));
+    expect(sanitiseReferralCode('ab cd')).toBe('');
+    expect(sanitiseReferralCode('ok-code_1')).toBe('ok-code_1');
+  });
+});
+
+describe('referral confirmation worker', () => {
+  const worker = require('../src/workers/referralConfirmationWorker');
+
+  it('is started by the server', () => {
+    const src = read('src/server.js');
+    expect(src).toContain("require('./workers/referralConfirmationWorker')");
+    expect(src).toContain('referralConfirmationWorker.start()');
+  });
+
+  it('only confirms events the service agrees are eligible', () => {
+    const src = read('src/workers/referralConfirmationWorker.js');
+    // The gate must come from the service, not be re-implemented here, or the
+    // worker and the admin action can disagree about who qualifies.
+    expect(src).toContain('referralService.canConfirm');
+    expect(src).toContain('referralService.getQualification');
+  });
+
+  it('scans only unconfirmed, unflagged events', () => {
+    const src = read('src/workers/referralConfirmationWorker.js');
+    expect(src).toContain(".eq('confirmed', false)");
+    expect(src).toContain(".eq('is_flagged', false)");
+  });
+
+  it('swallows a tick failure instead of crashing the process', () => {
+    // A rejected tick must be logged, not thrown, or one bad night takes the
+    // whole API down. Asserted structurally: actually calling processDue()
+    // here would make a live database round-trip from a unit test.
+    const src = read('src/workers/referralConfirmationWorker.js');
+    const tick = src.slice(src.indexOf('async function processDue'));
+    expect(tick).toContain('catch (err)');
+    expect(tick).toContain('return { error: err.message }');
+  });
+});

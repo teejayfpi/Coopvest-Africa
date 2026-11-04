@@ -283,7 +283,10 @@ router.post(
       let bonusPercent = 0;
       if (applyReferralBonus) {
         const { summary } = await referralService.getReferralSummary(profileId);
-        bonusPercent = summary.isBonusAvailable ? summary.currentTierBonus : 0;
+        // getReferralSummary returns snake_case (the mobile client's contract).
+        // Reading the old camelCase keys here silently yielded 0, so the bonus
+        // was never applied at loan creation.
+        bonusPercent = summary.is_bonus_available ? summary.current_tier_bonus : 0;
       }
 
       const calc = referralService.calculateInterestWithBonus(loanType, amount, tenureMonths, bonusPercent);

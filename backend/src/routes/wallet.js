@@ -994,10 +994,15 @@ router.get('/transactions/:id/receipt', authenticate, async (req, res) => {
 /**
  * GET /api/v1/wallet/statement
  */
-router.get('/statement', authenticate, async (req, res) => {
+const handleStatement = async (req, res) => {
   try {
-    const from = req.query.from ? new Date(req.query.from).toISOString() : null;
-    const to = req.query.to ? new Date(req.query.to).toISOString() : null;
+    // The mobile client POSTs start_date/end_date; the admin tooling uses the
+    // from/to query params. Accept either so both callers work.
+    const body = req.body || {};
+    const rawFrom = req.query.from || body.start_date || body.from;
+    const rawTo = req.query.to || body.end_date || body.to;
+    const from = rawFrom ? new Date(rawFrom).toISOString() : null;
+    const to = rawTo ? new Date(rawTo).toISOString() : null;
 
     let q = supabase
       .from('transactions')
@@ -1024,7 +1029,10 @@ router.get('/statement', authenticate, async (req, res) => {
     logger.error('statement error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
-});
+};
+
+router.get('/statement', authenticate, handleStatement);
+router.post('/statement', authenticate, handleStatement);
 
 /**
  * GET /api/v1/wallet/payment-settings

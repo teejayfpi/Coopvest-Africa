@@ -264,6 +264,15 @@ app.get('/', (req, res) => {
   });
 });
 
+// Referral invite landing page. Share links and QR codes point here
+// (`/join?ref=CODE`); before this route existed they led to a 404, so every
+// shared invite was a dead end.
+const { renderInvitePage } = require('./lib/invitePage');
+
+app.get('/join', (req, res) => {
+  res.type('html').send(renderInvitePage(req.query.ref));
+});
+
 app.get('/health', (req, res) => {
   res.json({
     success: true,
@@ -628,6 +637,12 @@ guarantorInviteWorker.start();
 // findings into the case queue. Alerts admins on a new critical case.
 const fraudDetectionWorker = require('./workers/fraudDetectionWorker');
 fraudDetectionWorker.start();
+
+// Referral confirmation worker — promotes pending referrals to confirmed once
+// the invited member qualifies. Without it no referral was ever confirmed, so
+// no member could ever earn the interest discount.
+const referralConfirmationWorker = require('./workers/referralConfirmationWorker');
+referralConfirmationWorker.start();
 
 // Surface a misconfigured payment gateway at boot instead of letting members
 // discover it as an opaque "online payment failed" at checkout.
