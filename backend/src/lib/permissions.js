@@ -292,6 +292,24 @@ function roleDefinition(raw) {
   return key ? ROLES[key] : null;
 }
 
+/** The one role that is not staff. */
+const MEMBER_ROLE = 'member';
+
+/**
+ * True when `raw` resolves to an administrative role rather than a member.
+ *
+ * Note that `member` is itself a catalog role, so "is this a known role?" is a
+ * different question — a check written that way exempts every member and
+ * silently disables single-device login. This asks the narrower question.
+ *
+ * Unknown roles count as non-staff, so a bad role value never grants the
+ * exemption.
+ */
+function isStaffRole(raw) {
+  const key = resolveRole(raw);
+  return Boolean(key) && key !== MEMBER_ROLE;
+}
+
 /**
  * Effective permissions for a role.
  *
@@ -364,6 +382,7 @@ module.exports = {
   ROLES,
   resolveRole,
   roleDefinition,
+  isStaffRole,
   permissionsFor,
   hasPermission,
   hasAllPermissions,

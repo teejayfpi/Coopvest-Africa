@@ -14,6 +14,7 @@
 
 const supabase = require('../config/supabase');
 const logger = require('../utils/logger');
+const { isStaffRole } = require('../lib/permissions');
 
 /**
  * Extract the Supabase session_id from an already-verified JWT payload.
@@ -120,8 +121,14 @@ const authenticate = async (req, res, next) => {
     // claimed session yet (active_session_id IS NULL) are left alone.
     // The claim endpoint itself (/auth/sync) sets req.skipSingleSessionCheck
     // so a brand-new session can pass through and claim the session.
+    //
+    // Staff are exempt. One-device-per-account is a consumer rule that fits a
+    // member with one phone; an admin plausibly works from a laptop and a phone
+    // at once, and the eviction is silent — the losing device re-claims on its
+    // next request and quietly signs the other one out, so the admin sees
+    // unexplained logouts rather than a message. Members keep the protection.
     const tokenSessionId = decodeSessionId(token);
-    if (!req.skipSingleSessionCheck && profile.active_session_id && tokenSessionId && profile.active_session_id !== tokenSessionId) {
+    if (!req.skipSingleSessionCheck && !isStaffRole(profile.role) && profile.active_session_id && tokenSessionId && profile.active_session_id !== tokenSessionId) {
       return res.status(401).json({
         success: false,
         error: 'You have been signed in on another device. Please log in again.',
