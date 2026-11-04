@@ -1473,6 +1473,14 @@ router.post('/loans/:id/reject', async (req, res) => {
 /**
  * GET /api/v1/admin/wallets
  */
+/**
+ * GET /api/v1/admin/wallets
+ *
+ * Returns the `wallets` array (consumed by the Manual Deposits screen) and the
+ * flattened `data`/`total` shape the Wallet Management page reads. The page
+ * previously rendered an empty table and four zeroed summary cards because it
+ * reads `data`, while this endpoint only ever returned `wallets`.
+ */
 router.get('/wallets', async (req, res) => {
   try {
     const { page, limit, from, to } = paging(req);
@@ -1486,12 +1494,115 @@ router.get('/wallets', async (req, res) => {
     // one member's wallet, and previously had to query the `wallets` table
     // directly from the browser because this endpoint could only list wallets.
     if (req.query.profileId) q = q.eq('profile_id', req.query.profileId);
+    if (req.query.status) q = q.eq('status', req.query.status);
+    if (req.query.search) {
+      // Wallet rows carry no member name, so search resolves to profile ids
+      // first and filters on those.
+      const term = String(req.query.search).replace(/[%,]/g, '');
+      const { data: matches } = await supabase
+        .from('profiles')
+        .select('id')
+        .or(`name.ilike.%${term}%,email.ilike.%${term}%,user_id.ilike.%${term}%`)
+        .limit(500);
+      const ids = (matches || []).map((m) => m.id);
+      // No matching member means no matching wallet, not every wallet.
+      q = q.in('profile_id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']);
+    }
 
     const { data, error, count } = await q;
     if (error) throw error;
-    res.json({ success: true, wallets: data || [], pagination: { page, limit, total: count || 0 } });
+
+    const wallets = (data || []).map((w) => ({
+      ...w,
+      userId: w.profile?.user_id ?? null,
+      userName: w.profile?.name ?? null,
+      userEmail: w.profile?.email ?? null,
+      status: w.status || 'active',
+      lastTransactionAt: w.updated_at || w.last_updated || null,
+    }));
+
+    res.json({
+      success: true,
+      // `wallets` keeps the Manual Deposits screen working; `data`/`total` are
+      // the Wallet Management contract.
+      wallets,
+      data: wallets,
+      total: count || 0,
+      pagination: { page, limit, total: count || 0 },
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/v1/admin/wallets/stats
+ *
+ * The four summary cards on the Wallet Management page. Registered before
+ * `/wallets/:id/...` so `stats` is never read as a wallet id.
+ */
+router.get('/wallets/stats', async (_req, res) => {
+  try {
+    const { data, error } = await supabase.rpc('admin_wallet_stats');
+    if (error) throw error;
+    res.json({ success: true, ...(data || {}) });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * PATCH /api/v1/admin/wallets/:id/status — freeze / unfreeze / suspend.
+ */
+router.patch('/wallets/:id/status', async (req, res) => {
+  try {
+    const { status } = req.body || {};
+    if (!['active', 'frozen', 'suspended'].includes(status)) {
+      return res.status(400).json({ success: false, error: 'Unknown wallet status' });
+    }
+    const { data, error } = await supabase.rpc('admin_set_wallet_status', {
+      p_wallet_id: req.params.id,
+      p_status: status,
+      p_admin_id: req.user?.id || null,
+    });
+    if (error) throw error;
+    await logAdminAction('WALLET_STATUS_CHANGED', 'wallets', { wallet_id: req.params.id, status }, req);
+    res.json({ success: true, ...(data || {}) });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/v1/admin/wallets/:id/adjust — credit or debit a member wallet.
+ *
+ * The balance is computed inside `admin_adjust_wallet_balance` under a row lock
+ * rather than read here and written back, so two admins adjusting the same
+ * wallet at once cannot lose one of the two movements.
+ */
+router.post('/wallets/:id/adjust', async (req, res) => {
+  try {
+    const amount = Number(req.body?.amount);
+    const note = req.body?.note;
+    if (!Number.isFinite(amount) || amount === 0) {
+      return res.status(400).json({ success: false, error: 'Amount must be a non-zero number' });
+    }
+    const { data, error } = await supabase.rpc('admin_adjust_wallet_balance', {
+      p_wallet_id: req.params.id,
+      p_amount: amount,
+      p_note: note,
+      p_admin_id: req.user?.id || null,
+    });
+    if (error) throw error;
+    await logAdminAction(
+      'WALLET_BALANCE_ADJUSTED',
+      'wallets',
+      { wallet_id: req.params.id, amount, note },
+      req
+    );
+    res.json({ success: true, ...(data || {}) });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
   }
 });
 
