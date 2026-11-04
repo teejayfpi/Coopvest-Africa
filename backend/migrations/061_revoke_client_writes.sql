@@ -56,6 +56,18 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
   REVOKE USAGE, UPDATE ON SEQUENCES FROM anon, authenticated;
 
+-- `postgres` does not own these defaults and cannot change them, so a table
+-- created from the Supabase dashboard still arrives client-writable. Try, and
+-- carry on if the role lacks the right — the assertion below still catches the
+-- result.
+DO $$
+BEGIN
+  ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
+    REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON TABLES FROM anon, authenticated;
+EXCEPTION WHEN insufficient_privilege THEN
+  RAISE WARNING 'cannot change supabase_admin default privileges; tables created from the Supabase dashboard will still grant write access to anon/authenticated';
+END $$;
+
 -- ---------------------------------------------------------------------------
 -- 2. Signed-in members write only user-owned, non-financial tables
 -- ---------------------------------------------------------------------------
@@ -155,8 +167,22 @@ END $$;
 -- ---------------------------------------------------------------------------
 -- 4. Assert the invariant, so a future migration cannot silently undo it
 -- ---------------------------------------------------------------------------
+-- The check is "no table is client-writable except the ones deliberately kept",
+-- rather than a fixed list of sensitive tables. A new table added later would
+-- otherwise pass the check simply by not being named in it.
 DO $$
 DECLARE
+  preserve text[] := ARRAY[
+    'profiles',
+    'device_tokens',
+    'notifications',
+    'user_settings',
+    'watchlist',
+    'tickets',
+    'ticket_messages',
+    'ticket_attachments',
+    'ticket_status_history'
+  ];
   leaks text;
 BEGIN
   SELECT string_agg(c.relname, ', ' ORDER BY c.relname)
@@ -165,9 +191,12 @@ BEGIN
   JOIN pg_namespace n ON n.oid = c.relnamespace
   WHERE n.nspname = 'public'
     AND c.relkind = 'r'
-    AND c.relname IN ('wallets', 'transactions', 'savings', 'loans', 'kyc')
+    AND c.relname <> ALL (preserve)
     AND (
-      has_table_privilege('authenticated', c.oid, 'INSERT')
+      has_table_privilege('anon', c.oid, 'INSERT')
+      OR has_table_privilege('anon', c.oid, 'UPDATE')
+      OR has_table_privilege('anon', c.oid, 'DELETE')
+      OR has_table_privilege('authenticated', c.oid, 'INSERT')
       OR has_table_privilege('authenticated', c.oid, 'UPDATE')
       OR has_table_privilege('authenticated', c.oid, 'DELETE')
     );
