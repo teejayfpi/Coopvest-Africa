@@ -8,6 +8,7 @@
 
 const logger = require('../utils/logger');
 const supabase = require('../config/supabase');
+const alertService = require('../services/alertService');
 
 const errorHandler = async (err, req, res, next) => {
   logger.error(`${req.method} ${req.path} - Error:`, {
@@ -53,6 +54,22 @@ const errorHandler = async (err, req, res, next) => {
     } catch (logErr) {
       logger.warn('Failed to write error to audit_logs:', logErr.message);
     }
+
+    // Tell operators, not just the log. A 5xx previously went to the log and to
+    // audit_logs and was then seen by nobody, so a broken endpoint stayed
+    // invisible until a member reported it. Fire-and-forget: a slow or
+    // misconfigured webhook must not delay the error response, and
+    // sendSystemErrorAlert never throws.
+    alertService.sendSystemErrorAlert({
+      title: `${req.method} ${req.path} failed`,
+      message: err.message,
+      context: {
+        userId: req.user?.userId || 'anonymous',
+        ip: req.ip,
+        statusCode,
+        stack: err.stack,
+      },
+    }).catch(() => {});
   }
 
   res.status(statusCode).json({

@@ -55,8 +55,8 @@ let ran = false;
 // each at different times):
 //   - `postgres.<project-ref>` with the DB password as the password (current
 //     Supabase dashboard format).
-//   - `postgres.<DB_PASSWORD>` with no separate password (legacy format used
-//     by backend/run_migration_now.js). The DB password is `Temiloluwa@1963`.
+//   - `postgres.<DB_PASSWORD>` with no separate password (legacy format).
+//     The password is read from the environment and is never written here.
 //
 // 1. An explicit SUPABASE_DB_URL if provided (highest priority — lets the
 //    operator override with any working connection string).
@@ -65,7 +65,12 @@ let ran = false;
 // 4. session pooler (port 5432) — project-ref username.
 // 5. direct connection (db.<ref>.supabase.co:5432, IPv6 only) — bare `postgres`
 //    user with the DB password.
-const DB_PASSWORD = process.env.SUPABASE_DB_PASSWORD || 'Temiloluwa@1963';
+// No hardcoded fallback. A real password in the source is a live credential
+// leak the moment the repository is readable, and it silently shadows a
+// misconfigured deployment — the bootstrap would keep working with the old
+// password after the env var was removed or rotated. Absent config now means
+// the bootstrap is skipped with a clear warning (see ensureGovernanceSchema).
+const DB_PASSWORD = process.env.SUPABASE_DB_PASSWORD;
 const REF = 'nyoauzqezpxeonmrxxgi';
 const POOLER_HOST = 'aws-1-eu-west-1.pooler.supabase.com';
 const CONNECTION_CANDIDATES = [
@@ -80,6 +85,13 @@ async function ensureGovernanceSchema() {
   ran = true;
 
   const connectionString = process.env.SUPABASE_DB_URL;
+  if (!connectionString && !DB_PASSWORD) {
+    // Nothing to connect with. Say so plainly instead of attempting candidates
+    // built from `undefined`, which fail with a confusing auth error.
+    logger.warn('governance schema bootstrap skipped: set SUPABASE_DB_URL or SUPABASE_DB_PASSWORD to enable it');
+    logger.warn(`Schema may be incomplete until these are applied by hand: ${MIGRATIONS.join(', ')}.`);
+    return;
+  }
   const candidates = connectionString ? [connectionString, ...CONNECTION_CANDIDATES] : CONNECTION_CANDIDATES;
 
   // One connection for every migration; the pooler handshake is the slow part.
@@ -126,7 +138,11 @@ async function applyMigration(client, name) {
   try {
     sql = fs.readFileSync(sqlPath, 'utf8');
   } catch (readErr) {
-    logger.warn(`schema: migration ${name} not found, skipping`);
+    // A migration listed in MIGRATIONS but absent from the repo means the
+    // schema it describes never gets applied, and the server still starts — so
+    // this is logged as an error rather than a warning. A unit test asserts
+    // every listed file exists, so it should be caught before deploy.
+    logger.error(`schema: migration ${name} is listed in MIGRATIONS but not found at ${sqlPath}; skipping`);
     return;
   }
 

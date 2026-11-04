@@ -15,9 +15,16 @@ const ALERT_EMAIL_RECIPIENTS = process.env.ALERT_EMAIL_RECIPIENTS || '';
 const ALERT_WEBHOOK_URL = process.env.ALERT_WEBHOOK_URL || '';
 const APP_NAME = 'Coopvest Africa';
 
+// Minimum gap between system-error alerts. Overridable so a test can drive the
+// throttle without waiting.
+const SYSTEM_ALERT_MIN_INTERVAL_MS = Number(process.env.SYSTEM_ALERT_MIN_INTERVAL_MS) || 5 * 60 * 1000;
+
 class AlertService {
   constructor() {
     this.transporter = null;
+    // Throttle state for sendSystemErrorAlert (see below).
+    this._lastSystemAlertAt = 0;
+    this._suppressedSystemAlerts = 0;
   }
 
   /**
@@ -116,6 +123,56 @@ class AlertService {
       logger.info(`Email alert sent to ${recipients.length} recipients`);
     } catch (error) {
       throw new Error(`Email alert failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Alert operators that the server itself is failing.
+   *
+   * Distinct from sendCriticalAlert, which reports a risky *user action* found
+   * in the audit log. This reports the process failing, and it exists because
+   * an error that reaches errorHandler was previously written to the log and to
+   * audit_logs and then seen by nobody — a failing endpoint stayed invisible
+   * until a member reported it.
+   *
+   * Uses the webhook channel (Slack/Discord/custom) rather than email: it is
+   * already generic, and it does not depend on SMTP being configured.
+   *
+   * Never throws. Alerting sits on the error path, so a failure to alert must
+   * not be able to turn one error into two.
+   */
+  async sendSystemErrorAlert({ title, message, context }) {
+    if (!ALERT_WEBHOOK_URL) return;
+
+    // A single failing dependency makes every request 5xx at once, so without a
+    // floor this sends thousands of identical messages and the channel gets
+    // muted precisely when it is needed. Send one per window and report how many
+    // were folded into it.
+    const now = Date.now();
+    if (now - this._lastSystemAlertAt < SYSTEM_ALERT_MIN_INTERVAL_MS) {
+      this._suppressedSystemAlerts += 1;
+      return;
+    }
+    const suppressed = this._suppressedSystemAlerts;
+    this._lastSystemAlertAt = now;
+    this._suppressedSystemAlerts = 0;
+
+    const body = suppressed > 0
+      ? `${message}\n\n(${suppressed} further error(s) suppressed in the last ${Math.round(SYSTEM_ALERT_MIN_INTERVAL_MS / 1000)}s)`
+      : message;
+
+    try {
+      await this.sendWebhookAlert({
+        title: title || 'Server error',
+        riskLevel: 'HIGH',
+        userId: (context && context.userId) || 'N/A',
+        message: body,
+        auditId: 'N/A',
+        timestamp: new Date().toISOString(),
+        metadata: context || {},
+      });
+    } catch (error) {
+      logger.warn(`System error alert failed: ${error.message}`);
     }
   }
 

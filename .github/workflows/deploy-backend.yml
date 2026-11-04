@@ -13,8 +13,38 @@ env:
   RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
 
 jobs:
+  # The deploy previously ran with no verification, so a broken commit reached
+  # production unchallenged. The tests need no credentials, so this is a cheap
+  # gate. It duplicates the Backend Tests workflow on purpose: `needs` can only
+  # reference a job in the same workflow, and a reusable workflow call would
+  # not let the deploy wait on it as directly.
+  test:
+    name: Test before deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
   deploy:
     name: Deploy to Render
+    needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
