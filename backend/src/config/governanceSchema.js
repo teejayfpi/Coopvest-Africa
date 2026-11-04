@@ -27,6 +27,11 @@ const MIGRATIONS = [
   // Makes `notifications.profile_id` NOT NULL so a notification can never be
   // global again (a NULL row leaked into every member's feed).
   '056_notifications_profile_id_not_null.sql',
+  // Wallet Management was unusable without these: the dashboard calls
+  // PATCH /wallets/:id/status and POST /wallets/:id/adjust, and reads a
+  // `status` column and the summary figures. The functions compute the new
+  // balance under a row lock rather than trusting a value from the client.
+  '060_admin_wallet_operations.sql',
 ];
 
 const { Client } = require('pg');
@@ -201,7 +206,7 @@ function splitSqlStatements(sql) {
   return out;
 }
 
-module.exports = { ensureGovernanceSchema, runGovernanceDiagnostics };
+module.exports = { ensureGovernanceSchema, runGovernanceDiagnostics, splitSqlStatements };
 
 // On-demand diagnostic runner (ignores the `ran` cache). Tries every connection
 // candidate, applies each statement, and returns a structured result so the
