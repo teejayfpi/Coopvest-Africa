@@ -1092,3 +1092,19 @@ array on every boot, using the `postgres` owner role. Every other file in
 `backend/migrations/` has to be applied by hand, so a new table a route depends
 on will not exist in production just because its SQL was merged. Add the file to
 the array, and keep it idempotent - it runs on each start.
+
+**The runner does not currently run in production.** It needs
+`SUPABASE_DB_PASSWORD` or `SUPABASE_DB_URL`, and Render has neither set (only
+`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` and `SUPABASE_ANON_KEY`). On boot it
+logs `governance schema bootstrap skipped` and returns, so every migration to
+date was applied by hand. Merging a migration therefore changes nothing in
+production until someone runs it. Setting either variable activates the runner on
+the next deploy, which would apply all four listed files at once.
+
+Until that is decided, apply migrations explicitly and verify the result against
+the live database, rather than assuming a merge deployed them.
+
+`pg_default_acl` in `public` has two entries: one owned by `postgres`, one by
+`supabase_admin`. `postgres` can change its own and not the other's, so a table
+created from the Supabase dashboard still arrives client-writable. The migration
+warns rather than fails on that, and its assertion catches the result.
