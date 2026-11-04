@@ -352,3 +352,35 @@ describe('referral_settings uses the production column name', () => {
       .toContain('program_enabled');
   });
 });
+
+describe('summary key consumers', () => {
+  const files = ['src/services/referralService.js', 'src/routes/loans.js', 'src/routes/referrals.js'];
+
+  it('never read camelCase keys off the summary object', () => {
+    // getReferralSummary returns snake_case for the Flutter client. A consumer
+    // reading `summary.currentTierBonus` gets undefined, which silently became
+    // a 0% bonus instead of an error — the loan was granted at full interest.
+    const offenders = [];
+    for (const f of files) {
+      const src = fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+      const matches = src.match(/summary\.(isBonusAvailable|currentTierBonus|myReferralCode|referralCount|confirmedReferralCount|spendableReferrals)\b/g);
+      if (matches) offenders.push(`${f}: ${matches.join(', ')}`);
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('every summary key a consumer reads is one the service actually returns', () => {
+    const service = fs.readFileSync(
+      path.join(__dirname, '..', 'src', 'services', 'referralService.js'), 'utf8'
+    );
+    const returned = new Set(
+      [...service.matchAll(/^\s{8}([a-z_]+):/gm)].map((m) => m[1])
+    );
+    for (const f of files) {
+      const src = fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+      for (const m of src.matchAll(/summary\.([a-z_]+)\b/g)) {
+        expect(returned.has(m[1])).toBe(true);
+      }
+    }
+  });
+});
