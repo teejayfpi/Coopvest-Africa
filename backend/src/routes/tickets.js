@@ -266,6 +266,9 @@ const handleMemberReply = async (req, res) => {
 
 router.post('/:id/messages', [param('id').isUUID(), body('content').optional().isString()], validate, handleMemberReply);
 router.post('/:id/reply', [param('id').isUUID()], validate, handleMemberReply);
+// The mobile client posts to /replies (plural). Accept both so the two
+// spellings cannot drift apart again.
+router.post('/:id/replies', [param('id').isUUID()], validate, handleMemberReply);
 
 /**
  * PATCH /api/v1/tickets/:id/close  (also accepts PATCH /:id with {status})

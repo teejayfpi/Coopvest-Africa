@@ -100,6 +100,13 @@ class ReferralService {
       && this.isLockInComplete(event, now);
   }
 
+  /** Has a referrer reached the configured cap? 0 or unset means no cap. */
+  isAtReferralCap(existingCount, cap) {
+    const limit = Number(cap) || 0;
+    if (limit <= 0) return false;
+    return Number(existingCount) >= limit;
+  }
+
   /** Qualification rules for a referred member. REFERRAL.md §2. */
   evaluateQualification({ kycVerified, consecutiveSavingsMonths }, requiredMonths = MINIMUM_SAVINGS_MONTHS) {
     const months = Number(consecutiveSavingsMonths) || 0;
@@ -419,6 +426,20 @@ class ReferralService {
 
     const abuse = await this.checkForAbuse(referrer.profile_id, referredProfileId);
     if (abuse.isDuplicate) return { success: false, error: abuse.reason };
+
+    // Enforce the per-referrer cap. It was read from settings and displayed but
+    // never checked, so the setting did nothing. 0 means "no cap".
+    const cap = Number(settings.maxReferralsPerUser) || 0;
+    if (cap > 0) {
+      const { count, error: cErr } = await supabase
+        .from('referral_events')
+        .select('id', { count: 'exact', head: true })
+        .eq('referrer_id', referrer.profile_id);
+      if (cErr) throw cErr;
+      if (this.isAtReferralCap(count, cap)) {
+        return { success: false, error: 'This referrer has reached the maximum number of referrals' };
+      }
+    }
 
     const lockInEnd = new Date();
     lockInEnd.setDate(lockInEnd.getDate() + LOCK_IN_DAYS);
