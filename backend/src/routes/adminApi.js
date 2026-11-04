@@ -6260,8 +6260,27 @@ router.get('/referrals', async (req, res) => {
 router.put('/referrals/settings', async (req, res) => {
   try {
     const { enabled, bonusAmount, maxReferralsPerUser } = req.body || {};
+    // The live table column is `program_enabled`, not `enabled`. Writing the
+    // wrong name raised "column does not exist" and the settings page silently
+    // failed to save. Detect the real column so this works on either schema.
+    let flagColumn = 'program_enabled';
+    try {
+      const { data: cols } = await supabase
+        .from('information_schema.columns')
+        .select('column_name')
+        .eq('table_schema', 'public')
+        .eq('table_name', 'referral_settings')
+        .in('column_name', ['enabled', 'program_enabled']);
+      const names = (cols || []).map((c) => c.column_name);
+      if (!names.includes('program_enabled') && names.includes('enabled')) {
+        flagColumn = 'enabled';
+      }
+    } catch (e) {
+      logger.warn('admin referrals: settings column probe failed:', e.message);
+    }
+
     const payload = {
-      enabled: enabled !== false,
+      [flagColumn]: enabled !== false,
       bonus_per_referral: bonusAmount ?? 0,
       max_referrals_per_user: maxReferralsPerUser ?? 0,
       updated_at: new Date().toISOString(),
