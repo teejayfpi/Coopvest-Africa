@@ -15,10 +15,16 @@ const path = require('path');
 const read = (rel) => fs.readFileSync(path.join(__dirname, '..', rel), 'utf8');
 const adminApi = read('src/routes/adminApi.js');
 const migration = read('migrations/060_admin_wallet_operations.sql');
-const page = fs.readFileSync(
-  path.join(__dirname, '..', '..', '..', 'Admin-Dashboard', 'src', 'pages', 'wallet-management', 'index.tsx'),
-  'utf8'
+// The dashboard lives in a sibling repository, which a single-repo CI checkout
+// does not have. Reading it unconditionally made this suite fail to load there
+// (ENOENT at require time), which is why it never ran in CI. Read it when it is
+// present and skip the assertions that need it otherwise — the API and SQL
+// assertions above do not depend on it.
+const DASHBOARD_PAGE = path.join(
+  __dirname, '..', '..', '..', 'Admin-Dashboard', 'src', 'pages', 'wallet-management', 'index.tsx'
 );
+const page = fs.existsSync(DASHBOARD_PAGE) ? fs.readFileSync(DASHBOARD_PAGE, 'utf8') : null;
+const describeWithPage = page ? describe : describe.skip;
 
 describe('wallet routes exist', () => {
   it('serves PATCH /wallets/:id/status', () => {
@@ -58,7 +64,6 @@ describe('wallet list shape', () => {
 
   it('still returns `wallets`, which the Manual Deposits screen reads', () => {
     expect(adminApi).toContain('wallets,');
-    expect(page).toContain('/api/admin/wallets/stats');
   });
 
   it('maps the member name and email the table renders', () => {
@@ -120,7 +125,7 @@ describe('balance adjustment SQL guards', () => {
   });
 });
 
-describe('dashboard page', () => {
+describeWithPage('dashboard page', () => {
   it('reads the stats endpoint for its summary cards', () => {
     expect(page).toContain('/api/admin/wallets/stats');
     expect(page).toContain('wallet-stats');
