@@ -50,14 +50,15 @@ class Referral extends Equatable {
     this.minimumSavingsDate,
   });
 
-  // Tier configuration
+  // Tier configuration. Mirrors the backend (REFERRAL.md §1): a confirmed
+  // referral count maps to an interest discount.
   static const Map<int, double> tierThresholds = {
-    2: 2.0, // 2 referrals = 2% reduction
-    4: 3.0, // 4 referrals = 3% reduction
-    6: 4.0, // 6 referrals = 4% reduction (max)
+    2: 0.5, // 2 referrals = 0.5% reduction
+    5: 1.0, // 5 referrals = 1% reduction
+    10: 2.0, // 10 referrals = 2% reduction (max)
   };
 
-  static const double maxBonusPercent = 4.0;
+  static const double maxBonusPercent = 2.0;
   static const int lockInDays = 30; // 30-day lock-in period
   static const int minimumSavingsMonths = 3;
 
@@ -121,9 +122,9 @@ class Referral extends Equatable {
 
   // Calculate tier bonus based on confirmed referral count
   static double calculateTierBonus(int confirmedReferralCount) {
-    if (confirmedReferralCount >= 6) return maxBonusPercent;
-    if (confirmedReferralCount >= 4) return 3.0;
-    if (confirmedReferralCount >= 2) return 2.0;
+    if (confirmedReferralCount >= 10) return maxBonusPercent;
+    if (confirmedReferralCount >= 5) return 1.0;
+    if (confirmedReferralCount >= 2) return 0.5;
     return 0;
   }
 
@@ -143,9 +144,9 @@ class Referral extends Equatable {
 
   // Get tier description
   String get tierDescription {
-    if (tierBonusPercent >= 4.0) return 'Gold Tier (4% OFF)';
-    if (tierBonusPercent >= 3.0) return 'Silver Tier (3% OFF)';
-    if (tierBonusPercent >= 2.0) return 'Bronze Tier (2% OFF)';
+    if (tierBonusPercent >= 2.0) return 'Gold Tier (2% OFF)';
+    if (tierBonusPercent >= 1.0) return 'Silver Tier (1% OFF)';
+    if (tierBonusPercent >= 0.5) return 'Bronze Tier (0.5% OFF)';
     return 'No Bonus Yet';
   }
 
@@ -203,15 +204,15 @@ class ReferralSummary extends Equatable {
 
   // Progress to next tier
   int get referralsToNextTier {
-    if (currentTierBonus >= 4.0) return 0; // Max tier reached
-    if (currentTierBonus >= 3.0) return 6 - confirmedReferrals;
-    if (currentTierBonus >= 2.0) return 4 - confirmedReferrals;
+    if (currentTierBonus >= 2.0) return 0; // Max tier reached
+    if (currentTierBonus >= 1.0) return 10 - confirmedReferrals;
+    if (currentTierBonus >= 0.5) return 5 - confirmedReferrals;
     return 2 - confirmedReferrals;
   }
 
   double get progressToNextTier {
-    if (currentTierBonus >= 4.0) return 1.0;
-    final target = currentTierBonus >= 3.0 ? 6 : (currentTierBonus >= 2.0 ? 4 : 2);
+    if (currentTierBonus >= 2.0) return 1.0;
+    final target = currentTierBonus >= 1.0 ? 10 : (currentTierBonus >= 0.5 ? 5 : 2);
     return (confirmedReferrals / target).clamp(0, 1);
   }
 
@@ -276,6 +277,11 @@ class LoanInterestCalculation extends Equatable {
   final int tenureMonths;
   final double monthlyRepaymentBeforeBonus;
   final double monthlyRepaymentAfterBonus;
+  // Authoritative simple-interest totals; the instalments above are derived
+  // from these, so `monthlyRepaymentAfterBonus × tenureMonths` equals
+  // `totalRepaymentAfterBonus` exactly (REFERRAL.md §1).
+  final double totalRepaymentAfterBonus;
+  final double totalRepaymentBeforeBonus;
   final double totalSavingsFromBonus;
   final double minimumInterestFloor;
   final bool bonusApplied;
@@ -290,18 +296,25 @@ class LoanInterestCalculation extends Equatable {
     required this.tenureMonths,
     required this.monthlyRepaymentBeforeBonus,
     required this.monthlyRepaymentAfterBonus,
+    required this.totalRepaymentAfterBonus,
+    required this.totalRepaymentBeforeBonus,
     required this.totalSavingsFromBonus,
     required this.minimumInterestFloor,
     this.bonusApplied = true,
     this.bonusNotAppliedReason,
   });
 
-  // Minimum interest floors per loan type
+  // Minimum interest floors per loan type = half the base rate (REFERRAL.md §1).
   static const Map<String, double> minimumInterestFloors = {
-    'Quick Loan': 5.0,
-    'Flexi Loan': 6.0,
-    'Emergency Loan': 7.0,
-    'Business Loan': 8.0,
+    'Quick Loan': 3.75,
+    'Flexi Loan': 3.5,
+    'Stable Loan (12 months)': 2.5,
+    'Stable Loan (18 months)': 3.5,
+    'Premium Loan': 7.0,
+    'Maxi Loan': 9.5,
+    'Micro Loan': 9.0,
+    'Business Loan': 10.0,
+    'Emergency Loan': 6.0,
   };
 
   // Calculate interest with bonus
@@ -314,7 +327,7 @@ class LoanInterestCalculation extends Equatable {
     bool bonusAvailable = true,
     String? bonusNotAppliedReason,
   }) {
-    final minimumFloor = minimumInterestFloors[loanType] ?? 5.0;
+    final minimumFloor = minimumInterestFloors[loanType] ?? baseInterestRate / 2;
     
     // Check if bonus can be applied
     final bool bonusApplied = bonusAvailable && referralBonusPercent > 0;
@@ -329,17 +342,17 @@ class LoanInterestCalculation extends Equatable {
         ? (baseInterestRate - referralBonusPercent).clamp(minimumFloor, baseInterestRate)
         : baseInterestRate;
 
-    // Calculate monthly repayments using simple interest formula
-    // EMI = P * r * (1+r)^n / ((1+r)^n - 1)
-    final monthlyRate = effectiveRate / 100 / 12;
-    final emiAfterBonus = loanAmount * monthlyRate * pow(1 + monthlyRate, tenureMonths) / 
-        (pow(1 + monthlyRate, tenureMonths) - 1);
-    
-    final monthlyRateBefore = baseInterestRate / 100 / 12;
-    final emiBeforeBonus = loanAmount * monthlyRateBefore * pow(1 + monthlyRateBefore, tenureMonths) / 
-        (pow(1 + monthlyRateBefore, tenureMonths) - 1);
-
-    final totalSavings = (emiBeforeBonus - emiAfterBonus) * tenureMonths;
+    // Total repayment is the authoritative figure: simple interest
+    // (amount + amount * rate / 100). The instalment is derived from the total,
+    // never a separate reducing-balance EMI — the two disagreed and the
+    // member's summary, schedule and admin reports read the instalment while
+    // arrears read the total. Mirrors `referralService.calculateInterestWithBonus`.
+    final tenure = tenureMonths > 0 ? tenureMonths : 1;
+    final totalAfterBonus = loanAmount + (loanAmount * effectiveRate / 100);
+    final totalBeforeBonus = loanAmount + (loanAmount * baseInterestRate / 100);
+    final monthlyAfterBonus = totalAfterBonus / tenure;
+    final monthlyBeforeBonus = totalBeforeBonus / tenure;
+    final totalSavings = totalBeforeBonus - totalAfterBonus;
 
     return LoanInterestCalculation(
       loanType: loanType,
@@ -348,9 +361,11 @@ class LoanInterestCalculation extends Equatable {
       effectiveInterestRate: effectiveRate,
       loanAmount: loanAmount,
       tenureMonths: tenureMonths,
-      monthlyRepaymentBeforeBonus: emiBeforeBonus,
-      monthlyRepaymentAfterBonus: emiAfterBonus,
-      totalSavingsFromBonus: totalSavings,
+      monthlyRepaymentBeforeBonus: monthlyBeforeBonus,
+      monthlyRepaymentAfterBonus: monthlyAfterBonus,
+      totalRepaymentAfterBonus: totalAfterBonus,
+      totalRepaymentBeforeBonus: totalBeforeBonus,
+      totalSavingsFromBonus: totalSavings < 0 ? 0 : totalSavings,
       minimumInterestFloor: minimumFloor,
       bonusApplied: bonusApplied,
       bonusNotAppliedReason: reason,
@@ -367,6 +382,10 @@ class LoanInterestCalculation extends Equatable {
       tenureMonths: json['tenure_months'] as int,
       monthlyRepaymentBeforeBonus: (json['monthly_repayment_before_bonus'] as num).toDouble(),
       monthlyRepaymentAfterBonus: (json['monthly_repayment_after_bonus'] as num).toDouble(),
+      totalRepaymentAfterBonus: (json['total_repayment'] as num?)?.toDouble() ??
+          (json['monthly_repayment_after_bonus'] as num).toDouble() * (json['tenure_months'] as int),
+      totalRepaymentBeforeBonus: (json['total_repayment_before_bonus'] as num?)?.toDouble() ??
+          (json['monthly_repayment_before_bonus'] as num).toDouble() * (json['tenure_months'] as int),
       totalSavingsFromBonus: (json['total_savings_from_bonus'] as num).toDouble(),
       minimumInterestFloor: (json['minimum_interest_floor'] as num).toDouble(),
       bonusApplied: json['bonus_applied'] as bool? ?? true,
@@ -384,6 +403,8 @@ class LoanInterestCalculation extends Equatable {
       'tenure_months': tenureMonths,
       'monthly_repayment_before_bonus': monthlyRepaymentBeforeBonus,
       'monthly_repayment_after_bonus': monthlyRepaymentAfterBonus,
+      'total_repayment': totalRepaymentAfterBonus,
+      'total_repayment_before_bonus': totalRepaymentBeforeBonus,
       'total_savings_from_bonus': totalSavingsFromBonus,
       'minimum_interest_floor': minimumInterestFloor,
       'bonus_applied': bonusApplied,
@@ -401,18 +422,11 @@ class LoanInterestCalculation extends Equatable {
     tenureMonths,
     monthlyRepaymentBeforeBonus,
     monthlyRepaymentAfterBonus,
+    totalRepaymentAfterBonus,
+    totalRepaymentBeforeBonus,
     totalSavingsFromBonus,
     minimumInterestFloor,
     bonusApplied,
     bonusNotAppliedReason,
   ];
-}
-
-/// Helper function for power calculation
-double pow(double base, int exponent) {
-  double result = 1.0;
-  for (int i = 0; i < exponent; i++) {
-    result *= base;
-  }
-  return result;
 }

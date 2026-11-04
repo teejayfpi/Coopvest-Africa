@@ -187,7 +187,13 @@ class ReferralRepository {
       final response = await _apiService.calculateInterestWithBonus(request);
 
       if (response.success && response.calculation != null) {
-        return ApiResult.success(response.calculation!);
+        // The backend returns its calculation as a JSON map; convert it. A
+        // raw map would be a type error against ApiResult<LoanInterestCalculation>.
+        return ApiResult.success(
+          LoanInterestCalculation.fromJson(
+            Map<String, dynamic>.from(response.calculation as Map),
+          ),
+        );
       } else {
         // Calculate locally
         final calculation = LoanInterestCalculation.calculate(
@@ -247,14 +253,19 @@ class ReferralRepository {
     return Referral.calculateTierBonus(confirmedReferralCount);
   }
 
-  /// Get base interest rate for loan type
+  /// Get base interest rate for loan type. Mirrors REFERRAL.md §1.
   double _getBaseInterestRate(String loanType) {
     switch (loanType) {
-      case 'Quick Loan': return 5.0;
-      case 'Flexi Loan': return 6.0;
-      case 'Emergency Loan': return 7.0;
-      case 'Business Loan': return 8.0;
-      default: return 5.0;
+      case 'Quick Loan': return 7.5;
+      case 'Flexi Loan': return 7.0;
+      case 'Stable Loan (12 months)': return 5.0;
+      case 'Stable Loan (18 months)': return 7.0;
+      case 'Premium Loan': return 14.0;
+      case 'Maxi Loan': return 19.0;
+      case 'Micro Loan': return 18.0;
+      case 'Business Loan': return 20.0;
+      case 'Emergency Loan': return 12.0;
+      default: return 7.5;
     }
   }
 
@@ -267,8 +278,8 @@ class ReferralRepository {
       pendingReferrals: 3,
       confirmedReferrals: 4,
       totalReferrals: 7,
-      currentTierBonus: 3.0,
-      currentTierDescription: 'Silver Tier (3% OFF)',
+      currentTierBonus: 0.5,
+      currentTierDescription: 'Bronze Tier (0.5% OFF)',
       isBonusAvailable: true,
       nextBonusUnlockDate: null,
       recentReferrals: _getMockReferrals().take(5).toList(),
@@ -288,7 +299,7 @@ class ReferralRepository {
         confirmed: true,
         confirmationDate: now.subtract(const Duration(days: 45)),
         lockInEndDate: now.subtract(const Duration(days: 15)),
-        tierBonusPercent: 2.0,
+        tierBonusPercent: 0.5,
         bonusConsumed: false,
         kycVerified: true,
         savingsCriteriaMet: true,
@@ -307,7 +318,7 @@ class ReferralRepository {
         confirmed: true,
         confirmationDate: now.subtract(const Duration(days: 60)),
         lockInEndDate: now.subtract(const Duration(days: 30)),
-        tierBonusPercent: 3.0,
+        tierBonusPercent: 0.5,
         bonusConsumed: false,
         kycVerified: true,
         savingsCriteriaMet: true,
@@ -326,7 +337,7 @@ class ReferralRepository {
         confirmed: true,
         confirmationDate: now.subtract(const Duration(days: 90)),
         lockInEndDate: now.subtract(const Duration(days: 60)),
-        tierBonusPercent: 4.0,
+        tierBonusPercent: 0.5,
         bonusConsumed: true,
         bonusUsedLoanId: 'LOAN-001',
         kycVerified: true,
@@ -346,7 +357,7 @@ class ReferralRepository {
         confirmed: true,
         confirmationDate: now.subtract(const Duration(days: 75)),
         lockInEndDate: now.subtract(const Duration(days: 45)),
-        tierBonusPercent: 4.0,
+        tierBonusPercent: 0.5,
         bonusConsumed: false,
         kycVerified: true,
         savingsCriteriaMet: true,

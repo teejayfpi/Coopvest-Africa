@@ -1,9 +1,9 @@
 /**
  * Referrals Routes
  *
- * Thin Supabase-backed endpoints. Heavy business logic (tier bonuses,
- * abuse checks, loan discount consumption) lives in
- * `services/referralService.js`.
+ * Thin Supabase-backed endpoints. Heavy business logic (tier bonuses, abuse
+ * checks, qualification gating, loan discount consumption) lives in
+ * `services/referralService.js`. See `REFERRAL.md` for the program rules.
  */
 
 const express = require('express');
@@ -62,12 +62,11 @@ router.get('/my-code', async (req, res) => {
   try {
     const row = await ensureReferralRow(req.user.id);
     const referralCode = row.my_referral_code;
-    const baseUrl = process.env.APP_BASE_URL || process.env.FRONTEND_URL || 'https://coopvestafrica.com';
-    const qrCodeUrl = `${baseUrl}/join?ref=${referralCode}`;
+    const baseUrl = process.env.APP_BASE_URL || 'https://coopvestafrica.com';
     res.json({
       success: true,
       referralCode,
-      qrCodeUrl,
+      qrCodeUrl: `${baseUrl}/join?ref=${referralCode}`,
     });
   } catch (err) {
     logger.error('referral my-code error:', err);
@@ -142,50 +141,26 @@ router.get('/', async (req, res) => {
 });
 
 /**
- * GET /api/v1/referrals/:referralId — get a single referral event
+ * POST /api/v1/referrals/claim — called by a new signup to credit their referrer
  */
-router.get('/:referralId', [param('referralId').notEmpty()], validate, async (req, res) => {
-  try {
-    const { data, error } = await supabase
-      .from('referral_events')
-      .select('*, referred:profiles!referral_events_referred_id_fkey(id, name, email)')
-      .eq('id', req.params.referralId)
-      .eq('referrer_id', req.user.id)
-      .maybeSingle();
-    if (error) throw error;
-    if (!data) return res.status(404).json({ success: false, error: 'Referral not found' });
-    res.json({ success: true, referral: data });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+router.post(
+  '/claim',
+  [body('referralCode').isString().isLength({ min: 4, max: 20 })],
+  validate,
+  async (req, res) => {
+    try {
+      const result = await referralService.attributeReferral({
+        referralCode: req.body.referralCode,
+        referredProfileId: req.user.id,
+        referredName: req.user.name || null,
+      });
+      if (!result.success) return res.status(400).json({ success: false, error: result.error });
+      res.status(201).json({ success: true, event: result.event });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
   }
-});
-
-/**
- * GET /api/v1/referrals/:referralId/status
- */
-router.get('/:referralId/status', [param('referralId').notEmpty()], validate, async (req, res) => {
-  try {
-    const { data, error } = await supabase
-      .from('referral_events')
-      .select('*, referred:profiles!referral_events_referred_id_fkey(id, kyc_verified)')
-      .eq('id', req.params.referralId)
-      .maybeSingle();
-    if (error) throw error;
-    if (!data) return res.status(404).json({ success: false, error: 'Referral not found' });
-
-    res.json({
-      success: true,
-      qualified: data.confirmed === true,
-      kycVerified: data.referred?.kyc_verified === true,
-      savingsCriteriaMet: false,
-      consecutiveSavingsMonths: 0,
-      requiredSavingsMonths: 3,
-      isFlagged: data.is_flagged === true,
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
+);
 
 /**
  * POST /api/v1/referrals/register — register a referral at sign-up
@@ -200,34 +175,14 @@ router.post(
   validate,
   async (req, res) => {
     try {
-      const { referralCode, referredUserId } = req.body;
-      const { data: referrer, error: rErr } = await supabase
-        .from('referrals')
-        .select('profile_id')
-        .eq('my_referral_code', referralCode)
-        .maybeSingle();
-      if (rErr) throw rErr;
-      if (!referrer) return res.status(404).json({ success: false, error: 'Referral code not found' });
-
-      const lockInEnd = new Date();
-      lockInEnd.setDate(lockInEnd.getDate() + 30);
-
-      const { data: event, error } = await supabase
-        .from('referral_events')
-        .insert({
-          referral_id: `REF-${Date.now()}`,
-          referrer_id: referrer.profile_id,
-          referred_id: referredUserId,
-          confirmed: false,
-          is_flagged: false,
-          bonus_consumed: false,
-          lock_in_end_date: lockInEnd.toISOString(),
-        })
-        .select('*')
-        .single();
-      if (error) throw error;
-
-      res.status(201).json({ success: true, referral: event });
+      const { referralCode, referredUserId, referredUserName } = req.body;
+      const result = await referralService.attributeReferral({
+        referralCode,
+        referredProfileId: referredUserId,
+        referredName: referredUserName,
+      });
+      if (!result.success) return res.status(400).json({ success: false, error: result.error });
+      res.status(201).json({ success: true, referral: result.event });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
     }
@@ -235,20 +190,29 @@ router.post(
 );
 
 /**
+ * POST /api/v1/referrals/events/:id/confirm — lifecycle hook for admin or
+ * email verification; enforces lock-in + qualification and refreshes the tier.
+ * Declared before the generic `/:referralId/...` routes so the literal
+ * `events` segment is not captured as a referral id.
+ */
+router.post('/events/:id/confirm', [param('id').isUUID()], validate, async (req, res) => {
+  try {
+    const result = await referralService.confirmReferralEvent(req.params.id);
+    if (!result.success) return res.status(400).json({ success: false, error: result.error });
+    res.json({ success: true, event: result.event, qualification: result.qualification });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * POST /api/v1/referrals/:referralId/confirm
  */
 router.post('/:referralId/confirm', [param('referralId').notEmpty()], validate, async (req, res) => {
   try {
-    const { data: event, error } = await supabase
-      .from('referral_events')
-      .update({ confirmed: true, confirmed_at: new Date().toISOString() })
-      .eq('id', req.params.referralId)
-      .select('*')
-      .maybeSingle();
-    if (error) throw error;
-    if (!event) return res.status(404).json({ success: false, error: 'Referral not found' });
-    await referralService.updateReferrerTier(event.referrer_id);
-    res.json({ success: true, referral: event });
+    const result = await referralService.confirmReferralEvent(req.params.referralId);
+    if (!result.success) return res.status(400).json({ success: false, error: result.error });
+    res.json({ success: true, referral: result.event, qualification: result.qualification });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -263,7 +227,7 @@ router.post(
   validate,
   async (req, res) => {
     try {
-      const { loanId, loanType, loanAmount, tenureMonths } = req.body;
+      const { loanId, loanType } = req.body;
       const result = await referralService.applyBonusToLoan(req.user.id, loanId, loanType);
       res.json({ success: true, bonusPercent: result?.bonusPercent || 0, message: result?.message });
     } catch (err) {
@@ -286,79 +250,49 @@ router.post('/calculate-interest', async (req, res) => {
 });
 
 /**
- * POST /api/v1/referrals/claim — called by a new signup to credit referrer
+ * GET /api/v1/referrals/:referralId/status
  */
-router.post(
-  '/claim',
-  [body('referralCode').isString().isLength({ min: 4, max: 20 })],
-  validate,
-  async (req, res) => {
-    try {
-      const { referralCode } = req.body;
-      const { data: referrer, error: rErr } = await supabase
-        .from('referrals')
-        .select('profile_id')
-        .eq('my_referral_code', referralCode)
-        .maybeSingle();
-      if (rErr) throw rErr;
-      if (!referrer) return res.status(404).json({ success: false, error: 'Referral code not found' });
-
-      const abuse = await referralService.checkForAbuse(referrer.profile_id, req.user.id);
-      if (abuse.isDuplicate) {
-        return res.status(400).json({ success: false, error: abuse.reason });
-      }
-
-      const lockInEnd = new Date();
-      lockInEnd.setDate(lockInEnd.getDate() + 30);
-
-      const { data: event, error } = await supabase
-        .from('referral_events')
-        .insert({
-          referral_id: `REF-${Date.now()}`,
-          referrer_id: referrer.profile_id,
-          referred_id: req.user.id,
-          confirmed: false,
-          is_flagged: false,
-          bonus_consumed: false,
-          lock_in_end_date: lockInEnd.toISOString(),
-        })
-        .select('*')
-        .single();
-      if (error) throw error;
-
-      const { data: current } = await supabase
-        .from('referrals')
-        .select('referral_count')
-        .eq('profile_id', referrer.profile_id)
-        .maybeSingle();
-      await supabase
-        .from('referrals')
-        .update({ referral_count: (current?.referral_count || 0) + 1 })
-        .eq('profile_id', referrer.profile_id);
-
-      res.status(201).json({ success: true, event });
-    } catch (err) {
-      res.status(500).json({ success: false, error: err.message });
-    }
-  }
-);
-
-/**
- * POST /api/v1/referrals/events/:id/confirm — lifecycle hook for admin or
- * email verification; marks a referral as confirmed and refreshes tier.
- */
-router.post('/events/:id/confirm', [param('id').isUUID()], validate, async (req, res) => {
+router.get('/:referralId/status', [param('referralId').notEmpty()], validate, async (req, res) => {
   try {
-    const { data: event, error } = await supabase
+    const { data, error } = await supabase
       .from('referral_events')
-      .update({ confirmed: true, confirmed_at: new Date().toISOString() })
-      .eq('id', req.params.id)
-      .select('*')
+      .select('*, referred:profiles!referral_events_referred_id_fkey(id, kyc_verified)')
+      .eq('id', req.params.referralId)
       .maybeSingle();
     if (error) throw error;
-    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
-    await referralService.updateReferrerTier(event.referrer_id);
-    res.json({ success: true, event });
+    if (!data) return res.status(404).json({ success: false, error: 'Referral not found' });
+
+    const qualification = await referralService.getQualification(data.referred_id);
+    res.json({
+      success: true,
+      qualified: qualification.qualified,
+      kycVerified: qualification.kycVerified,
+      savingsCriteriaMet: qualification.savingsCriteriaMet,
+      consecutiveSavingsMonths: qualification.consecutiveSavingsMonths,
+      requiredSavingsMonths: qualification.requiredSavingsMonths,
+      isFlagged: data.is_flagged === true,
+      lockInComplete: referralService.isLockInComplete(data),
+      confirmed: data.confirmed === true,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/v1/referrals/:referralId — get a single referral event
+ */
+router.get('/:referralId', [param('referralId').notEmpty()], validate, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('referral_events')
+      .select('*, referred:profiles!referral_events_referred_id_fkey(id, name, email)')
+      .eq('id', req.params.referralId)
+      .eq('referrer_id', req.user.id)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ success: false, error: 'Referral not found' });
+    res.json({ success: true, referral: data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

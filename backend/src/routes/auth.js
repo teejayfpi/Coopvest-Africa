@@ -26,6 +26,7 @@ const newAuthClient = () => createClient(
 );
 const logger = require('../utils/logger');
 const activationGate = require('../lib/activationGate');
+const referralService = require('../services/referralService');
 const { planProfileChannelUpdate } = require('../lib/contributionChannel');
 const {
   hasValue,
@@ -211,6 +212,20 @@ router.post('/register', [
       termsVersion: terms_version || null,
       termsAcceptedAt: terms_accepted_at || null,
     });
+
+    // Attribute the referral server-side. Best-effort: a bad or self-referral
+    // code must never fail a registration that otherwise succeeded.
+    if (referralCode && profile?.id) {
+      try {
+        await referralService.attributeReferral({
+          referralCode,
+          referredProfileId: profile.id,
+          referredName: profile.name || name || null,
+        });
+      } catch (refErr) {
+        logger.warn('Registration referral attribution failed:', refErr.message);
+      }
+    }
 
     // If no session (email confirmation required), return minimal response.
     if (!data.session) {

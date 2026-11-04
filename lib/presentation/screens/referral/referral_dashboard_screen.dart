@@ -143,8 +143,10 @@ class ReferralDashboardScreen extends ConsumerWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('${tierProgress.currentTier.toStringAsFixed(0)}% discount', style: TextStyle(color: context.textSecondary, fontSize: 12)),
-              if (!tierProgress.isMaxTier) Text('${tierProgress.referralsToNext} more to ${tierProgress.nextTier!.toStringAsFixed(0)}%', style: const TextStyle(color: CoopvestColors.primary, fontWeight: FontWeight.bold, fontSize: 12)),
+              // 0.5% and 2% both need one decimal, so toStringAsFixed(0)
+              // rendered the entry tier as "1% discount" and "0%".
+              Text('${tierProgress.currentTier.toStringAsFixed(1)}% discount', style: TextStyle(color: context.textSecondary, fontSize: 12)),
+              if (!tierProgress.isMaxTier) Text('${tierProgress.referralsToNext} more to ${tierProgress.nextTier!.toStringAsFixed(1)}%', style: const TextStyle(color: CoopvestColors.primary, fontWeight: FontWeight.bold, fontSize: 12)),
             ],
           ),
         ],

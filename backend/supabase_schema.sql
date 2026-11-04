@@ -155,6 +155,7 @@ CREATE TABLE IF NOT EXISTS public.referral_events (
   bonus_consumed BOOLEAN DEFAULT false,
   consumed_at TIMESTAMPTZ,
   tier_bonus_percent DECIMAL(5, 2) DEFAULT 0,
+  lock_in_end_date TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -162,6 +163,18 @@ CREATE TABLE IF NOT EXISTS public.referral_events (
 CREATE INDEX IF NOT EXISTS idx_referral_events_referrer ON public.referral_events(referrer_id);
 CREATE INDEX IF NOT EXISTS idx_referral_events_confirmed ON public.referral_events(confirmed);
 CREATE INDEX IF NOT EXISTS idx_referral_events_flagged ON public.referral_events(is_flagged);
+
+-- Single-row program configuration (see REFERRAL.md §6). Read/written by the
+-- admin API only; `bonus_per_referral` is a notional reporting value, not a
+-- wallet credit.
+CREATE TABLE IF NOT EXISTS public.referral_settings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  enabled BOOLEAN NOT NULL DEFAULT true,
+  bonus_per_referral DECIMAL(18, 2) NOT NULL DEFAULT 0,
+  max_referrals_per_user INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
 
 -- -----------------------------------------------------------------------------
 -- Wallet + transactions
