@@ -66,7 +66,11 @@ void main() {
         loanAmount: 900000,
         tenureMonths: 12,
       );
-      expect(r.totalRepayment, closeTo(945000, 0.01));
+      // No bonus here, so the before/after totals coincide. Assert both, since
+      // the invariant is that the instalment times the tenure equals the
+      // after-bonus total exactly.
+      expect(r.totalRepaymentBeforeBonus, closeTo(945000, 0.01));
+      expect(r.totalRepaymentAfterBonus, closeTo(945000, 0.01));
       expect(r.monthlyRepaymentAfterBonus * 12, closeTo(945000, 0.01));
     });
 

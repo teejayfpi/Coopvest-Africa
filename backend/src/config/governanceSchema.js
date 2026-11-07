@@ -39,6 +39,7 @@ const MIGRATIONS = [
   // policies, and clears the default privileges so new tables are not born
   // client-writable. Verified against the live database.
   '061_revoke_client_writes.sql',
+  '062_atomic_wallet_operations.sql',
 ];
 
 const { Client } = require('pg');

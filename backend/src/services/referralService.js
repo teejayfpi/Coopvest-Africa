@@ -344,10 +344,33 @@ class ReferralService {
       return { success: false, bonusApplied: false, error: 'No referral bonus available' };
     }
 
-    await supabase
+    // Claim the event and mark it consumed in one statement. The previous
+    // version selected a candidate and then updated it unconditionally, so two
+    // simultaneous applications both read `bonus_consumed = false` and both
+    // applied the same bonus. The `.eq('bonus_consumed', false)` is what makes
+    // the claim atomic: only the caller whose UPDATE matches a row wins, and
+    // the winner is recorded as the one that consumed it.
+    const { data: claimed, error: claimError } = await supabase
       .from('referral_events')
-      .update({ bonus_consumed: true, consumed_at: new Date().toISOString() })
-      .eq('id', event.id);
+      .update({
+        bonus_consumed: true,
+        consumed_at: new Date().toISOString(),
+        consumed_by_loan_id: loanId || null,
+      })
+      .eq('id', event.id)
+      .eq('bonus_consumed', false)
+      .select('id');
+
+    if (claimError) throw claimError;
+
+    // No row matched: another application claimed this event first.
+    if (!claimed || claimed.length === 0) {
+      return {
+        success: false,
+        bonusApplied: false,
+        error: 'This referral bonus was just applied to another loan. Please try again.',
+      };
+    }
 
     await this.logAuditEvent('BONUS_CONSUMED', profileId, {
       referralId: event.referral_id,
@@ -363,6 +386,28 @@ class ReferralService {
       loanId,
       message: `Referral bonus of ${bonusPercent}% applied successfully`,
     };
+  }
+
+  /**
+   * Undo a bonus claim whose loan was never written.
+   *
+   * applyBonusToLoan consumes the event before the loan insert so the discount
+   * cannot outlive a failed claim. That ordering means a failed insert must
+   * give the referral back, or the member loses a bonus they still hold.
+   */
+  async releaseBonusClaim(loanUuid) {
+    if (!loanUuid) return;
+    const { error } = await supabase
+      .from('referral_events')
+      .update({ bonus_consumed: false, consumed_at: null, consumed_by_loan_id: null })
+      .eq('consumed_by_loan_id', loanUuid)
+      .eq('bonus_consumed', true);
+    if (error) {
+      // The claim stays consumed. Log loudly rather than throw: the caller is
+      // already handling the failed insert, and masking that error would be
+      // worse than an over-consumed referral.
+      logger.error(`[referral] could not release bonus claim for loan ${loanUuid}:`, error.message);
+    }
   }
 
   /** Recompute a referrer's confirmed count and tier from their events. */

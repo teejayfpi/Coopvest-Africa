@@ -56,7 +56,7 @@ class TermsContent {
   TermsContent._();
 
   /// Version of the bundled document. Bump whenever the text changes.
-  static const String version = '2026-09-01';
+  static const String version = '2026-11-03';
 
   static const List<TermsSection> sections = [
     TermsSection(
@@ -81,6 +81,15 @@ class TermsContent {
           'terms, subject to applicable law and the cooperative\'s bylaws.\n\n'
           '6. These terms are governed by the laws of the Federal Republic of '
           'Nigeria.',
+    ),
+    TermsSection(
+      id: 'fees_and_charges',
+      title: 'Fees & Charges',
+      summary:
+          'Every charge Coopvest Africa applies, with the amount, so nothing '
+          'comes as a surprise.',
+      body:
+          'Coopvest Africa charges the following, and nothing else. Each charge, its amount, and when it applies are set out below so you know exactly what to expect before you commit any money.\n\n1. Registration fee — ₦5,000, one time. Non-refundable. It is added to your first monthly contribution. If you join through an employer that deducts contributions at source, it is recovered through that deduction instead of being paid in the app.\n\n2. Monthly contribution — ₦5,000 minimum. This is your own money, held in your savings. It is not a charge.\n\n3. Monthly administrative fee — ₦1,500, made up of the AGM levy (₦1,000) and the Development levy (₦500). If your contributions are deducted by an employer, this is recovered from your salary and is not charged again in the app.\n\n4. Loan interest — simple interest, charged once on the amount you borrow, at the rate shown for the product you choose before you apply: Stable Loan (12 months) 5%; Flexi Loan 7%; Stable Loan (18 months) 7%; Quick Loan 7.5%; Premium Loan 14%; Maxi Loan 19%. The total you repay is the amount borrowed plus this interest. There is no application fee, no processing fee, and no penalty for repaying early.\n\n5. Late repayment fine — ₦3,000. This applies only after two consecutive missed monthly repayments, never on the first. It is recorded as a separate obligation and is not added to your loan balance.\n\n6. Guarantor liability — standing as a guarantor is not a charge, but it is a real liability: you accept joint responsibility for that loan if the borrower defaults. It ends when the loan is fully repaid.\n\n7. We do not apply any charge that is not listed here. There is no withdrawal fee, no fee for repaying a loan early, and no account-maintenance charge beyond the monthly administrative fee at item 3. If we introduce a new charge, or change an amount, we will tell you in the app before it takes effect and update this page.',
     ),
     TermsSection(
       id: 'contribution_policy',

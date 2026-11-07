@@ -16,6 +16,9 @@ import '../loan/qr_scanner_screen.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../providers/kyc_provider.dart';
+import '../../providers/terms_provider.dart';
+import '../../../data/models/terms_content.dart';
+import '../auth/terms_section_screen.dart';
 import 'package:share_plus/share_plus.dart';
 import 'edit_profile_screen.dart';
 import 'bank_accounts_screen.dart';
@@ -168,6 +171,11 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
           'icon': Icons.share_outlined,
           'label': 'Share App',
           'subtitle': 'Invite friends to Coopvest',
+        },
+        {
+          'icon': Icons.receipt_long_outlined,
+          'label': 'Fees & Charges',
+          'subtitle': 'Every charge we apply, with the amount',
         },
         {
           'icon': Icons.policy_outlined,
@@ -586,6 +594,9 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
           MaterialPageRoute(builder: (context) => const NotificationsScreen()),
         );
         break;
+      case 'Fees & Charges':
+        _openFeesAndCharges();
+        break;
       case 'Privacy Policy':
         _showPrivacyPolicyDialog();
         break;
@@ -641,6 +652,38 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
         // Handle other taps
         break;
     }
+  }
+
+  /// Open the fees disclosure in full.
+  ///
+  /// Members who joined before the disclosure existed never accepted it during
+  /// onboarding, and a member cannot be bound by a charge they were never
+  /// shown. Rather than let a stale bundled copy speak for us, this reads the
+  /// same document the backend serves, so the member sees the current figures.
+  Future<void> _openFeesAndCharges() async {
+    final doc = await ref.read(termsDocumentProvider.future);
+    final matches = doc.sections.where((s) => s.id == 'fees_and_charges');
+    final TermsSection? section = matches.isEmpty ? null : matches.first;
+
+    if (!mounted) return;
+
+    if (section == null) {
+      // An older backend that predates the section. Say so rather than
+      // silently showing nothing, which would read as "no fees apply".
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'The fee schedule is unavailable right now. Please try again, or '
+            'contact support for the current list of charges.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => TermsSectionScreen(section: section)),
+    );
   }
 
   void _showPrivacyPolicyDialog() {

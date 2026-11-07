@@ -434,86 +434,36 @@ router.post('/deposits/:id/verify', async (req, res) => {
     const { id } = req.params;
     const { notes } = req.body; // optional admin notes
 
-    // Get deposit request
-    const { data: deposit, error: fetchErr } = await supabase
-      .from('deposit_requests')
-      .select('*, transaction:transactions(*)')
-      .eq('id', id)
-      .maybeSingle();
+    // One function: it locks the request, re-checks that it is still pending,
+    // credits the wallet, completes the transaction and marks the request
+    // verified, all or nothing. The previous version read the request, then
+    // credited the wallet, then updated the request as three separate steps —
+    // two concurrent verifications both passed the pending check and both
+    // credited, and a failure in between left the money credited with the
+    // request still pending, so it could be credited again.
+    const { data, error } = await supabase.rpc('verify_deposit_request', {
+      p_deposit_id: id,
+      p_admin_id: req.user.id,
+      p_notes: notes || null,
+    });
 
-    if (fetchErr) throw fetchErr;
-    if (!deposit) {
-      return res.status(404).json({ success: false, error: 'Deposit request not found' });
+    if (error) {
+      const msg = error.message || 'Verification failed';
+      const status = /not found/i.test(msg) ? 404
+        : /already|cannot verify|greater than zero|cannot be credited/i.test(msg) ? 400
+        : 500;
+      logger.warn(`admin deposit verify rejected: ${msg}`);
+      return res.status(status).json({ success: false, error: msg });
     }
 
-    if (deposit.status !== 'pending') {
-      return res.status(400).json({
-        success: false,
-        error: `Deposit already ${deposit.status}. Cannot verify.`
-      });
-    }
-
-    const profileId = deposit.profile_id;
-    const amount = Number(deposit.amount);
-
-    // Credit user's wallet
-    const wallet = await ensureWallet(profileId);
-    const newBalance = Number(wallet.balance) + amount;
-
-    // Update wallet balance
-    const { data: updatedWallet, error: walletErr } = await supabase
-      .from('wallets')
-      .update({
-        balance: newBalance,
-        last_updated: new Date().toISOString()
-      })
-      .eq('id', wallet.id)
-      .select()
-      .single();
-
-    if (walletErr) throw walletErr;
-
-    // Update transaction to completed
-    if (deposit.transaction_id) {
-      await supabase
-        .from('transactions')
-        .update({
-          status: 'completed',
-          completed_at: new Date().toISOString(),
-          balance_before: wallet.balance,
-          balance_after: newBalance,
-          metadata: {
-            ...(deposit.transaction?.metadata || {}),
-            verified_by: req.user.id,
-            verified_at: new Date().toISOString(),
-            deposit_request_id: id,
-          }
-        })
-        .eq('id', deposit.transaction_id);
-    }
-
-    // Update deposit request status
-    const { data: updatedDeposit, error: updateErr } = await supabase
-      .from('deposit_requests')
-      .update({
-        status: 'verified',
-        verified_by: req.user.id,
-        verified_at: new Date().toISOString(),
-        admin_notes: notes || null,
-      })
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (updateErr) throw updateErr;
-
-    logger.info(`Deposit ${id} verified by admin ${req.user.id}: ₦${amount} to user ${profileId}`);
+    const amount = Number(data.amount);
+    logger.info(`Deposit ${id} verified by admin ${req.user.id}: ₦${amount} to user ${data.profile_id}`);
 
     res.json({
       success: true,
       message: `Deposit of ₦${amount.toLocaleString()} has been verified and credited to wallet.`,
-      deposit: updatedDeposit,
-      wallet: updatedWallet,
+      deposit: data.deposit,
+      wallet: { balance: data.balance_after },
     });
   } catch (err) {
     logger.error('admin deposit verify error:', err);
@@ -613,60 +563,18 @@ router.post('/deposits/bulk-verify', async (req, res) => {
     const results = { verified: [], failed: [] };
 
     for (const id of deposit_ids) {
-      try {
-        // Get deposit request
-        const { data: deposit } = await supabase
-          .from('deposit_requests')
-          .select('*, transaction:transactions(*)')
-          .eq('id', id)
-          .maybeSingle();
+      // Each verification is its own transaction inside the function, so one
+      // failure does not roll back the ones already applied.
+      const { data, error } = await supabase.rpc('verify_deposit_request', {
+        p_deposit_id: id,
+        p_admin_id: req.user.id,
+        p_notes: null,
+      });
 
-        if (!deposit || deposit.status !== 'pending') {
-          results.failed.push({ id, reason: 'Not found or not pending' });
-          continue;
-        }
-
-        const profileId = deposit.profile_id;
-        const amount = Number(deposit.amount);
-
-        // Credit wallet
-        const wallet = await ensureWallet(profileId);
-        const newBalance = Number(wallet.balance) + amount;
-
-        await supabase
-          .from('wallets')
-          .update({
-            balance: newBalance,
-            last_updated: new Date().toISOString()
-          })
-          .eq('id', wallet.id);
-
-        // Update transaction
-        if (deposit.transaction_id) {
-          await supabase
-            .from('transactions')
-            .update({
-              status: 'completed',
-              completed_at: new Date().toISOString(),
-              balance_before: wallet.balance,
-              balance_after: newBalance,
-            })
-            .eq('id', deposit.transaction_id);
-        }
-
-        // Update deposit request
-        await supabase
-          .from('deposit_requests')
-          .update({
-            status: 'verified',
-            verified_by: req.user.id,
-            verified_at: new Date().toISOString(),
-          })
-          .eq('id', id);
-
-        results.verified.push({ id, amount });
-      } catch (err) {
-        results.failed.push({ id, reason: err.message });
+      if (error) {
+        results.failed.push({ id, reason: error.message || 'Verification failed' });
+      } else {
+        results.verified.push({ id, amount: Number(data.amount) });
       }
     }
 
@@ -682,9 +590,6 @@ router.post('/deposits/bulk-verify', async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
-
-// Import ensureWallet from wallet routes for use here
-const { ensureWallet } = require('./wallet');
 
 /**
  * POST /api/v1/admin/migrate-deposit-requests

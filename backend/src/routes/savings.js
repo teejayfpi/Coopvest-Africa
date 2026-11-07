@@ -2,8 +2,9 @@
  * Savings Routes
  *
  * Savings balances are stored per profile in `savings`. Named savings goals
- * live in `savings_goals`. Deposits and withdrawals flow through the
- * wallet helpers so every movement has a matching transaction row.
+ * live in `savings_goals`. Deposits and withdrawals go through the
+ * `savings_move` database function, so the wallet and savings balances change
+ * together and every movement has a matching transaction row.
  */
 
 const express = require('express');
@@ -15,7 +16,6 @@ const { authenticate } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const logger = require('../utils/logger');
 const notifyService = require('../services/notifyService');
-const { adjustBalance, recordTransaction, ensureWallet } = require('./wallet');
 
 router.use(authenticate);
 
@@ -34,24 +34,6 @@ async function getOrCreateSavings(profileId) {
     .single();
   if (cErr) throw cErr;
   return created;
-}
-
-async function adjustSavings(profileId, delta) {
-  const row = await getOrCreateSavings(profileId);
-  const newBalance = Number(row.balance) + Number(delta);
-  if (newBalance < 0) {
-    const err = new Error('Insufficient savings balance');
-    err.statusCode = 400;
-    throw err;
-  }
-  const { data, error } = await supabase
-    .from('savings')
-    .update({ balance: newBalance })
-    .eq('id', row.id)
-    .select('*')
-    .single();
-  if (error) throw error;
-  return data;
 }
 
 /**
@@ -77,15 +59,20 @@ router.post(
   async (req, res) => {
     try {
       const { amount, goalId, description } = req.body;
-      await adjustBalance(req.user.id, -Number(amount));
-      const savings = await adjustSavings(req.user.id, Number(amount));
-      const txn = await recordTransaction(req.user.id, {
-        type: 'debit',
-        category: 'savings_deposit',
-        amount,
-        description: description || 'Savings deposit',
-        meta: goalId ? { goalId } : {},
+      // One call: the wallet debit, the savings credit and the ledger row take
+      // effect together, with both balances read under a row lock.
+      const { data, error } = await supabase.rpc('savings_move', {
+        p_profile_id: req.user.id,
+        p_amount: Number(amount),
+        p_direction: 'deposit',
+        p_description: description || null,
       });
+      if (error) {
+        const msg = error.message || 'Deposit failed';
+        return res.status(/insufficient|greater than zero|blocked/i.test(msg) ? 400 : 500)
+          .json({ success: false, error: msg });
+      }
+      const savings = { id: data.savings_id, balance: data.savings_balance };
 
       if (goalId) {
         const { data: goal } = await supabase
@@ -102,7 +89,7 @@ router.post(
         }
       }
 
-      res.status(201).json({ success: true, savings, transaction: txn });
+      res.status(201).json({ success: true, savings, transaction: data.transaction });
     } catch (err) {
       logger.error('savings deposit error:', err);
       res.status(err.statusCode || 500).json({ success: false, error: err.message });
@@ -120,15 +107,21 @@ router.post(
   async (req, res) => {
     try {
       const { amount, description } = req.body;
-      const savings = await adjustSavings(req.user.id, -Number(amount));
-      await ensureWallet(req.user.id);
-      await adjustBalance(req.user.id, Number(amount));
-      const txn = await recordTransaction(req.user.id, {
-        type: 'credit',
-        category: 'savings_withdrawal',
-        amount,
-        description: description || 'Savings withdrawal',
+      // As with deposit: the savings debit, the wallet credit and the ledger
+      // row are one atomic move, so a failure cannot leave the money in neither
+      // or both balances.
+      const { data, error } = await supabase.rpc('savings_move', {
+        p_profile_id: req.user.id,
+        p_amount: Number(amount),
+        p_direction: 'withdraw',
+        p_description: description || null,
       });
+      if (error) {
+        const msg = error.message || 'Withdrawal failed';
+        return res.status(/insufficient|greater than zero|blocked/i.test(msg) ? 400 : 500)
+          .json({ success: false, error: msg });
+      }
+      const savings = { id: data.savings_id, balance: data.savings_balance };
 
       // Money has left the member's savings and landed in their wallet. Alert
       // admins so a withdrawal wave is visible the moment it happens.
@@ -140,7 +133,7 @@ router.post(
         priority: 'normal',
       }).catch((err) => logger.warn('savings withdraw: admin notify failed (non-fatal):', err.message));
 
-      res.status(201).json({ success: true, savings, transaction: txn });
+      res.status(201).json({ success: true, savings, transaction: data.transaction });
     } catch (err) {
       res.status(err.statusCode || 500).json({ success: false, error: err.message });
     }

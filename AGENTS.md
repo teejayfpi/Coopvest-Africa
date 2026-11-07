@@ -354,6 +354,33 @@ approval step. Table + one-pending-per-member unique index:
 `backend/migrations/032_withdrawal_requests.sql`. The endpoint returns 503 with
 a friendly message when that migration hasn't been applied yet.
 
+## Money movements are single database functions
+
+Never move a balance with a read-then-write. `const b = row.balance; update({ balance: b + delta })`
+loses updates under concurrency, and a sequence of such statements leaves the
+wallet, the ledger and the owning record disagreeing when one step fails.
+
+Every balance change goes through one `SECURITY DEFINER` function that locks the
+rows it touches (`SELECT ... FOR UPDATE`) and does the whole movement — balance,
+ledger row, owning record — in a single transaction. Migration 062 adds:
+
+| Function | Purpose |
+|---|---|
+| `wallet_transfer` | member-to-member transfer; locks both wallets |
+| `wallet_loan_repayment` | wallet → loan; rejects a repayment above the balance |
+| `savings_move` | wallet ↔ savings, `p_direction` = `deposit`/`withdraw` |
+| `verify_deposit_request` | admin deposit approval; locks the request |
+
+Two rules follow from this:
+
+- **Lock order is fixed** (e.g. wallets ordered by `id`) so opposite-direction
+  transfers cannot deadlock. Keep any new multi-row function consistent.
+- **These functions do not check `auth.uid()`** — they trust the profile id they
+  are handed. So `EXECUTE` is revoked from `PUBLIC, anon, authenticated` and
+  granted to `service_role` only. A new function must do the same, and the route
+  must pass the *authenticated caller's* id, never an id from the request body.
+  `backend/__tests__/securityReviewFixes.test.js` asserts both.
+
 ## Schema gotchas found against the live DB
 - `bank_accounts` uses `is_primary`, **not** `is_default`. The backend routes and
   the mobile bank-account/withdrawal screens must all read/write `is_primary` —
@@ -365,6 +392,17 @@ a friendly message when that migration hasn't been applied yet.
   NOT EXISTS profile_id/bank_account_id/description/processed_by/processed_at`.
 - `contribution_plans` has a FK to `profiles(id)` and `UNIQUE (profile_id)`, so
   `.upsert(..., { onConflict: 'profile_id' })` is safe.
+- `transactions.category` only permits `'credit'` and `'debit'`. The *kind* of
+  movement belongs in `type` (`savings_deposit`, `loan_repayment`, …). Writing
+  `category: 'savings_deposit'` violates `transactions_category_check` and
+  throws — and in the savings routes it threw *after* the wallet and savings
+  balances had already been moved, so every deposit/withdrawal broke silently.
+- `handle_new_user` (trigger on `auth.users`) derives `user_id` as
+  `USR-` + the first 8 characters of the profile UUID, and `user_id` is UNIQUE.
+  When seeding two test users, give them UUIDs with **different first-8
+  prefixes** or the second insert fails on `profiles_user_id_key`. The trigger
+  also auto-creates the profile, wallet, savings and user_settings rows, so do
+  not insert a `profiles` row by hand for a freshly inserted `auth.users` row.
 
 
 ## `handle_payment_proof_approval` never wrote a contribution (fixed, 033)
@@ -1108,3 +1146,79 @@ the live database, rather than assuming a merge deployed them.
 `supabase_admin`. `postgres` can change its own and not the other's, so a table
 created from the Supabase dashboard still arrives client-writable. The migration
 warns rather than fails on that, and its assertion catches the result.
+
+## Published charges must equal levied charges
+
+Every charge a member bears is declared once, in
+`backend/src/config/feeDisclosure.js`. The routes and workers that levy a charge
+import the amount from there, and the member-facing disclosure
+(`backend/src/config/terms.json`, section `fees_and_charges`) is checked against
+the same constants by `backend/__tests__/feeDisclosure.test.js`.
+
+The reason for the indirection is that the two sides get edited separately for
+different reasons - someone tunes the penalty, someone rewrites the leaflet -
+and they drift. A disclosure that says ₦3,000 while the code charges ₦5,000 is
+worse than no disclosure: the member relied on it.
+
+So when a charge changes:
+
+1. Change the constant in `feeDisclosure.js`.
+2. Update the `fees_and_charges` body in `terms.json` to match, and bump its
+   `version`.
+3. Mirror the same edit into `lib/data/models/terms_content.dart` (the offline
+   fallback) and bump its bundled `version` to match.
+4. `npx jest feeDisclosure` must pass. It fails if any published figure is not a
+   known charge, or if a levied amount is not published.
+
+Do not hardcode an amount at a call site. `loans.js` and `loanRecoveryWorker.js`
+both read `LATE_REPAYMENT_FINE`; the worker's notification text interpolates
+`FINE_LABEL` rather than quoting a figure, so a change cannot leave a stale
+number in a member's inbox. A test asserts no template literal in the worker
+contains a hardcoded naira amount.
+
+Charges the member does **not** bear do not go in the disclosure - and the
+disclosure says so explicitly, because a member reading a fee list reasonably
+wonders about the ones that are absent. Today it states there is no withdrawal
+fee, no early-repayment penalty, and no account-maintenance charge beyond the
+monthly administrative fee. Those negatives are verified, not assumed: the
+savings, termination and loan routes apply no fee.
+
+### The disclosure must reach existing members, not only new ones
+
+Onboarding requires every terms section to be opened and accepted, so a new
+member meets the disclosure. A member who joined earlier does not - and there is
+no re-acceptance mechanism keyed on `terms_version`, so bumping the version does
+not pull anyone back through onboarding. The entry point for them is
+Profile → Settings → About → **Fees & Charges**, which reads the same document
+the backend serves rather than the bundled copy, so they see current figures.
+
+If a change to charges should be actively acknowledged by existing members, that
+is a separate piece of work: nothing today compares the stored `terms_version`
+against the current one.
+
+### The corporate website publishes the same figures, from the same source
+
+`GET /api/v1/fees` (`backend/src/routes/fees.js`) serves the schedule as JSON,
+derived entirely from `feeDisclosure.js`. It is public, like `/api/v1/terms`.
+
+The website repository (`coopvestafrica-ops/coopvest-website-`) builds its
+Schedule of Charges page from that response. `tools/sync_fee_schedule.py` fetches
+it into `src/data/fee-schedule.json`, and `build.py` renders the page from that
+file - no figure is typed into the page, and `tools/check_charges.py` fails the
+build if one is.
+
+Two consequences worth knowing:
+
+- **A change to a charge now lands in three places, not two.** After editing
+  `feeDisclosure.js`, run `python3 tools/sync_fee_schedule.py && python3 build.py`
+  in the website repository and commit the result. The website's Verify job
+  rebuilds and fails if the committed pages are stale.
+- **The website deploy fetches this endpoint before building**, and that step is
+  fatal on failure. If the backend is unreachable the website deploy stops rather
+  than publishing a stale price. `build.py` itself makes no network call, because
+  it runs offline in CI.
+
+So the endpoint's shape is a contract with a repository outside this one. Adding a
+field is safe; renaming or removing `charges[].amount`, `charges[].label`,
+`loan_interest_rates` or `not_charged` breaks the website build. If the shape must
+change, change both repositories in the same session.
