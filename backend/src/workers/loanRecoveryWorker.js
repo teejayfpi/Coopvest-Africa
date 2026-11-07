@@ -7,7 +7,8 @@
  *     Automated repayment reminders sent via email and in-app notifications.
  *
  *   Stage 2 — 2nd consecutive missed month:
- *     A ₦3,000 late repayment charge is applied to the outstanding balance.
+ *     A ₦3,000 late repayment fine is recorded as a separate obligation (a
+ *     `member_fees` row). It is not added to the loan balance.
  *     An escalation notice is issued to the borrower.
  *     Admin is notified of the default status.
  *
@@ -15,16 +16,22 @@
  *     Guarantors are contacted. Loan recovery process is initiated.
  *     Admin dashboard is alerted. Additional recovery actions apply.
  *
- * NOTE: The ₦3,000 penalty is NOT applied on the first missed payment.
- * It is applied only after the 2nd consecutive missed month.
+ * NOTE: The late repayment fine is NOT applied on the first missed payment.
+ * It is applied only after the 2nd consecutive missed month. The amount lives
+ * in `config/feeDisclosure.js`, which is also what the member-facing
+ * disclosure quotes, so the two cannot drift.
  */
 
 const supabase = require('../config/supabase');
 const logger = require('../utils/logger');
 const notifyService = require('../services/notifyService');
+const { LATE_REPAYMENT_FINE, naira } = require('../config/feeDisclosure');
 
-const POLL_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
-const LATE_REPAYMENT_PENALTY_NGN = 3000;
+const POLL_INTERVAL_MS = 24 * 60 * 60 * 1000;
+// The amount and the wording the member sees both come from the one constant,
+// so a change to the fine cannot leave the notification quoting the old figure.
+const LATE_REPAYMENT_PENALTY_NGN = LATE_REPAYMENT_FINE;
+const FINE_LABEL = naira(LATE_REPAYMENT_FINE);
 
 /**
  * Return how many consecutive months have been missed for a loan.
@@ -44,7 +51,7 @@ const LATE_REPAYMENT_PENALTY_NGN = 3000;
  *
  * That misfired in both directions:
  *   - A member in good standing who had repaid every month was still reported as
- *     having missed all of them, and escalated to a ₦3,000 penalty.
+ *     having missed all of them, and escalated to a late repayment fine.
  *   - `next_due_date` is never written anywhere in the codebase, so the separate
  *     overdue queries could never match a loan either.
  *
@@ -174,7 +181,7 @@ async function processDue() {
             profileIds: [profileId],
             channels: ['in_app', 'email'],
             title: 'Loan Repayment Reminder',
-            body: `Your loan repayment is overdue. Please make your payment to avoid late fees. Late loan repayments may attract a ₦3,000 penalty fee after repeated default notices.`,
+            body: `Your loan repayment is overdue. Please make your payment to avoid late fees. Late loan repayments may attract a ${FINE_LABEL} penalty fee after repeated default notices.`,
           });
 
           // Mark status as overdue if not already
@@ -188,7 +195,7 @@ async function processDue() {
           logger.info(`loanRecoveryWorker: Stage 1 reminder sent — loan ${loan.loan_id || loan.id}`);
         }
 
-        // ── STAGE 2: 2nd consecutive missed month — apply ₦3,000 penalty ──
+        // ── STAGE 2: 2nd consecutive missed month — apply the late repayment fine ──
         else if (missedMonths === 2) {
           // Fines are separate obligations — record a member_fees row.
           await supabase.from('member_fees').insert({
@@ -215,7 +222,7 @@ async function processDue() {
             profileIds: [profileId],
             channels: ['in_app', 'email'],
             title: '⚠️ Late Repayment Penalty Applied',
-            body: `A ₦3,000 late repayment fine has been added to your obligations as a separate fee due to 2 consecutive missed payments. Please arrange a repayment plan immediately.`,
+            body: `A ${FINE_LABEL} late repayment fine has been added to your obligations as a separate fee due to 2 consecutive missed payments. Please arrange a repayment plan immediately.`,
           });
 
           // Flag the account (Policy: Active Default Restriction). The flag is

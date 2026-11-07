@@ -32,6 +32,14 @@ const MIGRATIONS = [
   // `status` column and the summary figures. The functions compute the new
   // balance under a row lock rather than trusting a value from the client.
   '060_admin_wallet_operations.sql',
+  // Supabase grants INSERT/UPDATE/DELETE on every `public` table to anon and
+  // authenticated by default. Migration 059 fixed `profiles`; 96 tables still
+  // allowed a signed-in member to write their own wallet balance and forge
+  // transactions. This revokes those grants, drops the now-inert write
+  // policies, and clears the default privileges so new tables are not born
+  // client-writable. Verified against the live database.
+  '061_revoke_client_writes.sql',
+  '062_atomic_wallet_operations.sql',
 ];
 
 const { Client } = require('pg');

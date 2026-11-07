@@ -102,10 +102,10 @@ jobs:
         run: flutter pub get
 
       - name: Run Flutter analyze (code quality)
-        run: flutter analyze --no-fatal-infos --no-fatal-warnings || true
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
       - name: Run tests
-        run: flutter test --no-pub || true
+        run: flutter test --no-pub
 
       - name: Run code generation (build_runner)
         continue-on-error: true
@@ -127,8 +127,10 @@ jobs:
             STORE_PASS="$KEY_STORE_PASSWORD"
             ALIAS_NAME="$KEY_ALIAS"
             KEY_PASS_VAL="$KEY_PASSWORD"
-          else
-            echo "No KEYSTORE_BASE64 secret found — generating a temporary CI keystore..."
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            # A pull request only needs to prove the build compiles; it never
+            # publishes an APK, so a throwaway key is harmless here.
+            echo "Pull request build — generating a temporary CI keystore..."
             keytool -genkey -v \
               -keystore android/keystore/release-keystore.jks \
               -alias coopvest \
@@ -142,6 +144,16 @@ jobs:
             STORE_PASS="coopvest_ci_2024"
             ALIAS_NAME="coopvest"
             KEY_PASS_VAL="coopvest_ci_2024"
+          else
+            # A push to main or a manual dispatch publishes to the stable
+            # download URL. An APK signed with a generated key cannot be
+            # installed as an upgrade over the published one (Android rejects
+            # the signature change) and can never be uploaded to Play, so
+            # publishing it is worse than failing. Fail loudly instead.
+            echo "::error::KEYSTORE_BASE64 is not set. Refusing to build a publishable release APK signed with a throwaway key."
+            echo "Add the signing secrets (KEYSTORE_BASE64, KEY_STORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD) to publish a release,"
+            echo "or run the workflow with build_type=debug to produce an unsigned test build."
+            exit 1
           fi
           printf 'storeFile=keystore/release-keystore.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
             "$STORE_PASS" "$ALIAS_NAME" "$KEY_PASS_VAL" > android/key.properties

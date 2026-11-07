@@ -7,6 +7,7 @@
  */
 
 const express = require('express');
+const crypto = require('crypto');
 const { body, param, query } = require('express-validator');
 const router = express.Router();
 
@@ -18,6 +19,7 @@ const referralService = require('../services/referralService');
 const qrCodeService = require('../services/qrCodeService');
 const notifyService = require('../services/notifyService');
 const loanPolicy = require('../lib/loanPolicy');
+const { LATE_REPAYMENT_FINE } = require('../config/feeDisclosure');
 const { kycGateFor } = require('../lib/kycGate');
 const { evaluateGuarantorEligibility } = require('../lib/guarantorEligibility');
 const logger = require('../utils/logger');
@@ -280,13 +282,29 @@ router.post(
         });
       }
 
+      // Generate the loan reference and its primary key up front: the bonus
+      // claim records which loan consumed the event, and claiming before the
+      // insert is what makes the discount depend on winning the claim.
+      const loanId = newLoanId();
+      const loanUuid = crypto.randomUUID();
+
+      // Claim the referral bonus before the loan is written. Previously the
+      // discount came from a plain summary read and the claim happened after
+      // the insert, so a loan kept its discounted rate even when the claim
+      // failed — two concurrent applications each got the discount while only
+      // one consumed the event.
+      let bonusResult = null;
       let bonusPercent = 0;
       if (applyReferralBonus) {
-        const { summary } = await referralService.getReferralSummary(profileId);
-        // getReferralSummary returns snake_case (the mobile client's contract).
-        // Reading the old camelCase keys here silently yielded 0, so the bonus
-        // was never applied at loan creation.
-        bonusPercent = summary.is_bonus_available ? summary.current_tier_bonus : 0;
+        bonusResult = await referralService.applyBonusToLoan(profileId, loanUuid, loanType);
+        if (bonusResult.success && bonusResult.bonusApplied) {
+          bonusPercent = bonusResult.bonusPercent;
+        } else {
+          // Lost the claim to a concurrent application, or the tier's bonus
+          // would breach the interest floor. The application still proceeds, at
+          // the base rate rather than a discount nothing paid for.
+          logger.warn(`referral bonus not applied for ${profileId}: ${bonusResult.error}`);
+        }
       }
 
       const calc = referralService.calculateInterestWithBonus(loanType, amount, tenureMonths, bonusPercent);
@@ -304,8 +322,8 @@ router.post(
         currentContribution = plan?.current_monthly_amount ?? null;
       } catch (_) { /* contribution_plans may not exist yet */ }
 
-      const loanId = newLoanId();
       const insertPayload = {
+        id: loanUuid,
         loan_id: loanId,
         profile_id: profileId,
         loan_type: loanType,
@@ -337,7 +355,15 @@ router.post(
         delete insertPayload.monthly_contribution_at_application;
         ({ data: loan, error } = await supabase.from('loans').insert(insertPayload).select('*').single());
       }
-      if (error) throw error;
+      if (error) {
+        // The bonus was claimed before this insert. Release it so a failed
+        // application does not silently consume a referral the member still
+        // holds — otherwise a transient insert failure costs them the discount.
+        if (bonusResult && bonusResult.bonusApplied) {
+          await referralService.releaseBonusClaim(loanUuid);
+        }
+        throw error;
+      }
 
       // Retain evidence of the borrower's digital acceptance (Policy §2.2).
       const { error: agreementErr } = await supabase.from('loan_agreements').insert({
@@ -350,11 +376,6 @@ router.post(
         metadata: { loanType, amount, tenureMonths },
       });
       if (agreementErr) logger.warn('loan_agreements insert failed:', agreementErr.message);
-
-      let bonusResult = null;
-      if (applyReferralBonus && bonusPercent > 0) {
-        bonusResult = await referralService.applyBonusToLoan(profileId, loanId, loanType);
-      }
 
       await auditLog(profileId, 'LOAN_APPLIED', loan.id, { loanType, amount, bonusPercent, agreementAccepted: true });
 
@@ -997,7 +1018,19 @@ router.post(
   async (req, res) => {
     try {
       const { loanId: rawLoanId } = req.params;
-      const { guarantor_id: guarantorId, guarantor_name, guarantor_phone } = req.body;
+      const { guarantor_id: requestedGuarantorId, guarantor_name } = req.body;
+
+      // The acting guarantor is the caller. `guarantor_id` in the body names
+      // the record to act on, but it must be the caller's own id: without this
+      // check a member could consent on another member's behalf, which is what
+      // promotes a loan to 'under_review' and toward approval.
+      const guarantorId = req.user.id;
+      if (requestedGuarantorId && requestedGuarantorId !== guarantorId) {
+        return res.status(403).json({
+          success: false,
+          error: 'A guarantee can only be confirmed by the guarantor it belongs to.',
+        });
+      }
 
       const actorId = req.user.id;
 
@@ -1107,7 +1140,17 @@ router.post(
   async (req, res) => {
     try {
       const { loanId: rawLoanId } = req.params;
-      const { guarantor_id: guarantorId, reason } = req.body;
+      const { guarantor_id: requestedGuarantorId, reason } = req.body;
+
+      // As with consent, only the guarantor themselves may decline. Without
+      // this a member could mark another member's guarantee as rejected.
+      const guarantorId = req.user.id;
+      if (requestedGuarantorId && requestedGuarantorId !== guarantorId) {
+        return res.status(403).json({
+          success: false,
+          error: 'A guarantee can only be declined by the guarantor it belongs to.',
+        });
+      }
 
       // Resolve composite text references to a UUID before querying.
       const loanId = await resolveLoanUuid(rawLoanId);
@@ -1170,7 +1213,7 @@ router.post(
         .maybeSingle();
       if (loanErr) throw loanErr;
       if (!loan) return res.status(404).json({ success: false, error: 'Loan not found' });
-      const PENALTY = 3000;
+      const PENALTY = LATE_REPAYMENT_FINE;
 
       if (!['active', 'repaying', 'overdue'].includes(loan.status)) {
         return res.status(400).json({
@@ -1309,62 +1352,31 @@ router.post(
 
       // ── Instant wallet repayment ──
       if (paymentMethod === 'wallet') {
-        const { ensureWallet } = require('./wallet');
-        const wallet = await ensureWallet(loan.profile_id);
-        const balance = Number(wallet.balance || 0);
-        if (balance < amount) {
-          return res.status(400).json({ success: false, error: 'Insufficient wallet balance for this repayment.' });
+        // One function call, so the wallet debit, the loan balance reduction,
+        // the ledger row and the repayment record take effect together. It also
+        // refuses an amount larger than the outstanding loan, which the previous
+        // version accepted while clamping the recorded balance to zero — the
+        // excess was debited and never applied.
+        const { data, error } = await supabase.rpc('wallet_loan_repayment', {
+          p_loan_id: loan.id,
+          p_profile_id: loan.profile_id,
+          p_amount: amount,
+        });
+
+        if (error) {
+          const msg = error.message || 'Repayment failed';
+          const status = /exceeds the outstanding|insufficient wallet|only accepted for|does not belong|greater than zero/i.test(msg)
+            ? 400
+            : 500;
+          logger.warn(`wallet repayment rejected: ${msg}`);
+          return res.status(status).json({ success: false, error: msg });
         }
-        const newBalance = balance - amount;
-        const { error: wErr } = await supabase
-          .from('wallets')
-          .update({ balance: newBalance, last_updated: now })
-          .eq('id', wallet.id);
-        if (wErr) throw wErr;
-
-        const { data: txn } = await supabase
-          .from('transactions')
-          .insert({
-            profile_id: loan.profile_id,
-            type: 'loan_repayment',
-            category: 'debit',
-            amount,
-            status: 'completed',
-            description: `Loan repayment for ${loan.loan_id || loan.id}`,
-            payment_method: 'wallet',
-            balance_before: balance,
-            balance_after: newBalance,
-            completed_at: now,
-          })
-          .select('*')
-          .maybeSingle();
-
-        const remainingBefore = Number(loan.remaining_balance ?? loan.total_repayment ?? 0);
-        const remaining = Math.max(0, remainingBefore - amount);
-        await supabase
-          .from('loans')
-          .update({ remaining_balance: remaining, updated_at: now })
-          .eq('id', loan.id);
-
-        const { data: repayment, error: rErr } = await supabase
-          .from('loan_repayments')
-          .insert({
-            loan_id: loan.id,
-            profile_id: loan.profile_id,
-            amount,
-            status: 'paid',
-            paid_at: now,
-            reference: txn ? txn.id : null,
-          })
-          .select('*')
-          .maybeSingle();
-        if (rErr) throw rErr;
 
         return res.status(201).json({
           success: true,
-          message: `Repayment of ₦${amount.toLocaleString()} applied. New loan balance: ₦${remaining.toLocaleString()}.`,
-          repayment,
-          remaining_balance: remaining,
+          message: `Repayment of ₦${amount.toLocaleString()} applied. New loan balance: ₦${Number(data.remaining_balance).toLocaleString()}.`,
+          repayment: data.repayment,
+          remaining_balance: data.remaining_balance,
         });
       }
 

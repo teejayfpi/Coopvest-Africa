@@ -881,40 +881,36 @@ router.post(
   async (req, res) => {
     try {
       const { toUserId, amount, description } = req.body;
-      const { data: recipient, error: lookupErr } = await supabase
-        .from('profiles')
-        .select('id, user_id, name')
-        .or(`user_id.eq.${toUserId},id.eq.${toUserId}`)
-        .maybeSingle();
-      if (lookupErr || !recipient) {
-        return res.status(404).json({ success: false, error: 'Recipient not found' });
-      }
-      if (recipient.id === req.user.id) {
-        return res.status(400).json({ success: false, error: 'Cannot transfer to yourself' });
-      }
 
-      const ref = newRef('TRF');
-      const sender = await adjustBalance(req.user.id, -Number(amount));
-      await adjustBalance(recipient.id, Number(amount));
-
-      const senderTxn = await recordTransaction(req.user.id, {
-        type: 'transfer_out',
-        category: 'debit',
-        amount,
-        description: description || `Transfer to ${recipient.name || recipient.user_id}`,
-        reference: ref,
-        metadata: { counterparty_id: recipient.id },
-      });
-      await recordTransaction(recipient.id, {
-        type: 'transfer_in',
-        category: 'credit',
-        amount,
-        description: description || `Transfer from ${req.user.name || req.user.userId}`,
-        reference: ref,
-        metadata: { counterparty_id: req.user.id },
+      // One function call, so the debit, the credit and both ledger rows either
+      // all take effect or none do. The previous version debited the sender,
+      // credited the recipient and wrote two transactions as four separate
+      // statements, and read each balance before writing it back.
+      const { data, error } = await supabase.rpc('wallet_transfer', {
+        p_from_profile_id: req.user.id,
+        p_to_user_ref: toUserId,
+        p_amount: Number(amount),
+        p_description: description || null,
       });
 
-      res.status(201).json({ success: true, wallet: sender, transaction: senderTxn });
+      if (error) {
+        const msg = error.message || 'Transfer failed';
+        // The function raises 22023 for the cases a caller can act on
+        // (insufficient funds, self-transfer, frozen wallet, bad amount) and
+        // 23503 when the recipient cannot be resolved.
+        const status = /insufficient wallet balance|greater than zero|cannot transfer to yourself|is frozen|is suspended|exceeds the maximum|smallest transferable/i.test(msg)
+          ? 400
+          : /recipient not found/i.test(msg) ? 404 : 500;
+        logger.warn(`transfer rejected: ${msg}`);
+        return res.status(status).json({ success: false, error: msg });
+      }
+
+      return res.status(201).json({
+        success: true,
+        wallet: { balance: data.sender_balance },
+        transaction: data.transaction,
+        reference: data.reference,
+      });
     } catch (err) {
       logger.error('transfer error:', err);
       res.status(err.statusCode || 500).json({ success: false, error: err.message });

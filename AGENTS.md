@@ -354,6 +354,33 @@ approval step. Table + one-pending-per-member unique index:
 `backend/migrations/032_withdrawal_requests.sql`. The endpoint returns 503 with
 a friendly message when that migration hasn't been applied yet.
 
+## Money movements are single database functions
+
+Never move a balance with a read-then-write. `const b = row.balance; update({ balance: b + delta })`
+loses updates under concurrency, and a sequence of such statements leaves the
+wallet, the ledger and the owning record disagreeing when one step fails.
+
+Every balance change goes through one `SECURITY DEFINER` function that locks the
+rows it touches (`SELECT ... FOR UPDATE`) and does the whole movement — balance,
+ledger row, owning record — in a single transaction. Migration 062 adds:
+
+| Function | Purpose |
+|---|---|
+| `wallet_transfer` | member-to-member transfer; locks both wallets |
+| `wallet_loan_repayment` | wallet → loan; rejects a repayment above the balance |
+| `savings_move` | wallet ↔ savings, `p_direction` = `deposit`/`withdraw` |
+| `verify_deposit_request` | admin deposit approval; locks the request |
+
+Two rules follow from this:
+
+- **Lock order is fixed** (e.g. wallets ordered by `id`) so opposite-direction
+  transfers cannot deadlock. Keep any new multi-row function consistent.
+- **These functions do not check `auth.uid()`** — they trust the profile id they
+  are handed. So `EXECUTE` is revoked from `PUBLIC, anon, authenticated` and
+  granted to `service_role` only. A new function must do the same, and the route
+  must pass the *authenticated caller's* id, never an id from the request body.
+  `backend/__tests__/securityReviewFixes.test.js` asserts both.
+
 ## Schema gotchas found against the live DB
 - `bank_accounts` uses `is_primary`, **not** `is_default`. The backend routes and
   the mobile bank-account/withdrawal screens must all read/write `is_primary` —
@@ -365,6 +392,17 @@ a friendly message when that migration hasn't been applied yet.
   NOT EXISTS profile_id/bank_account_id/description/processed_by/processed_at`.
 - `contribution_plans` has a FK to `profiles(id)` and `UNIQUE (profile_id)`, so
   `.upsert(..., { onConflict: 'profile_id' })` is safe.
+- `transactions.category` only permits `'credit'` and `'debit'`. The *kind* of
+  movement belongs in `type` (`savings_deposit`, `loan_repayment`, …). Writing
+  `category: 'savings_deposit'` violates `transactions_category_check` and
+  throws — and in the savings routes it threw *after* the wallet and savings
+  balances had already been moved, so every deposit/withdrawal broke silently.
+- `handle_new_user` (trigger on `auth.users`) derives `user_id` as
+  `USR-` + the first 8 characters of the profile UUID, and `user_id` is UNIQUE.
+  When seeding two test users, give them UUIDs with **different first-8
+  prefixes** or the second insert fails on `profiles_user_id_key`. The trigger
+  also auto-creates the profile, wallet, savings and user_settings rows, so do
+  not insert a `profiles` row by hand for a freshly inserted `auth.users` row.
 
 
 ## `handle_payment_proof_approval` never wrote a contribution (fixed, 033)
@@ -1057,3 +1095,103 @@ same shape is in the history scan, which otherwise only looked for a JWT-style
 service key. Test a new pattern against the actual value before committing it,
 and confirm it does not match `governanceSchema.js`, which builds the URL from
 `encodeURIComponent(DB_PASSWORD)` and must not be flagged.
+
+## Supabase grants every table to anon and authenticated - revoke per table
+`ALTER DEFAULT PRIVILEGES` in `public` grants INSERT/UPDATE/DELETE to `anon` and
+`authenticated`, so **every new table arrives client-writable**. A table is only
+safe once its grants are revoked; enabling RLS alone does not do it, because a
+permissive policy on a row the caller owns still lets the caller rewrite every
+column in that row.
+
+Migration 059 fixed `profiles` by revoking table-level UPDATE and granting back
+only the columns a member may change. Migration 061 generalises that: it revokes
+write grants on all tables except a short list of user-owned, non-financial ones,
+drops the now-inert write policies, and clears the default privileges.
+
+The live audit found 96 tables still client-writable. On `wallets`,
+`transactions`, `savings` and `loans` the policy is
+`FOR ALL USING/WITH CHECK (profile_id = auth.uid())`, which a caller satisfies
+with a row they own — so a signed-in member could set their own `balance` and
+insert a `completed` deposit. Verified on the live database before the fix.
+
+When adding a table, or a column that holds money or a privilege:
+- do not assume RLS protects it; check `has_table_privilege('authenticated', ...)`;
+- a `FOR ALL` policy on an owned row is a write grant to that row, not a guard;
+- guard money columns with a trigger or a `SECURITY DEFINER` function if a client
+  ever needs to write the row.
+
+Verify a change the way migration 061 was verified: `SET LOCAL role authenticated`
+plus `set_config('request.jwt.claims', ...)` inside a transaction that is rolled
+back, so the assertion runs under the real policy without changing data.
+
+## Only migrations listed in MIGRATIONS are applied automatically
+`backend/src/config/governanceSchema.js` applies the files in its `MIGRATIONS`
+array on every boot, using the `postgres` owner role. Every other file in
+`backend/migrations/` has to be applied by hand, so a new table a route depends
+on will not exist in production just because its SQL was merged. Add the file to
+the array, and keep it idempotent - it runs on each start.
+
+**The runner does not currently run in production.** It needs
+`SUPABASE_DB_PASSWORD` or `SUPABASE_DB_URL`, and Render has neither set (only
+`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` and `SUPABASE_ANON_KEY`). On boot it
+logs `governance schema bootstrap skipped` and returns, so every migration to
+date was applied by hand. Merging a migration therefore changes nothing in
+production until someone runs it. Setting either variable activates the runner on
+the next deploy, which would apply all four listed files at once.
+
+Until that is decided, apply migrations explicitly and verify the result against
+the live database, rather than assuming a merge deployed them.
+
+`pg_default_acl` in `public` has two entries: one owned by `postgres`, one by
+`supabase_admin`. `postgres` can change its own and not the other's, so a table
+created from the Supabase dashboard still arrives client-writable. The migration
+warns rather than fails on that, and its assertion catches the result.
+
+## Published charges must equal levied charges
+
+Every charge a member bears is declared once, in
+`backend/src/config/feeDisclosure.js`. The routes and workers that levy a charge
+import the amount from there, and the member-facing disclosure
+(`backend/src/config/terms.json`, section `fees_and_charges`) is checked against
+the same constants by `backend/__tests__/feeDisclosure.test.js`.
+
+The reason for the indirection is that the two sides get edited separately for
+different reasons - someone tunes the penalty, someone rewrites the leaflet -
+and they drift. A disclosure that says ₦3,000 while the code charges ₦5,000 is
+worse than no disclosure: the member relied on it.
+
+So when a charge changes:
+
+1. Change the constant in `feeDisclosure.js`.
+2. Update the `fees_and_charges` body in `terms.json` to match, and bump its
+   `version`.
+3. Mirror the same edit into `lib/data/models/terms_content.dart` (the offline
+   fallback) and bump its bundled `version` to match.
+4. `npx jest feeDisclosure` must pass. It fails if any published figure is not a
+   known charge, or if a levied amount is not published.
+
+Do not hardcode an amount at a call site. `loans.js` and `loanRecoveryWorker.js`
+both read `LATE_REPAYMENT_FINE`; the worker's notification text interpolates
+`FINE_LABEL` rather than quoting a figure, so a change cannot leave a stale
+number in a member's inbox. A test asserts no template literal in the worker
+contains a hardcoded naira amount.
+
+Charges the member does **not** bear do not go in the disclosure - and the
+disclosure says so explicitly, because a member reading a fee list reasonably
+wonders about the ones that are absent. Today it states there is no withdrawal
+fee, no early-repayment penalty, and no account-maintenance charge beyond the
+monthly administrative fee. Those negatives are verified, not assumed: the
+savings, termination and loan routes apply no fee.
+
+### The disclosure must reach existing members, not only new ones
+
+Onboarding requires every terms section to be opened and accepted, so a new
+member meets the disclosure. A member who joined earlier does not - and there is
+no re-acceptance mechanism keyed on `terms_version`, so bumping the version does
+not pull anyone back through onboarding. The entry point for them is
+Profile → Settings → About → **Fees & Charges**, which reads the same document
+the backend serves rather than the bundled copy, so they see current figures.
+
+If a change to charges should be actively acknowledged by existing members, that
+is a separate piece of work: nothing today compares the stored `terms_version`
+against the current one.
