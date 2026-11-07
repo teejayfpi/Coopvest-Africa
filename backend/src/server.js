@@ -47,6 +47,7 @@ const notificationRoutes = require('./routes/notifications');
 const bankAccountRoutes = require('./routes/bankAccounts');
 const banksRoutes = require('./routes/banks');
 const termsRoutes = require('./routes/terms');
+const feeRoutes = require('./routes/fees');
 const transactionRoutes = require('./routes/transactions');
 const settingsRoutes = require('./routes/settings');
 const watchlistRoutes = require('./routes/watchlist');
@@ -336,6 +337,7 @@ app.use('/api/v1/notifications', requireFeatureFlag('notifications'), notificati
 app.use('/api/v1/bank-accounts', bankAccountRoutes);
 app.use('/api/v1/banks', banksRoutes);
 app.use('/api/v1/terms', termsRoutes);
+app.use('/api/v1/fees', feeRoutes);
 app.use('/api/v1/transactions', requireRegistrationPaid, transactionRoutes);
 app.use('/api/v1/settings', settingsRoutes);
 app.use('/api/v1/watchlist', watchlistRoutes);

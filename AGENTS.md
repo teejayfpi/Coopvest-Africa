@@ -1195,3 +1195,30 @@ the backend serves rather than the bundled copy, so they see current figures.
 If a change to charges should be actively acknowledged by existing members, that
 is a separate piece of work: nothing today compares the stored `terms_version`
 against the current one.
+
+### The corporate website publishes the same figures, from the same source
+
+`GET /api/v1/fees` (`backend/src/routes/fees.js`) serves the schedule as JSON,
+derived entirely from `feeDisclosure.js`. It is public, like `/api/v1/terms`.
+
+The website repository (`coopvestafrica-ops/coopvest-website-`) builds its
+Schedule of Charges page from that response. `tools/sync_fee_schedule.py` fetches
+it into `src/data/fee-schedule.json`, and `build.py` renders the page from that
+file - no figure is typed into the page, and `tools/check_charges.py` fails the
+build if one is.
+
+Two consequences worth knowing:
+
+- **A change to a charge now lands in three places, not two.** After editing
+  `feeDisclosure.js`, run `python3 tools/sync_fee_schedule.py && python3 build.py`
+  in the website repository and commit the result. The website's Verify job
+  rebuilds and fails if the committed pages are stale.
+- **The website deploy fetches this endpoint before building**, and that step is
+  fatal on failure. If the backend is unreachable the website deploy stops rather
+  than publishing a stale price. `build.py` itself makes no network call, because
+  it runs offline in CI.
+
+So the endpoint's shape is a contract with a repository outside this one. Adding a
+field is safe; renaming or removing `charges[].amount`, `charges[].label`,
+`loan_interest_rates` or `not_charged` breaks the website build. If the shape must
+change, change both repositories in the same session.
