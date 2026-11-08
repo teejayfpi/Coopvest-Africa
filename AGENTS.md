@@ -1228,6 +1228,45 @@ the live database, rather than assuming a merge deployed them.
 created from the Supabase dashboard still arrives client-writable. The migration
 warns rather than fails on that, and its assertion catches the result.
 
+## Savings are held against an outstanding loan
+`default_recovery_policy` clause 3 already told the member: "Outstanding balances
+may be recovered from the member's contributions, savings, or dividends held with
+the cooperative." Nothing enforced it. `savings_move(..., 'withdraw')`
+(`migrations/062_atomic_wallet_operations.sql`) checked only that the wallet was
+active and the savings balance sufficient — never the member's loans. A borrower
+could move their whole savings balance to the wallet and withdraw it, leaving the
+loan with nothing behind it.
+
+`migrations/065_savings_lien_for_outstanding_loans.sql` replaces the function so
+a withdrawal may not take savings below the member's total outstanding loan
+balance. Savings above that line stay withdrawable, so a member with a loan and
+no arrears still reaches their own money. Deposits are never restricted.
+
+Three things to keep true when touching it:
+
+- **The live-debt status set must match the real vocabulary.** It counts
+  `approved, active, repaying, overdue, defaulted, in_recovery` — the statuses
+  that carry debt. `pending` and `under_review` are excluded so an undisbursed
+  application cannot freeze a member's savings; `completed`, `rejected` and
+  `cancelled` are settled or dead; `rolled_over` is excluded because a refinance
+  closed that row and the successor loan counts instead (counting both would
+  double the lien). The vocabulary is the CHECK constraint from migration 039 —
+  an invented status such as `disbursed` would make the guard silently miss real
+  loans. `__tests__/savingsLien.test.js` pins this.
+- **The lien is not the whole of recovery.** A loan is 3x–5x savings
+  (`lib/loanPolicy.js`), so savings can never cover a default. This stops the
+  borrower draining what security exists; it does not make the loan safe.
+- **It is applied deliberately, not by the deploy bootstrap.** The migration is
+  NOT in `governanceSchema.js` `MIGRATIONS`. It changes what members may do with
+  their own money, so it needs sign-off and a hand-run. Add the name to that list
+  to apply it, and delete the test that asserts it is absent.
+
+The app's member-facing withdrawal path (`withdrawal_screen.dart`) goes
+wallet → bank and never calls `savings/withdraw`, so the leak was reachable only
+by calling the API directly. The guard is at the database function because that
+is the only path that moves savings, and a route-level check would miss any
+future caller.
+
 ## Published charges must equal levied charges
 
 Every charge a member bears is declared once, in
