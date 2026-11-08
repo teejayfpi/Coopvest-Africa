@@ -1032,12 +1032,19 @@ outstanding fines + outstanding fees. `GET /api/v1/wallet/obligations`
 (`backend/src/routes/wallet.js` `computeObligations`) is the single source of
 "amount due"; the app never derives it from the wallet balance.
 
-- The monthly administrative charge is NGN1,500 = AGM levy NGN1,000 +
-  Development levy NGN500 (`AppConfig.totalMonthlyLevies`; `agmLevy`/
-  `developmentLevy` are the parts). The `fee_types` catalogue calls it
-  **Administrative Fee** (renamed from "Mobile App Fee" in migration 055).
-  `member_fees.label` copies the catalogue name at assignment time, so a rename
-  must relabel existing rows too.
+- The monthly administrative charge is NGN1,500 = Administrative charges
+  NGN1,000 + Development levy NGN500 (`AppConfig.totalMonthlyLevies`;
+  `administrativeCharges`/`developmentLevy` are the parts). The `fee_types`
+  catalogue calls it **Administrative Fee** (renamed from "Mobile App Fee" in
+  migration 055). `member_fees.label` copies the catalogue name at assignment
+  time, so a rename must relabel existing rows too.
+- The registration fee (NGN5,000, one-time, non-refundable) is a charge payable
+  to the cooperative. It is **not** added to, or collected with, the member's
+  monthly contribution — that wording appeared in the disclosure and was wrong.
+  A member's contribution is their own savings; the fee sits outside it. The
+  disclosure must say so, and `feeDisclosure.test.js` fails if the bundling
+  wording returns to the terms document, the served schedule, or the bundled
+  Flutter copy.
 - **Pay Now** (`lib/presentation/widgets/obligations_card.dart`) must charge
   `savingsDue + monthlyLoanRepayment + finesTotal + feesTotal` and pass a
   per-obligation `initialAllocations` breakdown to `DepositScreen`. Charging the

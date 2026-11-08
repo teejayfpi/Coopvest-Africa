@@ -77,13 +77,13 @@ void main() {
     test('the administrative fee and both levies match AppConfig', () {
       final body = fees().body;
       expect(body, contains(naira(AppConfig.totalMonthlyLevies)));
-      expect(body, contains(naira(AppConfig.agmLevy)));
+      expect(body, contains(naira(AppConfig.administrativeCharges)));
       expect(body, contains(naira(AppConfig.developmentLevy)));
     });
 
     test('the levies add up to the administrative fee', () {
       expect(
-        AppConfig.agmLevy + AppConfig.developmentLevy,
+        AppConfig.administrativeCharges + AppConfig.developmentLevy,
         AppConfig.totalMonthlyLevies,
       );
     });

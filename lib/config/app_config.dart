@@ -66,9 +66,9 @@ class AppConfig {
   static const double maxGuarantorLimit = 5000000;
 
   // Monthly Deductions Configuration
-  static const double agmLevy = 1000.0; // AGM Levy - monthly
+  static const double administrativeCharges = 1000.0; // Administrative charges - monthly
   static const double developmentLevy = 500.0; // Development Levy - monthly
-  static const double totalMonthlyLevies = 1500.0; // AGM + Development
+  static const double totalMonthlyLevies = 1500.0; // Administrative charges + Development
   static const double entranceFee = 5000.0; // One-time entrance fee
 
   // Contribution Configuration

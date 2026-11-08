@@ -44,7 +44,7 @@ function buildSchedule() {
         amount: REGISTRATION_FEE,
         frequency: 'one-time',
         refundable: false,
-        note: 'Added to your first monthly contribution. Where an employer deducts contributions at source, it is recovered through that deduction instead.',
+        note: 'A charge payable to the cooperative. Where an employer deducts contributions at source, it is recovered through that deduction instead.',
       },
       {
         id: 'monthly_contribution',

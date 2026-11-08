@@ -27,6 +27,12 @@ const terms = require('../src/config/terms.json');
 
 const ROOT = path.join(__dirname, '..', '..');
 
+/** The Flutter copy bundled with the app, read once for the whole file. */
+const dart = fs.readFileSync(
+  path.join(ROOT, 'lib', 'data', 'models', 'terms_content.dart'),
+  'utf8'
+);
+
 function sectionById(id) {
   const found = (terms.sections || []).find((s) => s.id === id);
   if (!found) throw new Error(`terms.json has no section '${id}'`);
@@ -147,11 +153,6 @@ describe('fee disclosure', () => {
   });
 
   describe('the bundled offline copy mirrors the served document', () => {
-    const dart = fs.readFileSync(
-      path.join(ROOT, 'lib', 'data', 'models', 'terms_content.dart'),
-      'utf8'
-    );
-
     test('the bundled document declares the same version', () => {
       expect(dart).toContain(`static const String version = '${terms.version}';`);
     });
@@ -176,6 +177,54 @@ describe('fee disclosure', () => {
     test('it says early repayment carries no penalty', () => {
       expect(sectionById('fees_and_charges').body.toLowerCase())
         .toContain('no penalty for repaying early');
+    });
+  });
+
+  describe('the registration fee is stated as the cooperative\'s charge', () => {
+    // The fee is payable to the cooperative and sits outside the member's own
+    // savings. Saying it is "added to your monthly contribution" implies the
+    // member's contribution buys the fee, which misstates where the money goes.
+    const noBundling = (text) => {
+      expect(text.toLowerCase()).not.toMatch(/added to your first/);
+      expect(text.toLowerCase()).not.toMatch(/added to, and collected together with/);
+    };
+
+    test('the fees section does not bundle it into the contribution', () => {
+      noBundling(sectionById('fees_and_charges').body);
+      expect(sectionById('fees_and_charges').body)
+        .toMatch(/charge payable to the cooperative/);
+    });
+
+    test('the registration fee policy does not bundle it into the contribution', () => {
+      noBundling(sectionById('registration_fee_policy').body);
+    });
+
+    test('the contribution policy does not bundle it into the contribution', () => {
+      noBundling(sectionById('contribution_policy').body);
+    });
+
+    test('the served schedule does not bundle it into the contribution', () => {
+      const { buildSchedule } = require('../src/routes/fees');
+      const charge = buildSchedule().charges.find((c) => c.id === 'registration_fee');
+      noBundling(charge.note || '');
+    });
+
+    test('the bundled Flutter copy does not bundle it into the contribution', () => {
+      noBundling(dart);
+    });
+  });
+
+  describe('the administrative fee is itemised as administrative charges', () => {
+    test('the component the disclosure names matches the constant', () => {
+      const text = sectionById('fees_and_charges').body;
+      for (const component of ADMINISTRATIVE_FEE.components) {
+        expect(text).toContain(component.name);
+      }
+    });
+
+    test('the old AGM levy wording is gone from the disclosure', () => {
+      expect(sectionById('fees_and_charges').body).not.toMatch(/AGM/i);
+      expect(dart).not.toMatch(/AGM/);
     });
   });
 });
