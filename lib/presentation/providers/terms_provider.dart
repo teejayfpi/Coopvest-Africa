@@ -9,7 +9,11 @@ import '../../data/models/terms_content.dart';
 /// the request fails.
 final termsDocumentProvider = FutureProvider<TermsDocument>((ref) async {
   try {
-    final data = await ref.read(apiClientProvider).get('/terms');
+    // The client's base URL already ends in `/api`, so this resolves to
+    // `/api/v1/terms`. It previously read `/terms`, which resolved to
+    // `/api/terms` — a path the server does not mount — so the request always
+    // failed and the app silently used the bundled copy, never the live text.
+    final data = await ref.read(apiClientProvider).get('/v1/terms');
     if (data is Map<String, dynamic> &&
         data['success'] == true &&
         data['sections'] is List &&
