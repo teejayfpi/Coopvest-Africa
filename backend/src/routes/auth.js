@@ -96,7 +96,7 @@ const ensureProfile = async (authUser, extra = {}) => {
   const userId = extra.userId || `USR-${Date.now().toString(36).toUpperCase()}`;
   const { data: existing } = await supabase
     .from('profiles')
-    .select('id, user_id, email, name, phone, role, kyc_verified, is_active, registration_fee_paid, registration_completed, completed_at, profile_picture, created_at, updated_at, organization_id, contribution_method, contribution_type, pending_organization_name')
+    .select('id, user_id, email, name, phone, role, kyc_verified, is_active, registration_fee_paid, registration_completed, completed_at, profile_picture, created_at, updated_at, organization_id, contribution_method, contribution_type, pending_organization_name, pending_organization_requested_at')
     .eq('id', authUser.id)
     .maybeSingle();
 
@@ -120,7 +120,7 @@ const ensureProfile = async (authUser, extra = {}) => {
       role: 'member',
       is_active: true,
     })
-    .select('id, user_id, email, name, phone, role, kyc_verified, is_active, registration_fee_paid, registration_completed, completed_at, profile_picture, created_at, updated_at, organization_id, contribution_method, contribution_type, pending_organization_name')
+    .select('id, user_id, email, name, phone, role, kyc_verified, is_active, registration_fee_paid, registration_completed, completed_at, profile_picture, created_at, updated_at, organization_id, contribution_method, contribution_type, pending_organization_name, pending_organization_requested_at')
     .single();
 
   if (error) {
@@ -308,7 +308,7 @@ router.post('/refresh', [
     const authUser = data.user;
     const { data: profile } = await supabase
       .from('profiles')
-      .select('id, user_id, email, name, phone, role, kyc_verified, is_active, registration_fee_paid, registration_completed, profile_picture, created_at, updated_at, organization_id, contribution_method, contribution_type, pending_organization_name')
+      .select('id, user_id, email, name, phone, role, kyc_verified, is_active, registration_fee_paid, registration_completed, profile_picture, created_at, updated_at, organization_id, contribution_method, contribution_type, pending_organization_name, pending_organization_requested_at')
       .eq('id', authUser.id)
       .maybeSingle();
 
@@ -630,9 +630,18 @@ router.post('/complete-registration', authenticate, async (req, res) => {
     //    exemption could not fire and guarantor eligibility could not classify
     //    them.
     const now = new Date().toISOString();
+    // Read the existing deferral anchor before writing, so a wizard re-save
+    // cannot restart the bounded window a self-declared employer opened.
+    const { data: profileForChannel } = await supabase
+      .from('profiles')
+      .select('pending_organization_requested_at')
+      .eq('id', req.user.id)
+      .maybeSingle();
     const channelUpdate = planProfileChannelUpdate({
       contributionType: personal_info_candidate.contribution_type,
       employerName: personal_info_candidate.employer_name || employment_info_candidate.employer_name,
+      pendingOrganizationRequestedAt: profileForChannel?.pending_organization_requested_at || null,
+      now,
     });
     const { error: profileError } = await supabase
       .from('profiles')
@@ -809,7 +818,7 @@ router.post('/sync', (req, res, next) => { req.skipSingleSessionCheck = true; ne
       .from('profiles')
       .update(updateData)
       .eq('id', profileId)
-      .select('id, user_id, email, name, phone, role, kyc_verified, is_active, registration_fee_paid, registration_completed, profile_picture, created_at, updated_at, organization_id, contribution_method, contribution_type, pending_organization_name')
+      .select('id, user_id, email, name, phone, role, kyc_verified, is_active, registration_fee_paid, registration_completed, profile_picture, created_at, updated_at, organization_id, contribution_method, contribution_type, pending_organization_name, pending_organization_requested_at')
       .maybeSingle();
 
     if (error) {

@@ -55,6 +55,46 @@ describe('planProfileChannelUpdate', () => {
     expect(update.pending_organization_name).toBeNull();
   });
 
+  test('the deferral anchor is set on the first self-declared employer', () => {
+    const update = planProfileChannelUpdate({
+      contributionType: 'salary_deduction',
+      employerName: 'Acme Ltd',
+      now: '2026-01-01T00:00:00.000Z',
+    });
+    expect(update.pending_organization_requested_at).toBe('2026-01-01T00:00:00.000Z');
+  });
+
+  test('an existing anchor is never moved, so the window cannot be restarted', () => {
+    // Re-saving the screen, or alternating the employer name, must not hand the
+    // member a fresh deferral window on an unverified claim.
+    const update = planProfileChannelUpdate({
+      contributionType: 'salary_deduction',
+      employerName: 'A Different Ltd',
+      pendingOrganizationRequestedAt: '2026-01-01T00:00:00.000Z',
+      now: '2026-06-01T00:00:00.000Z',
+    });
+    expect(update.pending_organization_requested_at).toBe('2026-01-01T00:00:00.000Z');
+    expect(update.pending_organization_name).toBe('A Different Ltd');
+  });
+
+  test('linking a verified employer clears the deferral anchor', () => {
+    const update = planProfileChannelUpdate({
+      contributionType: 'salary_deduction',
+      employerName: 'Acme Ltd',
+      requestedOrgId: 'org-1',
+      orgIsActive: true,
+      pendingOrganizationRequestedAt: '2026-01-01T00:00:00.000Z',
+    });
+    expect(update.organization_id).toBe('org-1');
+    expect(update.pending_organization_requested_at).toBeNull();
+  });
+
+  test('switching to direct deposit keeps the anchor, so a return gets no new window', () => {
+    const update = planProfileChannelUpdate({ contributionType: 'direct_deposit' });
+    expect(update.pending_organization_name).toBeNull();
+    expect(update).not.toHaveProperty('pending_organization_requested_at');
+  });
+
   test('an unknown or missing channel leaves the profile untouched', () => {
     expect(planProfileChannelUpdate({})).toBeNull();
     expect(planProfileChannelUpdate({ contributionType: null })).toBeNull();

@@ -109,6 +109,63 @@ member sees in the app.
 - Admin dashboard is a separate Vite/React app in
   `../Admin-Dashboard` deployed on Vercel.
 
+## Registration fee: a self-declared employer defers, it does not exempt
+
+`isRegistrationFeeSettled` / `isAdministrativeFeeExempt`
+(`backend/src/lib/activationGate.js`) exempt a salary-deduction member whose fee
+is recovered from salary, and the SQL twin
+`public.member_registration_fee_settled()` (migration 063) mirrors them.
+
+The two kinds of "employer on file" are NOT equivalent, and conflating them was
+a live fee-evasion hole:
+
+- **Linked** (`profiles.organization_id`) — an admin approved the enrolment, so
+  the fee is exempt indefinitely.
+- **Named** (`profiles.pending_organization_name`) — self-declared and
+  unverified. It only *defers* the fee, for
+  `PENDING_EMPLOYER_FEE_GRACE_DAYS` (default 45) counted from
+  `pending_organization_requested_at`. Past that the fee is payable in the app
+  again.
+
+Without the bound, a member could register as salary deduction, type any
+employer name, and never pay the ₦5,000 registration fee or the ₦1,500 monthly
+administrative fee — no payroll batch can recover either from an employer that
+was never enrolled, and nothing expired the claim.
+
+The deferral anchor is written once and never moved: `planProfileChannelUpdate`
+(`backend/src/lib/contributionChannel.js`) only sets
+`pending_organization_requested_at` when it is absent, `/organizations/request-approval`
+keeps the existing value, and a switch to direct deposit leaves it in place. A
+re-save, a new employer name, or a round-trip through direct deposit must not
+restart the window. Linking a verified employer clears it.
+
+An anchor dated in the future must not count either. The elapsed time would be
+negative, pass the window check, and defer the fee permanently — and the anchor
+is a member-writable column, so that is reachable without privileged access. A
+future anchor beyond a few minutes of clock skew is rejected in both the JS and
+the SQL.
+
+Clients must not be able to write the columns the exemption is derived from.
+Migration 063 revokes `UPDATE` on `contribution_method`, `contribution_type`,
+`pending_organization_name` and `pending_organization_requested_at` from `anon`
+and `authenticated`, and asserts the revoke so a later migration cannot silently
+undo it.
+
+**This revoke is load-bearing, not tidiness.** Verified against production
+(project `nyoauzqezpxeonmrxxgi`) on 2026-11-03: `authenticated` held column-level
+`UPDATE` on exactly those four columns (plus `name`, `phone`, `department`), and
+a member-writable `profiles` UPDATE policy (`auth.uid() = id`) exists. So a
+signed-in member could `PATCH /rest/v1/profiles?id=eq.<self>` with the anon key
+that ships in the app and set `contribution_method='payroll'` and
+`pending_organization_name='anything'` directly — bypassing the
+active-organisation check in `/kyc/contribution-type` entirely. That is why the
+exemption must not depend on the *value* of a member-writable column alone: the
+grace window and the future-anchor check both bound it even if a write succeeds.
+The only `profiles` writer using the anon-key path is the admin dashboard, and it
+writes only `name`, `phone`, `department`, `updated_at` (none revoked). The
+Flutter app uses Supabase for auth only — no table writes. The backend uses the
+service role, which bypasses these grants.
+
 ## Registration / onboarding (mobile)
 - `POST /api/auth/complete-registration` (auth) saves onboarding data to the
   `kyc` table. `date_of_birth` and `address` are top-level columns; everything

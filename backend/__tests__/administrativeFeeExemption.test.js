@@ -108,19 +108,39 @@ describe('administrative fee is withheld for salary-deduction members', () => {
     expect(o.total_due).toBe(5000);
   });
 
-  test('a pending employer enrolment counts as an employer on file', async () => {
+  test('a pending employer enrolment defers the fee inside its window', async () => {
     resetTables({
       profile: {
         contribution_method: 'payroll',
         contribution_type: 'salary_deduction',
         organization_id: null,
         pending_organization_name: 'Lagos State Ministry of Finance',
+        pending_organization_requested_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
       },
       memberFees: [ADMIN_FEE_ROW],
     });
 
     const o = await computeObligations('p1');
     expect(o.fees).toHaveLength(0);
+  });
+
+  test('the fee returns once a self-declared employer window lapses', async () => {
+    // A member who names an employer that is never enrolled must not hide the
+    // monthly administrative fee forever.
+    resetTables({
+      profile: {
+        contribution_method: 'payroll',
+        contribution_type: 'salary_deduction',
+        organization_id: null,
+        pending_organization_name: 'Never Enrolled Ltd',
+        pending_organization_requested_at: new Date(Date.now() - 200 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      memberFees: [ADMIN_FEE_ROW],
+    });
+
+    const o = await computeObligations('p1');
+    expect(o.fees).toHaveLength(1);
+    expect(o.total_due).toBe(6500);
   });
 
   test('the exemption is reported so the app can explain the waiver', async () => {

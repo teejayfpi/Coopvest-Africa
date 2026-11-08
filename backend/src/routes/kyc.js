@@ -214,8 +214,9 @@ router.post(
       // `organization_id` is only accepted when it matches a real, active
       // organisation — a stale or spoofed id must not grant the exemption. An
       // employer that is not enrolled yet is recorded as a pending request
-      // instead, which also counts as an employer on file (the fee is recovered
-      // once they are enrolled and payroll runs).
+      // instead. A pending request defers the fee only for a bounded window
+      // (see lib/activationGate.js); the fee is recovered once the employer is
+      // enrolled and payroll runs.
       try {
         const requestedOrgId = employmentInfo?.organization_id ?? null;
         const employerName =
@@ -237,11 +238,21 @@ router.post(
           }
         }
 
+        // Read the existing deferral anchor so a re-save cannot restart the
+        // bounded window a self-declared employer opened (see
+        // lib/contributionChannel.js).
+        const { data: currentProfile } = await supabase
+          .from('profiles')
+          .select('pending_organization_requested_at')
+          .eq('id', req.user.id)
+          .maybeSingle();
+
         const profileUpdate = planProfileChannelUpdate({
           contributionType: contribution_type,
           employerName,
           requestedOrgId,
           orgIsActive,
+          pendingOrganizationRequestedAt: currentProfile?.pending_organization_requested_at || null,
         });
 
         if (profileUpdate) {
