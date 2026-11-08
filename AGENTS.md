@@ -641,6 +641,23 @@ that only exist in recent Dart: `Color.withValues`, `Color.toARGB32`,
 gaps, not code defects. Use Flutter 3.47.x (Dart 3.13) or newer; there the
 project analyzes with 0 errors / 0 warnings.
 
+The APK workflow pins `FLUTTER_VERSION: '3.44.0'`, so that is the version to
+install locally when verifying before a push — it analyzes clean too. Flutter
+is not preinstalled in the sandbox, but it can be fetched:
+
+```
+curl -L -o /tmp/flutter.tar.xz \
+  https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.44.0-stable.tar.xz
+tar xf /tmp/flutter.tar.xz -C /tmp
+git config --global --add safe.directory /tmp/flutter
+export PATH="/tmp/flutter/bin:$PATH"
+```
+
+Then `flutter pub get`, `flutter analyze`, `flutter test`. The full Dart suite
+is ~297 tests and runs in well under a minute. Do NOT push a Dart change having
+only run the backend suite — the app tests are the only local check that the
+app compiles.
+
 ## Loans table has NO `disbursed_at` column
 Only `disbursed_by` exists. Selecting `disbursed_at` makes PostgREST reject
 the ENTIRE query, so a report silently reads zero rows and looks like it
