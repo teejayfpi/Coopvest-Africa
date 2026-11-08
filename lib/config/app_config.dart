@@ -70,6 +70,10 @@ class AppConfig {
   static const double developmentLevy = 500.0; // Development Levy - monthly
   static const double totalMonthlyLevies = 1500.0; // Administrative charges + Development
   static const double entranceFee = 5000.0; // One-time entrance fee
+  // Late-repayment fine, applied after two consecutive missed instalments.
+  // Displayed in the fee disclosure; the server levies it, and this constant
+  // keeps the offline fallback from quoting a different figure.
+  static const double lateRepaymentFine = 3000.0;
 
   // Contribution Configuration
   static const double minContribution = 5000;

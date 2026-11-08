@@ -14,6 +14,7 @@ import 'config/theme_config.dart';
 import 'core/services/feature_service.dart';
 import 'core/services/security_service.dart';
 import 'core/services/notification_service.dart';
+import 'presentation/widgets/common/fee_disclosure_host.dart';
 import 'data/models/auth_models.dart';
 import 'data/models/loan_models.dart';
 import 'presentation/providers/auth_provider.dart';
@@ -204,6 +205,20 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
     _setupDeepLinks();
   }
 
+  /// Put the published fee schedule in front of the member once, on first open.
+  ///
+  /// Held back while the biometric lock is up: the disclosure belongs over the
+  /// app, not over the lock that guards it. It is shown once the member is
+  /// actually looking at the app.
+  Future<void> _maybeShowFeeDisclosure() async {
+    if (_biometricEnabled && !_biometricUnlocked) return;
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+    final context = navigatorKey.currentContext;
+    if (context == null || !context.mounted) return;
+    await FeeDisclosureHost.maybeShow(context, ref);
+  }
+
   /// Catch app links (coopvest://verify-email?token=...) so tapping the
   /// Supabase confirmation email opens the app's verification screen instead
   /// of a web page / the admin site.
@@ -331,6 +346,7 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
           _isSessionRestored = true;
         });
       }
+      _maybeShowFeeDisclosure();
     }
   }
 
@@ -403,6 +419,9 @@ class _CoopvestAppState extends ConsumerState<CoopvestApp>
                           if (mounted) {
                             setState(() => _biometricUnlocked = true);
                           }
+                          // The disclosure was held back while the lock was up;
+                          // now that the member is in, it may be shown.
+                          _maybeShowFeeDisclosure();
                         },
                         onUsePassword: _biometricFallbackToPassword,
                       )

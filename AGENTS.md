@@ -1260,6 +1260,41 @@ If a change to charges should be actively acknowledged by existing members, that
 is a separate piece of work: nothing today compares the stored `terms_version`
 against the current one.
 
+### The disclosure is shown on first open, keyed to the schedule hash
+
+New members meet the disclosure through onboarding; existing members reach it
+via Profile → About → Fees & Charges. Neither covers the person who has just
+installed the app and has not registered: they can reach the sign-up button
+without having seen a single charge.
+
+`FeeDisclosureHost.maybeShow` (called from `_CoopvestAppState` once the first
+screen is up) closes that gap. It fetches `GET /api/v1/fees`, and if the
+returned `schedule_hash` differs from the one recorded in
+`FeeDisclosureStore`, it shows `FeeDisclosureSheet` before the member commits
+anything. This is a **disclosure, not a consent** — it records no acceptance and
+gates nothing. Binding acceptance stays at registration, where the member is
+identifiable and the accepted version can be stamped.
+
+Three rules make it honest:
+
+- **Keyed on the hash, not a boolean.** "Shown once" means once per revision. If
+  a charge changes, the hash changes, and the member is shown the new price list.
+  A boolean would show the first list and never the correction.
+- **A bundled schedule carries no hash and is never recorded.** Offline, the
+  sheet still appears (built from `AppConfig`, so it cannot disagree with what
+  the app levies), but because its hash is empty it does not suppress the live
+  schedule — the real one supersedes it as soon as the member is online.
+- **Held back while the biometric lock is up.** The disclosure belongs over the
+  app, not over the lock that guards it; it is shown on unlock.
+
+The same three rules are pinned by `test/unit/fee_disclosure_test.dart`.
+
+Related fix: `termsDocumentProvider` read `/terms`, which the client resolves to
+`/api/terms` — a path the server does not mount — so the request always failed
+and the app silently used the bundled copy, never the live text. It now reads
+`/v1/terms` (→ `/api/v1/terms`). Any other provider that hardcodes a path must
+remember the base URL already ends in `/api`.
+
 ### The corporate website publishes the same figures, from the same source
 
 `GET /api/v1/fees` (`backend/src/routes/fees.js`) serves the schedule as JSON,
