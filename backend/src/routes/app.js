@@ -38,6 +38,7 @@ const GATE_COLUMNS = [
   'contribution_method',
   'contribution_type',
   'pending_organization_name',
+  'pending_organization_requested_at',
 ].join(', ');
 
 /**

@@ -104,7 +104,7 @@ router.post('/request-approval', authenticate, async (req, res) => {
 
     const { data: profile, error: profileErr } = await supabase
       .from('profiles')
-      .select('id, name, email, pending_organization_name')
+      .select('id, name, email, pending_organization_name, pending_organization_requested_at')
       .eq('id', req.user.id)
       .maybeSingle();
     if (profileErr) throw profileErr;
@@ -142,11 +142,16 @@ router.post('/request-approval', authenticate, async (req, res) => {
       });
     }
 
+    // Anchor the fee-deferral window on the FIRST request and never move it.
+    // A self-declared employer defers the registration fee only for a bounded
+    // window (lib/activationGate.js); re-stamping here would let a member
+    // restart that window indefinitely by re-requesting, or by alternating the
+    // employer name, and so never pay the fee.
     const { error: updateErr } = await supabase
       .from('profiles')
       .update({
         pending_organization_name: organizationName,
-        pending_organization_requested_at: now,
+        pending_organization_requested_at: profile.pending_organization_requested_at || now,
         updated_at: now,
       })
       .eq('id', req.user.id);

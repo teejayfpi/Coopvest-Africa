@@ -319,7 +319,7 @@ async function computeObligations(profileId) {
   try {
     const { data } = await supabase
       .from('profiles')
-      .select('created_at, contribution_method, contribution_type, organization_id, pending_organization_name')
+      .select('created_at, contribution_method, contribution_type, organization_id, pending_organization_name, pending_organization_requested_at')
       .eq('id', profileId)
       .maybeSingle();
     profile = data || null;

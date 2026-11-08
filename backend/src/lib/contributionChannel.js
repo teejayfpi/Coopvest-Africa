@@ -32,9 +32,18 @@
  * @param {string}   [input.employerName]    free-text employer (enrolment not yet known)
  * @param {string}   [input.requestedOrgId]  an enrolled organisation the member picked
  * @param {boolean}  [input.orgIsActive]     whether `requestedOrgId` is a real, active org
+ * @param {string}   [input.pendingOrganizationRequestedAt]  the existing deferral anchor, if any
+ * @param {string}   [input.now]             timestamp to stamp, injectable for tests
  * @returns {object|null} a partial profiles update, or null when no channel was chosen
  */
-function planProfileChannelUpdate({ contributionType, employerName, requestedOrgId, orgIsActive }) {
+function planProfileChannelUpdate({
+  contributionType,
+  employerName,
+  requestedOrgId,
+  orgIsActive,
+  pendingOrganizationRequestedAt,
+  now,
+}) {
   const type =
     contributionType === 'salary_deduction'
       ? 'salary_deduction'
@@ -46,10 +55,11 @@ function planProfileChannelUpdate({ contributionType, employerName, requestedOrg
   // leave the profile untouched rather than guessing a channel.
   if (!type) return null;
 
+  const stamp = now || new Date().toISOString();
   const update = {
     contribution_method: type === 'salary_deduction' ? 'payroll' : 'manual',
     contribution_type: type,
-    updated_at: new Date().toISOString(),
+    updated_at: stamp,
   };
 
   if (type === 'salary_deduction') {
@@ -58,6 +68,7 @@ function planProfileChannelUpdate({ contributionType, employerName, requestedOrg
       // A real, active employer: link it and drop any stale pending request.
       update.organization_id = requestedOrgId;
       update.pending_organization_name = null;
+      update.pending_organization_requested_at = null;
     } else if (name) {
       // Employer named but not enrolled (or the id did not resolve): record it
       // as a pending request, which still counts as an employer on file so the
@@ -70,6 +81,13 @@ function planProfileChannelUpdate({ contributionType, employerName, requestedOrg
       // rule would match their guarantors against it.
       update.organization_id = null;
       update.pending_organization_name = name;
+      // The fee deferral for a self-declared employer is bounded, so the window
+      // is anchored on the FIRST time a name was recorded and never reset. A
+      // member cannot extend the deferral by re-saving the screen or by
+      // alternating employer names — either would hand them an unbounded
+      // exemption on the strength of an unverified claim.
+      update.pending_organization_requested_at =
+        pendingOrganizationRequestedAt || stamp;
     } else {
       // Channel set to salary deduction with no employer named at all. Leave any
       // existing employer untouched: a settings toggle that does not collect an
@@ -80,6 +98,10 @@ function planProfileChannelUpdate({ contributionType, employerName, requestedOrg
     // salary-deduction exemption alive on a member who is no longer on payroll.
     update.organization_id = null;
     update.pending_organization_name = null;
+    // The deferral anchor is deliberately left in place: a member who names an
+    // employer, switches back to direct deposit, then returns to salary
+    // deduction must not get a fresh window. Clearing it here would reset the
+    // clock and re-open the hole this closes.
   }
 
   return update;
