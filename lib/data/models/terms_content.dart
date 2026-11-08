@@ -56,7 +56,7 @@ class TermsContent {
   TermsContent._();
 
   /// Version of the bundled document. Bump whenever the text changes.
-  static const String version = '2026-11-03';
+  static const String version = '2026-11-08';
 
   static const List<TermsSection> sections = [
     TermsSection(
@@ -89,7 +89,7 @@ class TermsContent {
           'Every charge Coopvest Africa applies, with the amount, so nothing '
           'comes as a surprise.',
       body:
-          'Coopvest Africa charges the following, and nothing else. Each charge, its amount, and when it applies are set out below so you know exactly what to expect before you commit any money.\n\n1. Registration fee — ₦5,000, one time. Non-refundable. It is added to your first monthly contribution. If you join through an employer that deducts contributions at source, it is recovered through that deduction instead of being paid in the app.\n\n2. Monthly contribution — ₦5,000 minimum. This is your own money, held in your savings. It is not a charge.\n\n3. Monthly administrative fee — ₦1,500, made up of the AGM levy (₦1,000) and the Development levy (₦500). If your contributions are deducted by an employer, this is recovered from your salary and is not charged again in the app.\n\n4. Loan interest — simple interest, charged once on the amount you borrow, at the rate shown for the product you choose before you apply: Stable Loan (12 months) 5%; Flexi Loan 7%; Stable Loan (18 months) 7%; Quick Loan 7.5%; Premium Loan 14%; Maxi Loan 19%. The total you repay is the amount borrowed plus this interest. There is no application fee, no processing fee, and no penalty for repaying early.\n\n5. Late repayment fine — ₦3,000. This applies only after two consecutive missed monthly repayments, never on the first. It is recorded as a separate obligation and is not added to your loan balance.\n\n6. Guarantor liability — standing as a guarantor is not a charge, but it is a real liability: you accept joint responsibility for that loan if the borrower defaults. It ends when the loan is fully repaid.\n\n7. We do not apply any charge that is not listed here. There is no withdrawal fee, no fee for repaying a loan early, and no account-maintenance charge beyond the monthly administrative fee at item 3. If we introduce a new charge, or change an amount, we will tell you in the app before it takes effect and update this page.',
+          'Coopvest Africa charges the following, and nothing else. Each charge, its amount, and when it applies are set out below so you know exactly what to expect before you commit any money.\n\n1. Registration fee: ₦5,000, one time. Non-refundable. It is a charge payable to the cooperative and is not added to your monthly contribution. If you join through an employer that deducts contributions at source, it is recovered through that deduction instead of being paid in the app.\n\n2. Monthly contribution: ₦5,000 minimum. This is your own money, held in your savings. It is not a charge.\n\n3. Monthly administrative fee: ₦1,500, made up of Administrative charges (₦1,000) and the Development levy (₦500). If your contributions are deducted by an employer, this is recovered from your salary and is not charged again in the app.\n\n4. Loan interest: simple interest, charged once on the amount you borrow, at the rate shown for the product you choose before you apply: Stable Loan (12 months) 5%; Flexi Loan 7%; Stable Loan (18 months) 7%; Quick Loan 7.5%; Premium Loan 14%; Maxi Loan 19%. The total you repay is the amount borrowed plus this interest. There is no application fee, no processing fee, and no penalty for repaying early.\n\n5. Late repayment fine: ₦3,000. This applies only after two consecutive missed monthly repayments, never on the first. It is recorded as a separate obligation and is not added to your loan balance.\n\n6. Guarantor liability: standing as a guarantor is not a charge, but it is a real liability: you accept joint responsibility for that loan if the borrower defaults. It ends when the loan is fully repaid.\n\n7. We do not apply any charge that is not listed here. There is no withdrawal fee, no fee for repaying a loan early, and no account-maintenance charge beyond the monthly administrative fee at item 3. If we introduce a new charge, or change an amount, we will tell you in the app before it takes effect and update this page.',
     ),
     TermsSection(
       id: 'contribution_policy',
@@ -99,8 +99,9 @@ class TermsContent {
           'reductions require 3-month notice.',
       body:
           '1. Every member must make a minimum monthly contribution of ₦5,000. '
-          'A one-time, non-refundable registration fee of ₦5,000 applies to all '
-          'new members and is added to the first contribution.\n\n'
+          'A one-time, non-refundable registration fee of ₦5,000 also applies to '
+          'all new members; it is a charge payable to the cooperative and is not '
+          'added to your contribution.\n\n'
           '2. Members may increase their monthly contribution at any time '
           'through the app, and the new amount takes effect from the next '
           'contribution cycle.\n\n'
@@ -167,14 +168,14 @@ class TermsContent {
       id: 'registration_fee_policy',
       title: 'Registration Fee Policy',
       summary:
-          'The ₦5,000 registration fee is non-refundable and is added to your '
-          'first contribution.',
+          'The ₦5,000 registration fee is non-refundable and is a charge '
+          'payable to the cooperative.',
       body:
           '1. A one-time registration fee of ₦5,000 applies to all new members.\n\n'
           '2. The registration fee is non-refundable under any circumstances, '
           'including voluntary withdrawal or termination of membership.\n\n'
-          '3. The fee is added to, and collected together with, your first '
-          'monthly contribution.',
+          '3. The fee is a charge payable to the cooperative. It is not added to '
+          'your monthly contribution.',
     ),
     TermsSection(
       id: 'privacy_policy',

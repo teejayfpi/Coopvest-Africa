@@ -187,6 +187,8 @@ function rate(numerator, denominator) {
 function incomeCategoryOf(row) {
   const hint = `${row.fee_type || ''} ${row.label || ''} ${row.contribution_type || ''}`.toLowerCase();
   if (row.fee_type === 'registration_fee' || hint.includes('registration')) return 'registration_fees';
+  // The key stays `agm_levies` for consumers; the charge is published as
+  // "Administrative charges" since the ₦1,000 component was renamed.
   if (hint.includes('agm')) return 'agm_levies';
   if (hint.includes('development')) return 'development_levies';
   if (row.fee_type === 'levy' || hint.includes('levy')) return 'other_income';
@@ -328,7 +330,7 @@ async function savingsMetrics(ctx) {
         unit: 'percent',
       },
       { key: 'registration_fees', label: 'Registration fees', value: byCategory.registration_fees, unit: 'currency' },
-      { key: 'agm_levies', label: 'AGM levies', value: byCategory.agm_levies, unit: 'currency' },
+      { key: 'agm_levies', label: 'Administrative charges', value: byCategory.agm_levies, unit: 'currency' },
       { key: 'development_levies', label: 'Development levies', value: byCategory.development_levies, unit: 'currency' },
       { key: 'other_income', label: 'Other income', value: byCategory.other_income, unit: 'currency' },
       { key: 'withdrawals', label: 'Withdrawals', value: withdrawals, unit: 'currency' },
@@ -338,7 +340,7 @@ async function savingsMetrics(ctx) {
       { key: 'salary_deductions', label: 'Salary deductions', value: salaryDeductions, pct: pctOfTotal(salaryDeductions) },
       { key: 'direct_contributions', label: 'Direct contributions', value: directContributions, pct: pctOfTotal(directContributions) },
       { key: 'registration_fees', label: 'Registration fees', value: byCategory.registration_fees, pct: pctOfTotal(byCategory.registration_fees) },
-      { key: 'agm_levies', label: 'AGM levies', value: byCategory.agm_levies, pct: pctOfTotal(byCategory.agm_levies) },
+      { key: 'agm_levies', label: 'Administrative charges', value: byCategory.agm_levies, pct: pctOfTotal(byCategory.agm_levies) },
       { key: 'development_levies', label: 'Development levies', value: byCategory.development_levies, pct: pctOfTotal(byCategory.development_levies) },
       { key: 'other_income', label: 'Other income', value: byCategory.other_income, pct: pctOfTotal(byCategory.other_income) },
     ].filter((c) => c.value > 0),

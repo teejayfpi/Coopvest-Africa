@@ -1061,7 +1061,7 @@ class _WelcomeStep extends StatelessWidget {
                 SizedBox(height: 10),
                 Text(
                   'A one-time non-refundable registration fee of ₦5,000 applies to all new members. '
-                  'This will be added to your first monthly contribution.',
+                  'It is a charge payable to the cooperative, separate from your monthly contribution.',
                   style: TextStyle(
                       color: CoopvestColors.warning,
                       fontSize: 12,

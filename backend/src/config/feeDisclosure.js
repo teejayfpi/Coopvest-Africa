@@ -21,7 +21,10 @@
 /** Late-repayment fine, applied on the 2nd consecutive missed instalment. */
 const LATE_REPAYMENT_FINE = 3000;
 
-/** One-time, non-refundable registration (entrance) fee, added to the first contribution. */
+/**
+ * One-time, non-refundable registration (entrance) fee. A charge payable to the
+ * cooperative; it is not bundled into the member's monthly contribution.
+ */
 const REGISTRATION_FEE = 5000;
 
 /** Minimum monthly contribution. Not a charge, but a recurring member obligation. */
@@ -34,7 +37,7 @@ const MIN_MONTHLY_CONTRIBUTION = 5000;
 const ADMINISTRATIVE_FEE = {
   total: 1500,
   components: [
-    { name: 'AGM levy', amount: 1000 },
+    { name: 'Administrative charges', amount: 1000 },
     { name: 'Development levy', amount: 500 },
   ],
 };
