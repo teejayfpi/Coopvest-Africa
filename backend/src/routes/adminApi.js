@@ -5579,6 +5579,7 @@ router.post('/bulk/import-members', async (req, res) => {
   try {
     const members = Array.isArray(req.body?.members) ? req.body.members : [];
     let inserted = 0;
+    const phoneConflicts = [];
     for (const m of members) {
       const { error } = await supabase.from('profiles').upsert({
         email: m.email,
@@ -5588,9 +5589,25 @@ router.post('/bulk/import-members', async (req, res) => {
         is_active: true,
       }, { onConflict: 'email' });
       if (!error) inserted++;
+      // 23505 on the phone index means another member already holds the number.
+      // The row is skipped; the admin needs to know which, or the import looks
+      // like a silent partial failure.
+      else if (error.code === '23505' && /phone/.test(error.message || '')) {
+        phoneConflicts.push({ email: m.email, phone: m.phone });
+      }
     }
-    await logAdminAction('BULK_IMPORT_MEMBERS', {}, { total: members.length, inserted });
-    res.json({ success: true, message: `Imported ${inserted} of ${members.length} members`, inserted, total: members.length });
+    await logAdminAction('BULK_IMPORT_MEMBERS', {}, {
+      total: members.length,
+      inserted,
+      phoneConflicts: phoneConflicts.length,
+    }, req);
+    res.json({
+      success: true,
+      message: `Imported ${inserted} of ${members.length} members`,
+      inserted,
+      total: members.length,
+      phoneConflicts,
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
