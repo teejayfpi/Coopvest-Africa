@@ -11,6 +11,8 @@ const multer = require('multer');
 const supabase = require('../config/supabase');
 const { authenticate, requireRegistrationPaid } = require('../middleware/auth');
 const logger = require('../utils/logger');
+const { normalizePhone, phoneLookupKey } = require('../lib/phoneNumber');
+const { findPhoneOwner, PHONE_TAKEN_MESSAGE } = require('../lib/phoneRegistry');
 
 const AVATAR_BUCKET = process.env.AVATAR_BUCKET || 'kyc-documents';
 const avatarUpload = multer({
@@ -103,7 +105,23 @@ router.put('/profile', authenticate, [
 
     const updateData = {};
     if (name) updateData.name = name;
-    if (phone) updateData.phone = phone;
+    if (phone) {
+      // A member may correct their own number, but not adopt one that belongs
+      // to another account.
+      const key = phoneLookupKey(phone);
+      const currentKey = phoneLookupKey(req.user.phone || '');
+      if (key && key !== currentKey) {
+        const owner = await findPhoneOwner(supabase, phone);
+        if (owner && owner.id !== req.user.id) {
+          return res.status(409).json({
+            success: false,
+            error: PHONE_TAKEN_MESSAGE,
+            code: 'PHONE_ALREADY_REGISTERED',
+          });
+        }
+      }
+      updateData.phone = normalizePhone(phone);
+    }
     if (address !== undefined) updateData.address = address;
 
     const { data, error } = await supabase
