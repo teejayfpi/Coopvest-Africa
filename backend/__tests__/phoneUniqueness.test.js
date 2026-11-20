@@ -21,7 +21,7 @@ const express = require('express');
 // The profiles lookup. Answers with whatever the current test says the number
 // owns; `columnMissing` models the database before migration 066.
 jest.mock('../src/config/supabase', () => {
-  const state = { owner: null, columnMissing: false, queries: [], upsertError: null };
+  const state = { owner: null, columnMissing: false, queries: [], upsertError: null, ownerSequence: null };
 
   const makeQuery = (table) => {
     const q = { table, filters: [] };
@@ -33,6 +33,12 @@ jest.mock('../src/config/supabase', () => {
         return { data: null, error: { code: '42703', message: 'column profiles.phone_normalized does not exist' } };
       }
       if (state.upsertError) return { data: null, error: state.upsertError };
+      // A test can model the race: free when the pre-check runs, taken by the
+      // time signUp has failed, so only the error handler sees the owner.
+      if (state.ownerSequence && state.ownerSequence.length) {
+        const next = state.ownerSequence.shift();
+        return { data: next, error: null };
+      }
       const listQuery = q.filters.some(([kind]) => kind === 'in');
       return { data: listQuery ? (state.owner ? [state.owner] : []) : state.owner, error: null };
     };
@@ -92,6 +98,7 @@ const supabase = require('../src/config/supabase');
 const { __auth: authSdk } = require('@supabase/supabase-js');
 const authRouter = require('../src/routes/auth');
 const adminRouter = require('../src/routes/adminApi');
+const { PHONE_TAKEN_MESSAGE } = require('../src/lib/phoneRegistry');
 
 const state = supabase.__state;
 
@@ -105,6 +112,7 @@ beforeEach(() => {
   state.columnMissing = false;
   state.queries.length = 0;
   state.upsertError = null;
+  state.ownerSequence = null;
   authSdk.signUp.mockReset();
   authSdk.admin.deleteUser.mockReset();
 });
@@ -206,6 +214,30 @@ describe('POST /auth/register refuses a number that is already registered', () =
     expect(authSdk.signUp).not.toHaveBeenCalled();
   });
 
+  test('a signUp rejected by the phone trigger returns the same 409', async () => {
+    // With migration 066 applied, handle_new_user() runs as an AFTER INSERT
+    // trigger on auth.users, so a duplicate makes signUp itself fail with an
+    // opaque message. The member must still read the shared sentence.
+    // First lookup (the pre-check) sees the number free; the second, made after
+    // signUp fails, sees the member who won the race.
+    state.ownerSequence = [null, { id: 'someone-else', email: 'other@example.com' }];
+    authSdk.signUp.mockResolvedValue({
+      data: { user: null, session: null },
+      error: { message: 'Database error saving new user' },
+    });
+
+    const res = await request(app).post('/api/v1/auth/register').send({
+      email: 'fresh@example.com',
+      phone: '07038193753',
+      name: 'Fresh Member',
+      password: 'Str0ngPassw0rd!',
+    });
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('PHONE_ALREADY_REGISTERED');
+    expect(res.body.error).toBe(PHONE_TAKEN_MESSAGE);
+  });
+
   test('stores the number in one canonical form', async () => {
     authSdk.signUp.mockResolvedValue({
       data: { user: { id: 'new-auth-id', email: body.email, user_metadata: {} }, session: null },
@@ -258,6 +290,7 @@ describe('POST /admin/bulk/import-members reports a number it could not take', (
 
   test('a successful import reports no conflicts', async () => {
     state.upsertError = null;
+  state.ownerSequence = null;
 
     const res = await request(app)
       .post('/api/v1/admin/bulk/import-members')

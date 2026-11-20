@@ -229,6 +229,21 @@ router.post('/register', [
     });
 
     if (error) {
+      // Once migration 066 is applied, handle_new_user() runs as an AFTER INSERT
+      // trigger on auth.users, so a duplicate number makes signUp itself fail and
+      // surfaces here as an opaque "Database error saving new user". The rollback
+      // is what we want (no orphaned auth account), but the member needs the same
+      // sentence the pre-check gives rather than a raw Postgres string.
+      if (phone) {
+        const owner = await phoneOwner(phone).catch(() => null);
+        if (owner) {
+          return res.status(409).json({
+            success: false,
+            error: PHONE_TAKEN_MESSAGE,
+            code: 'PHONE_ALREADY_REGISTERED',
+          });
+        }
+      }
       return res.status(400).json({ success: false, error: error.message });
     }
 

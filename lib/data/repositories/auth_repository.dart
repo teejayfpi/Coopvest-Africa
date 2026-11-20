@@ -181,25 +181,14 @@ class AuthRepository {
         }
       }
 
-      final response = await _supabase.auth.signUp(
+      final response = await _signUpOrExplainPhoneCollision(
         email: email.trim(),
         password: password,
-        data: {
-          'name': name,
-          'phone': phone,
-          'referralCode': referralCode,
-          // Policy acceptance, recorded against the member at sign-up so it is
-          // provable. The backend persists it onto the KYC record.
-          if (termsVersion != null) 'terms_version': termsVersion,
-          if (termsAcceptedAt != null) 'terms_accepted_at': termsAcceptedAt,
-        },
-        // In-app verification: the deep-link URL from the single source of truth
-        // in AppConfig. This used to be hardcoded to the admin dashboard's
-        // /verify-email page, which sent members into the OPERATOR portal to
-        // confirm their own account. The app's deep-link handler routes
-        // coopvest://verify-email and https://coopvest.africa/verify-email into
-        // the in-app verify screen; see AppConfig for the domain caveat.
-        emailRedirectTo: AppConfig.emailVerifyRedirect,
+        name: name,
+        phone: phone,
+        referralCode: referralCode,
+        termsVersion: termsVersion,
+        termsAcceptedAt: termsAcceptedAt,
       );
 
       if (response.user == null) {
@@ -230,6 +219,54 @@ class AuthRepository {
       logger.e('Register error: $e');
       final networkMsg = ErrorHandler.networkErrorMessage(e);
       if (networkMsg != null) throw AuthException(networkMsg);
+      rethrow;
+    }
+  }
+
+  /// signUp, translating a phone-collision rejection into the shared sentence.
+  ///
+  /// Once migration 066 is applied, handle_new_user() runs as an AFTER INSERT
+  /// trigger on auth.users, so a duplicate number makes signUp itself fail with
+  /// an opaque "Database error saving new user". The transaction rolls back, so
+  /// nothing is stranded, but the member would otherwise see a Postgres string.
+  /// Ask the backend which number holds it, and only claim a collision when the
+  /// backend agrees — a generic database error must not be reported as a
+  /// duplicate, or a member with a free number would be told to use another.
+  Future<sb.AuthResponse> _signUpOrExplainPhoneCollision({
+    required String email,
+    required String password,
+    required String name,
+    String? phone,
+    String? referralCode,
+    String? termsVersion,
+    String? termsAcceptedAt,
+  }) async {
+    try {
+      return await _supabase.auth.signUp(
+        email: email,
+        password: password,
+        data: {
+          'name': name,
+          'phone': phone,
+          'referralCode': referralCode,
+          // Policy acceptance, recorded against the member at sign-up so it is
+          // provable. The backend persists it onto the KYC record.
+          if (termsVersion != null) 'terms_version': termsVersion,
+          if (termsAcceptedAt != null) 'terms_accepted_at': termsAcceptedAt,
+        },
+        // In-app verification: the deep-link URL from the single source of truth
+        // in AppConfig. This used to be hardcoded to the admin dashboard's
+        // /verify-email page, which sent members into the OPERATOR portal to
+        // confirm their own account. The app's deep-link handler routes
+        // coopvest://verify-email and https://coopvest.africa/verify-email into
+        // the in-app verify screen; see AppConfig for the domain caveat.
+        emailRedirectTo: AppConfig.emailVerifyRedirect,
+      );
+    } on sb.AuthException catch (e) {
+      if (phone != null && phone.trim().isNotEmpty) {
+        final available = await isPhoneAvailable(phone.trim());
+        if (!available) throw AuthException(phoneTakenMessage);
+      }
       rethrow;
     }
   }
