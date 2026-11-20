@@ -23,6 +23,7 @@ const logger = require('../utils/logger');
 const notifyService = require('../services/notifyService');
 const { evaluateGuarantorEligibility, contributionChannel, canGuarantee } = require('../lib/guarantorEligibility');
 const { deadlineFrom, DEFAULT_CONSENT_WINDOW_DAYS } = require('../lib/guarantorInvitations');
+const guarantorCoverage = require('../lib/guarantorCoverage');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -353,6 +354,67 @@ router.get(
   }
 );
 
+/**
+ * Work out what this guarantor should pledge for a loan, and whether the
+ * database can hold it yet.
+ *
+ * `supported` is false until migration 067 is applied. Consent must keep
+ * working in that window: the column is new, and a deploy that lands before the
+ * migration is applied by hand would otherwise reject every guarantee with
+ * "column pledged_amount does not exist". When the column is missing the
+ * guarantee is still recorded, just without a pledge — the same state every
+ * pre-067 guarantee is in.
+ *
+ * Never throws: a failure to read savings must not lose a consent that the
+ * member has already given and that the borrower is waiting on.
+ */
+async function recordPledge(loanId, guarantorProfileId) {
+  try {
+    const { data: loan, error: loanErr } = await supabase
+      .from('loans')
+      .select('amount, total_repayment, remaining_balance, status')
+      .eq('id', loanId)
+      .maybeSingle();
+    if (loanErr) throw loanErr;
+
+    const { data: row, error: rowErr } = await supabase
+      .from('loan_guarantors')
+      .select('pledged_amount')
+      .eq('loan_id', loanId)
+      .eq('guarantor_profile_id', guarantorProfileId)
+      .maybeSingle();
+
+    // 42703 = undefined_column, which is what PostgREST reports for a select
+    // against a column the migration has not created yet.
+    if (rowErr && (rowErr.code === '42703' || /pledged_amount/.test(rowErr.message || ''))) {
+      return { supported: false, amount: null };
+    }
+    if (rowErr) throw rowErr;
+
+    const { data: savings } = await supabase
+      .from('savings')
+      .select('balance')
+      .eq('profile_id', guarantorProfileId)
+      .maybeSingle();
+
+    const { data: guarantors } = await supabase
+      .from('loan_guarantors')
+      .select('id')
+      .eq('loan_id', loanId);
+
+    const amount = guarantorCoverage.pledgedAmount(
+      guarantorCoverage.outstandingFor(loan),
+      (guarantors || []).length,
+      Number(savings?.balance || 0),
+    );
+
+    return { supported: true, amount };
+  } catch (err) {
+    logger.warn(`[guarantor] pledge not recorded for loan ${loanId}: ${err.message}`);
+    return { supported: false, amount: null };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // POST /requests/:requestId/accept
 // ---------------------------------------------------------------------------
@@ -449,10 +511,22 @@ router.post(
 
       const now = new Date().toISOString();
 
+      // Hold the guarantor's share of this loan. The pledge is what turns the
+      // guarantee into security: without it the member could consent and then
+      // withdraw every naira, which is exactly what used to happen. Read the
+      // balance here, at consent, because that is the moment the commitment is
+      // made; a later read would pledge whatever is left after they have spent.
+      const pledge = await recordPledge(row.loan_id, req.user.id);
+
       // Always update by the resolved PK (row.id), not the raw requestId param
       const { error: updateErr } = await supabase
         .from('loan_guarantors')
-        .update({ status: 'consented', consented_at: now, updated_at: now })
+        .update({
+          status: 'consented',
+          consented_at: now,
+          updated_at: now,
+          ...(pledge.supported ? { pledged_amount: pledge.amount } : {}),
+        })
         .eq('id', row.id);
 
       if (updateErr) throw updateErr;

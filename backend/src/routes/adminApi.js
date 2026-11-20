@@ -33,6 +33,7 @@ const {
   contributionChannel,
   REASON,
 } = require('../lib/guarantorEligibility');
+const guarantorCoverage = require('../lib/guarantorCoverage');
 
 /** Notify the loan's borrower of an approve/reject decision. Never throws. */
 async function notifyBorrowerOfDecision(loan, approve, reason) {
@@ -1425,6 +1426,20 @@ router.post('/loans/:id/approve', async (req, res) => {
     if (fetchErr) throw fetchErr;
     if (!loan) return res.status(404).json({ success: false, error: 'Loan not found' });
     if (await routeToApprovalCenterIfRequired(req, res, loan)) return;
+
+    // A loan whose savings cannot cover it is not refused outright — an officer
+    // may have a reason to approve anyway — but it must be a deliberate
+    // decision rather than an oversight. Without the flag the request is
+    // rejected with the figures, so the dashboard can show them.
+    const coverage = await guarantorCoverage.evaluateLoanCoverage(supabase, loan);
+    if (!coverage.covered && !req.body?.acknowledgeUnderCovered) {
+      return res.status(409).json({
+        success: false,
+        code: 'UNDER_COVERED',
+        error: guarantorCoverage.coverageMessage(coverage),
+        coverage,
+      });
+    }
 
     const { data, error } = await supabase
       .from('loans')
