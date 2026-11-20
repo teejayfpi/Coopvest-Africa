@@ -7,6 +7,7 @@ import '../../../core/utils/error_handler.dart';
 import '../../../core/utils/utils.dart';
 import '../../../core/services/terms_acceptance_store.dart';
 import '../../../data/models/terms_content.dart';
+import '../../../data/repositories/auth_repository.dart';
 import 'terms_section_screen.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/common/buttons.dart';
@@ -164,7 +165,11 @@ class _RegisterStep1ScreenState extends ConsumerState<RegisterStep1Screen> {
                 .replaceFirst('Exception: ', '')
                 .replaceFirst('AuthException: ', '');
 
-        if (msg.contains('already exists') ||
+        // A number that is already registered is an error on the phone field,
+        // not a general failure, so it is shown where the member can act on it.
+        if (msg.contains(AuthRepository.phoneTakenMessage)) {
+          setState(() => _phoneError = AuthRepository.phoneTakenMessage);
+        } else if (msg.contains('already exists') ||
             msg.contains('email-already-in-use') ||
             msg.contains('already registered')) {
           await _handleExistingAccount();

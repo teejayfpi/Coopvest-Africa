@@ -36,6 +36,12 @@ const {
   normalizeDateOfBirth,
   MIN_AGE_YEARS,
 } = require('../services/registrationMerge');
+const {
+  normalizePhone,
+  phoneLookupKey,
+  isNigerianMobile,
+} = require('../lib/phoneNumber');
+const { findPhoneOwner, PHONE_TAKEN_MESSAGE } = require('../lib/phoneRegistry');
 
 const validate = (req, res, next) => {
   const errors = validationResult(req);
@@ -44,6 +50,9 @@ const validate = (req, res, next) => {
   }
   next();
 };
+
+/** Bound to this module's service-role client. */
+const phoneOwner = (rawPhone) => findPhoneOwner(supabase, rawPhone);
 
 /**
  * Build the user object returned to the Flutter app.
@@ -189,16 +198,52 @@ router.post('/register', [
     const { email, phone, name, password, referralCode, terms_version, terms_accepted_at } = req.body;
     const userId = `USR-${Date.now().toString(36).toUpperCase()}`;
 
+    // One number, one member. Checked before the auth user is created, because
+    // a rejection afterwards would leave an orphaned Supabase auth account
+    // holding the email. The unique index (migration 066) is the backstop if
+    // two requests race past this check.
+    if (phone) {
+      if (!isNigerianMobile(phone)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Enter a valid Nigerian mobile number, for example 08031234567.',
+        });
+      }
+      const owner = await phoneOwner(phone);
+      if (owner) {
+        return res.status(409).json({
+          success: false,
+          error: PHONE_TAKEN_MESSAGE,
+          code: 'PHONE_ALREADY_REGISTERED',
+        });
+      }
+    }
+
     // Throwaway client — see newAuthClient note above.
     const { data, error } = await newAuthClient().auth.signUp({
       email: email.toLowerCase(),
       password,
       options: {
-        data: { name, phone: phone || null, userId, role: 'member', referralCode: referralCode || null },
+        data: { name, phone: normalizePhone(phone) || null, userId, role: 'member', referralCode: referralCode || null },
       },
     });
 
     if (error) {
+      // Once migration 066 is applied, handle_new_user() runs as an AFTER INSERT
+      // trigger on auth.users, so a duplicate number makes signUp itself fail and
+      // surfaces here as an opaque "Database error saving new user". The rollback
+      // is what we want (no orphaned auth account), but the member needs the same
+      // sentence the pre-check gives rather than a raw Postgres string.
+      if (phone) {
+        const owner = await phoneOwner(phone).catch(() => null);
+        if (owner) {
+          return res.status(409).json({
+            success: false,
+            error: PHONE_TAKEN_MESSAGE,
+            code: 'PHONE_ALREADY_REGISTERED',
+          });
+        }
+      }
       return res.status(400).json({ success: false, error: error.message });
     }
 
@@ -208,10 +253,30 @@ router.post('/register', [
     const profile = await ensureProfile(authUser, {
       userId,
       name,
-      phone: phone || null,
+      phone: normalizePhone(phone) || null,
       termsVersion: terms_version || null,
       termsAcceptedAt: terms_accepted_at || null,
     });
+
+    // Two concurrent registrations can both pass the pre-check above; the unique
+    // index stops the second one. Report it in the same words as the pre-check
+    // rather than a generic 500, and close the auth account the loser created so
+    // its email is not left half-registered.
+    if (phone && !profile) {
+      const owner = await phoneOwner(phone).catch(() => null);
+      if (owner) {
+        try {
+          await newAuthClient().auth.admin.deleteUser(authUser.id);
+        } catch (cleanupErr) {
+          logger.warn('register: could not remove auth user after phone collision:', cleanupErr.message);
+        }
+        return res.status(409).json({
+          success: false,
+          error: PHONE_TAKEN_MESSAGE,
+          code: 'PHONE_ALREADY_REGISTERED',
+        });
+      }
+    }
 
     // Attribute the referral server-side. Best-effort: a bad or self-referral
     // code must never fail a registration that otherwise succeeded.
@@ -243,6 +308,49 @@ router.post('/register', [
   } catch (err) {
     logger.error('Registration error:', err);
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/v1/auth/phone-availability?phone=...
+//
+// The member app registers through `supabase.auth.signUp` directly, so it
+// cannot rely on POST /auth/register to reject a duplicate number. This lets
+// the sign-up screen check first and show the error against the phone field,
+// before an auth account is created for an email that would then be stranded.
+//
+// Returns `available: false` with the same sentence /auth/register uses, so the
+// member sees one wording wherever the check happens. Deliberately says nothing
+// about *who* holds the number.
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/phone-availability', async (req, res) => {
+  try {
+    const { phone } = req.query;
+    if (!phone) {
+      return res.status(400).json({ success: false, error: 'A phone number is required.' });
+    }
+    if (!isNigerianMobile(phone)) {
+      return res.status(400).json({
+        success: false,
+        available: false,
+        error: 'Enter a valid Nigerian mobile number, for example 08031234567.',
+      });
+    }
+
+    const owner = await phoneOwner(phone);
+    if (owner) {
+      return res.status(200).json({
+        success: true,
+        available: false,
+        code: 'PHONE_ALREADY_REGISTERED',
+        error: PHONE_TAKEN_MESSAGE,
+      });
+    }
+
+    return res.status(200).json({ success: true, available: true });
+  } catch (err) {
+    logger.error('Phone availability check failed:', err.message);
+    res.status(500).json({ success: false, error: 'Could not check this number right now. Please try again.' });
   }
 });
 
@@ -805,7 +913,24 @@ router.post('/sync', (req, res, next) => { req.skipSingleSessionCheck = true; ne
 
     const updateData = { updated_at: new Date().toISOString() };
     if (name) updateData.name = name;
-    if (phone) updateData.phone = phone;
+    if (phone) {
+      // Sync must not move this account onto a number another member already
+      // registered. Without this an existing member could claim a taken number
+      // and the unique index would only surface it as a 500.
+      const key = phoneLookupKey(phone);
+      const currentKey = phoneLookupKey(req.user.phone || '');
+      if (key && key !== currentKey) {
+        const owner = await phoneOwner(phone);
+        if (owner && owner.id !== profileId) {
+          return res.status(409).json({
+            success: false,
+            error: PHONE_TAKEN_MESSAGE,
+            code: 'PHONE_ALREADY_REGISTERED',
+          });
+        }
+      }
+      updateData.phone = normalizePhone(phone);
+    }
 
     // Single-device login: this is the endpoint the app hits right after a
     // fresh sign-in, so claim the active session here. Any other device still

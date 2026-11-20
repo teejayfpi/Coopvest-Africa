@@ -40,6 +40,10 @@ const MIGRATIONS = [
   // client-writable. Verified against the live database.
   '061_revoke_client_writes.sql',
   '062_atomic_wallet_operations.sql',
+  // One phone number, one member. Adds profiles.phone_normalized, backfills it,
+  // and puts a unique index on it. Without this the API's duplicate check is a
+  // single point of failure with no database-level backstop.
+  '066_phone_number_uniqueness.sql',
 ];
 
 const { Client } = require('pg');

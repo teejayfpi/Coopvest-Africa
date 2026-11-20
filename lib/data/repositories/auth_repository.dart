@@ -23,6 +23,12 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
 ///   3. Send the access token to the backend to sync/create the profile row
 ///   4. Backend returns the full User payload
 class AuthRepository {
+  /// Shown wherever a number is rejected as already registered. Kept identical
+  /// to the backend's PHONE_TAKEN_MESSAGE so the member reads one sentence
+  /// whether the app or the API caught it.
+  static const String phoneTakenMessage =
+      'This phone number has already been used to register. Please use a different number, or log in to your existing account.';
+
   final ApiClient _apiClient;
   final sb.SupabaseClient _supabase = sb.Supabase.instance.client;
   final GoogleSignIn _googleSignIn = GoogleSignIn(
@@ -52,6 +58,29 @@ class AuthRepository {
   /// Check if there's a valid Supabase session.
   Future<bool> hasValidSession() async {
     return _supabase.auth.currentSession != null;
+  }
+
+  /// Ask the backend whether a phone number is still free to register.
+  ///
+  /// Fails open: if the check itself cannot be made (offline, backend down) the
+  /// caller proceeds to sign up, where the backend re-checks and the database
+  /// enforces the rule. Failing closed here would block registration for
+  /// everyone whenever the API hiccups, which is worse than the rare duplicate
+  /// that the server-side check catches anyway.
+  Future<bool> isPhoneAvailable(String phone) async {
+    try {
+      final response = await _apiClient.get(
+        '/auth/phone-availability',
+        queryParameters: {'phone': phone},
+      );
+      if (response is Map<String, dynamic>) {
+        return response['available'] != false;
+      }
+      return true;
+    } catch (e) {
+      logger.w('Phone availability check failed: $e — letting signup proceed');
+      return true;
+    }
   }
 
   /// Get the current Supabase user.
@@ -141,25 +170,25 @@ class AuthRepository {
     String? termsAcceptedAt,
   }) async {
     try {
-      final response = await _supabase.auth.signUp(
+      // A number may only register once. Checked before signUp() because
+      // Supabase would otherwise create the auth user and strand the email;
+      // the backend re-checks and the database enforces it, this just lets the
+      // sign-up form show the error against the phone field.
+      if (phone != null && phone.trim().isNotEmpty) {
+        final available = await isPhoneAvailable(phone.trim());
+        if (!available) {
+          throw AuthException(phoneTakenMessage);
+        }
+      }
+
+      final response = await _signUpOrExplainPhoneCollision(
         email: email.trim(),
         password: password,
-        data: {
-          'name': name,
-          'phone': phone,
-          'referralCode': referralCode,
-          // Policy acceptance, recorded against the member at sign-up so it is
-          // provable. The backend persists it onto the KYC record.
-          if (termsVersion != null) 'terms_version': termsVersion,
-          if (termsAcceptedAt != null) 'terms_accepted_at': termsAcceptedAt,
-        },
-        // In-app verification: the deep-link URL from the single source of truth
-        // in AppConfig. This used to be hardcoded to the admin dashboard's
-        // /verify-email page, which sent members into the OPERATOR portal to
-        // confirm their own account. The app's deep-link handler routes
-        // coopvest://verify-email and https://coopvest.africa/verify-email into
-        // the in-app verify screen; see AppConfig for the domain caveat.
-        emailRedirectTo: AppConfig.emailVerifyRedirect,
+        name: name,
+        phone: phone,
+        referralCode: referralCode,
+        termsVersion: termsVersion,
+        termsAcceptedAt: termsAcceptedAt,
       );
 
       if (response.user == null) {
@@ -190,6 +219,54 @@ class AuthRepository {
       logger.e('Register error: $e');
       final networkMsg = ErrorHandler.networkErrorMessage(e);
       if (networkMsg != null) throw AuthException(networkMsg);
+      rethrow;
+    }
+  }
+
+  /// signUp, translating a phone-collision rejection into the shared sentence.
+  ///
+  /// Once migration 066 is applied, handle_new_user() runs as an AFTER INSERT
+  /// trigger on auth.users, so a duplicate number makes signUp itself fail with
+  /// an opaque "Database error saving new user". The transaction rolls back, so
+  /// nothing is stranded, but the member would otherwise see a Postgres string.
+  /// Ask the backend which number holds it, and only claim a collision when the
+  /// backend agrees — a generic database error must not be reported as a
+  /// duplicate, or a member with a free number would be told to use another.
+  Future<sb.AuthResponse> _signUpOrExplainPhoneCollision({
+    required String email,
+    required String password,
+    required String name,
+    String? phone,
+    String? referralCode,
+    String? termsVersion,
+    String? termsAcceptedAt,
+  }) async {
+    try {
+      return await _supabase.auth.signUp(
+        email: email,
+        password: password,
+        data: {
+          'name': name,
+          'phone': phone,
+          'referralCode': referralCode,
+          // Policy acceptance, recorded against the member at sign-up so it is
+          // provable. The backend persists it onto the KYC record.
+          if (termsVersion != null) 'terms_version': termsVersion,
+          if (termsAcceptedAt != null) 'terms_accepted_at': termsAcceptedAt,
+        },
+        // In-app verification: the deep-link URL from the single source of truth
+        // in AppConfig. This used to be hardcoded to the admin dashboard's
+        // /verify-email page, which sent members into the OPERATOR portal to
+        // confirm their own account. The app's deep-link handler routes
+        // coopvest://verify-email and https://coopvest.africa/verify-email into
+        // the in-app verify screen; see AppConfig for the domain caveat.
+        emailRedirectTo: AppConfig.emailVerifyRedirect,
+      );
+    } on sb.AuthException catch (e) {
+      if (phone != null && phone.trim().isNotEmpty) {
+        final available = await isPhoneAvailable(phone.trim());
+        if (!available) throw AuthException(phoneTakenMessage);
+      }
       rethrow;
     }
   }
