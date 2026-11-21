@@ -1195,10 +1195,23 @@ router.get('/loans', async (req, res) => {
     const profileByLoan = {};
     (data || []).forEach((l) => { if (l.profile) profileByLoan[l.id] = l.profile; });
     if (loanIds.length > 0) {
-      const { data: guarantorRows } = await supabase
+      let { data: guarantorRows, error: guarantorErr } = await supabase
         .from('loan_guarantors')
-        .select('id, loan_id, status, consented_at, created_at, guarantor_profile:profiles!loan_guarantors_guarantor_id_fkey(id, name, email, phone, organization_id, contribution_method, contribution_type, pending_organization_name)')
+        .select('id, loan_id, status, consented_at, created_at, pledged_amount, pledged_recovered, guarantor_profile:profiles!loan_guarantors_guarantor_id_fkey(id, name, email, phone, organization_id, contribution_method, contribution_type, pending_organization_name)')
         .in('loan_id', loanIds);
+
+      // 42703 = undefined_column: migration 067 has not been applied yet. Retry
+      // without the pledge columns so the page still lists guarantors; the
+      // dashboard then shows no pledge rather than the whole list vanishing.
+      if (guarantorErr && (guarantorErr.code === '42703' || /pledged_/.test(guarantorErr.message || ''))) {
+        const { data: fallback } = await supabase
+          .from('loan_guarantors')
+          .select('id, loan_id, status, consented_at, created_at, guarantor_profile:profiles!loan_guarantors_guarantor_id_fkey(id, name, email, phone, organization_id, contribution_method, contribution_type, pending_organization_name)')
+          .in('loan_id', loanIds);
+        guarantorRows = fallback || [];
+      } else if (guarantorErr) {
+        throw guarantorErr;
+      }
 
       const byLoan = {};
       (guarantorRows || []).forEach((g) => {
@@ -1222,6 +1235,11 @@ router.get('/loans', async (req, res) => {
           ineligibleReason: elig.eligible ? null : elig.reason,
           consentedAt: g.consented_at ?? null,
           createdAt: g.created_at,
+          // Null before migration 067. A null pledge means the guarantee
+          // predates pledging and holds nothing back, so the dashboard must
+          // not present it as a secured commitment.
+          pledged: g.pledged_amount != null ? Number(g.pledged_amount) : null,
+          pledgedRecovered: g.pledged_recovered != null ? Number(g.pledged_recovered) : 0,
         });
       });
       loansArr.forEach((l) => { l.guarantors = byLoan[l.id] || []; });
