@@ -34,6 +34,7 @@ const {
   REASON,
 } = require('../lib/guarantorEligibility');
 const guarantorCoverage = require('../lib/guarantorCoverage');
+const savingsSetoff = require('../lib/savingsSetoff');
 
 /** Notify the loan's borrower of an approve/reject decision. Never throws. */
 async function notifyBorrowerOfDecision(loan, approve, reason) {
@@ -1455,6 +1456,65 @@ router.post('/loans/:id/approve', async (req, res) => {
     // through rather than finding out only if a repayment is missed.
     await notifyGuarantorsOfApproval(data);
     res.json({ success: true, loan: data, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/admin/loans/:id/recover-from-savings
+ *
+ * Apply a defaulted loan's savings set-off. The heavy lifting is in
+ * `loan_settle_from_savings` (migration 068), which debits in order and caps
+ * each guarantor at their pledge; this endpoint only gates and reports it.
+ *
+ * Deliberately requires two explicit flags. Recovering money from a member's
+ * savings is irreversible, and the policy commits to the member being told
+ * first, so the caller must confirm both that notice was served and that they
+ * intend to proceed. A default of "false" means a mis-wired dashboard button
+ * cannot empty someone's savings.
+ */
+router.post('/loans/:id/recover-from-savings', async (req, res) => {
+  try {
+    const { data: loan, error: loanErr } = await supabase
+      .from('loans')
+      .select('id, loan_id, status, remaining_balance, total_repayment, amount, profile_id')
+      .eq('id', req.params.id)
+      .maybeSingle();
+    if (loanErr) throw loanErr;
+    if (!loan) return res.status(404).json({ success: false, error: 'Loan not found' });
+
+    if (!savingsSetoff.isEligibleForSetOff(loan)) {
+      return res.status(409).json({
+        success: false,
+        code: 'NOT_ELIGIBLE',
+        error: `Savings recovery applies only to overdue, defaulted or in-recovery loans. This loan is ${loan.status}.`,
+      });
+    }
+
+    if (req.body?.noticeServed !== true || req.body?.confirm !== true) {
+      return res.status(400).json({
+        success: false,
+        code: 'CONFIRMATION_REQUIRED',
+        error: 'Recovering from savings requires noticeServed and confirm to both be true.',
+      });
+    }
+
+    const { data, error } = await supabase.rpc('loan_settle_from_savings', {
+      p_loan_id: loan.id,
+      p_admin_id: req.user?.id || null,
+      p_notice_served: true,
+    });
+    if (error) throw error;
+
+    await logAdminAction('LOAN_SAVINGS_SETOFF', { model: 'Loan', id: loan.id }, {
+      recovered: data?.recovered,
+      shortfall: data?.shortfall,
+      steps: data?.steps,
+      adminId: req.user?.id || null,
+    }, req);
+
+    res.json({ success: true, ...data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
