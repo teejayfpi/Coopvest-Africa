@@ -33,6 +33,8 @@ const {
   contributionChannel,
   REASON,
 } = require('../lib/guarantorEligibility');
+const guarantorCoverage = require('../lib/guarantorCoverage');
+const savingsSetoff = require('../lib/savingsSetoff');
 
 /** Notify the loan's borrower of an approve/reject decision. Never throws. */
 async function notifyBorrowerOfDecision(loan, approve, reason) {
@@ -1193,10 +1195,23 @@ router.get('/loans', async (req, res) => {
     const profileByLoan = {};
     (data || []).forEach((l) => { if (l.profile) profileByLoan[l.id] = l.profile; });
     if (loanIds.length > 0) {
-      const { data: guarantorRows } = await supabase
+      let { data: guarantorRows, error: guarantorErr } = await supabase
         .from('loan_guarantors')
-        .select('id, loan_id, status, consented_at, created_at, guarantor_profile:profiles!loan_guarantors_guarantor_id_fkey(id, name, email, phone, organization_id, contribution_method, contribution_type, pending_organization_name)')
+        .select('id, loan_id, status, consented_at, created_at, pledged_amount, pledged_recovered, guarantor_profile:profiles!loan_guarantors_guarantor_id_fkey(id, name, email, phone, organization_id, contribution_method, contribution_type, pending_organization_name)')
         .in('loan_id', loanIds);
+
+      // 42703 = undefined_column: migration 067 has not been applied yet. Retry
+      // without the pledge columns so the page still lists guarantors; the
+      // dashboard then shows no pledge rather than the whole list vanishing.
+      if (guarantorErr && (guarantorErr.code === '42703' || /pledged_/.test(guarantorErr.message || ''))) {
+        const { data: fallback } = await supabase
+          .from('loan_guarantors')
+          .select('id, loan_id, status, consented_at, created_at, guarantor_profile:profiles!loan_guarantors_guarantor_id_fkey(id, name, email, phone, organization_id, contribution_method, contribution_type, pending_organization_name)')
+          .in('loan_id', loanIds);
+        guarantorRows = fallback || [];
+      } else if (guarantorErr) {
+        throw guarantorErr;
+      }
 
       const byLoan = {};
       (guarantorRows || []).forEach((g) => {
@@ -1220,6 +1235,11 @@ router.get('/loans', async (req, res) => {
           ineligibleReason: elig.eligible ? null : elig.reason,
           consentedAt: g.consented_at ?? null,
           createdAt: g.created_at,
+          // Null before migration 067. A null pledge means the guarantee
+          // predates pledging and holds nothing back, so the dashboard must
+          // not present it as a secured commitment.
+          pledged: g.pledged_amount != null ? Number(g.pledged_amount) : null,
+          pledgedRecovered: g.pledged_recovered != null ? Number(g.pledged_recovered) : 0,
         });
       });
       loansArr.forEach((l) => { l.guarantors = byLoan[l.id] || []; });
@@ -1426,6 +1446,20 @@ router.post('/loans/:id/approve', async (req, res) => {
     if (!loan) return res.status(404).json({ success: false, error: 'Loan not found' });
     if (await routeToApprovalCenterIfRequired(req, res, loan)) return;
 
+    // A loan whose savings cannot cover it is not refused outright — an officer
+    // may have a reason to approve anyway — but it must be a deliberate
+    // decision rather than an oversight. Without the flag the request is
+    // rejected with the figures, so the dashboard can show them.
+    const coverage = await guarantorCoverage.evaluateLoanCoverage(supabase, loan);
+    if (!coverage.covered && !req.body?.acknowledgeUnderCovered) {
+      return res.status(409).json({
+        success: false,
+        code: 'UNDER_COVERED',
+        error: guarantorCoverage.coverageMessage(coverage),
+        coverage,
+      });
+    }
+
     const { data, error } = await supabase
       .from('loans')
       .update({ status: 'approved', approved_by: adminId, approved_at: now, rejected_reason: null, rejected_by: null, updated_at: now })
@@ -1440,6 +1474,65 @@ router.post('/loans/:id/approve', async (req, res) => {
     // through rather than finding out only if a repayment is missed.
     await notifyGuarantorsOfApproval(data);
     res.json({ success: true, loan: data, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/admin/loans/:id/recover-from-savings
+ *
+ * Apply a defaulted loan's savings set-off. The heavy lifting is in
+ * `loan_settle_from_savings` (migration 068), which debits in order and caps
+ * each guarantor at their pledge; this endpoint only gates and reports it.
+ *
+ * Deliberately requires two explicit flags. Recovering money from a member's
+ * savings is irreversible, and the policy commits to the member being told
+ * first, so the caller must confirm both that notice was served and that they
+ * intend to proceed. A default of "false" means a mis-wired dashboard button
+ * cannot empty someone's savings.
+ */
+router.post('/loans/:id/recover-from-savings', async (req, res) => {
+  try {
+    const { data: loan, error: loanErr } = await supabase
+      .from('loans')
+      .select('id, loan_id, status, remaining_balance, total_repayment, amount, profile_id')
+      .eq('id', req.params.id)
+      .maybeSingle();
+    if (loanErr) throw loanErr;
+    if (!loan) return res.status(404).json({ success: false, error: 'Loan not found' });
+
+    if (!savingsSetoff.isEligibleForSetOff(loan)) {
+      return res.status(409).json({
+        success: false,
+        code: 'NOT_ELIGIBLE',
+        error: `Savings recovery applies only to overdue, defaulted or in-recovery loans. This loan is ${loan.status}.`,
+      });
+    }
+
+    if (req.body?.noticeServed !== true || req.body?.confirm !== true) {
+      return res.status(400).json({
+        success: false,
+        code: 'CONFIRMATION_REQUIRED',
+        error: 'Recovering from savings requires noticeServed and confirm to both be true.',
+      });
+    }
+
+    const { data, error } = await supabase.rpc('loan_settle_from_savings', {
+      p_loan_id: loan.id,
+      p_admin_id: req.user?.id || null,
+      p_notice_served: true,
+    });
+    if (error) throw error;
+
+    await logAdminAction('LOAN_SAVINGS_SETOFF', { model: 'Loan', id: loan.id }, {
+      recovered: data?.recovered,
+      shortfall: data?.shortfall,
+      steps: data?.steps,
+      adminId: req.user?.id || null,
+    }, req);
+
+    res.json({ success: true, ...data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
