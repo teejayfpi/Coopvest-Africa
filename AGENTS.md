@@ -1422,6 +1422,36 @@ migration not having run: `recordPledge` in `src/routes/guarantor.js` detects
 Nothing debits a pledge on default yet. The recovery worker notifies; it does
 not collect. Set-off is a policy decision, not a missing query.
 
+## Contribution currency (loan eligibility)
+
+`loanPolicy.countContributionMonths` counts months ever contributed, so a member
+who paid six months then stopped still passes the entry gate forever.
+`src/lib/contributionConsistency.js` supplies the missing question: are the
+contributions *current*? It is enforced in `POST /loans/apply` and returns
+`CONTRIBUTIONS_NOT_CURRENT` with a member-facing message.
+
+Three things to know before touching it:
+
+- **The rule is gated on consent.** `POLICY.minAgreementVersion` is `v1.1`, and
+  the check only runs when the application's `agreementVersion` is at least that.
+  `v1.0` applications are exempt because that agreement never disclosed the
+  clause. Bump the agreement version in the app *and* the policy version
+  together, or members will be refused under a rule they never accepted.
+- **The published text is enforced by tests.** `terms.json`
+  (`contribution_policy`) and the app's bundled copy in
+  `lib/data/models/terms_content.dart` must both state the 10-day grace period
+  and the "resumes automatically" outcome.
+  `__tests__/contributionPolicyPublication.test.js` fails if they drift.
+- **`savings.consecutive_months` is still never written.** Ten places read it
+  (wallet, member profile, reports, referral service) and it is always 0. Use
+  `assessConsistency` instead; do not start writing the column, because a
+  writer plus the readers would make a stale value look authoritative.
+
+Deposits count across every type in `CONTRIBUTION_TRANSACTION_TYPES`
+(`deposit`, `savings_deposit`, `transfer_in`, `salary_deduction`,
+`contribution`). An earlier version counted only `savings_deposit`, which
+reported payroll members as never having contributed.
+
 ## Recovery from savings
 
 `loan_settle_from_savings` (068) is the only code that takes money out of a

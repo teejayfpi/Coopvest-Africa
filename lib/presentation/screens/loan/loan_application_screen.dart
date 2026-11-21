@@ -430,7 +430,12 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
                           '4. If repayment is missed for 3 consecutive months without approved arrangements, '
                           'guarantors may become responsible for the outstanding balance in accordance with '
                           'Coopvest Africa\'s loan policy.\n\n'
-                          '5. By proceeding, you authorise Coopvest Africa to disburse the approved amount '
+                          '5. Your monthly contribution must be current, not merely historical, to qualify for a loan. '
+                          'You have ten (10) days from the start of each month to pay it. If it is still unpaid after '
+                          'that, borrowing (and guaranteeing others) is paused until the outstanding months are paid. '
+                          'No penalty is charged and no savings are taken, and borrowing resumes automatically once '
+                          'you are up to date.\n\n'
+                          '6. By proceeding, you authorise Coopvest Africa to disburse the approved amount '
                           'to your registered account and to apply the terms above.',
                           style: TextStyle(fontSize: 12, height: 1.6),
                         ),
@@ -687,7 +692,7 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
           'tenureMonths': loanInfo['duration'],
           'purpose': _purposeController.text.trim(),
           'agreementAccepted': true,
-          'agreementVersion': 'v1.0',
+          'agreementVersion': 'v1.1',
           'applyReferralBonus': _useReferralBonus && hasBonus,
         });
 

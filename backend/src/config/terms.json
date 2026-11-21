@@ -1,5 +1,5 @@
 {
- "version": "2026-11-08",
+ "version": "2026-11-20",
  "sections": [
   {
    "id": "terms_and_conditions",
@@ -16,8 +16,8 @@
   {
    "id": "contribution_policy",
    "title": "Contribution Policy",
-   "summary": "Monthly contribution rules: minimum \u20a65,000, increases anytime, reductions require 3-month notice.",
-   "body": "1. Every member must make a minimum monthly contribution of \u20a65,000. A one-time, non-refundable registration fee of \u20a65,000 also applies to all new members; it is a charge payable to the cooperative and is not added to your contribution.\n\n2. Members may increase their monthly contribution at any time through the app, and the new amount takes effect from the next contribution cycle.\n\n3. Requests to reduce a monthly contribution require a minimum of three (3) months' written notice to the cooperative.\n\n4. Contributions may be made by manual monthly self-contribution or by salary deduction (payroll) through your employer.\n\n5. Consistent contributions improve eligibility for future financial support services. Contribution history and account records are tracked digitally for transparency."
+   "summary": "Monthly contribution rules: minimum \u20a65,000, increases anytime, reductions require 3-month notice, and contributions must be current to borrow.",
+   "body": "1. Every member must make a minimum monthly contribution of \u20a65,000. A one-time, non-refundable registration fee of \u20a65,000 also applies to all new members; it is a charge payable to the cooperative and is not added to your contribution.\n\n2. Members may increase their monthly contribution at any time through the app, and the new amount takes effect from the next contribution cycle.\n\n3. Requests to reduce a monthly contribution require a minimum of three (3) months' written notice to the cooperative.\n\n4. Contributions may be made by manual monthly self-contribution or by salary deduction (payroll) through your employer.\n\n5. Consistent contributions improve eligibility for future financial support services. Contribution history and account records are tracked digitally for transparency.\n\n6. Contributions must be current, not merely historical, to qualify for a new loan. A member whose contributions have lapsed is not eligible to borrow until the outstanding months are paid.\n\n7. A grace period of ten (10) days applies at the start of each month. A contribution paid within the first ten days of the month is treated as on time for that month.\n\n8. Where a contribution remains unpaid after the grace period, borrowing is paused from that point. No penalty, fine or interest is charged for a lapse, and no savings are taken. Borrowing resumes automatically, without a new application, as soon as the outstanding months are paid.\n\n9. A member who has never contributed is not in arrears; their first contribution starts their record.\n\n10. This rule applies to loan applications submitted under the Digital Loan Agreement version that discloses it. Applications made under an earlier version are assessed on the terms in force when they were submitted.\n\n11. If you believe your contribution record is wrong, contact support before applying. Records are corrected where a payment was made but not reflected."
   },
   {
    "id": "loan_policy",

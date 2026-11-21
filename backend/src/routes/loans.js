@@ -22,10 +22,10 @@ const loanPolicy = require('../lib/loanPolicy');
 const { LATE_REPAYMENT_FINE } = require('../config/feeDisclosure');
 const { kycGateFor } = require('../lib/kycGate');
 const { evaluateGuarantorEligibility } = require('../lib/guarantorEligibility');
+const contributionConsistency = require('../lib/contributionConsistency');
 const logger = require('../utils/logger');
 
 const ADMIN_ROLES = ['admin', 'superadmin', 'super_admin', 'staff'];
-const AGREEMENT_VERSION = 'v1.0';
 
 const LOAN_TYPES = [
   // Mobile app loan types
@@ -236,6 +236,52 @@ router.post(
             },
           });
         }
+
+        // ── Contributions must be current, not merely historical ────────────
+        // `countContributionMonths` counts distinct months ever paid, so a
+        // member who paid six months in a row and then stopped still passes the
+        // gate above and stays fully loan-eligible. This is the check that
+        // notices the stop. It reads wallet/payroll deposits as well as
+        // contribution rows, because those flows write no row and would
+        // otherwise look like a lapse.
+        //
+        // Only applied to applications whose Digital Loan Agreement version
+        // discloses this rule. A member who accepted an older agreement never
+        // saw the clause, so the platform must not enforce it against them.
+        if (contributionConsistency.policyAppliesTo(agreementVersion)) {
+          const { data: depositRows } = await supabase
+            .from('transactions')
+            .select('created_at')
+            .eq('profile_id', profileId)
+            .in('type', contributionConsistency.CONTRIBUTION_TRANSACTION_TYPES)
+            .eq('status', 'completed')
+            .order('created_at', { ascending: false })
+            .limit(60);
+
+          const consistency = contributionConsistency.assessConsistency({
+            contributions: memberContributions,
+            deposits: depositRows || [],
+          });
+
+          if (!consistency.inGoodStanding) {
+            return res.status(403).json({
+              success: false,
+              code: 'CONTRIBUTIONS_NOT_CURRENT',
+              error: contributionConsistency.consistencyMessage(consistency),
+              policyVersion: contributionConsistency.POLICY.version,
+              standing: contributionConsistency.standingFor(
+                consistency.currentStreak,
+                consistency.monthsSinceLast,
+              ),
+              consistency: {
+                currentStreak: consistency.currentStreak,
+                monthsSinceLast: consistency.monthsSinceLast,
+                lastPaidMonth: consistency.lastPaidMonth,
+                graceDays: contributionConsistency.POLICY.graceDays,
+              },
+            });
+          }
+        }
       }
 
       // ── Savings-based eligibility cap (Policy §3) ─────────────────────────
@@ -338,7 +384,12 @@ router.post(
         savings_from_bonus: calc.totalSavingsFromBonus,
         status: 'pending',
         agreement_accepted_at: new Date().toISOString(),
-        agreement_version: agreementVersion || AGREEMENT_VERSION,
+        // Record what the member actually accepted. Defaulting to the *current*
+        // version would manufacture consent evidence for a client that sent
+        // none, and the contribution gate keys off this value. Omitting the key
+        // when the client sent nothing lets the column default apply, which is
+        // the baseline version they are treated as having accepted.
+        ...(agreementVersion ? { agreement_version: agreementVersion } : {}),
         monthly_contribution_at_application: currentContribution,
       };
 
@@ -369,7 +420,11 @@ router.post(
       const { error: agreementErr } = await supabase.from('loan_agreements').insert({
         loan_id: loan.id,
         profile_id: profileId,
-        agreement_version: agreementVersion || AGREEMENT_VERSION,
+        // Record what the member actually accepted. Omitting the key when the
+        // client sent no version lets the column default apply; the column is
+        // NOT NULL, so an explicit null would fail the insert and lose the
+        // consent record entirely.
+        ...(agreementVersion ? { agreement_version: agreementVersion } : {}),
         accepted_at: new Date().toISOString(),
         ip_address: (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || null,
         user_agent: req.headers['user-agent'] || null,
