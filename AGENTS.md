@@ -1377,3 +1377,48 @@ So the endpoint's shape is a contract with a repository outside this one. Adding
 field is safe; renaming or removing `charges[].amount`, `charges[].label`,
 `loan_interest_rates` or `not_charged` breaks the website build. If the shape must
 change, change both repositories in the same session.
+
+## Savings liens: what is held, and why
+
+Two migrations hold member savings against debt. They are the only place a
+member's own money is restricted, so know which one you are touching.
+
+- **065** holds a borrower's savings against their *own* live loans. A
+  withdrawal may not take the balance below the total outstanding.
+- **067** adds `loan_guarantors.pledged_amount` and extends the same lien to
+  loans the member has *guaranteed*. `NULL` means no pledge — every pre-067
+  guarantee is `NULL`, so applying the migration freezes nobody's savings
+  without notice.
+
+Both live inside `public.savings_move`, which is `SECURITY DEFINER` and is the
+single choke point for savings movement. A withdrawal is blocked only if it
+would take the balance below `loan_lien + pledge_lien`; everything above that
+line stays withdrawable, and deposits are never restricted.
+
+The arithmetic lives in `src/lib/guarantorCoverage.js` and is mirrored in the
+SQL status list. **If you change `LIVE_LOAN_STATUSES`, change the status list in
+both 065 and 067 too**, or a member is shown one coverage figure and the
+database enforces another.
+
+Neither migration is in `governanceSchema.js` `MIGRATIONS`. They change what
+members may do with their own money, so they are applied by hand after
+sign-off, not by the deploy bootstrap. Code must therefore tolerate the
+migration not having run: `recordPledge` in `src/routes/guarantor.js` detects
+`42703` and records the consent without a pledge rather than failing it.
+
+Nothing debits a pledge on default yet. The recovery worker notifies; it does
+not collect. Set-off is a policy decision, not a missing query.
+
+## Recovery from savings
+
+`loan_settle_from_savings` (068) is the only code that takes money out of a
+member's savings for a debt. Three invariants:
+
+- `p_notice_served` must be true. The member is told before, not after.
+- A guarantor is capped at `pledged_amount - pledged_recovered`, never at their
+  whole balance and never twice for the same pledge.
+- Only `overdue`, `defaulted` and `in_recovery` qualify. An `active` loan is
+  being serviced; taking savings there punishes a member who is current.
+
+Anything left over comes back as `shortfall`. It is not written off, and no
+other source is invented to cover it.
