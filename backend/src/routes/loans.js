@@ -22,7 +22,6 @@ const loanPolicy = require('../lib/loanPolicy');
 const { LATE_REPAYMENT_FINE } = require('../config/feeDisclosure');
 const { kycGateFor } = require('../lib/kycGate');
 const { evaluateGuarantorEligibility } = require('../lib/guarantorEligibility');
-const contributionConsistency = require('../lib/contributionConsistency');
 const logger = require('../utils/logger');
 
 const ADMIN_ROLES = ['admin', 'superadmin', 'super_admin', 'staff'];
@@ -234,44 +233,6 @@ router.post(
               contributionMonths,
               membershipRequired: loanPolicy.MIN_MEMBERSHIP_MONTHS,
               contributionsRequired: loanPolicy.MIN_CONTRIBUTION_MONTHS,
-            },
-          });
-        }
-
-        // ── Contributions must be current, not merely historical ────────────
-        // `countContributionMonths` counts distinct months ever paid, so a
-        // member who paid six months in a row and then stopped still passes the
-        // gate above and stays fully loan-eligible. This is the check that
-        // notices the stop. It reads wallet deposits as well as contribution
-        // rows, because the deposit flow writes no row and would otherwise look
-        // like a lapse.
-        const { data: depositRows } = await supabase
-          .from('transactions')
-          .select('created_at')
-          .eq('profile_id', profileId)
-          .eq('type', 'savings_deposit')
-          .eq('status', 'completed')
-          .order('created_at', { ascending: false })
-          .limit(60);
-
-        const consistency = contributionConsistency.assessConsistency({
-          contributions: memberContributions,
-          deposits: depositRows || [],
-        });
-
-        if (!consistency.inGoodStanding) {
-          return res.status(403).json({
-            success: false,
-            code: 'CONTRIBUTIONS_NOT_CURRENT',
-            error: contributionConsistency.consistencyMessage(consistency),
-            standing: contributionConsistency.standingFor(
-              consistency.currentStreak,
-              consistency.monthsSinceLast,
-            ),
-            consistency: {
-              currentStreak: consistency.currentStreak,
-              monthsSinceLast: consistency.monthsSinceLast,
-              lastPaidMonth: consistency.lastPaidMonth,
             },
           });
         }
