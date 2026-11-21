@@ -35,6 +35,13 @@ const {
 } = require('../lib/guarantorEligibility');
 const guarantorCoverage = require('../lib/guarantorCoverage');
 const savingsSetoff = require('../lib/savingsSetoff');
+const guarantorNotifications = require('../lib/guarantorNotifications');
+
+/** Statuses a penalty may be added to: live loans that can fall into arrears. */
+const PENALTY_ELIGIBLE_STATUSES = new Set(['active', 'repaying', 'overdue', 'defaulted']);
+
+/** Statuses whose repayment plan may be restructured: live, not yet closed. */
+const RESTRUCTURABLE_STATUSES = new Set(['active', 'repaying', 'overdue', 'defaulted', 'in_recovery']);
 
 /** Notify the loan's borrower of an approve/reject decision. Never throws. */
 async function notifyBorrowerOfDecision(loan, approve, reason) {
@@ -66,61 +73,30 @@ async function notifyBorrowerOfDecision(loan, approve, reason) {
 }
 
 /**
- * Tell the guarantors that a loan they backed has been approved.
+ * Tell the borrower their loan money has landed. Never throws.
  *
- * WHY
- * ---
- * Guarantors were only ever contacted at the point they were invited to
- * consent. Once the loan was approved nothing was sent, so a member could find
- * out they were on the hook for someone else's loan only when the borrower
- * stopped paying. That is the worst possible moment to learn about it.
- *
- * Guarantor rows carry two id columns: `guarantor_profile_id` (the member
- * account) and `guarantor_id` (a legacy reference). Notify the profile id, and
- * fall back to the legacy column, skipping anything unset so a malformed row
- * cannot throw.
- *
- * Best-effort: a failed notification must never fail the approval itself.
+ * Sent on in-app and push: a disbursement is the moment the member can act
+ * (spend it or repay it), and an unread inbox row would leave them checking
+ * their balance to find out.
  */
-async function notifyGuarantorsOfApproval(loan) {
+async function notifyBorrowerOfDisbursement(loan) {
   try {
-    const loanId = loan.id;
-    if (!loanId) return;
-
-    const { data: guarantors, error } = await supabase
-      .from('loan_guarantors')
-      .select('guarantor_profile_id, guarantor_id, guarantor_name, status')
-      .eq('loan_id', loanId);
-    if (error) {
-      logger.warn('notifyGuarantorsOfApproval: could not load guarantors:', error.message);
-      return;
-    }
-    if (!guarantors || guarantors.length === 0) return;
-
+    const borrowerId = loan.borrower_id || loan.profile_id || loan.user_id;
+    if (!borrowerId) return;
     const amount = Number(loan.amount || 0);
-    const fmt = amount ? `₦${amount.toLocaleString()}` : 'a loan';
-    // Only consenting guarantors are actually on the hook.
-    const consenting = guarantors.filter(
-      (g) => !g.status || String(g.status).toLowerCase() === 'consented' ||
-             String(g.status).toLowerCase() === 'accepted'
-    );
-    const targets = (consenting.length ? consenting : guarantors)
-      .map((g) => g.guarantor_profile_id || g.guarantor_id)
-      .filter((id) => typeof id === 'string' && id.length > 0);
-
-    for (const profileId of new Set(targets)) {
-      await notifyService.sendInApp({
-        profileId,
-        title: 'Loan you guaranteed was approved',
-        body: `A loan of ${fmt} that you guaranteed has been approved. `
-            + 'You will be notified if a repayment is missed.',
-        type: 'loan',
-        category: 'info',
-      });
-    }
-    logger.info(`notifyGuarantorsOfApproval: notified ${new Set(targets).size} guarantor(s) for loan ${loanId}`);
+    const fmt = amount ? `₦${amount.toLocaleString()}` : 'Your loan';
+    await notifyService.broadcast({
+      profileIds: [borrowerId],
+      channels: ['in_app', 'push'],
+      title: '💸 Loan Disbursed',
+      body: `${fmt} has been credited to your Coopvest wallet. `
+        + 'Your repayment schedule starts from today.',
+      type: 'loan',
+      category: 'success',
+      data: { loanId: loan.id, event: 'disbursed' },
+    });
   } catch (e) {
-    logger.warn('notifyGuarantorsOfApproval failed:', e.message);
+    logger.warn('notifyBorrowerOfDisbursement failed:', e.message);
   }
 }
 
@@ -1371,6 +1347,9 @@ router.post(
       if (!data) return res.status(404).json({ success: false, error: 'Loan not found' });
       await logAdminAction(`LOAN_${approve ? 'APPROVED' : 'REJECTED'}`, { model: 'Loan', id: data.id }, { reason, adminId });
       await notifyBorrowerOfDecision(data, approve, reason);
+      // A guarantor backed this loan, so the decision is theirs to know too:
+      // on approval they become liable, on rejection that liability ends.
+      await guarantorNotifications.notifyGuarantorsOfDecision(data, approve, reason);
       res.json({ success: true, loan: data, data });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
@@ -1470,14 +1449,206 @@ router.post('/loans/:id/approve', async (req, res) => {
     if (!data) return res.status(404).json({ success: false, error: 'Loan not found' });
     await logAdminAction('LOAN_APPROVED', { model: 'Loan', id: data.id }, { adminId });
     await notifyBorrowerOfDecision(data, true, null);
-    // Guarantors are on the hook for this loan, so they are told it went
-    // through rather than finding out only if a repayment is missed.
-    await notifyGuarantorsOfApproval(data);
+    // Guarantors are on the hook for this loan, so they are told the outcome
+    // rather than finding out only if a repayment is missed.
+    await guarantorNotifications.notifyGuarantorsOfDecision(data, true, null);
     res.json({ success: true, loan: data, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
+
+/**
+ * POST /api/admin/loans/:id/disburse
+ *
+ * Pay out an approved loan. Credits the principal to the member's wallet and
+ * moves the loan to 'active' in one transaction (migration 070).
+ *
+ * This is the step that makes the rest of the loan lifecycle work. Approval
+ * alone left the loan at 'approved', and repayment only accepts 'active' /
+ * 'repaying' / 'overdue', so an approved loan could not be repaid at all — and
+ * the recovery worker never scanned it, so its guarantors were never warned
+ * when it fell into arrears.
+ *
+ * Only 'approved' qualifies, so a double click cannot credit the principal
+ * twice. The dashboard surfaces a 409 and refreshes rather than retrying.
+ */
+router.post(
+  '/loans/:id/disburse',
+  [body('confirm').optional().isBoolean()],
+  validate,
+  async (req, res) => {
+    try {
+      const adminId = req.user?.id || null;
+
+      const { data: loan, error: fetchErr } = await supabase
+        .from('loans')
+        .select('*, profile:profiles!profile_id(name, email)')
+        .eq('id', req.params.id)
+        .maybeSingle();
+      if (fetchErr) throw fetchErr;
+      if (!loan) return res.status(404).json({ success: false, error: 'Loan not found' });
+
+      if (loan.status !== 'approved') {
+        return res.status(409).json({
+          success: false,
+          code: 'NOT_DISBURSABLE',
+          error: `Only an approved loan can be disbursed. This one is ${loan.status}.`,
+        });
+      }
+
+      const { data: disbursed, error } = await supabase.rpc('loan_disburse', {
+        p_loan_id: loan.id,
+        p_admin_id: adminId,
+      });
+      if (error) {
+        const message = error.message || '';
+        if (error.code === '22023' || /Only an approved loan/i.test(message)) {
+          return res.status(409).json({
+            success: false,
+            code: 'NOT_DISBURSABLE',
+            error: message,
+          });
+        }
+        // The function itself is missing until migration 070 is applied.
+        if (error.code === '42883' || /function .*loan_disburse.* does not exist/i.test(message)) {
+          logger.error('loan_disburse missing — run migration 070');
+          return res.status(503).json({
+            success: false,
+            code: 'MIGRATION_REQUIRED',
+            error: 'Loan disbursement is unavailable until migration 070 is applied.',
+          });
+        }
+        throw error;
+      }
+
+      await logAdminAction('LOAN_DISBURSED', { model: 'Loan', id: loan.id }, { adminId }, req);
+
+      // The borrower needs to know the money is in their wallet, and the
+      // guarantors need to know the liability they consented to has started —
+      // up to now they had only been told the application was approved.
+      await notifyBorrowerOfDisbursement(disbursed || loan);
+      await guarantorNotifications.notifyGuarantorsOfDecision(disbursed || loan, true, null);
+
+      res.json({ success: true, loan: disbursed, data: disbursed });
+    } catch (err) {
+      logger.error('admin loan disburse error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  },
+);
+
+/**
+ * POST /api/admin/loans/:id/penalty
+ *
+ * Add a late-repayment penalty to a loan as a `member_fees` obligation.
+ *
+ * This is deliberately an obligation row rather than a silent bump of
+ * `remaining_balance`. `member_fees` is what the deposit-verification path pays
+ * down, and what the member sees as an outstanding charge — so the penalty is
+ * collected, waivable, and visible. Adding it straight to the loan balance would
+ * make it invisible and unpayable except by overpaying the loan itself.
+ *
+ * The loan policy sets the amount (₦3,000 for a second consecutive missed
+ * instalment, `fee_types` row 'Late Loan Repayment Fine'), so an explicit amount
+ * is accepted but the configured type is the default.
+ *
+ * Loans only attract penalties once they are live and in arrears. Penalising a
+ * pending application or a completed loan would create a charge nobody can
+ * explain, so those are refused.
+ */
+router.post(
+  '/loans/:id/penalty',
+  [
+    body('amount').optional().isFloat({ min: 0.01 }),
+    body('reason').optional().isString().isLength({ max: 500 }),
+  ],
+  validate,
+  async (req, res) => {
+    try {
+      const adminId = req.user?.id || null;
+
+      const { data: loan, error: fetchErr } = await supabase
+        .from('loans')
+        .select('*, profile:profiles!profile_id(name, email)')
+        .eq('id', req.params.id)
+        .maybeSingle();
+      if (fetchErr) throw fetchErr;
+      if (!loan) return res.status(404).json({ success: false, error: 'Loan not found' });
+
+      if (!PENALTY_ELIGIBLE_STATUSES.has(loan.status)) {
+        return res.status(409).json({
+          success: false,
+          code: 'NOT_PENALISABLE',
+          error: `A penalty can only be added to an active, repaying, overdue or defaulted loan. This one is ${loan.status}.`,
+        });
+      }
+
+      const { data: feeType } = await supabase
+        .from('fee_types')
+        .select('id, name, amount')
+        .eq('category', 'fine')
+        .eq('is_active', true)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      const amount = Number(req.body?.amount ?? feeType?.amount ?? 0);
+      if (!(amount > 0)) {
+        return res.status(400).json({
+          success: false,
+          error: 'No penalty amount supplied and no active fine fee type is configured.',
+        });
+      }
+
+      const { data: fee, error } = await supabase
+        .from('member_fees')
+        .insert({
+          profile_id: loan.profile_id,
+          loan_id: loan.id,
+          fee_type_id: feeType?.id ?? null,
+          fee_type: 'fine',
+          label: req.body?.reason?.trim() || feeType?.name || 'Late Loan Repayment Fine',
+          amount,
+          status: 'outstanding',
+          assigned_by: adminId,
+        })
+        .select('*')
+        .maybeSingle();
+      if (error) throw error;
+
+      await logAdminAction(
+        'LOAN_PENALTY_ADDED',
+        { model: 'Loan', id: loan.id },
+        { adminId, amount, fee_id: fee?.id, reason: req.body?.reason ?? null },
+        req,
+      );
+
+      // The member is told what they have been charged and why, on in-app and
+      // push. A charge that appears only on a statement is one they will
+      // dispute later.
+      try {
+        await notifyService.broadcast({
+          profileIds: [loan.profile_id],
+          channels: ['in_app', 'push'],
+          title: 'Penalty Added',
+          body: `A late repayment penalty of ₦${amount.toLocaleString()} has been added to your loan. `
+            + 'It appears as an outstanding charge on your account.',
+          type: 'loan',
+          category: 'warning',
+          data: { loanId: loan.id, feeId: fee?.id, event: 'penalty' },
+        });
+      } catch (notifyErr) {
+        logger.warn('penalty notification failed:', notifyErr.message);
+      }
+
+      res.status(201).json({ success: true, fee, amount });
+    } catch (err) {
+      logger.error('admin loan penalty error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  },
+);
 
 /**
  * POST /api/admin/loans/:id/recover-from-savings
@@ -1557,6 +1728,9 @@ router.post('/loans/:id/reject', async (req, res) => {
     if (!data) return res.status(404).json({ success: false, error: 'Loan not found' });
     await logAdminAction('LOAN_REJECTED', { model: 'Loan', id: data.id }, { reason, adminId });
     await notifyBorrowerOfDecision(data, false, reason);
+    // The borrower's reason is not repeated to guarantors; they are told only
+    // that the loan was declined and that they are no longer liable.
+    await guarantorNotifications.notifyGuarantorsOfDecision(data, false, reason);
     res.json({ success: true, loan: data, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -4312,7 +4486,31 @@ router.post(
       }
       if (req.body.newMonthlyRepayment !== undefined) update.monthly_repayment = req.body.newMonthlyRepayment;
       if (req.body.newInterestRate !== undefined) update.effective_interest_rate = req.body.newInterestRate;
-      update.status = 'active';
+
+      // Read the loan first: total_repayment has to follow the new instalment
+      // count, and the status guard below needs the current one. Forcing
+      // 'active' unconditionally used to resurrect a rejected or completed loan.
+      const { data: existing, error: readErr } = await supabase
+        .from('loans').select('*').eq('id', req.params.id).maybeSingle();
+      if (readErr) throw readErr;
+      if (!existing) return res.status(404).json({ success: false, error: 'Loan not found' });
+
+      if (!RESTRUCTURABLE_STATUSES.has(existing.status)) {
+        return res.status(409).json({
+          success: false,
+          code: 'NOT_RESTRUCTURABLE',
+          error: `A repayment plan can only be restructured while the loan is live. This one is ${existing.status}.`,
+        });
+      }
+
+      const tenure = Number(update.tenure_months ?? existing.tenure_months ?? 0);
+      const monthly = Number(update.monthly_repayment ?? existing.monthly_repayment ?? 0);
+      if (tenure > 0 && monthly > 0) {
+        // Leaving total_repayment stale would make the schedule disagree with
+        // the instalments, and the next_due_date trigger derives from it.
+        update.total_repayment = Math.round(tenure * monthly * 100) / 100;
+      }
+
       const { data, error } = await supabase
         .from('loans').update(update).eq('id', req.params.id).select('*').maybeSingle();
       if (error) throw error;

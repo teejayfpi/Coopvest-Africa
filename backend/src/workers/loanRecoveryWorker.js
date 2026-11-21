@@ -25,6 +25,7 @@
 const supabase = require('../config/supabase');
 const logger = require('../utils/logger');
 const notifyService = require('../services/notifyService');
+const guarantorNotifications = require('../lib/guarantorNotifications');
 const { LATE_REPAYMENT_FINE, naira } = require('../config/feeDisclosure');
 
 const POLL_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -123,32 +124,17 @@ async function notifyAdminOfDefault(loan, stage) {
 }
 
 async function notifyGuarantors(loan) {
+  // Delegates to the shared notifier so the definition of a "bound guarantor"
+  // is the same one the decision paths use. The previous version filtered the
+  // query on status 'accepted', a value nothing in the codebase writes — consent
+  // writes 'consented' — so it matched no row and no guarantor was ever told.
   try {
-    // Fetch guarantors for this loan
-    const { data: guarantors } = await supabase
-      .from('loan_guarantors')
-      .select('guarantor_profile_id, guarantor_name')
-      .eq('loan_id', loan.id)
-      .eq('status', 'accepted');
-
-    if (!guarantors || guarantors.length === 0) return;
-
-    for (const g of guarantors) {
-      await notifyService.sendInApp({
-        profileId: g.guarantor_profile_id,
-        title: '⚠️ Loan Recovery Notice',
-        body: `A loan you guaranteed is now 3 months overdue. As a guarantor, you may be contacted as part of Coopvest Africa's loan recovery process in accordance with the loan policy you accepted.`,
-        type: 'loan_recovery',
-        category: 'warning',
-        priority: 'high',
-      });
-    }
-
-    logger.info(`loanRecoveryWorker: guarantors notified for loan ${loan.loan_id || loan.id}`);
+    await guarantorNotifications.notifyGuarantorsOfRecovery(loan);
   } catch (err) {
     logger.warn('loanRecoveryWorker: guarantor notification failed:', err.message);
   }
 }
+
 
 async function processDue() {
   try {
@@ -195,60 +181,74 @@ async function processDue() {
           logger.info(`loanRecoveryWorker: Stage 1 reminder sent — loan ${loan.loan_id || loan.id}`);
         }
 
-        // ── STAGE 2: 2nd consecutive missed month — apply the late repayment fine ──
-        else if (missedMonths === 2) {
-          // Fines are separate obligations — record a member_fees row.
-          await supabase.from('member_fees').insert({
-            profile_id: profileId,
-            loan_id: loan.id,
-            fee_type: 'fine',
-            label: 'Late Loan Repayment Fine',
-            amount: LATE_REPAYMENT_PENALTY_NGN,
-            status: 'outstanding',
-          });
+        // ── STAGE 2: 2nd+ consecutive missed month — apply the late repayment fine ──
+        //
+        // `>= 2`, not `=== 2`. With an exact match a loan that reached 3 missed
+        // months never matched this branch again and silently skipped the fine,
+        // while a loan sitting at exactly 2 re-ran it every day (see the guard
+        // below). Stage 3 no longer depends on this branch having been skipped.
+        else if (missedMonths >= 2) {
+          // The fine is charged once per loan, not once per worker tick. This
+          // ran daily before, so a loan at 2 missed months accumulated a new
+          // late-fee row every day — tens of thousands of naira of obligations
+          // for a single policy fine. `penalty_applied` was written but never
+          // read, so it could not prevent that.
+          const alreadyFined = loan.penalty_applied === true
+            || Number(loan.penalty_amount || 0) > 0
+            || await hasOutstandingLateFine(loan.id);
 
-          await supabase
-            .from('loans')
-            .update({
-              penalty_applied: true,
-              penalty_amount: (loan.penalty_amount || 0) + LATE_REPAYMENT_PENALTY_NGN,
-              status: 'overdue',
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', loan.id);
-
-          // Notify borrower of penalty
-          await notifyService.broadcast({
-            profileIds: [profileId],
-            channels: ['in_app', 'email'],
-            title: '⚠️ Late Repayment Penalty Applied',
-            body: `A ${FINE_LABEL} late repayment fine has been added to your obligations as a separate fee due to 2 consecutive missed payments. Please arrange a repayment plan immediately.`,
-          });
-
-          // Flag the account (Policy: Active Default Restriction). The flag is
-          // cleared automatically once no overdue/defaulted loans remain.
-          const { error: flagErr } = await supabase
-            .from('profiles')
-            .update({ is_flagged: true, flag_reason: 'loan_default' })
-            .eq('id', profileId)
-            .neq('is_flagged', true);
-          if (flagErr) {
-            // flag_reason requires migration 019 — fall back to the bare flag
-            if (/Could not find the .* column|column .* does not exist/i.test(flagErr.message || '')) {
-              await supabase.from('profiles').update({ is_flagged: true }).eq('id', profileId).neq('is_flagged', true);
-            } else {
-              logger.warn('loanRecoveryWorker: account flag failed:', flagErr.message);
+          if (!alreadyFined) {
+            // Fines are separate obligations — record a member_fees row.
+            const { error: fineErr } = await supabase.from('member_fees').insert({
+              profile_id: profileId,
+              loan_id: loan.id,
+              fee_type: 'fine',
+              label: 'Late Loan Repayment Fine',
+              amount: LATE_REPAYMENT_PENALTY_NGN,
+              status: 'outstanding',
+            });
+            // A silent failure here charged the member in the notification but
+            // not on their account, which is how a fee becomes invisible.
+            if (fineErr) {
+              logger.error(`loanRecoveryWorker: fine insert failed for loan ${loan.loan_id || loan.id}:`, fineErr.message);
+              throw fineErr;
             }
+
+            await supabase
+              .from('loans')
+              .update({
+                penalty_applied: true,
+                penalty_amount: (loan.penalty_amount || 0) + LATE_REPAYMENT_PENALTY_NGN,
+                status: 'overdue',
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', loan.id);
+
+            // Notify borrower of penalty
+            await notifyService.broadcast({
+              profileIds: [profileId],
+              channels: ['in_app', 'email'],
+              title: '⚠️ Late Repayment Penalty Applied',
+              body: `A ${FINE_LABEL} late repayment fine has been added to your obligations as a separate fee due to 2 consecutive missed payments. Please arrange a repayment plan immediately.`,
+            });
+
+            logger.info(`loanRecoveryWorker: Stage 2 fine recorded — loan ${loan.loan_id || loan.id}`);
           }
 
-          // Notify admin
-          await notifyAdminOfDefault(loan, 2);
+          // Flag the account (Policy: Active Default Restriction). Idempotent:
+          // the neq keeps it from re-writing on every tick.
+          await flagAccountForDefault(profileId);
 
-          logger.info(`loanRecoveryWorker: Stage 2 fine recorded — loan ${loan.loan_id || loan.id}`);
+          // Notify admin. Only on the tick that actually charged the fine, so a
+          // loan sitting in default does not mail the admins every morning.
+          if (!alreadyFined) await notifyAdminOfDefault(loan, 2);
         }
 
         // ── STAGE 3: 3rd+ consecutive missed month — contact guarantors ───
-        else if (missedMonths >= 3) {
+        //
+        // A separate `if`, not `else if`. Stage 2 now matches every month from
+        // the 2nd onward, so chaining them would make stage 3 unreachable.
+        if (missedMonths >= 3) {
           // Contact guarantors
           await notifyGuarantors(loan);
 
@@ -283,6 +283,53 @@ async function processDue() {
   } catch (err) {
     logger.warn('loanRecoveryWorker: tick failed:', err.message);
   }
+}
+
+/**
+ * Has this loan already been charged the late repayment fine?
+ *
+ * The durable check is the `member_fees` row itself rather than only the
+ * `loans.penalty_applied` flag: the flag can be reset by an admin restructure
+ * while the fee obligation still exists, and charging twice is the failure that
+ * actually costs a member money.
+ */
+async function hasOutstandingLateFine(loanId) {
+  const { data, error } = await supabase
+    .from('member_fees')
+    .select('id')
+    .eq('loan_id', loanId)
+    .eq('fee_type', 'fine')
+    .eq('label', 'Late Loan Repayment Fine')
+    .limit(1);
+  // On a read error assume it was already charged: skipping a fine is
+  // recoverable, silently duplicating one is not.
+  if (error) {
+    logger.warn(`loanRecoveryWorker: fine lookup failed for loan ${loanId}:`, error.message);
+    return true;
+  }
+  return (data || []).length > 0;
+}
+
+/**
+ * Apply the Policy "Active Default Restriction" flag.
+ *
+ * `is_flagged` blocks login outright (see auth.js), so this is the most
+ * consequential write the worker makes. Idempotent via `neq`, and it falls back
+ * to the bare flag when `flag_reason` is absent.
+ */
+async function flagAccountForDefault(profileId) {
+  const { error: flagErr } = await supabase
+    .from('profiles')
+    .update({ is_flagged: true, flag_reason: 'loan_default' })
+    .eq('id', profileId)
+    .neq('is_flagged', true);
+  if (!flagErr) return;
+  // flag_reason requires migration 019 — fall back to the bare flag
+  if (/Could not find the .* column|column .* does not exist/i.test(flagErr.message || '')) {
+    await supabase.from('profiles').update({ is_flagged: true }).eq('id', profileId).neq('is_flagged', true);
+    return;
+  }
+  logger.warn('loanRecoveryWorker: account flag failed:', flagErr.message);
 }
 
 function start() {
