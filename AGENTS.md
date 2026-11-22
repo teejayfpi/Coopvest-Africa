@@ -1640,3 +1640,46 @@ Two related invariants, both in migration 072:
 Verified live: a loan approved 95 days ago with no repayments, worker run twice,
 produced exactly one fine; stage 3 fired; a full repayment was accepted while
 `in_recovery`, closed the loan, and cleared the login block.
+
+## Audit writes go through `lib/auditLog.js`, and the actor is not optional
+There were four copies of `logAdminAction` - in `adminApi`, `kycAdmin`,
+`adminPlatform` and `paymentProofAdmin` - with two different signatures
+(`target` vs `resource`) and two different column sets. Because `audit_logs`
+carries both column families, every write "succeeded" and nothing looked wrong.
+But only `adminApi`'s copy read the actor from the request, and it took `req` as
+an optional *fourth* argument that 44 of 60 call sites omitted. Live: 174 of the
+last 200 audit rows had `actor_id = NULL`, including loan approvals, KYC
+decisions and password resets. `kycAdmin`'s copy hardcoded `actor_id: null`, so
+KYC never had an actor even when `req` was passed.
+
+The dashboard hid it: `getAuditLogs` mapped the actor as
+`l.actor_id ?? "Administrator"`, so unattributed rows rendered as if an
+administrator had acted.
+
+One implementation now, in `src/lib/auditLog.js`. Call sites bind the request
+once, so there is no `req` argument left to forget:
+
+```js
+await auditFor(req)('LOAN_APPROVED', { model: 'Loan', id }, { adminId });
+```
+
+`auditFor(req)` writes the union of both column families (`actor_id`,
+`actor_role`, `target_model`, `target_id`, `metadata` *and* `resource`,
+`resource_id`, `target_profile_id`, `details`) so the audit screen, ledger views
+and existing SQL all keep working. It logs a warning when the actor is null
+rather than writing a silent NULL, and it never stores the request body.
+
+Two guards in `__tests__/auditLogAttribution.test.js` keep this from regressing:
+no route may define its own audit writer or hardcode `actor_id: null`, and every
+`logAction(`/`auditFor(` call must pass `req` first.
+
+Rows written before this fix stay unattributed - the actor cannot be recovered
+retroactively. The audit screen now labels them "System" with an *unattributed*
+badge instead of "Administrator", so the gap is visible rather than disguised.
+
+## A settings PUT must merge, not replace
+`PUT /admin/referrals/settings` read three fields and wrote
+`bonusAmount ?? 0` / `maxReferralsPerUser ?? 0`. Any caller sending a partial
+body - `{ enabled: true }` - silently zeroed the referral bonus and cap. It now
+sets only the keys present in the request. When adding a settings endpoint, treat
+an absent field as "leave it alone", not as "set it to zero".
