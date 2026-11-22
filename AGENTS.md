@@ -14,6 +14,19 @@ They are **byte-identical** across `lib/`, `android/`, `assets/`, `ios/` and
 again). They have different histories — a shared initial commit, then separate
 commits — so **cherry-picking between them is unreliable. Copy files.**
 
+As of 2026-11-22 the drift had grown to **48 differing files**, because the
+repos forked on 2026-08-11 and each side kept committing (343 commits here, 278
+there). Resolved by syncing `Coopvest-Africa` to this repo's tree; both trees are
+now the same object. When they diverge again, sync **toward this repo**: it is
+the superset. `Coopvest-Africa` has no file under `backend/src` or `lib/` that
+this repo lacks, and this repo carries migrations 070-075 (disbursement,
+repayment split, recovery, and three RLS lock-downs) that the other does not.
+
+**Only this repo is deployed.** Render's `coopvest-api` builds
+`coopvestafrica-ops/Latest-Coopvest`, branch `main`, rootDir `backend`. Nothing
+deploys `Coopvest-Africa`, so a change made only there does not reach
+production even though the code looks identical.
+
 **Every change must land in both.** A one-sided change ships different behaviour
 for the same product, which has already happened twice:
 - the LGA fix landed only in a screen so dead it never ran, and
