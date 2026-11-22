@@ -20,6 +20,7 @@ const supabase = require('../config/supabase');
 const { authenticate, requireAdmin } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const logger = require('../utils/logger');
+const { auditFor } = require('../lib/auditLog');
 
 // Admin-only surface: every handler returns other members' PII (profiles.*,
 // kyc, documents, bank accounts, next of kin) and several can approve or
@@ -37,22 +38,6 @@ function paging(req) {
   return { page, limit, from: (page - 1) * limit, to: page * limit - 1 };
 }
 
-async function logAdminAction(action, target, metadata = {}, req = null) {
-  try {
-    await supabase.from('audit_logs').insert({
-      actor_id: null,
-      action,
-      resource: target?.model || null,
-      resource_id: target?.id || null,
-      target_profile_id: target?.profileId || null,
-      details: { ...metadata, source: 'admin-web' },
-      ip_address: req?.ip || null,
-      user_agent: req?.get('user-agent') || null,
-    });
-  } catch (err) {
-    logger.warn('audit_logs insert failed:', err.message);
-  }
-}
 
 async function logMemberActivity(profileId, activityType, description, metadata = {}, actorId = null, req = null) {
   try {
@@ -325,10 +310,10 @@ router.post(
       if (profileError) throw profileError;
 
       // Log admin action
-      await logAdminAction('KYC_VERIFIED', { model: 'KYC', id: kyc.id, profileId }, { 
+      await auditFor(req)('KYC_VERIFIED', { model: 'KYC', id: kyc.id, profileId }, { 
         verificationLevel, 
         notes 
-      }, req);
+      });
 
       // Log member activity
       await logMemberActivity(profileId, 'kyc_verified', 'KYC verified by administrator', {
@@ -384,10 +369,10 @@ router.post(
         .eq('id', profileId);
 
       // Log admin action
-      await logAdminAction('KYC_REJECTED', { model: 'KYC', id: kyc?.id, profileId }, { 
+      await auditFor(req)('KYC_REJECTED', { model: 'KYC', id: kyc?.id, profileId }, { 
         reason,
         requestDocuments,
-      }, req);
+      });
 
       // Log member activity
       await logMemberActivity(profileId, 'kyc_rejected', `KYC rejected: ${reason}`, {
@@ -430,7 +415,7 @@ router.post(
       if (error) throw error;
       if (!doc) return res.status(404).json({ success: false, error: 'Document not found' });
 
-      await logAdminAction('KYC_DOCUMENT_VERIFIED', { model: 'KycDocument', id: doc.id, profileId }, { notes }, req);
+      await auditFor(req)('KYC_DOCUMENT_VERIFIED', { model: 'KycDocument', id: doc.id, profileId }, { notes });
       await logMemberActivity(profileId, 'document_verified', `Document (${doc.type}) verified by administrator`, {}, null, req);
 
       res.json({ success: true, document: doc });
@@ -467,7 +452,7 @@ router.post(
       if (error) throw error;
       if (!doc) return res.status(404).json({ success: false, error: 'Document not found' });
 
-      await logAdminAction('KYC_DOCUMENT_REJECTED', { model: 'KycDocument', id: doc.id, profileId }, { reason }, req);
+      await auditFor(req)('KYC_DOCUMENT_REJECTED', { model: 'KycDocument', id: doc.id, profileId }, { reason });
       await logMemberActivity(profileId, 'document_rejected', `Document (${doc.type}) rejected: ${reason}`, { reason }, null, req);
 
       res.json({ success: true, document: doc });
@@ -508,7 +493,7 @@ router.post(
       if (error) throw error;
       if (!profile) return res.status(404).json({ success: false, error: 'Member not found' });
 
-      await logAdminAction('MEMBER_SUSPENDED', { model: 'Profile', id: profileId, profileId }, { reason }, req);
+      await auditFor(req)('MEMBER_SUSPENDED', { model: 'Profile', id: profileId, profileId }, { reason });
       await logMemberActivity(profileId, 'account_suspended', `Account suspended: ${reason}`, { reason }, null, req);
 
       res.json({ success: true, profile });
@@ -540,7 +525,7 @@ router.post('/:profileId/reactivate', async (req, res) => {
     if (error) throw error;
     if (!profile) return res.status(404).json({ success: false, error: 'Member not found' });
 
-    await logAdminAction('MEMBER_REACTIVATED', { model: 'Profile', id: profileId, profileId }, {}, req);
+    await auditFor(req)('MEMBER_REACTIVATED', { model: 'Profile', id: profileId, profileId }, {});
     await logMemberActivity(profileId, 'account_reactivated', 'Account reactivated by administrator', {}, null, req);
 
     res.json({ success: true, profile });
@@ -601,7 +586,7 @@ router.post(
 
       if (error) throw error;
 
-      await logAdminAction('ADMIN_NOTE_ADDED', { model: 'AdminNote', id: adminNote.id, profileId }, { noteLength: note.length }, req);
+      await auditFor(req)('ADMIN_NOTE_ADDED', { model: 'AdminNote', id: adminNote.id, profileId }, { noteLength: note.length });
 
       res.status(201).json({ success: true, note: adminNote });
     } catch (err) {
@@ -627,7 +612,7 @@ router.delete('/:profileId/notes/:noteId', async (req, res) => {
 
     if (error) throw error;
 
-    await logAdminAction('ADMIN_NOTE_DELETED', { model: 'AdminNote', id: noteId, profileId }, {}, req);
+    await auditFor(req)('ADMIN_NOTE_DELETED', { model: 'AdminNote', id: noteId, profileId }, {});
 
     res.json({ success: true });
   } catch (err) {
@@ -677,11 +662,11 @@ router.post(
 
       if (error) throw error;
 
-      await logAdminAction('DOCUMENT_REQUESTED', { model: 'DocumentRequest', id: request.id, profileId }, {
+      await auditFor(req)('DOCUMENT_REQUESTED', { model: 'DocumentRequest', id: request.id, profileId }, {
         documentType,
         reason,
         expiresAt: expiresAt.toISOString(),
-      }, req);
+      });
 
       await logMemberActivity(profileId, 'document_uploaded', `Additional document requested: ${documentType}`, {
         documentType,

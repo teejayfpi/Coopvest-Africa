@@ -83,6 +83,59 @@ const auditLog = async (actorId, action, targetId, metadata = {}) => {
 const newLoanId = () => `LN-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
 /**
+ * The member's loan-eligibility verdict, read from complete data.
+ *
+ * Both the application gate and `GET /loans/eligibility` use this, so the
+ * number the app shows and the rule the server enforces cannot disagree. The
+ * client cannot compute this reliably: it only holds the first page of
+ * contribution rows, so a member with several rows per month can have their
+ * run understated and be told they are ineligible when they are not.
+ */
+async function computeEligibility(profileId) {
+  const { data: profileDates, error: datesErr } = await supabase
+    .from('profiles')
+    .select('created_at')
+    .eq('id', profileId)
+    .maybeSingle();
+  if (datesErr) throw datesErr;
+
+  const { data: memberContributions, error: contribErr } = await supabase
+    .from('contributions')
+    .select('status, contribution_month, created_at')
+    .eq('profile_id', profileId);
+  if (contribErr) throw contribErr;
+
+  // Wallet and payroll deposits write no `contributions` row, so counting only
+  // that table reports those members as never having paid.
+  const { data: depositRows } = await supabase
+    .from('transactions')
+    .select('created_at')
+    .eq('profile_id', profileId)
+    .in('type', contributionConsistency.CONTRIBUTION_TRANSACTION_TYPES)
+    .eq('status', 'completed')
+    .order('created_at', { ascending: false })
+    .limit(60);
+
+  const membershipMonths = loanPolicy.monthsBetween(profileDates?.created_at);
+  const verdict = contributionConsistency.assessEligibility({
+    contributions: memberContributions,
+    deposits: depositRows || [],
+  });
+
+  const membershipMet = membershipMonths >= loanPolicy.MIN_MEMBERSHIP_MONTHS;
+  const refusal = verdict.eligible ? null : contributionConsistency.eligibilityRefusal(verdict);
+
+  return {
+    membershipMonths,
+    membershipRequired: loanPolicy.MIN_MEMBERSHIP_MONTHS,
+    membershipMet,
+    verdict,
+    refusal,
+    eligible: membershipMet && verdict.eligible,
+  };
+}
+
+/**
  * POST /api/v1/loans/apply
  */
 router.post(
@@ -211,36 +264,7 @@ router.post(
       // (Loan Policy §1) and in the in-app agreement, so every applicant has
       // been shown it and it applies to all of them.
       if (!loanPolicy.minEligibilityDisabled()) {
-        const { data: profileDates, error: datesErr } = await supabase
-          .from('profiles')
-          .select('created_at')
-          .eq('id', profileId)
-          .maybeSingle();
-        if (datesErr) throw datesErr;
-
-        const { data: memberContributions, error: contribErr } = await supabase
-          .from('contributions')
-          .select('status, contribution_month, created_at')
-          .eq('profile_id', profileId);
-        if (contribErr) throw contribErr;
-
-        // Wallet and payroll deposits write no `contributions` row, so counting
-        // only that table reports those members as never having paid. Read the
-        // transaction rows too, as the consistency check always has.
-        const { data: depositRows } = await supabase
-          .from('transactions')
-          .select('created_at')
-          .eq('profile_id', profileId)
-          .in('type', contributionConsistency.CONTRIBUTION_TRANSACTION_TYPES)
-          .eq('status', 'completed')
-          .order('created_at', { ascending: false })
-          .limit(60);
-
-        const membershipMonths = loanPolicy.monthsBetween(profileDates?.created_at);
-        const verdict = contributionConsistency.assessEligibility({
-          contributions: memberContributions,
-          deposits: depositRows || [],
-        });
+        const { membershipMonths, verdict } = await computeEligibility(profileId);
 
         if (membershipMonths < loanPolicy.MIN_MEMBERSHIP_MONTHS) {
           return res.status(403).json({
@@ -587,6 +611,50 @@ router.post(
     }
   }
 );
+
+/**
+ * GET /api/v1/loans/eligibility
+ *
+ * The member's own standing, computed from complete data. The app shows this
+ * rather than inferring eligibility from the first page of contributions,
+ * which understates the run for a member with several rows per month.
+ */
+router.get('/eligibility', authenticate, async (req, res) => {
+  try {
+    if (loanPolicy.minEligibilityDisabled()) {
+      return res.json({
+        success: true,
+        enforced: false,
+        eligible: true,
+        message: 'Loan eligibility checks are disabled on this environment.',
+      });
+    }
+
+    const { membershipMonths, membershipRequired, membershipMet, verdict, refusal } =
+      await computeEligibility(req.user.id);
+
+    res.json({
+      success: true,
+      enforced: true,
+      eligible: membershipMet && verdict.eligible,
+      membershipMonths,
+      membershipRequired,
+      membershipMet,
+      consecutiveMonths: verdict.longestStreak,
+      consecutiveRequired: verdict.requiredConsecutiveMonths,
+      isCurrent: verdict.inGoodStanding,
+      reason: refusal ? refusal.reason : null,
+      guidance: refusal ? refusal.guidance : null,
+      termsSection: refusal
+        ? { id: refusal.termsSectionId, title: refusal.termsSectionTitle }
+        : null,
+      policyVersion: contributionConsistency.POLICY.version,
+    });
+  } catch (err) {
+    logger.error('eligibility lookup error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 /**
  * GET /api/v1/loans

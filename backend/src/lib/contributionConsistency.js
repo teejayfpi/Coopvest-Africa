@@ -25,8 +25,8 @@
  * Deliberately free of I/O so the month arithmetic can be tested directly.
  */
 
-/** Statuses that mean money actually arrived. Matches loanPolicy's set. */
-const PAID_STATUSES = new Set(['successful', 'completed', 'approved', 'paid']);
+/** Statuses that mean money actually arrived. Shared with loanPolicy. */
+const { PAID_CONTRIBUTION_STATUS_SET: PAID_STATUSES } = require('./contributionStatuses');
 
 /**
  * Transaction types that represent a contribution landing in savings.

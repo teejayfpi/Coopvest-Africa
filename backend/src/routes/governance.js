@@ -3,7 +3,7 @@
  *
  * Implements the Super Admin governance surface consumed by the Admin Dashboard:
  *   - Login monitoring        GET/POST  /login-events, /login-history (enriched)
- *   - Audit trail             (enriched logAdminAction lives in adminApi.js)
+ *   - Audit trail             (audit writes live in lib/auditLog.js)
  *   - Approval workflow       GET/POST  /approvals[/:id/:action]
  *   - Security alerts         GET/POST  /security-alerts[/:id/:action]
  *   - Live admin monitoring   GET/POST  /activity[ /online ]

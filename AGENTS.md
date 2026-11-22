@@ -14,6 +14,19 @@ They are **byte-identical** across `lib/`, `android/`, `assets/`, `ios/` and
 again). They have different histories — a shared initial commit, then separate
 commits — so **cherry-picking between them is unreliable. Copy files.**
 
+As of 2026-11-22 the drift had grown to **48 differing files**, because the
+repos forked on 2026-08-11 and each side kept committing (343 commits here, 278
+there). Resolved by syncing `Coopvest-Africa` to this repo's tree; both trees are
+now the same object. When they diverge again, sync **toward this repo**: it is
+the superset. `Coopvest-Africa` has no file under `backend/src` or `lib/` that
+this repo lacks, and this repo carries migrations 070-075 (disbursement,
+repayment split, recovery, and three RLS lock-downs) that the other does not.
+
+**Only this repo is deployed.** Render's `coopvest-api` builds
+`coopvestafrica-ops/Latest-Coopvest`, branch `main`, rootDir `backend`. Nothing
+deploys `Coopvest-Africa`, so a change made only there does not reach
+production even though the code looks identical.
+
 **Every change must land in both.** A one-sided change ships different behaviour
 for the same product, which has already happened twice:
 - the LGA fix landed only in a screen so dead it never ran, and
@@ -66,11 +79,39 @@ Never re-introduce a client-side `isEligible = true`; the app's check is a
 courtesy that mirrors the server, not the gate. It must use the same
 longest-run measure, or it says "eligible" and then collects a 403.
 
+The app cannot compute the rule itself, so it asks:
+`GET /api/v1/loans/eligibility` returns the member's verdict from complete
+data. `loadContributions()` fetches only page 1 (20 rows, newest first), so a
+member with several rows per month can have their run understated and be told
+they are ineligible when they are not. Both this endpoint and the POST /apply
+gate call the same `computeEligibility()` helper - do not add a second copy of
+the arithmetic. `serverEligibilityProvider` in `loan_provider.dart` fetches it;
+the eligibility card and the application form prefer it and fall back to the
+local estimate only while the request is in flight or if it fails.
+
+Register `/eligibility` **before** `/:loanId`, or Express treats "eligibility"
+as a loan id.
+
 A refusal must say why, what clears it, and which terms section states the rule.
 `eligibilityRefusal()` builds that; the route sends `reason`, `guidance` and
 `termsSection`, and the app links to the cited section. The app has no
 eligibility screen, so this text is the only place a refused member learns the
 remedy. Keep the cited section id real - a test asserts it exists in terms.json.
+
+## Paid contribution statuses: one list
+`backend/src/lib/contributionStatuses.js` is the only definition of which
+contribution statuses mean money arrived. It used to be three lists -
+`loanPolicy`, `contributionConsistency` and `wallet` - and they disagreed:
+only the wallet's accepted `confirmed`, so that contribution counted toward the
+member's balance but not toward their eligibility. Their savings grew while the
+app told them they had not been saving.
+
+On the Dart side, `ContributionStatus` names only `successful` among the
+settled statuses the server writes. Parsing by enum name (`e.name == json[...]`)
+therefore mapped `completed`, `approved`, `confirmed` and `paid` all onto
+`pending`, so a paying member read as unpaid. Use
+`contributionStatusFrom(json['status'])`; `MonthlyContribution.fromJson` and
+`StatusHistory.fromJson` both do.
 
 ## Interest calculation (mobile-aligned)
 The backend interest logic in `src/services/referralService.js` MUST mirror the
@@ -1612,3 +1653,46 @@ Two related invariants, both in migration 072:
 Verified live: a loan approved 95 days ago with no repayments, worker run twice,
 produced exactly one fine; stage 3 fired; a full repayment was accepted while
 `in_recovery`, closed the loan, and cleared the login block.
+
+## Audit writes go through `lib/auditLog.js`, and the actor is not optional
+There were four copies of `logAdminAction` - in `adminApi`, `kycAdmin`,
+`adminPlatform` and `paymentProofAdmin` - with two different signatures
+(`target` vs `resource`) and two different column sets. Because `audit_logs`
+carries both column families, every write "succeeded" and nothing looked wrong.
+But only `adminApi`'s copy read the actor from the request, and it took `req` as
+an optional *fourth* argument that 44 of 60 call sites omitted. Live: 174 of the
+last 200 audit rows had `actor_id = NULL`, including loan approvals, KYC
+decisions and password resets. `kycAdmin`'s copy hardcoded `actor_id: null`, so
+KYC never had an actor even when `req` was passed.
+
+The dashboard hid it: `getAuditLogs` mapped the actor as
+`l.actor_id ?? "Administrator"`, so unattributed rows rendered as if an
+administrator had acted.
+
+One implementation now, in `src/lib/auditLog.js`. Call sites bind the request
+once, so there is no `req` argument left to forget:
+
+```js
+await auditFor(req)('LOAN_APPROVED', { model: 'Loan', id }, { adminId });
+```
+
+`auditFor(req)` writes the union of both column families (`actor_id`,
+`actor_role`, `target_model`, `target_id`, `metadata` *and* `resource`,
+`resource_id`, `target_profile_id`, `details`) so the audit screen, ledger views
+and existing SQL all keep working. It logs a warning when the actor is null
+rather than writing a silent NULL, and it never stores the request body.
+
+Two guards in `__tests__/auditLogAttribution.test.js` keep this from regressing:
+no route may define its own audit writer or hardcode `actor_id: null`, and every
+`logAction(`/`auditFor(` call must pass `req` first.
+
+Rows written before this fix stay unattributed - the actor cannot be recovered
+retroactively. The audit screen now labels them "System" with an *unattributed*
+badge instead of "Administrator", so the gap is visible rather than disguised.
+
+## A settings PUT must merge, not replace
+`PUT /admin/referrals/settings` read three fields and wrote
+`bonusAmount ?? 0` / `maxReferralsPerUser ?? 0`. Any caller sending a partial
+body - `{ enabled: true }` - silently zeroed the referral bonus and cap. It now
+sets only the keys present in the request. When adding a settings endpoint, treat
+an absent field as "leave it alone", not as "set it to zero".

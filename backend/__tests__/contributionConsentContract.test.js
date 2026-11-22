@@ -168,3 +168,79 @@ describe('a refused member is told what to do and where to read the rule', () =>
     expect(settingsScreen).toContain('_openTermsAndConditions');
   });
 });
+
+describe('the app and the server answer the same eligibility question', () => {
+  const model = read('lib/data/models/contributions/monthly_contribution.dart');
+  const helper = read('lib/core/utils/loan_eligibility.dart');
+  const card = read('lib/presentation/widgets/loan/loan_eligibility_card.dart');
+  const provider = read('lib/presentation/providers/loan_provider.dart');
+
+  test('the server exposes the verdict it enforces', () => {
+    // The app cannot compute this from one page of contributions, so it asks.
+    expect(loansRoute).toContain("router.get('/eligibility'");
+    expect(loansRoute).toContain('computeEligibility');
+  });
+
+  test('the application gate and the endpoint share one computation', () => {
+    // Two copies of the rule drift; the gate must call the same helper the
+    // endpoint reports, or a member is told one thing and refused another.
+    const gateUsesHelper = /if \(!loanPolicy\.minEligibilityDisabled\(\)\) \{\s*\n\s*const \{[^}]*\} = await computeEligibility\(profileId\);/.test(loansRoute);
+    expect(gateUsesHelper).toBe(true);
+  });
+
+  test('/eligibility is registered before the /:loanId catch-all', () => {
+    const eligibilityAt = loansRoute.indexOf("router.get('/eligibility'");
+    const catchAllAt = loansRoute.indexOf("router.get(\n  '/:loanId',");
+    expect(eligibilityAt).toBeGreaterThan(-1);
+    expect(catchAllAt).toBeGreaterThan(-1);
+    expect(eligibilityAt).toBeLessThan(catchAllAt);
+  });
+
+  test('the app fetches the server verdict', () => {
+    expect(provider).toContain('serverEligibilityProvider');
+    expect(provider).toContain("'/loans/eligibility'");
+  });
+
+  test('the dashboard card prefers the server verdict', () => {
+    expect(card).toContain('serverEligibilityProvider');
+    expect(card).toContain('serverEligibility?.consecutiveMonths');
+  });
+
+  test('the card does not decide eligibility from membership alone', () => {
+    // The regression: six months of tenure, zero contributions, "Eligible".
+    expect(card).not.toMatch(/final isEligible = monthsDone >= monthsRequired/);
+    expect(card).toContain('membershipMet && runMet && isCurrent');
+  });
+});
+
+describe('a settled contribution is never read as unpaid', () => {
+  const model = read('lib/data/models/contributions/monthly_contribution.dart');
+  const { PAID_CONTRIBUTION_STATUSES } = require('../src/lib/contributionStatuses');
+
+  test('the paid vocabulary the server writes is parsed to a settled status', () => {
+    // The enum names only `successful`; the server also writes `completed`,
+    // `approved`, `confirmed` and `paid`. Parsing by enum name alone mapped all
+    // four onto `pending`, so a paying member read as unpaid.
+    expect(PAID_CONTRIBUTION_STATUSES.length).toBeGreaterThan(1);
+    for (const status of PAID_CONTRIBUTION_STATUSES) {
+      expect(model).toContain(`case '${status}':`);
+    }
+  });
+
+  test('every module reads the one paid-status list', () => {
+    // Three copies drifted: only the wallet's accepted `confirmed`, so that
+    // contribution counted toward the balance but not toward eligibility.
+    const wallet = read('backend/src/routes/wallet.js');
+    const policy = read('backend/src/lib/loanPolicy.js');
+    const consistency = read('backend/src/lib/contributionConsistency.js');
+    for (const source of [wallet, policy, consistency]) {
+      expect(source).toContain('contributionStatuses');
+      expect(source).not.toMatch(/new Set\(\['successful'/);
+    }
+  });
+
+  test('the model no longer matches status by enum name', () => {
+    expect(model).not.toContain("(e) => e.name == (json['status'] as String? ?? 'pending')");
+    expect(model).toContain('contributionStatusFrom(json[\'status\'])');
+  });
+});

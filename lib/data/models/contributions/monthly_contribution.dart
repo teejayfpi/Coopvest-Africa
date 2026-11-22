@@ -38,6 +38,42 @@ enum ContributionStatus {
   disputed,
 }
 
+/// Parses a stored contribution status.
+///
+/// The server records `successful`, `completed`, `approved`, `confirmed` and
+/// `paid`, but the enum above only names `successful` among them. Matching by
+/// enum name alone therefore mapped a settled contribution to `pending`, so a
+/// member who had paid saw their savings counted as unpaid - and the eligibility
+/// card told them they had not been saving. Aliases below mirror the server's
+/// paid set.
+ContributionStatus contributionStatusFrom(Object? raw) {
+  final s = (raw ?? 'pending').toString().toLowerCase().trim();
+  switch (s) {
+    case 'successful':
+    case 'success':
+    case 'completed':
+    case 'complete':
+    case 'approved':
+    case 'confirmed':
+    case 'paid':
+      return ContributionStatus.successful;
+    case 'failed':
+    case 'rejected':
+      return ContributionStatus.failed;
+    case 'processing':
+      return ContributionStatus.processing;
+    case 'reversed':
+    case 'cancelled':
+      return ContributionStatus.reversed;
+    case 'adjusted':
+      return ContributionStatus.adjusted;
+    case 'disputed':
+      return ContributionStatus.disputed;
+    default:
+      return ContributionStatus.pending;
+  }
+}
+
 /// Types of contributions
 enum ContributionType {
   monthly,
@@ -182,10 +218,7 @@ class MonthlyContribution extends Equatable {
         (e) => e.name == (json['contribution_type'] as String? ?? 'monthly'),
         orElse: () => ContributionType.monthly,
       ),
-      status: ContributionStatus.values.firstWhere(
-        (e) => e.name == (json['status'] as String? ?? 'pending'),
-        orElse: () => ContributionStatus.pending,
-      ),
+      status: contributionStatusFrom(json['status']),
       transactionReference: json['transaction_reference'] as String?,
       paymentMethod: json['payment_method'] as String?,
       sourceWallet: json['source_wallet'] as String?,
@@ -277,10 +310,7 @@ class StatusHistory extends Equatable {
 
   factory StatusHistory.fromJson(Map<String, dynamic> json) {
     return StatusHistory(
-      status: ContributionStatus.values.firstWhere(
-        (e) => e.name == (json['status'] as String? ?? 'pending'),
-        orElse: () => ContributionStatus.pending,
-      ),
+      status: contributionStatusFrom(json['status']),
       description: json['description'] as String?,
       timestamp: DateTime.parse(json['timestamp'] as String),
     );
