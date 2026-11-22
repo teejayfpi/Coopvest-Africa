@@ -44,11 +44,27 @@ results were a crash or a dead tap.
 - Do not list a feature in the search catalog until a screen exists behind it.
 
 ## Loan eligibility lives on the server
-The six-month membership + contribution rule is enforced in
-`backend/src/routes/loans.js` via `backend/src/lib/loanPolicy.js`. It is **on by
-default**. Never re-introduce a client-side `isEligible = true`; the app's check
-is a courtesy that mirrors the server, not the gate. Staging can opt out with
+A new loan requires six months of membership AND six **consecutive** months of
+contributions with no month missed, plus contributions current at application.
+Enforced in `backend/src/routes/loans.js`; the rule itself is
+`assessEligibility()` in `backend/src/lib/contributionConsistency.js`, which
+combines the run length (`longestStreak`) and current standing so the two halves
+cannot drift apart. It is **on by default**; staging can opt out with
 `LOAN_MIN_ELIGIBILITY_DISABLED=true`.
+
+Two traps, both previously real bugs:
+
+- Do not measure eligibility with `countContributionMonths()`. It counts
+  distinct months *ever* paid, so a member who paid six months and then stopped
+  scores six. Only a longest-unbroken-run measure can see a gap or a stop.
+- Do not gate the check on `agreementVersion`. It is optional in the validator,
+  so gating let a caller skip the rule by omitting the field. Enforcement is
+  unconditional; the rule is disclosed in the published Loan Policy and in the
+  in-app agreement instead.
+
+Never re-introduce a client-side `isEligible = true`; the app's check is a
+courtesy that mirrors the server, not the gate. It must use the same
+longest-run measure, or it says "eligible" and then collects a 403.
 
 ## Interest calculation (mobile-aligned)
 The backend interest logic in `src/services/referralService.js` MUST mirror the
