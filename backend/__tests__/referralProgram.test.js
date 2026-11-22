@@ -477,3 +477,24 @@ describe('referral confirmation worker', () => {
     expect(tick).toContain('return { error: err.message }');
   });
 });
+
+/**
+ * PUT /referrals/settings used to default every omitted field to 0:
+ *   bonus_per_referral: bonusAmount ?? 0
+ * so a caller sending only `{ enabled: true }` silently wiped the bonus and
+ * the cap. It must merge only what the caller sent.
+ */
+describe('referral settings update is a merge, not a replace', () => {
+  const src = read('src/routes/adminApi.js');
+
+  it('does not default omitted fields to zero', () => {
+    expect(src).not.toMatch(/bonus_per_referral:\s*bonusAmount\s*\?\?\s*0/);
+    expect(src).not.toMatch(/max_referrals_per_user:\s*maxReferralsPerUser\s*\?\?\s*0/);
+  });
+
+  it('guards each field on being present in the request', () => {
+    expect(src).toMatch(/if \(enabled !== undefined\) payload\[flagColumn\]/);
+    expect(src).toMatch(/if \(bonusAmount !== undefined\) payload\.bonus_per_referral/);
+    expect(src).toMatch(/if \(maxReferralsPerUser !== undefined\) payload\.max_referrals_per_user/);
+  });
+});
