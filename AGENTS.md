@@ -66,6 +66,12 @@ Never re-introduce a client-side `isEligible = true`; the app's check is a
 courtesy that mirrors the server, not the gate. It must use the same
 longest-run measure, or it says "eligible" and then collects a 403.
 
+A refusal must say why, what clears it, and which terms section states the rule.
+`eligibilityRefusal()` builds that; the route sends `reason`, `guidance` and
+`termsSection`, and the app links to the cited section. The app has no
+eligibility screen, so this text is the only place a refused member learns the
+remedy. Keep the cited section id real - a test asserts it exists in terms.json.
+
 ## Interest calculation (mobile-aligned)
 The backend interest logic in `src/services/referralService.js` MUST mirror the
 mobile app (`lib/presentation/screens/loan/loan_application_screen.dart`):
