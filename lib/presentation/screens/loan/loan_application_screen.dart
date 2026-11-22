@@ -10,7 +10,10 @@ import '../../../presentation/providers/auth_provider.dart';
 import '../../../presentation/providers/contributions/contribution_provider.dart';
 import '../../../presentation/providers/kyc_provider.dart';
 import '../../../data/models/referral_models.dart';
+import '../../../data/models/terms_content.dart';
 import '../../../presentation/providers/referral_provider.dart';
+import '../../../presentation/providers/terms_provider.dart';
+import '../auth/terms_section_screen.dart';
 import '../../../presentation/providers/wallet_provider.dart';
 import '../../../presentation/widgets/common/buttons.dart';
 import '../../../presentation/widgets/common/cards.dart';
@@ -102,6 +105,8 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
   String? _qrCodeData; // Full QR code data string from backend
   String? _qrImageDataUrl; // Backend-generated QR PNG data URL (persisted on loan_qrs)
   String? _rejectionReason;
+  /// Terms section the server cited for a refusal, so the banner can link to it.
+  String? _rejectionTermsSectionId;
   bool _showQrCode = false;
   bool _isSubmitting = false;
   // The referral discount is spent per loan, so the member opts in explicitly.
@@ -343,14 +348,62 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
             ),
             const SizedBox(height: 12),
             Text(
-              'Continue making your monthly contributions to become eligible for a loan.',
+              membershipMonths < membershipRequired
+                ? 'Continue your membership and make your monthly contributions to '
+                  'become eligible for a loan.'
+                : 'Keep contributing every month with no month missed to become '
+                  'eligible. A month with no contribution breaks the run and the '
+                  'count restarts from the first month you pay after a gap.',
               style: TextStyle(
                 color: isDarkMode ? Colors.white60 : CoopvestColors.mediumGray,
                 fontSize: 12,
                 fontStyle: FontStyle.italic,
               ),
             ),
+            const SizedBox(height: 8),
+            // The rule is in the published terms, so point at the section that
+            // states it rather than telling the member to go and find it.
+            GestureDetector(
+              onTap: () => _openTermsSection('loan_policy'),
+              child: const Text(
+                'Read the Loan Policy in our Terms & Conditions',
+                style: TextStyle(
+                  color: CoopvestColors.primary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+            ),
           ],
+        ),
+      );
+    }
+  }
+
+  /// Opens one policy section of the served terms document.
+  ///
+  /// Reads the same document the backend serves so a member who was refused
+  /// under a rule reads the current wording, not a stale bundled copy.
+  Future<void> _openTermsSection(String sectionId) async {
+    try {
+      final doc = await ref.read(termsDocumentProvider.future);
+      final matches = doc.sections.where((s) => s.id == sectionId);
+      if (matches.isEmpty) throw StateError('section $sectionId unavailable');
+      if (!mounted) return;
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => TermsSectionScreen(section: matches.first),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'The Terms & Conditions are unavailable right now. Please try '
+            'again, or contact support for the eligibility rules.',
+          ),
         ),
       );
     }
@@ -393,10 +446,15 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
   /// member sees the actual policy rule they hit (default restriction,
   /// savings limit, missing agreement, ...).
   String _extractApiError(Object e) {
+    _rejectionTermsSectionId = null;
     try {
       final dynamic err = e;
       final data = err.response?.data;
       if (data is Map) {
+        final section = data['termsSection'];
+        if (section is Map && section['id'] != null) {
+          _rejectionTermsSectionId = section['id'].toString();
+        }
         if (data['error'] != null) return data['error'].toString();
         if (data['message'] != null) return data['message'].toString();
       }
@@ -794,6 +852,7 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
         _qrCodeData = qrCodeData;
         _loanStatus = 'Pending Review';
         _rejectionReason = null;
+        _rejectionTermsSectionId = null;
         _showQrCode = showQr;
         _isSubmitting = false;
       });
@@ -1320,6 +1379,24 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
                     color: CoopvestColors.errorText,
                   ),
                 ),
+                // Eligibility refusals are the common case here, and the rule
+                // lives in the terms. The server names the section it applied,
+                // so link to that one instead of leaving the member to hunt.
+                if (_rejectionTermsSectionId != null) ...[
+                  const SizedBox(height: 8),
+                  GestureDetector(
+                    onTap: () => _openTermsSection(_rejectionTermsSectionId!),
+                    child: const Text(
+                      'Read the rule in our Terms & Conditions',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: CoopvestColors.primary,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

@@ -178,9 +178,14 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
           'subtitle': 'Every charge we apply, with the amount',
         },
         {
+          'icon': Icons.gavel_outlined,
+          'label': 'Terms & Conditions',
+          'subtitle': 'Loan, contribution and fee policies',
+        },
+        {
           'icon': Icons.policy_outlined,
           'label': 'Privacy Policy',
-          'subtitle': 'Terms of service, privacy',
+          'subtitle': 'How we handle your data',
         },
         {
           'icon': Icons.info_outline,
@@ -597,6 +602,8 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
       case 'Fees & Charges':
         _openFeesAndCharges();
         break;
+      case 'Terms & Conditions':
+        _openTermsAndConditions();
       case 'Privacy Policy':
         _showPrivacyPolicyDialog();
         break;
@@ -683,6 +690,108 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
 
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => TermsSectionScreen(section: section)),
+    );
+  }
+
+  /// Lists every policy section so a member can read the rules that govern
+  /// them, including the loan eligibility rule a refusal may have cited.
+  ///
+  /// The settings menu previously offered only Fees & Charges and a hardcoded
+  /// privacy dialog, so the Loan and Contribution policies - the ones that
+  /// decide whether a member can borrow - were unreachable after onboarding.
+  Future<void> _openTermsAndConditions() async {
+    TermsDocument doc;
+    try {
+      doc = await ref.read(termsDocumentProvider.future);
+    } catch (_) {
+      doc = TermsContent.bundled();
+    }
+    if (!mounted) return;
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: context.cardBackground,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(sheetContext).size.height * 0.8,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Terms & Conditions',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: context.textPrimary,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      doc.version,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: context.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                  itemCount: doc.sections.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 4),
+                  itemBuilder: (_, index) {
+                    final section = doc.sections[index];
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(
+                        Icons.description_outlined,
+                        color: CoopvestColors.primary,
+                        size: 20,
+                      ),
+                      title: Text(
+                        section.title,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: context.textPrimary,
+                        ),
+                      ),
+                      subtitle: Text(
+                        section.summary,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: context.textSecondary,
+                        ),
+                      ),
+                      onTap: () {
+                        Navigator.of(sheetContext).pop();
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => TermsSectionScreen(section: section),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

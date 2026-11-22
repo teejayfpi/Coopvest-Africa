@@ -258,10 +258,18 @@ router.post(
         }
 
         if (!verdict.eligible) {
+          const refusal = contributionConsistency.eligibilityRefusal(verdict);
           return res.status(403).json({
             success: false,
             code: verdict.reason,
+            // `error` is what the app shows the member: the reason, what clears
+            // it, and which terms section spells the rule out.
             error: contributionConsistency.eligibilityMessage(verdict),
+            reason: refusal ? refusal.reason : undefined,
+            guidance: refusal ? refusal.guidance : undefined,
+            termsSection: refusal
+              ? { id: refusal.termsSectionId, title: refusal.termsSectionTitle }
+              : undefined,
             policyVersion: contributionConsistency.POLICY.version,
             standing: contributionConsistency.standingFor(
               verdict.currentStreak,

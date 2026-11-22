@@ -130,3 +130,41 @@ describe('consent evidence survives a client that sends no version', () => {
     expect(loansRoute).toContain('{ agreement_version: agreementVersion }');
   });
 });
+
+
+describe('a refused member is told what to do and where to read the rule', () => {
+  const appScreen = read('lib/presentation/screens/loan/loan_application_screen.dart');
+  const settingsScreen = read('lib/presentation/screens/profile/profile_settings_screen.dart');
+
+  test('the server returns the reason, the remedy and the terms section', () => {
+    expect(loansRoute).toContain('contributionConsistency.eligibilityRefusal(verdict)');
+    expect(loansRoute).toContain('guidance: refusal');
+    expect(loansRoute).toContain('termsSection:');
+  });
+
+  test('the app renders the server refusal message', () => {
+    expect(appScreen).toContain('_extractApiError');
+  });
+
+  test('the app links a refusal to the section the server cited', () => {
+    expect(appScreen).toContain("data['termsSection']");
+    expect(appScreen).toContain('_rejectionTermsSectionId');
+    expect(appScreen).toContain('Terms & Conditions');
+  });
+
+  test('the ineligible card links to the loan policy', () => {
+    expect(appScreen).toContain("_openTermsSection('loan_policy')");
+  });
+
+  test('the app opens the served document, not the bundled copy', () => {
+    expect(appScreen).toContain('termsDocumentProvider');
+    expect(appScreen).toContain('TermsSectionScreen');
+  });
+
+  test('members can reach the policies from settings', () => {
+    // Before this the Loan and Contribution policies were unreachable after
+    // onboarding, so a referral to the terms would have dead-ended.
+    expect(settingsScreen).toContain("'label': 'Terms & Conditions'");
+    expect(settingsScreen).toContain('_openTermsAndConditions');
+  });
+});

@@ -274,20 +274,69 @@ function assessEligibility({ contributions, deposits = [], now = new Date(), gra
 }
 
 /**
- * Member-facing explanation of an eligibility refusal.
+ * Why a member was refused, what they must do about it, and where to read the
+ * rule.
+ *
+ * A bare "not eligible" leaves the member with no way to fix it, and the app
+ * has no eligibility screen of its own, so the refusal text is the only place
+ * they learn the remedy. Each branch therefore names the rule, states the
+ * member's own figures, says what clears it, and points at the published terms.
+ */
+function eligibilityRefusal(verdict) {
+  const required = verdict.requiredConsecutiveMonths;
+  const run = verdict.longestStreak;
+  const months = (n) => `month${n === 1 ? '' : 's'}`;
+
+  if (verdict.reason === 'INSUFFICIENT_CONSECUTIVE_MONTHS') {
+    const guidance = run === 0
+      ? 'Start contributing monthly. Your first contribution starts your record, and '
+        + `${required} consecutive months with no month missed will make you eligible.`
+      : `Keep contributing every month until you reach ${required} consecutive months with no month `
+        + 'missed. A month with no contribution breaks the run, and the count restarts from the '
+        + 'first month you pay after a gap, so months paid before a gap do not count.';
+    return {
+      code: verdict.reason,
+      reason: `You need ${required} consecutive months of contributions with no month missed. `
+        + `Your longest unbroken run is ${run} ${months(run)}.`,
+      guidance,
+      termsSectionId: 'loan_policy',
+      termsSectionTitle: 'Loan Policy',
+    };
+  }
+
+  if (verdict.reason === 'CONTRIBUTIONS_NOT_CURRENT') {
+    const behind = verdict.monthsSinceLast;
+    const reason = behind == null
+      ? 'You have not made a contribution yet.'
+      : `Your contribution is ${behind} ${months(behind)} behind.`;
+    return {
+      code: verdict.reason,
+      reason,
+      guidance: (behind == null
+        ? 'Make your first contribution to start your record. '
+        : `Pay the outstanding ${months(behind)} to bring your contribution up to date. `)
+        + 'Borrowing resumes automatically once you are up to date and no new application is '
+        + 'needed. No penalty or fine is charged for a lapse, and no savings are taken.',
+      termsSectionId: 'contribution_policy',
+      termsSectionTitle: 'Contribution Policy',
+    };
+  }
+
+  return null;
+}
+
+/**
+ * The full refusal text shown to the member: reason, remedy, and where to read
+ * the rule. Kept as one string so every client surface renders the same words.
  */
 function eligibilityMessage(verdict) {
-  const required = verdict.requiredConsecutiveMonths;
-  if (verdict.reason === 'INSUFFICIENT_CONSECUTIVE_MONTHS') {
-    return (
-      `A new loan requires ${required} consecutive months of contributions with no month missed. `
-      + `Your longest unbroken run is ${verdict.longestStreak} month${verdict.longestStreak === 1 ? '' : 's'}.`
-    );
+  if (verdict.eligible) {
+    return `You are eligible: ${verdict.longestStreak} consecutive months contributed and up to date.`;
   }
-  if (verdict.reason === 'CONTRIBUTIONS_NOT_CURRENT') {
-    return consistencyMessage(verdict);
-  }
-  return `You are eligible: ${verdict.longestStreak} consecutive months contributed and up to date.`;
+  const refusal = eligibilityRefusal(verdict);
+  if (!refusal) return consistencyMessage(verdict);
+  return `${refusal.reason}\n\nWhat to do: ${refusal.guidance}\n\n`
+    + `Please read the ${refusal.termsSectionTitle} in our Terms & Conditions for the full rule.`;
 }
 
 /**
@@ -341,6 +390,7 @@ module.exports = {
   longestStreak,
   assessConsistency,
   assessEligibility,
+  eligibilityRefusal,
   eligibilityMessage,
   standingFor,
   consistencyMessage,

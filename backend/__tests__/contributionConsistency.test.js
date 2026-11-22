@@ -11,6 +11,7 @@ const {
   paidMonths,
   assessConsistency,
   assessEligibility,
+  eligibilityRefusal,
   eligibilityMessage,
   longestStreak,
   standingFor,
@@ -358,5 +359,122 @@ describe('eligibilityMessage', () => {
   test('explains a lapse in terms of months behind', () => {
     const v = assessEligibility({ contributions: [2, 3, 4, 5, 6, 7].map((n) => paid(monthBack(n))), now });
     expect(eligibilityMessage(v)).toContain('behind');
+  });
+});
+
+
+/**
+ * A refusal has to tell the member what to do, not just that they failed.
+ * There is no eligibility screen in the app, so this text is the only place a
+ * refused member learns the remedy.
+ */
+describe('eligibilityRefusal — reason, remedy, and where to read the rule', () => {
+  const now = new Date('2026-11-20T12:00:00Z');
+  const monthBack = (n) => {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - n, 15));
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+  };
+  const months = (...backs) => backs.map((n) => paid(monthBack(n)));
+
+  describe('too few consecutive months', () => {
+    const verdict = assessEligibility({ contributions: months(0, 1, 2), now });
+    const refusal = eligibilityRefusal(verdict);
+
+    test('states the rule and the member\'s own run', () => {
+      expect(refusal.code).toBe('INSUFFICIENT_CONSECUTIVE_MONTHS');
+      expect(refusal.reason).toContain('6 consecutive months');
+      expect(refusal.reason).toContain('3 months');
+    });
+
+    test('tells the member how to become eligible', () => {
+      expect(refusal.guidance).toContain('Keep contributing every month');
+      expect(refusal.guidance).toContain('6 consecutive months');
+    });
+
+    test('explains that a gap resets the count', () => {
+      expect(refusal.guidance.toLowerCase()).toContain('breaks the run');
+      expect(refusal.guidance.toLowerCase()).toContain('restarts');
+    });
+
+    test('cites the Loan Policy', () => {
+      expect(refusal.termsSectionId).toBe('loan_policy');
+      expect(refusal.termsSectionTitle).toBe('Loan Policy');
+    });
+  });
+
+  describe('never contributed', () => {
+    const refusal = eligibilityRefusal(assessEligibility({ contributions: [], now }));
+
+    test('does not accuse a new member of being behind', () => {
+      expect(refusal.guidance).not.toMatch(/behind/i);
+      expect(refusal.reason).toContain('0 months');
+    });
+
+    test('invites them to start contributing', () => {
+      expect(refusal.guidance).toContain('first contribution starts your record');
+    });
+  });
+
+  describe('contributions lapsed', () => {
+    const verdict = assessEligibility({ contributions: months(2, 3, 4, 5, 6, 7), now });
+    const refusal = eligibilityRefusal(verdict);
+
+    test('says how far behind the member is', () => {
+      expect(refusal.code).toBe('CONTRIBUTIONS_NOT_CURRENT');
+      expect(refusal.reason).toContain('2 months behind');
+    });
+
+    test('tells them to pay up and that borrowing then resumes', () => {
+      expect(refusal.guidance).toContain('Pay the outstanding');
+      expect(refusal.guidance).toContain('resumes automatically');
+    });
+
+    test('reassures that a lapse carries no penalty', () => {
+      expect(refusal.guidance.toLowerCase()).toContain('no penalty');
+    });
+
+    test('cites the Contribution Policy', () => {
+      expect(refusal.termsSectionId).toBe('contribution_policy');
+    });
+  });
+
+  test('an eligible member gets no refusal', () => {
+    const verdict = assessEligibility({ contributions: months(0, 1, 2, 3, 4, 5), now });
+    expect(eligibilityRefusal(verdict)).toBeNull();
+  });
+
+  describe('the message the member actually reads', () => {
+    test('carries the reason, the remedy and a pointer to the terms', () => {
+      const msg = eligibilityMessage(assessEligibility({ contributions: months(0, 1, 2), now }));
+      expect(msg).toContain('6 consecutive months');      // reason
+      expect(msg).toContain('What to do:');                // remedy heading
+      expect(msg).toContain('Keep contributing');          // remedy
+      expect(msg).toContain('Terms & Conditions');         // where to read it
+      expect(msg).toContain('Loan Policy');                // which section
+    });
+
+    test('the lapsed message points at the Contribution Policy', () => {
+      const msg = eligibilityMessage(
+        assessEligibility({ contributions: months(2, 3, 4, 5, 6, 7), now }),
+      );
+      expect(msg).toContain('Contribution Policy');
+      expect(msg).toContain('Terms & Conditions');
+    });
+
+    test('every refusal names a real section of the published terms', () => {
+      const terms = require('../src/config/terms.json');
+      const ids = new Set(terms.sections.map((s) => s.id));
+      const cases = [[], months(0, 1, 2), months(2, 3, 4, 5, 6, 7)];
+      for (const contributions of cases) {
+        const refusal = eligibilityRefusal(assessEligibility({ contributions, now }));
+        expect(ids.has(refusal.termsSectionId)).toBe(true);
+      }
+    });
+
+    test('the cited section actually contains the rule', () => {
+      const terms = require('../src/config/terms.json');
+      const loanPolicy = terms.sections.find((s) => s.id === 'loan_policy');
+      expect(loanPolicy.body).toContain('six (6) consecutive months');
+    });
   });
 });
