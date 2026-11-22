@@ -199,10 +199,17 @@ router.post(
       }
 
       // ── Minimum membership & contribution history (Loan Policy §3) ─────────
-      // A new loan requires six months of membership AND six months of
-      // successful contributions. The app used to be the only place that
-      // checked this, and its check was disabled with a `TESTING ONLY` flag, so
-      // the rule was enforced nowhere. The server is now authoritative.
+      // A new loan requires six months of membership AND six consecutive months
+      // of contributions with no month missed in between, still up to date at
+      // the time of application.
+      //
+      // This is enforced unconditionally. It used to be gated on
+      // `policyAppliesTo(agreementVersion)`, which exempted any caller that
+      // omitted the version - and `agreementVersion` is an optional field, so a
+      // member who had stopped contributing months earlier was approved by
+      // simply leaving it out. The rule is now disclosed in the published terms
+      // (Loan Policy §1) and in the in-app agreement, so every applicant has
+      // been shown it and it applies to all of them.
       if (!loanPolicy.minEligibilityDisabled()) {
         const { data: profileDates, error: datesErr } = await supabase
           .from('profiles')
@@ -217,70 +224,60 @@ router.post(
           .eq('profile_id', profileId);
         if (contribErr) throw contribErr;
 
-        const membershipMonths = loanPolicy.monthsBetween(profileDates?.created_at);
-        const contributionMonths = loanPolicy.countContributionMonths(memberContributions);
+        // Wallet and payroll deposits write no `contributions` row, so counting
+        // only that table reports those members as never having paid. Read the
+        // transaction rows too, as the consistency check always has.
+        const { data: depositRows } = await supabase
+          .from('transactions')
+          .select('created_at')
+          .eq('profile_id', profileId)
+          .in('type', contributionConsistency.CONTRIBUTION_TRANSACTION_TYPES)
+          .eq('status', 'completed')
+          .order('created_at', { ascending: false })
+          .limit(60);
 
-        if (membershipMonths < loanPolicy.MIN_MEMBERSHIP_MONTHS
-          || contributionMonths < loanPolicy.MIN_CONTRIBUTION_MONTHS) {
+        const membershipMonths = loanPolicy.monthsBetween(profileDates?.created_at);
+        const verdict = contributionConsistency.assessEligibility({
+          contributions: memberContributions,
+          deposits: depositRows || [],
+        });
+
+        if (membershipMonths < loanPolicy.MIN_MEMBERSHIP_MONTHS) {
           return res.status(403).json({
             success: false,
             code: 'LOAN_ELIGIBILITY_NOT_MET',
-            error: 'A new loan requires at least '
-              + `${loanPolicy.MIN_MEMBERSHIP_MONTHS} months of membership and `
-              + `${loanPolicy.MIN_CONTRIBUTION_MONTHS} months of consistent contributions.`,
+            error: `A new loan requires at least ${loanPolicy.MIN_MEMBERSHIP_MONTHS} months of membership. `
+              + `You have been a member for ${membershipMonths} month${membershipMonths === 1 ? '' : 's'}.`,
             eligibility: {
               membershipMonths,
-              contributionMonths,
               membershipRequired: loanPolicy.MIN_MEMBERSHIP_MONTHS,
-              contributionsRequired: loanPolicy.MIN_CONTRIBUTION_MONTHS,
+              consecutiveMonths: verdict.longestStreak,
+              consecutiveRequired: verdict.requiredConsecutiveMonths,
             },
           });
         }
 
-        // ── Contributions must be current, not merely historical ────────────
-        // `countContributionMonths` counts distinct months ever paid, so a
-        // member who paid six months in a row and then stopped still passes the
-        // gate above and stays fully loan-eligible. This is the check that
-        // notices the stop. It reads wallet/payroll deposits as well as
-        // contribution rows, because those flows write no row and would
-        // otherwise look like a lapse.
-        //
-        // Only applied to applications whose Digital Loan Agreement version
-        // discloses this rule. A member who accepted an older agreement never
-        // saw the clause, so the platform must not enforce it against them.
-        if (contributionConsistency.policyAppliesTo(agreementVersion)) {
-          const { data: depositRows } = await supabase
-            .from('transactions')
-            .select('created_at')
-            .eq('profile_id', profileId)
-            .in('type', contributionConsistency.CONTRIBUTION_TRANSACTION_TYPES)
-            .eq('status', 'completed')
-            .order('created_at', { ascending: false })
-            .limit(60);
-
-          const consistency = contributionConsistency.assessConsistency({
-            contributions: memberContributions,
-            deposits: depositRows || [],
+        if (!verdict.eligible) {
+          return res.status(403).json({
+            success: false,
+            code: verdict.reason,
+            error: contributionConsistency.eligibilityMessage(verdict),
+            policyVersion: contributionConsistency.POLICY.version,
+            standing: contributionConsistency.standingFor(
+              verdict.currentStreak,
+              verdict.monthsSinceLast,
+            ),
+            eligibility: {
+              membershipMonths,
+              membershipRequired: loanPolicy.MIN_MEMBERSHIP_MONTHS,
+              consecutiveMonths: verdict.longestStreak,
+              consecutiveRequired: verdict.requiredConsecutiveMonths,
+              currentStreak: verdict.currentStreak,
+              monthsSinceLast: verdict.monthsSinceLast,
+              lastPaidMonth: verdict.lastPaidMonth,
+              graceDays: contributionConsistency.POLICY.graceDays,
+            },
           });
-
-          if (!consistency.inGoodStanding) {
-            return res.status(403).json({
-              success: false,
-              code: 'CONTRIBUTIONS_NOT_CURRENT',
-              error: contributionConsistency.consistencyMessage(consistency),
-              policyVersion: contributionConsistency.POLICY.version,
-              standing: contributionConsistency.standingFor(
-                consistency.currentStreak,
-                consistency.monthsSinceLast,
-              ),
-              consistency: {
-                currentStreak: consistency.currentStreak,
-                monthsSinceLast: consistency.monthsSinceLast,
-                lastPaidMonth: consistency.lastPaidMonth,
-                graceDays: contributionConsistency.POLICY.graceDays,
-              },
-            });
-          }
         }
       }
 

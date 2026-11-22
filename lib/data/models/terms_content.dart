@@ -56,7 +56,7 @@ class TermsContent {
   TermsContent._();
 
   /// Version of the bundled document. Bump whenever the text changes.
-  static const String version = '2026-11-20';
+  static const String version = '2026-11-21';
 
   static const List<TermsSection> sections = [
     TermsSection(
@@ -138,11 +138,26 @@ class TermsContent {
       id: 'loan_policy',
       title: 'Loan Policy',
       summary:
-          'Loan eligibility criteria, guarantor requirements, and repayment '
-          'obligations.',
+          'Loan eligibility criteria (six months of membership and six '
+          'consecutive months of contributions, with contributions current at '
+          'application), guarantor requirements, and repayment obligations.',
       body:
           '1. Loan eligibility is based on membership duration, contribution '
-          'history, and the cooperative\'s prevailing credit policy.\n\n'
+          'history, and the cooperative\'s prevailing credit policy. To qualify '
+          'for a new loan a member must satisfy all of the following:\n\n'
+          '   (a) at least six (6) months of membership;\n\n'
+          '   (b) at least six (6) consecutive months of contributions with no '
+          'month missed; and\n\n'
+          '   (c) contributions that are current at the time of application, not '
+          'merely historical. You have ten (10) days from the start of each month '
+          'to pay that month\'s contribution. If it is still unpaid after that '
+          'period, borrowing and guaranteeing others are paused until the '
+          'outstanding months are paid. No penalty is charged and no savings are '
+          'taken, and borrowing resumes automatically once you are up to date.\n\n'
+          'A month in which no contribution is received breaks the consecutive '
+          'run, and the count of consecutive months restarts from the first month '
+          'paid after the gap. Months in which contributions were made before a '
+          'gap do not count towards the six-month requirement.\n\n'
           '2. Loan amounts, interest rates, and tenures are determined by the '
           'loan product selected and are displayed in the app before you apply.\n\n'
           '3. Approved loans are disbursed to the bank account verified during '

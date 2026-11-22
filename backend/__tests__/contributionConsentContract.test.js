@@ -1,12 +1,17 @@
 /**
- * Guards the consent contract for the contribution-currency rule.
+ * Guards the consent contract for the loan eligibility rule.
  *
- * The server only applies the rule to applications whose agreement version
- * discloses it. That is a promise to members, and it depends on three things
- * staying in sync: the version the app sends, the version the policy requires,
- * and the clause in the agreement the member reads. If any one of them drifts,
- * members are either refused under a rule they never saw, or the rule is never
- * applied at all.
+ * The rule now applies to every applicant, so it has to be disclosed everywhere
+ * a member might read it. It depends on these staying in sync: the version the
+ * app sends, the version the policy requires, the clause in the in-app
+ * agreement, and the published terms document. If any one drifts, members are
+ * refused under a rule they were never shown.
+ *
+ * The rule used to be gated on `policyAppliesTo(agreementVersion)`. That
+ * exempted any caller that omitted the optional `agreementVersion` field, so a
+ * member who had stopped contributing months earlier was approved by leaving
+ * the field out. Enforcement is now unconditional; this suite fails if the gate
+ * is ever reinstated.
  */
 const fs = require('fs');
 const path = require('path');
@@ -44,11 +49,51 @@ describe('the agreement the member reads discloses the rule', () => {
   test('the dialog states borrowing resumes once paid up', () => {
     expect(appScreen.toLowerCase()).toContain('resumes automatically');
   });
+
+  test('the dialog states the six consecutive months requirement', () => {
+    expect(appScreen).toContain('six (6) consecutive months');
+  });
+
+  test('the dialog states that a missed month breaks the run', () => {
+    expect(appScreen.toLowerCase()).toContain('breaks the run');
+  });
 });
 
-describe('the server enforces only against consent', () => {
-  test('the currency check is gated on the accepted agreement version', () => {
-    expect(loansRoute).toContain('contributionConsistency.policyAppliesTo(agreementVersion)');
+describe('the published terms disclose the rule', () => {
+  const terms = require('../src/config/terms.json');
+  const loanPolicy = terms.sections.find((s) => s.id === 'loan_policy');
+
+  test('the loan policy section names six consecutive months', () => {
+    expect(loanPolicy.body).toContain('six (6) consecutive months');
+  });
+
+  test('the loan policy section says a missed month breaks the run', () => {
+    expect(loanPolicy.body.toLowerCase()).toContain('breaks the consecutive run');
+  });
+
+  test('the loan policy section states contributions must be current', () => {
+    expect(loanPolicy.body.toLowerCase()).toContain('current at the time of application');
+  });
+
+  test('the bundled offline copy mirrors the served version', () => {
+    const bundled = read('lib/data/models/terms_content.dart');
+    expect(bundled).toContain(`static const String version = '${terms.version}';`);
+  });
+});
+
+describe('the server enforces the rule unconditionally', () => {
+  test('the eligibility check is not gated on the accepted agreement version', () => {
+    // The gate let a caller skip the check by omitting an optional field.
+    expect(loansRoute).not.toContain('contributionConsistency.policyAppliesTo(agreementVersion)');
+    expect(loansRoute).not.toMatch(/if\s*\(\s*contributionConsistency\.policyAppliesTo/);
+  });
+
+  test('the route calls the combined eligibility verdict', () => {
+    expect(loansRoute).toContain('contributionConsistency.assessEligibility(');
+  });
+
+  test('the route still reads deposits for members who never write a row', () => {
+    expect(loansRoute).toContain('CONTRIBUTION_TRANSACTION_TYPES');
   });
 
   test('the loan records what the member accepted, not an assumed default', () => {
@@ -62,7 +107,8 @@ describe('the server enforces only against consent', () => {
   });
 
   test('a refusal is machine-readable and explains itself', () => {
-    expect(loansRoute).toContain('CONTRIBUTIONS_NOT_CURRENT');
+    expect(loansRoute).toContain('code: verdict.reason');
+    expect(loansRoute).toContain('contributionConsistency.eligibilityMessage(verdict)');
   });
 });
 

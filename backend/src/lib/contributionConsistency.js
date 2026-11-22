@@ -60,10 +60,12 @@ const DEFAULT_GRACE_DAYS = 10;
  * rule against someone who was never shown it.
  */
 const POLICY = {
-  version: 'v1.1',
-  minAgreementVersion: 'v1.1',
+  version: 'v1.2',
+  minAgreementVersion: 'v1.2',
   graceDays: DEFAULT_GRACE_DAYS,
-  label: 'Contribution currency',
+  label: 'Contribution currency and consistency',
+  /** Consecutive contributed months required before a new loan. */
+  minConsecutiveMonths: 6,
 };
 
 function monthKey(value) {
@@ -141,6 +143,30 @@ function streakEndingAt(months, fromMonth) {
 }
 
 /**
+ * Length of the longest unbroken run anywhere in the member's history.
+ *
+ * `streakEndingAt` only ever measured the run that touches the most recent
+ * payment, so a member who paid six months, lapsed, then resumed and paid the
+ * current month reported a streak of 1 - even though they had served a full
+ * qualifying run. Eligibility needs this figure instead.
+ */
+function longestStreak(months) {
+  if (!months || months.size === 0) return 0;
+  const sorted = [...months].sort();
+  let longest = 1;
+  let run = 1;
+  for (let i = 1; i < sorted.length; i += 1) {
+    if (shiftMonth(sorted[i - 1], 1) === sorted[i]) {
+      run += 1;
+    } else {
+      run = 1;
+    }
+    if (run > longest) longest = run;
+  }
+  return longest;
+}
+
+/**
  * Assess a member's contribution standing.
  *
  * @param {object} input
@@ -166,6 +192,7 @@ function assessConsistency({
       paidMonths: 0,
       streak: 0,
       currentStreak: 0,
+      longestStreak: 0,
       monthsSinceLast: null,
       inGoodStanding: false,
       graceActive: false,
@@ -202,11 +229,65 @@ function assessConsistency({
     paidMonths: months.size,
     streak,
     currentStreak,
+    longestStreak: longestStreak(months),
     monthsSinceLast,
     inGoodStanding: currentStreak > 0,
     graceActive,
     lastPaidMonth,
   };
+}
+
+/**
+ * The loan-eligibility verdict for contribution history.
+ *
+ * Both halves of the agreed rule live here, so the two cannot drift apart:
+ *
+ *   1. six consecutive months contributed with no month missed in between
+ *      (`longestStreak`), and
+ *   2. still up to date now (`inGoodStanding`).
+ *
+ * Requiring only (1) would let a member serve their six months and then stop;
+ * requiring only (2) would let a member pay six months with gaps in the middle.
+ * The previous implementation effectively required neither: it counted distinct
+ * months ever paid, which a lapsed member still passes.
+ */
+function assessEligibility({ contributions, deposits = [], now = new Date(), graceDays = DEFAULT_GRACE_DAYS } = {}) {
+  const assessment = assessConsistency({ contributions, deposits, now, graceDays });
+  const required = POLICY.minConsecutiveMonths;
+  const enoughConsecutive = assessment.longestStreak >= required;
+  const eligible = enoughConsecutive && assessment.inGoodStanding;
+
+  let reason = null;
+  if (!enoughConsecutive) {
+    reason = 'INSUFFICIENT_CONSECUTIVE_MONTHS';
+  } else if (!assessment.inGoodStanding) {
+    reason = 'CONTRIBUTIONS_NOT_CURRENT';
+  }
+
+  return {
+    ...assessment,
+    requiredConsecutiveMonths: required,
+    enoughConsecutive,
+    eligible,
+    reason,
+  };
+}
+
+/**
+ * Member-facing explanation of an eligibility refusal.
+ */
+function eligibilityMessage(verdict) {
+  const required = verdict.requiredConsecutiveMonths;
+  if (verdict.reason === 'INSUFFICIENT_CONSECUTIVE_MONTHS') {
+    return (
+      `A new loan requires ${required} consecutive months of contributions with no month missed. `
+      + `Your longest unbroken run is ${verdict.longestStreak} month${verdict.longestStreak === 1 ? '' : 's'}.`
+    );
+  }
+  if (verdict.reason === 'CONTRIBUTIONS_NOT_CURRENT') {
+    return consistencyMessage(verdict);
+  }
+  return `You are eligible: ${verdict.longestStreak} consecutive months contributed and up to date.`;
 }
 
 /**
@@ -257,7 +338,10 @@ module.exports = {
   policyAppliesTo,
   paidMonths,
   streakEndingAt,
+  longestStreak,
   assessConsistency,
+  assessEligibility,
+  eligibilityMessage,
   standingFor,
   consistencyMessage,
 };

@@ -36,10 +36,12 @@ describe('published contribution policy', () => {
     expect(contributionPolicy.body.toLowerCase()).toContain('no penalty');
   });
 
-  test('describes how the rule interacts with agreement versions', () => {
-    // Enforcement is tied to the agreement version the member accepted, so the
-    // published text has to say so or the gate looks retroactive.
-    expect(contributionPolicy.body.toLowerCase()).toContain('earlier version');
+  test('says the rule applies to every loan application', () => {
+    // Enforcement is no longer tied to an agreement version - that gate let a
+    // caller skip the check by omitting the field. The published text must not
+    // suggest some applications are exempt.
+    expect(contributionPolicy.body.toLowerCase()).toContain('applies to every loan application');
+    expect(contributionPolicy.body.toLowerCase()).not.toContain('earlier version');
   });
 });
 

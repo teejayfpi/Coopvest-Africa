@@ -138,7 +138,8 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
   String get _formattedLoanId => 'COOP-$_loanId';
 
   // Check if user is eligible for loan based on membership duration and contributions
-  // Requirements: At least 6 months membership AND at least 6 months of consistent contributions
+  // Requirements: At least 6 months membership AND 6 consecutive months of
+  // contributions with no month missed
   Map<String, dynamic> _checkLoanEligibility() {
     // Get user from auth provider
     final authState = ref.read(authProvider);
@@ -147,7 +148,6 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
     // Get contributions from contribution provider
     final contributionState = ref.read(contributionProvider);
     final contributions = contributionState.contributions;
-    final summary = contributionState.summary;
     
     // Check membership duration
     int membershipMonths = 0;
@@ -182,30 +182,54 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
       uniqueContributionMonths.add(c.contributionMonth);
     }
     
-    final contributionMonths = uniqueContributionMonths.length;
-    
-    // Also check from summary if available
-    final summaryContributionMonths = summary?.monthsContributed ?? 0;
-    
-    // Use the higher of the two values
-    final finalContributionMonths = contributionMonths > summaryContributionMonths 
-        ? contributionMonths 
-        : summaryContributionMonths;
-    
+    // Longest unbroken run of contributed months. The policy requires six
+    // *consecutive* months, so counting distinct months (the previous
+    // behaviour) let a member with gaps in the middle appear eligible while the
+    // server refused them. The app and the server must answer the same
+    // question, and the server re-checks this authoritatively.
+    final sortedMonths = uniqueContributionMonths.toList()..sort();
+    int longestRun = 0;
+    int currentRun = 0;
+    String? previousMonth;
+    for (final month in sortedMonths) {
+      currentRun = (previousMonth != null && _isNextMonth(previousMonth, month))
+          ? currentRun + 1
+          : 1;
+      if (currentRun > longestRun) longestRun = currentRun;
+      previousMonth = month;
+    }
+
     // Determine eligibility — Loan Policy: six months of membership AND six
-    // months of consistent contributions. This must stay a real check: the
-    // client gate is what stops an ineligible member at the form, and a
-    // hardcoded `true` here shipped a working loan application to every member
-    // on day one.
-    final isEligible = membershipMonths >= 6 && finalContributionMonths >= 6;
-    
+    // consecutive months of contributions with no month missed. This must stay a
+    // real check: the client gate is what stops an ineligible member at the
+    // form, and a hardcoded `true` here shipped a working loan application to
+    // every member on day one.
+    final isEligible = membershipMonths >= 6 && longestRun >= 6;
+
     return {
       'isEligible': isEligible,
       'membershipMonths': membershipMonths,
-      'contributionMonths': finalContributionMonths,
+      'contributionMonths': longestRun,
       'membershipRequired': 6,
       'contributionsRequired': 6,
     };
+  }
+
+  /// True when [next] is the calendar month immediately after [previous].
+  /// Month keys are 'YYYY-MM'.
+  bool _isNextMonth(String previous, String next) {
+    final prev = previous.split('-');
+    final curr = next.split('-');
+    if (prev.length != 2 || curr.length != 2) return false;
+    final prevYear = int.tryParse(prev[0]);
+    final prevMonth = int.tryParse(prev[1]);
+    final currYear = int.tryParse(curr[0]);
+    final currMonth = int.tryParse(curr[1]);
+    if (prevYear == null || prevMonth == null || currYear == null || currMonth == null) {
+      return false;
+    }
+    if (prevYear == currYear) return currMonth == prevMonth + 1;
+    return currYear == prevYear + 1 && prevMonth == 12 && currMonth == 1;
   }
 
   // Build eligibility status widget
@@ -256,11 +280,11 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
       // User is NOT eligible - show red warning
       String reason = '';
       if (membershipMonths < 6 && contributionMonths < 6) {
-        reason = 'You need at least $membershipRequired months of membership AND $contributionsRequired months of consistent contributions to be eligible for a loan.';
+        reason = 'You need at least $membershipRequired months of membership AND $contributionsRequired consecutive months of contributions with no month missed.';
       } else if (membershipMonths < 6) {
         reason = 'You need at least $membershipRequired months of membership. You currently have $membershipMonths months.';
       } else if (contributionMonths < 6) {
-        reason = 'You need at least $contributionsRequired months of consistent contributions. You currently have $contributionMonths months.';
+        reason = 'You need at least $contributionsRequired consecutive months of contributions with no month missed. Your longest unbroken run is $contributionMonths months.';
       }
       
       return AppCard(
@@ -310,7 +334,7 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
                   ),
                   const SizedBox(height: 8),
                   _buildEligibilityRow(
-                    'Consistent Contributions',
+                    'Consecutive Contributions',
                     '$contributionMonths / $contributionsRequired months',
                     contributionMonths >= contributionsRequired,
                   ),
@@ -430,12 +454,16 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
                           '4. If repayment is missed for 3 consecutive months without approved arrangements, '
                           'guarantors may become responsible for the outstanding balance in accordance with '
                           'Coopvest Africa\'s loan policy.\n\n'
-                          '5. Your monthly contribution must be current, not merely historical, to qualify for a loan. '
+                          '5. To qualify for a loan you need at least six (6) months of membership and at least '
+                          'six (6) consecutive months of contributions with no month missed. A month in which no '
+                          'contribution is received breaks the run, and the count restarts from the first month paid '
+                          'after the gap.\n\n'
+                          '6. Your monthly contribution must be current, not merely historical. '
                           'You have ten (10) days from the start of each month to pay it. If it is still unpaid after '
                           'that, borrowing (and guaranteeing others) is paused until the outstanding months are paid. '
                           'No penalty is charged and no savings are taken, and borrowing resumes automatically once '
                           'you are up to date.\n\n'
-                          '6. By proceeding, you authorise Coopvest Africa to disburse the approved amount '
+                          '7. By proceeding, you authorise Coopvest Africa to disburse the approved amount '
                           'to your registered account and to apply the terms above.',
                           style: TextStyle(fontSize: 12, height: 1.6),
                         ),
@@ -692,7 +720,7 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
           'tenureMonths': loanInfo['duration'],
           'purpose': _purposeController.text.trim(),
           'agreementAccepted': true,
-          'agreementVersion': 'v1.1',
+          'agreementVersion': 'v1.2',
           'applyReferralBonus': _useReferralBonus && hasBonus,
         });
 

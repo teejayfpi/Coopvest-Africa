@@ -10,6 +10,9 @@ const {
   shiftMonth,
   paidMonths,
   assessConsistency,
+  assessEligibility,
+  eligibilityMessage,
+  longestStreak,
   standingFor,
   consistencyMessage,
   parseVersion,
@@ -192,5 +195,168 @@ describe('contribution transaction types', () => {
     for (const type of ['deposit', 'savings_deposit', 'transfer_in', 'salary_deduction', 'contribution']) {
       expect(CONTRIBUTION_TRANSACTION_TYPES).toContain(type);
     }
+  });
+});
+
+
+/**
+ * The agreed eligibility rule: six consecutive months of contributions with no
+ * month missed, still up to date at the time of application.
+ *
+ * The bug these guard: eligibility used to count *distinct* months ever paid,
+ * so a member who paid six months and then lapsed still qualified, and a member
+ * with a gap in the middle also qualified.
+ */
+describe('assessEligibility — six consecutive months, no month missed', () => {
+  const now = new Date('2026-11-20T12:00:00Z');
+  // Months counting back from the current month: 0 = this month, 1 = last, ...
+  const monthBack = (n) => {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - n, 15));
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+  };
+  const months = (...backs) => backs.map((n) => paid(monthBack(n)));
+
+  test('six consecutive months including this month is eligible', () => {
+    const v = assessEligibility({ contributions: months(0, 1, 2, 3, 4, 5), now });
+    expect(v.eligible).toBe(true);
+    expect(v.longestStreak).toBe(6);
+    expect(v.reason).toBeNull();
+  });
+
+  test('six consecutive months but stopped two months ago is NOT eligible', () => {
+    // The reported bug: this member was approved because the count of distinct
+    // months was still six.
+    const v = assessEligibility({ contributions: months(2, 3, 4, 5, 6, 7), now });
+    expect(v.longestStreak).toBe(6);
+    expect(v.inGoodStanding).toBe(false);
+    expect(v.eligible).toBe(false);
+    expect(v.reason).toBe('CONTRIBUTIONS_NOT_CURRENT');
+  });
+
+  test('six months with a three-month gap in the middle is NOT eligible', () => {
+    // Paid this month, but missed a stretch mid-history. Counting distinct
+    // months scored this 6; the longest unbroken run is only 3.
+    const v = assessEligibility({ contributions: months(0, 1, 2, 6, 7, 8), now });
+    expect(v.paidMonths).toBe(6);
+    expect(v.longestStreak).toBe(3);
+    expect(v.eligible).toBe(false);
+    expect(v.reason).toBe('INSUFFICIENT_CONSECUTIVE_MONTHS');
+  });
+
+  test('five consecutive months is not enough', () => {
+    const v = assessEligibility({ contributions: months(0, 1, 2, 3, 4), now });
+    expect(v.longestStreak).toBe(5);
+    expect(v.eligible).toBe(false);
+    expect(v.reason).toBe('INSUFFICIENT_CONSECUTIVE_MONTHS');
+  });
+
+  test('six months but last month missed is NOT eligible', () => {
+    const v = assessEligibility({ contributions: months(1, 2, 3, 4, 5, 6), now });
+    expect(v.longestStreak).toBe(6);
+    expect(v.eligible).toBe(false);
+    expect(v.reason).toBe('CONTRIBUTIONS_NOT_CURRENT');
+  });
+
+  test('a longer run qualifies', () => {
+    const v = assessEligibility({ contributions: months(0, 1, 2, 3, 4, 5, 6, 7, 8), now });
+    expect(v.longestStreak).toBe(9);
+    expect(v.eligible).toBe(true);
+  });
+
+  test('no contributions at all is not eligible and does not crash', () => {
+    const v = assessEligibility({ contributions: [], now });
+    expect(v.longestStreak).toBe(0);
+    expect(v.eligible).toBe(false);
+    expect(v.reason).toBe('INSUFFICIENT_CONSECUTIVE_MONTHS');
+  });
+
+  test('a run served earlier still counts once the member is up to date again', () => {
+    // Six consecutive months, then one missed month, then paid again. The
+    // qualifying run is intact and the member is current, so they qualify.
+    const v = assessEligibility({ contributions: months(0, 2, 3, 4, 5, 6, 7), now });
+    expect(v.longestStreak).toBe(6);
+    expect(v.inGoodStanding).toBe(true);
+    expect(v.eligible).toBe(true);
+  });
+
+  test('the grace period still applies to the current month', () => {
+    const early = new Date('2026-11-05T12:00:00Z');
+    const contributions = [1, 2, 3, 4, 5, 6].map((n) => {
+      const d = new Date(Date.UTC(early.getUTCFullYear(), early.getUTCMonth() - n, 15));
+      return paid(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`);
+    });
+    const v = assessEligibility({ contributions, now: early });
+    expect(v.graceActive).toBe(true);
+    expect(v.eligible).toBe(true);
+  });
+
+  test('past the grace period, an unpaid current month breaks eligibility', () => {
+    const late = new Date('2026-11-20T12:00:00Z');
+    const contributions = [1, 2, 3, 4, 5, 6].map((n) => {
+      const d = new Date(Date.UTC(late.getUTCFullYear(), late.getUTCMonth() - n, 15));
+      return paid(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`);
+    });
+    const v = assessEligibility({ contributions, now: late });
+    expect(v.graceActive).toBe(false);
+    expect(v.eligible).toBe(false);
+    expect(v.reason).toBe('CONTRIBUTIONS_NOT_CURRENT');
+  });
+
+  test('wallet and payroll deposits count towards the run', () => {
+    // These flows write no contributions row; ignoring them would report a
+    // payroll member as never having paid.
+    const deposits = [0, 1, 2, 3, 4, 5].map((n) => ({ created_at: `${monthBack(n)}-10T09:00:00Z` }));
+    const v = assessEligibility({ contributions: [], deposits, now });
+    expect(v.longestStreak).toBe(6);
+    expect(v.eligible).toBe(true);
+  });
+
+  test('a gap in deposit months also breaks the run', () => {
+    // Runs are 0-1 (two months) and 4-7 (four months); the longest is four.
+    const deposits = [0, 1, 4, 5, 6, 7].map((n) => ({ created_at: `${monthBack(n)}-10T09:00:00Z` }));
+    const v = assessEligibility({ contributions: [], deposits, now });
+    expect(v.longestStreak).toBe(4);
+    expect(v.eligible).toBe(false);
+  });
+});
+
+describe('longestStreak', () => {
+  test('is zero for no months', () => {
+    expect(longestStreak(new Set())).toBe(0);
+    expect(longestStreak(null)).toBe(0);
+  });
+
+  test('handles a single month', () => {
+    expect(longestStreak(new Set(['2026-01']))).toBe(1);
+  });
+
+  test('spans a year boundary', () => {
+    const months = new Set(['2025-11', '2025-12', '2026-01', '2026-02']);
+    expect(longestStreak(months)).toBe(4);
+  });
+
+  test('finds the longest run, not the last one', () => {
+    const months = new Set(['2026-01', '2026-02', '2026-03', '2026-04', '2026-06']);
+    expect(longestStreak(months)).toBe(4);
+  });
+});
+
+describe('eligibilityMessage', () => {
+  const now = new Date('2026-11-20T12:00:00Z');
+  const monthBack = (n) => {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - n, 15));
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+  };
+
+  test('explains a short run and names the member\'s actual run', () => {
+    const v = assessEligibility({ contributions: [0, 1, 2].map((n) => paid(monthBack(n))), now });
+    const msg = eligibilityMessage(v);
+    expect(msg).toContain('6 consecutive months');
+    expect(msg).toContain('longest unbroken run is 3 months');
+  });
+
+  test('explains a lapse in terms of months behind', () => {
+    const v = assessEligibility({ contributions: [2, 3, 4, 5, 6, 7].map((n) => paid(monthBack(n))), now });
+    expect(eligibilityMessage(v)).toContain('behind');
   });
 });
