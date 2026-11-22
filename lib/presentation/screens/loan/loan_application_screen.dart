@@ -6,11 +6,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/utils/loan_eligibility.dart';
 import '../../../presentation/providers/auth_provider.dart';
 import '../../../presentation/providers/contributions/contribution_provider.dart';
 import '../../../presentation/providers/kyc_provider.dart';
+import '../../../presentation/providers/loan_provider.dart';
 import '../../../data/models/referral_models.dart';
-import '../../../data/models/terms_content.dart';
 import '../../../presentation/providers/referral_provider.dart';
 import '../../../presentation/providers/terms_provider.dart';
 import '../auth/terms_section_screen.dart';
@@ -160,81 +161,38 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
       membershipMonths = user.membershipDurationMonths;
     }
     
-    // Count months with successful contributions
-    final now = DateTime.now();
-    final sixMonthsAgo = DateTime(now.year, now.month - 6, 1);
-    
-    // Count settled contributions in the last 6 months. The settled set must
-    // match the server's loanPolicy.countContributionMonths, or the app says
-    // "eligible" and the server answers 403 (or the reverse).
-    const settledStatuses = {'successful', 'completed', 'approved', 'paid'};
-    final successfulContributions = contributions.where((c) {
-      if (!settledStatuses.contains(c.status.name)) {
-        return false;
-      }
-      // Check if contribution is from the last 6 months
-      if (c.postedDate != null) {
-        return c.postedDate!.isAfter(sixMonthsAgo) || 
-               c.postedDate!.isAtSameMomentAs(sixMonthsAgo);
-      }
-      return c.createdAt.isAfter(sixMonthsAgo) || 
-             c.createdAt.isAtSameMomentAs(sixMonthsAgo);
-    }).toList();
-    
-    // Get unique months with successful contributions
-    final uniqueContributionMonths = <String>{};
-    for (final c in successfulContributions) {
-      uniqueContributionMonths.add(c.contributionMonth);
-    }
-    
-    // Longest unbroken run of contributed months. The policy requires six
-    // *consecutive* months, so counting distinct months (the previous
-    // behaviour) let a member with gaps in the middle appear eligible while the
-    // server refused them. The app and the server must answer the same
-    // question, and the server re-checks this authoritatively.
-    final sortedMonths = uniqueContributionMonths.toList()..sort();
-    int longestRun = 0;
-    int currentRun = 0;
-    String? previousMonth;
-    for (final month in sortedMonths) {
-      currentRun = (previousMonth != null && _isNextMonth(previousMonth, month))
-          ? currentRun + 1
-          : 1;
-      if (currentRun > longestRun) longestRun = currentRun;
-      previousMonth = month;
-    }
+    // Prefer the server's verdict: it sees every contribution row, while the
+    // provider holds only the first page, so a member with several rows per
+    // month could be told here that they are short when they are not.
+    final server = ref.read(serverEligibilityProvider).valueOrNull;
 
-    // Determine eligibility — Loan Policy: six months of membership AND six
-    // consecutive months of contributions with no month missed. This must stay a
-    // real check: the client gate is what stops an ineligible member at the
-    // form, and a hardcoded `true` here shipped a working loan application to
-    // every member on day one.
-    final isEligible = membershipMonths >= 6 && longestRun >= 6;
+    // Longest unbroken run of contributed months. Shared with the dashboard
+    // card so the two cannot disagree; the server re-checks authoritatively.
+    final longestRun = server?.consecutiveMonths ??
+        LoanEligibility.longestConsecutiveRun(contributions);
+    final membershipRequired =
+        server?.membershipRequired ?? LoanEligibility.membershipMonthsRequired;
+    final contributionsRequired =
+        server?.consecutiveRequired ?? LoanEligibility.consecutiveMonthsRequired;
+
+    // Loan Policy: six months of membership AND six consecutive months of
+    // contributions with no month missed. This must stay a real check: the
+    // client gate is what stops an ineligible member at the form, and a
+    // hardcoded `true` here shipped a working loan application to every member
+    // on day one.
+    final isEligible = server?.eligible ??
+        (membershipMonths >= membershipRequired &&
+            longestRun >= contributionsRequired);
 
     return {
       'isEligible': isEligible,
       'membershipMonths': membershipMonths,
       'contributionMonths': longestRun,
-      'membershipRequired': 6,
-      'contributionsRequired': 6,
+      'membershipRequired': membershipRequired,
+      'contributionsRequired': contributionsRequired,
+      'serverReason': server?.reason,
+      'termsSectionId': server?.termsSectionId,
     };
-  }
-
-  /// True when [next] is the calendar month immediately after [previous].
-  /// Month keys are 'YYYY-MM'.
-  bool _isNextMonth(String previous, String next) {
-    final prev = previous.split('-');
-    final curr = next.split('-');
-    if (prev.length != 2 || curr.length != 2) return false;
-    final prevYear = int.tryParse(prev[0]);
-    final prevMonth = int.tryParse(prev[1]);
-    final currYear = int.tryParse(curr[0]);
-    final currMonth = int.tryParse(curr[1]);
-    if (prevYear == null || prevMonth == null || currYear == null || currMonth == null) {
-      return false;
-    }
-    if (prevYear == currYear) return currMonth == prevMonth + 1;
-    return currYear == prevYear + 1 && prevMonth == 12 && currMonth == 1;
   }
 
   // Build eligibility status widget

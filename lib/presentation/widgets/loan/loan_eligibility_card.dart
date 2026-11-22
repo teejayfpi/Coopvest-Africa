@@ -6,7 +6,9 @@ import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/extensions/number_extensions.dart';
 import '../../widgets/common/feature_gate.dart';
+import '../../../core/utils/loan_eligibility.dart';
 import '../../../presentation/providers/auth_provider.dart';
+import '../../../presentation/providers/contributions/contribution_provider.dart';
 import '../../../presentation/providers/loan_provider.dart';
 import '../../../presentation/providers/wallet_provider.dart';
 
@@ -31,18 +33,74 @@ class LoanEligibilityCard extends ConsumerWidget {
     final featureService = ref.read(featureServiceProvider);
     final loansEnabled = featureService.isEnabled('loan_requests');
 
-    final monthsDone = user?.membershipDurationMonths ?? 0;
-    const monthsRequired = AppConfig.loanEligibilityMonths;
-    final monthsLeft = (monthsRequired - monthsDone).clamp(0, monthsRequired);
+    // Two independent conditions decide eligibility: months of membership and
+    // a run of consecutive contributed months. This card used to read only the
+    // first, so a member six months in with no contributions at all saw
+    // "0 months left to unlock", an "Eligible" badge and a working Apply button
+    // - and then collected a 403 from the server.
+    final contributions = ref.watch(contributionProvider).contributions;
+
+    // Prefer the server's verdict: it sees every contribution row, while this
+    // widget only holds one page. The local estimate below is a fallback for
+    // when the request has not resolved (or failed), so the card still renders.
+    final serverEligibility = ref.watch(serverEligibilityProvider).valueOrNull;
+
+    final membershipMonths = serverEligibility?.membershipMonths ??
+        user?.membershipDurationMonths ??
+        0;
+    final monthsRequired = serverEligibility?.membershipRequired ??
+        AppConfig.loanEligibilityMonths;
+    final membershipMet =
+        serverEligibility?.membershipMet ?? membershipMonths >= monthsRequired;
+
+    final contributedRun = serverEligibility?.consecutiveMonths ??
+        LoanEligibility.longestConsecutiveRun(contributions);
+    final consecutiveRequired = serverEligibility?.consecutiveRequired ??
+        LoanEligibility.consecutiveMonthsRequired;
+    final runMet = contributedRun >= consecutiveRequired;
+    final isCurrent = serverEligibility?.isCurrent ??
+        LoanEligibility.isCurrent(contributions);
+
     // `loanEligibilityMonths` is 6 in production. The waived branch is a
     // safety net so a future 0 value cannot divide by zero (0/0 is NaN and
     // renders a broken progress ring): treat "no minimum" as fully met rather
     // than as a milestone the member has not reached.
-    const requirementWaived = monthsRequired <= 0;
-    final progress = requirementWaived
+    final requirementWaived = monthsRequired <= 0;
+
+    // Progress tracks the condition furthest from being met, so the ring never
+    // reads 100% while a requirement is still outstanding.
+    final membershipProgress = requirementWaived
         ? 1.0
-        : (monthsDone / monthsRequired).clamp(0.0, 1.0);
-    final isEligible = monthsDone >= monthsRequired;
+        : (membershipMonths / monthsRequired).clamp(0.0, 1.0);
+    final runProgress = (contributedRun / consecutiveRequired).clamp(0.0, 1.0);
+    final progress = min(membershipProgress, runProgress);
+
+    final isEligible = membershipMet && runMet && isCurrent;
+
+    // What is still outstanding, in the member's terms. The card previously
+    // had no way to say "your tenure is fine but you have not been saving".
+    final monthsLeft =
+        (monthsRequired - membershipMonths).clamp(0, monthsRequired);
+    final monthsOfSavingLeft =
+        (consecutiveRequired - contributedRun).clamp(0, consecutiveRequired);
+    final String statusLine;
+    if (isEligible) {
+      statusLine = 'You qualify for a loan!';
+    } else if (!membershipMet && !runMet) {
+      statusLine = '$monthsLeft membership + $monthsOfSavingLeft saving '
+          'month${monthsOfSavingLeft == 1 ? '' : 's'} left';
+    } else if (!membershipMet) {
+      statusLine =
+          '$monthsLeft month${monthsLeft == 1 ? '' : 's'} of membership left';
+    } else if (!runMet) {
+      statusLine = '$monthsOfSavingLeft more consecutive saving '
+          'month${monthsOfSavingLeft == 1 ? '' : 's'} needed';
+    } else if (serverEligibility?.reason != null) {
+      // The server explains the specific shortfall; prefer its wording.
+      statusLine = serverEligibility!.reason!;
+    } else {
+      statusLine = 'Your contributions are behind - pay the outstanding month';
+    }
 
     // Savings basis must match the loan application screen, which uses the
     // wallet's totalSavings and falls back to the wallet balance. The card
@@ -54,7 +112,8 @@ class LoanEligibilityCard extends ConsumerWidget {
         : (wallet.totalSavings > 0 ? wallet.totalSavings : wallet.balance);
     final maxLoan = loanNotifier.calculateMaxLoanAmount(totalSavings);
 
-    final primaryColor = isEligible ? CoopvestColors.success : CoopvestColors.primary;
+    final primaryColor =
+        isEligible ? CoopvestColors.success : CoopvestColors.primary;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 0),
@@ -117,17 +176,14 @@ class LoanEligibilityCard extends ConsumerWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      isEligible
-                          ? 'You qualify for a loan!'
-                          : '$monthsLeft month${monthsLeft == 1 ? '' : 's'} left to unlock',
+                      statusLine,
                       style: TextStyle(
                         fontSize: 12,
                         color: isEligible
                             ? CoopvestColors.success
                             : context.textSecondary,
-                        fontWeight: isEligible
-                            ? FontWeight.w600
-                            : FontWeight.normal,
+                        fontWeight:
+                            isEligible ? FontWeight.w600 : FontWeight.normal,
                       ),
                     ),
                   ],
@@ -178,7 +234,7 @@ class LoanEligibilityCard extends ConsumerWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          '$monthsDone',
+                          '${min(membershipMonths, monthsRequired)}',
                           style: TextStyle(
                             fontSize: 24,
                             fontWeight: FontWeight.bold,
@@ -189,7 +245,9 @@ class LoanEligibilityCard extends ConsumerWidget {
                         Text(
                           // "of 0" previously read "0 of 0 months", which looks
                           // like missing data. Name the waived state instead.
-                          requirementWaived ? 'no minimum' : 'of $monthsRequired',
+                          requirementWaived
+                              ? 'no minimum'
+                              : 'of $monthsRequired',
                           style: TextStyle(
                             fontSize: 11,
                             color: context.textSecondary,
@@ -217,7 +275,7 @@ class LoanEligibilityCard extends ConsumerWidget {
                   children: [
                     // Months milestone pills
                     _MilestonePills(
-                      monthsDone: monthsDone,
+                      monthsDone: min(membershipMonths, monthsRequired),
                       monthsRequired: monthsRequired,
                       color: primaryColor,
                     ),
@@ -233,7 +291,8 @@ class LoanEligibilityCard extends ConsumerWidget {
                           color: CoopvestColors.success.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(
-                            color: CoopvestColors.success.withValues(alpha: 0.2),
+                            color:
+                                CoopvestColors.success.withValues(alpha: 0.2),
                           ),
                         ),
                         child: Column(
@@ -310,23 +369,29 @@ class LoanEligibilityCard extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    requirementWaived
-                        ? 'Membership tenure'
-                        : 'Contribution months progress',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: context.textSecondary,
+                  // Both labels share the row and the left one wraps: at
+                  // 320dp "Consecutive saving months" plus "6 / 6" overflowed
+                  // by 60px, and spaceBetween gives no room to shrink.
+                  Expanded(
+                    child: Text(
+                      requirementWaived
+                          ? 'Membership tenure'
+                          : 'Consecutive saving months',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: context.textSecondary,
+                      ),
                     ),
                   ),
+                  const SizedBox(width: 8),
                   Text(
                     // While the minimum is waived, "100%" is meaningless — show
-                    // the member's actual tenure instead of a milestone met.
+                    // the member's actual run instead of a milestone met.
                     requirementWaived
-                        ? '$monthsDone ${monthsDone == 1 ? 'month' : 'months'}'
-                        : '${(progress * 100).round()}%',
+                        ? '$contributedRun '
+                            '${contributedRun == 1 ? 'month' : 'months'}'
+                        : '$contributedRun / $consecutiveRequired',
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
@@ -375,11 +440,13 @@ class LoanEligibilityCard extends ConsumerWidget {
               decoration: BoxDecoration(
                 color: CoopvestColors.warning.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: CoopvestColors.warning.withValues(alpha: 0.3)),
+                border: Border.all(
+                    color: CoopvestColors.warning.withValues(alpha: 0.3)),
               ),
               child: const Row(
                 children: [
-                  Icon(Icons.lock_outline, size: 18, color: CoopvestColors.warning),
+                  Icon(Icons.lock_outline,
+                      size: 18, color: CoopvestColors.warning),
                   SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -421,28 +488,36 @@ class _MilestonePills extends StatelessWidget {
             padding: const EdgeInsets.only(right: 3),
             child: Column(
               children: [
-                Container(
-                  width: 26,
-                  height: 26,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: done ? color : color.withValues(alpha: 0.1),
-                    border: Border.all(
-                      color: done ? color : color.withValues(alpha: 0.25),
-                      width: 1.5,
+                // The pill is sized by the space `Expanded` gives it rather
+                // than a fixed 26px, so six of them still fit on a 320dp
+                // screen (6 x 26px overflowed by 60px).
+                AspectRatio(
+                  aspectRatio: 1,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: done ? color : color.withValues(alpha: 0.1),
+                      border: Border.all(
+                        color: done ? color : color.withValues(alpha: 0.25),
+                        width: 1.5,
+                      ),
                     ),
-                  ),
-                  child: Center(
-                    child: done
-                        ? const Icon(Icons.check, color: Colors.white, size: 13)
-                        : Text(
-                            '${i + 1}',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: color.withValues(alpha: 0.5),
-                            ),
-                          ),
+                    child: Center(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: done
+                            ? const Icon(Icons.check,
+                                color: Colors.white, size: 13)
+                            : Text(
+                                '${i + 1}',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: color.withValues(alpha: 0.5),
+                                ),
+                              ),
+                      ),
+                    ),
                   ),
                 ),
               ],

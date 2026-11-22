@@ -192,7 +192,7 @@ const ACTIVE_LOAN_STATUSES = ['active', 'repaying', 'overdue', 'approved', 'disb
 
 // A contribution row in any of these states means the money is in — the
 // monthly contribution has been paid for that month.
-const PAID_CONTRIBUTION_STATUSES = ['successful', 'approved', 'completed', 'confirmed', 'paid'];
+const { PAID_CONTRIBUTION_STATUSES } = require('../lib/contributionStatuses');
 
 /** 'YYYY-MM' for a date (defaults to now). */
 function monthKey(date = new Date()) {

@@ -757,7 +757,7 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
                     final section = doc.sections[index];
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
-                      leading: Icon(
+                      leading: const Icon(
                         Icons.description_outlined,
                         color: CoopvestColors.primary,
                         size: 20,
