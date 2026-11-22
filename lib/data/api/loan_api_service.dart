@@ -114,7 +114,7 @@ class LoanApplicationRequest {
     required this.tenureMonths,
     required this.purpose,
     this.agreementAccepted = true,
-    this.agreementVersion = 'v1.0',
+    this.agreementVersion = 'v1.2',
   });
 
   Map<String, dynamic> toJson() => {

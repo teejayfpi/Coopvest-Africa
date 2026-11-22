@@ -28,6 +28,7 @@ const riskScoring = require('../lib/riskScoring');
 const manualDeposit = require('../lib/manualDeposit');
 const { classifyChannels, normalizeAudience, AUDIENCE_TYPES } = require('../lib/notificationBroadcast');
 const rbac = require('../lib/permissions');
+const { auditFor } = require('../lib/auditLog');
 const {
   guarantorEligibility,
   contributionChannel,
@@ -35,6 +36,13 @@ const {
 } = require('../lib/guarantorEligibility');
 const guarantorCoverage = require('../lib/guarantorCoverage');
 const savingsSetoff = require('../lib/savingsSetoff');
+const guarantorNotifications = require('../lib/guarantorNotifications');
+
+/** Statuses a penalty may be added to: live loans that can fall into arrears. */
+const PENALTY_ELIGIBLE_STATUSES = new Set(['active', 'repaying', 'overdue', 'defaulted']);
+
+/** Statuses whose repayment plan may be restructured: live, not yet closed. */
+const RESTRUCTURABLE_STATUSES = new Set(['active', 'repaying', 'overdue', 'defaulted', 'in_recovery']);
 
 /** Notify the loan's borrower of an approve/reject decision. Never throws. */
 async function notifyBorrowerOfDecision(loan, approve, reason) {
@@ -66,61 +74,30 @@ async function notifyBorrowerOfDecision(loan, approve, reason) {
 }
 
 /**
- * Tell the guarantors that a loan they backed has been approved.
+ * Tell the borrower their loan money has landed. Never throws.
  *
- * WHY
- * ---
- * Guarantors were only ever contacted at the point they were invited to
- * consent. Once the loan was approved nothing was sent, so a member could find
- * out they were on the hook for someone else's loan only when the borrower
- * stopped paying. That is the worst possible moment to learn about it.
- *
- * Guarantor rows carry two id columns: `guarantor_profile_id` (the member
- * account) and `guarantor_id` (a legacy reference). Notify the profile id, and
- * fall back to the legacy column, skipping anything unset so a malformed row
- * cannot throw.
- *
- * Best-effort: a failed notification must never fail the approval itself.
+ * Sent on in-app and push: a disbursement is the moment the member can act
+ * (spend it or repay it), and an unread inbox row would leave them checking
+ * their balance to find out.
  */
-async function notifyGuarantorsOfApproval(loan) {
+async function notifyBorrowerOfDisbursement(loan) {
   try {
-    const loanId = loan.id;
-    if (!loanId) return;
-
-    const { data: guarantors, error } = await supabase
-      .from('loan_guarantors')
-      .select('guarantor_profile_id, guarantor_id, guarantor_name, status')
-      .eq('loan_id', loanId);
-    if (error) {
-      logger.warn('notifyGuarantorsOfApproval: could not load guarantors:', error.message);
-      return;
-    }
-    if (!guarantors || guarantors.length === 0) return;
-
+    const borrowerId = loan.borrower_id || loan.profile_id || loan.user_id;
+    if (!borrowerId) return;
     const amount = Number(loan.amount || 0);
-    const fmt = amount ? `₦${amount.toLocaleString()}` : 'a loan';
-    // Only consenting guarantors are actually on the hook.
-    const consenting = guarantors.filter(
-      (g) => !g.status || String(g.status).toLowerCase() === 'consented' ||
-             String(g.status).toLowerCase() === 'accepted'
-    );
-    const targets = (consenting.length ? consenting : guarantors)
-      .map((g) => g.guarantor_profile_id || g.guarantor_id)
-      .filter((id) => typeof id === 'string' && id.length > 0);
-
-    for (const profileId of new Set(targets)) {
-      await notifyService.sendInApp({
-        profileId,
-        title: 'Loan you guaranteed was approved',
-        body: `A loan of ${fmt} that you guaranteed has been approved. `
-            + 'You will be notified if a repayment is missed.',
-        type: 'loan',
-        category: 'info',
-      });
-    }
-    logger.info(`notifyGuarantorsOfApproval: notified ${new Set(targets).size} guarantor(s) for loan ${loanId}`);
+    const fmt = amount ? `₦${amount.toLocaleString()}` : 'Your loan';
+    await notifyService.broadcast({
+      profileIds: [borrowerId],
+      channels: ['in_app', 'push'],
+      title: '💸 Loan Disbursed',
+      body: `${fmt} has been credited to your Coopvest wallet. `
+        + 'Your repayment schedule starts from today.',
+      type: 'loan',
+      category: 'success',
+      data: { loanId: loan.id, event: 'disbursed' },
+    });
   } catch (e) {
-    logger.warn('notifyGuarantorsOfApproval failed:', e.message);
+    logger.warn('notifyBorrowerOfDisbursement failed:', e.message);
   }
 }
 
@@ -164,23 +141,6 @@ function paging(req) {
 // Enriched audit logger. Pass `req` (4th arg) from a route handler to record
 // the acting admin's id/role, IP, and user-agent. Call sites that omit `req`
 // behave exactly as before (null actor) — no regression.
-async function logAdminAction(action, target, metadata = {}, req = null) {
-  try {
-    const m = req ? clientMeta(req) : { ip: null, userAgent: null };
-    await supabase.from('audit_logs').insert({
-      actor_id: req?.user?.id || null,
-      actor_role: req?.user?.role || null,
-      action,
-      target_model: target?.model || null,
-      target_id: target?.id || null,
-      metadata: { ...metadata, source: 'admin-web' },
-      ip_address: m.ip || null,
-      user_agent: m.userAgent || null,
-    });
-  } catch (err) {
-    logger.warn('audit_logs insert failed:', err.message);
-  }
-}
 
 /**
  * POST /api/v1/admin/backfill-registration-completed
@@ -240,7 +200,7 @@ router.post('/backfill-registration-completed', async (req, res) => {
       .eq('registration_completed', false);
     const updated = beforeFalse - (stillFalse?.length || 0);
 
-    await logAdminAction('backfill-registration-completed', null, { count: updated });
+    await auditFor(req)('backfill-registration-completed', null, { count: updated });
 
     return res.json({ success: true, updated, profileIds: targetIds });
   } catch (err) {
@@ -850,12 +810,10 @@ router.patch(
         .maybeSingle();
       if (error) throw error;
       if (!data) return res.status(404).json({ success: false, error: 'Member not found' });
-      await logAdminAction(
+      await auditFor(req)(
         update.role === 'super_admin' ? 'SUPER_ADMIN_GRANTED' : 'MEMBER_UPDATED',
         { model: 'Profile', id: data.id },
-        { ...update, actorEmail: req.user.email },
-        req,
-      );
+        { ...update, actorEmail: req.user.email });
       res.json({ success: true, member: data });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
@@ -944,9 +902,9 @@ router.post('/members/:id/confirm-delete', async (req, res) => {
     const expiresAt = new Date(Date.now() + MEMBER_DELETE_CODE_TTL_MS);
     pendingMemberDeletions.set(id, { code, expiresAt, requestedBy: req.user.id });
 
-    await logAdminAction('MEMBER_DELETE_INITIATED', { model: 'Profile', id }, {
+    await auditFor(req)('MEMBER_DELETE_INITIATED', { model: 'Profile', id }, {
       memberEmail: member.email,
-    }, req);
+    });
 
     res.json({
       success: true,
@@ -1047,11 +1005,11 @@ router.delete('/members/:id', async (req, res) => {
     }
 
     pendingMemberDeletions.delete(id);
-    await logAdminAction('MEMBER_DELETED', { model: 'Profile', id }, {
+    await auditFor(req)('MEMBER_DELETED', { model: 'Profile', id }, {
       memberEmail: member.email,
       memberName: member.name,
       cleanupFailures: failures.length ? failures : undefined,
-    }, req);
+    });
 
     res.json({
       success: true,
@@ -1090,7 +1048,7 @@ router.post('/members/:id/reset-password', async (req, res) => {
       return res.status(502).json({ success: false, error: 'Could not send reset email. Please try again.' });
     }
 
-    await logAdminAction('MEMBER_PASSWORD_RESET', { model: 'Profile', id: profile.id }, { email: profile.email });
+    await auditFor(req)('MEMBER_PASSWORD_RESET', { model: 'Profile', id: profile.id }, { email: profile.email });
 
     // Security heads-up: the member gets the reset email, but an in-app record
     // means they see the request even if the email lands in spam — and can
@@ -1314,7 +1272,7 @@ async function routeToApprovalCenterIfRequired(req, res, loan) {
     thresholdValue: approvalMatrix.maxApprovableAmount(role, await approvalMatrix.getThresholds()),
     user: req.user,
   });
-  await logAdminAction('LOAN_APPROVAL_ROUTED', { model: 'Loan', id: loan.id }, { amount, adminId: req.user?.id, approvalRequestId: request.id });
+  await auditFor(req)('LOAN_APPROVAL_ROUTED', { model: 'Loan', id: loan.id }, { amount, adminId: req.user?.id, approvalRequestId: request.id });
   res.status(202).json({
     success: true,
     pendingApproval: true,
@@ -1369,8 +1327,11 @@ router.post(
         .maybeSingle();
       if (error) throw error;
       if (!data) return res.status(404).json({ success: false, error: 'Loan not found' });
-      await logAdminAction(`LOAN_${approve ? 'APPROVED' : 'REJECTED'}`, { model: 'Loan', id: data.id }, { reason, adminId });
+      await auditFor(req)(`LOAN_${approve ? 'APPROVED' : 'REJECTED'}`, { model: 'Loan', id: data.id }, { reason, adminId });
       await notifyBorrowerOfDecision(data, approve, reason);
+      // A guarantor backed this loan, so the decision is theirs to know too:
+      // on approval they become liable, on rejection that liability ends.
+      await guarantorNotifications.notifyGuarantorsOfDecision(data, approve, reason);
       res.json({ success: true, loan: data, data });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
@@ -1406,7 +1367,7 @@ router.post(
       if (error) throw error;
       if (!data) return res.status(404).json({ success: false, error: 'Loan not found' });
 
-      await logAdminAction('LOAN_INFO_REQUESTED', { model: 'Loan', id: data.id }, { message, adminId: req.user?.id });
+      await auditFor(req)('LOAN_INFO_REQUESTED', { model: 'Loan', id: data.id }, { message, adminId: req.user?.id });
       try {
         await notifyService.sendInApp({
           profileId: data.profile_id,
@@ -1468,16 +1429,206 @@ router.post('/loans/:id/approve', async (req, res) => {
       .maybeSingle();
     if (error) throw error;
     if (!data) return res.status(404).json({ success: false, error: 'Loan not found' });
-    await logAdminAction('LOAN_APPROVED', { model: 'Loan', id: data.id }, { adminId });
+    await auditFor(req)('LOAN_APPROVED', { model: 'Loan', id: data.id }, { adminId });
     await notifyBorrowerOfDecision(data, true, null);
-    // Guarantors are on the hook for this loan, so they are told it went
-    // through rather than finding out only if a repayment is missed.
-    await notifyGuarantorsOfApproval(data);
+    // Guarantors are on the hook for this loan, so they are told the outcome
+    // rather than finding out only if a repayment is missed.
+    await guarantorNotifications.notifyGuarantorsOfDecision(data, true, null);
     res.json({ success: true, loan: data, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
+
+/**
+ * POST /api/admin/loans/:id/disburse
+ *
+ * Pay out an approved loan. Credits the principal to the member's wallet and
+ * moves the loan to 'active' in one transaction (migration 070).
+ *
+ * This is the step that makes the rest of the loan lifecycle work. Approval
+ * alone left the loan at 'approved', and repayment only accepts 'active' /
+ * 'repaying' / 'overdue', so an approved loan could not be repaid at all — and
+ * the recovery worker never scanned it, so its guarantors were never warned
+ * when it fell into arrears.
+ *
+ * Only 'approved' qualifies, so a double click cannot credit the principal
+ * twice. The dashboard surfaces a 409 and refreshes rather than retrying.
+ */
+router.post(
+  '/loans/:id/disburse',
+  [body('confirm').optional().isBoolean()],
+  validate,
+  async (req, res) => {
+    try {
+      const adminId = req.user?.id || null;
+
+      const { data: loan, error: fetchErr } = await supabase
+        .from('loans')
+        .select('*, profile:profiles!profile_id(name, email)')
+        .eq('id', req.params.id)
+        .maybeSingle();
+      if (fetchErr) throw fetchErr;
+      if (!loan) return res.status(404).json({ success: false, error: 'Loan not found' });
+
+      if (loan.status !== 'approved') {
+        return res.status(409).json({
+          success: false,
+          code: 'NOT_DISBURSABLE',
+          error: `Only an approved loan can be disbursed. This one is ${loan.status}.`,
+        });
+      }
+
+      const { data: disbursed, error } = await supabase.rpc('loan_disburse', {
+        p_loan_id: loan.id,
+        p_admin_id: adminId,
+      });
+      if (error) {
+        const message = error.message || '';
+        if (error.code === '22023' || /Only an approved loan/i.test(message)) {
+          return res.status(409).json({
+            success: false,
+            code: 'NOT_DISBURSABLE',
+            error: message,
+          });
+        }
+        // The function itself is missing until migration 070 is applied.
+        if (error.code === '42883' || /function .*loan_disburse.* does not exist/i.test(message)) {
+          logger.error('loan_disburse missing — run migration 070');
+          return res.status(503).json({
+            success: false,
+            code: 'MIGRATION_REQUIRED',
+            error: 'Loan disbursement is unavailable until migration 070 is applied.',
+          });
+        }
+        throw error;
+      }
+
+      await auditFor(req)('LOAN_DISBURSED', { model: 'Loan', id: loan.id }, { adminId });
+
+      // The borrower needs to know the money is in their wallet, and the
+      // guarantors need to know the liability they consented to has started —
+      // up to now they had only been told the application was approved.
+      await notifyBorrowerOfDisbursement(disbursed || loan);
+      await guarantorNotifications.notifyGuarantorsOfDecision(disbursed || loan, true, null);
+
+      res.json({ success: true, loan: disbursed, data: disbursed });
+    } catch (err) {
+      logger.error('admin loan disburse error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  },
+);
+
+/**
+ * POST /api/admin/loans/:id/penalty
+ *
+ * Add a late-repayment penalty to a loan as a `member_fees` obligation.
+ *
+ * This is deliberately an obligation row rather than a silent bump of
+ * `remaining_balance`. `member_fees` is what the deposit-verification path pays
+ * down, and what the member sees as an outstanding charge — so the penalty is
+ * collected, waivable, and visible. Adding it straight to the loan balance would
+ * make it invisible and unpayable except by overpaying the loan itself.
+ *
+ * The loan policy sets the amount (₦3,000 for a second consecutive missed
+ * instalment, `fee_types` row 'Late Loan Repayment Fine'), so an explicit amount
+ * is accepted but the configured type is the default.
+ *
+ * Loans only attract penalties once they are live and in arrears. Penalising a
+ * pending application or a completed loan would create a charge nobody can
+ * explain, so those are refused.
+ */
+router.post(
+  '/loans/:id/penalty',
+  [
+    body('amount').optional().isFloat({ min: 0.01 }),
+    body('reason').optional().isString().isLength({ max: 500 }),
+  ],
+  validate,
+  async (req, res) => {
+    try {
+      const adminId = req.user?.id || null;
+
+      const { data: loan, error: fetchErr } = await supabase
+        .from('loans')
+        .select('*, profile:profiles!profile_id(name, email)')
+        .eq('id', req.params.id)
+        .maybeSingle();
+      if (fetchErr) throw fetchErr;
+      if (!loan) return res.status(404).json({ success: false, error: 'Loan not found' });
+
+      if (!PENALTY_ELIGIBLE_STATUSES.has(loan.status)) {
+        return res.status(409).json({
+          success: false,
+          code: 'NOT_PENALISABLE',
+          error: `A penalty can only be added to an active, repaying, overdue or defaulted loan. This one is ${loan.status}.`,
+        });
+      }
+
+      const { data: feeType } = await supabase
+        .from('fee_types')
+        .select('id, name, amount')
+        .eq('category', 'fine')
+        .eq('is_active', true)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      const amount = Number(req.body?.amount ?? feeType?.amount ?? 0);
+      if (!(amount > 0)) {
+        return res.status(400).json({
+          success: false,
+          error: 'No penalty amount supplied and no active fine fee type is configured.',
+        });
+      }
+
+      const { data: fee, error } = await supabase
+        .from('member_fees')
+        .insert({
+          profile_id: loan.profile_id,
+          loan_id: loan.id,
+          fee_type_id: feeType?.id ?? null,
+          fee_type: 'fine',
+          label: req.body?.reason?.trim() || feeType?.name || 'Late Loan Repayment Fine',
+          amount,
+          status: 'outstanding',
+          assigned_by: adminId,
+        })
+        .select('*')
+        .maybeSingle();
+      if (error) throw error;
+
+      await auditFor(req)(
+        'LOAN_PENALTY_ADDED',
+        { model: 'Loan', id: loan.id },
+        { adminId, amount, fee_id: fee?.id, reason: req.body?.reason ?? null });
+
+      // The member is told what they have been charged and why, on in-app and
+      // push. A charge that appears only on a statement is one they will
+      // dispute later.
+      try {
+        await notifyService.broadcast({
+          profileIds: [loan.profile_id],
+          channels: ['in_app', 'push'],
+          title: 'Penalty Added',
+          body: `A late repayment penalty of ₦${amount.toLocaleString()} has been added to your loan. `
+            + 'It appears as an outstanding charge on your account.',
+          type: 'loan',
+          category: 'warning',
+          data: { loanId: loan.id, feeId: fee?.id, event: 'penalty' },
+        });
+      } catch (notifyErr) {
+        logger.warn('penalty notification failed:', notifyErr.message);
+      }
+
+      res.status(201).json({ success: true, fee, amount });
+    } catch (err) {
+      logger.error('admin loan penalty error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  },
+);
 
 /**
  * POST /api/admin/loans/:id/recover-from-savings
@@ -1525,12 +1676,12 @@ router.post('/loans/:id/recover-from-savings', async (req, res) => {
     });
     if (error) throw error;
 
-    await logAdminAction('LOAN_SAVINGS_SETOFF', { model: 'Loan', id: loan.id }, {
+    await auditFor(req)('LOAN_SAVINGS_SETOFF', { model: 'Loan', id: loan.id }, {
       recovered: data?.recovered,
       shortfall: data?.shortfall,
       steps: data?.steps,
       adminId: req.user?.id || null,
-    }, req);
+    });
 
     res.json({ success: true, ...data });
   } catch (err) {
@@ -1555,8 +1706,11 @@ router.post('/loans/:id/reject', async (req, res) => {
       .maybeSingle();
     if (error) throw error;
     if (!data) return res.status(404).json({ success: false, error: 'Loan not found' });
-    await logAdminAction('LOAN_REJECTED', { model: 'Loan', id: data.id }, { reason, adminId });
+    await auditFor(req)('LOAN_REJECTED', { model: 'Loan', id: data.id }, { reason, adminId });
     await notifyBorrowerOfDecision(data, false, reason);
+    // The borrower's reason is not repeated to guarantors; they are told only
+    // that the loan was declined and that they are no longer liable.
+    await guarantorNotifications.notifyGuarantorsOfDecision(data, false, reason);
     res.json({ success: true, loan: data, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -1659,7 +1813,7 @@ router.patch('/wallets/:id/status', async (req, res) => {
       p_admin_id: req.user?.id || null,
     });
     if (error) throw error;
-    await logAdminAction('WALLET_STATUS_CHANGED', 'wallets', { wallet_id: req.params.id, status }, req);
+    await auditFor(req)('WALLET_STATUS_CHANGED', 'wallets', { wallet_id: req.params.id, status });
     res.json({ success: true, ...(data || {}) });
   } catch (err) {
     res.status(400).json({ success: false, error: err.message });
@@ -1687,12 +1841,10 @@ router.post('/wallets/:id/adjust', async (req, res) => {
       p_admin_id: req.user?.id || null,
     });
     if (error) throw error;
-    await logAdminAction(
+    await auditFor(req)(
       'WALLET_BALANCE_ADJUSTED',
       'wallets',
-      { wallet_id: req.params.id, amount, note },
-      req
-    );
+      { wallet_id: req.params.id, amount, note });
     res.json({ success: true, ...(data || {}) });
   } catch (err) {
     res.status(400).json({ success: false, error: err.message });
@@ -2209,7 +2361,7 @@ router.patch('/payments/failed/:id/resolve', async (req, res) => {
       .single();
     if (error) throw error;
 
-    await logAdminAction('FAILED_CHARGE_RESOLVED', { model: 'payment_failed_charges', id: req.params.id }, { note }, req);
+    await auditFor(req)('FAILED_CHARGE_RESOLVED', { model: 'payment_failed_charges', id: req.params.id }, { note });
     res.json({ success: true, failedCharge: data });
   } catch (err) {
     logger.error('admin failed-charge resolve error:', err);
@@ -2844,7 +2996,7 @@ router.post('/compliance/:id/approve', async (req, res) => {
       .select('id, name, email')
       .single();
     if (error) throw error;
-    await logAdminAction('KYC_APPROVE', { model: 'Profile', id }, { member: data?.name || id });
+    await auditFor(req)('KYC_APPROVE', { model: 'Profile', id }, { member: data?.name || id });
     notifyService
       .notifyMember({
         profileId: id,
@@ -2871,7 +3023,7 @@ router.post('/compliance/:id/reject', async (req, res) => {
       .select('id, name, email')
       .single();
     if (error) throw error;
-    await logAdminAction('KYC_REJECT', { model: 'Profile', id }, { member: data?.name || id });
+    await auditFor(req)('KYC_REJECT', { model: 'Profile', id }, { member: data?.name || id });
     notifyService
       .notifyMember({
         profileId: id,
@@ -3461,7 +3613,7 @@ router.post(
         }
       }
 
-      await logAdminAction('NOTIFICATION_BROADCAST', { model: 'Notification' }, { count: rows.length, title, audience: targetGroup, channels: delivered, notImplemented, push, email });
+      await auditFor(req)('NOTIFICATION_BROADCAST', { model: 'Notification' }, { count: rows.length, title, audience: targetGroup, channels: delivered, notImplemented, push, email });
       res.status(201).json({ success: true, sent: rows.length, audience: targetGroup, channels: delivered, notImplemented, push, email });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
@@ -4146,7 +4298,7 @@ router.post(
         .select('*')
         .maybeSingle();
       if (error) throw error;
-      await logAdminAction('INVESTMENT_POOL_CREATED', { model: 'InvestmentPool', id: data.id }, insert);
+      await auditFor(req)('INVESTMENT_POOL_CREATED', { model: 'InvestmentPool', id: data.id }, insert);
       res.status(201).json({ success: true, pool: data });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
@@ -4192,7 +4344,7 @@ router.patch(
         .maybeSingle();
       if (error) throw error;
       if (!data) return res.status(404).json({ success: false, error: 'Pool not found' });
-      await logAdminAction('INVESTMENT_POOL_UPDATED', { model: 'InvestmentPool', id: data.id }, u);
+      await auditFor(req)('INVESTMENT_POOL_UPDATED', { model: 'InvestmentPool', id: data.id }, u);
       res.json({ success: true, pool: data });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
@@ -4210,7 +4362,7 @@ router.delete('/investments/:id', async (req, res) => {
       .maybeSingle();
     if (error) throw error;
     if (!data) return res.status(404).json({ success: false, error: 'Pool not found' });
-    await logAdminAction('INVESTMENT_POOL_CANCELLED', { model: 'InvestmentPool', id: data.id });
+    await auditFor(req)('INVESTMENT_POOL_CANCELLED', { model: 'InvestmentPool', id: data.id });
     res.json({ success: true, pool: data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -4283,7 +4435,7 @@ router.post(
         const remaining = Math.max(0, Number(loan.remaining_balance) - Number(insert.amount));
         await supabase.from('loans').update({ remaining_balance: remaining }).eq('id', loan.id);
       }
-      await logAdminAction('LOAN_REPAYMENT_RECORDED', { model: 'LoanRepayment', id: data.id }, insert);
+      await auditFor(req)('LOAN_REPAYMENT_RECORDED', { model: 'LoanRepayment', id: data.id }, insert);
       res.status(201).json({ success: true, repayment: data });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
@@ -4312,12 +4464,36 @@ router.post(
       }
       if (req.body.newMonthlyRepayment !== undefined) update.monthly_repayment = req.body.newMonthlyRepayment;
       if (req.body.newInterestRate !== undefined) update.effective_interest_rate = req.body.newInterestRate;
-      update.status = 'active';
+
+      // Read the loan first: total_repayment has to follow the new instalment
+      // count, and the status guard below needs the current one. Forcing
+      // 'active' unconditionally used to resurrect a rejected or completed loan.
+      const { data: existing, error: readErr } = await supabase
+        .from('loans').select('*').eq('id', req.params.id).maybeSingle();
+      if (readErr) throw readErr;
+      if (!existing) return res.status(404).json({ success: false, error: 'Loan not found' });
+
+      if (!RESTRUCTURABLE_STATUSES.has(existing.status)) {
+        return res.status(409).json({
+          success: false,
+          code: 'NOT_RESTRUCTURABLE',
+          error: `A repayment plan can only be restructured while the loan is live. This one is ${existing.status}.`,
+        });
+      }
+
+      const tenure = Number(update.tenure_months ?? existing.tenure_months ?? 0);
+      const monthly = Number(update.monthly_repayment ?? existing.monthly_repayment ?? 0);
+      if (tenure > 0 && monthly > 0) {
+        // Leaving total_repayment stale would make the schedule disagree with
+        // the instalments, and the next_due_date trigger derives from it.
+        update.total_repayment = Math.round(tenure * monthly * 100) / 100;
+      }
+
       const { data, error } = await supabase
         .from('loans').update(update).eq('id', req.params.id).select('*').maybeSingle();
       if (error) throw error;
       if (!data) return res.status(404).json({ success: false, error: 'Loan not found' });
-      await logAdminAction('LOAN_RESTRUCTURED', { model: 'Loan', id: data.id }, { ...update, reason: req.body.reason });
+      await auditFor(req)('LOAN_RESTRUCTURED', { model: 'Loan', id: data.id }, { ...update, reason: req.body.reason });
       res.json({ success: true, loan: data });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
@@ -4365,7 +4541,7 @@ router.put(
       const { data, error } = await supabase
         .from('system_settings').upsert(payload, { onConflict: 'key' }).select('*').maybeSingle();
       if (error) throw error;
-      await logAdminAction('SYSTEM_SETTING_UPDATED', { model: 'SystemSetting', id: req.params.key }, payload);
+      await auditFor(req)('SYSTEM_SETTING_UPDATED', { model: 'SystemSetting', id: req.params.key }, payload);
       res.json({ success: true, setting: data });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
@@ -4411,7 +4587,7 @@ router.put(
       const { data, error } = await supabase
         .from('system_settings').upsert(payload, { onConflict: 'key' }).select('*').maybeSingle();
       if (error) throw error;
-      await logAdminAction(
+      await auditFor(req)(
         req.body.enabled ? 'FEATURE_FLAG_ENABLED' : 'FEATURE_FLAG_DISABLED',
         { model: 'FeatureFlag', id: req.params.key },
         { key: req.params.key, enabled: !!req.body.enabled }
@@ -4473,7 +4649,7 @@ router.post(
       const { data, error } = await supabase
         .from('scheduled_notifications').insert(insert).select('*').maybeSingle();
       if (error) throw error;
-      await logAdminAction('NOTIFICATION_SCHEDULED', { model: 'ScheduledNotification', id: data.id }, insert);
+      await auditFor(req)('NOTIFICATION_SCHEDULED', { model: 'ScheduledNotification', id: data.id }, insert);
       res.status(201).json({ success: true, scheduled: data });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
@@ -4491,7 +4667,7 @@ router.delete('/scheduled-notifications/:id', async (req, res) => {
       .maybeSingle();
     if (error) throw error;
     if (!data) return res.status(404).json({ success: false, error: 'Not found' });
-    await logAdminAction('NOTIFICATION_SCHEDULE_CANCELLED', { model: 'ScheduledNotification', id: data.id });
+    await auditFor(req)('NOTIFICATION_SCHEDULE_CANCELLED', { model: 'ScheduledNotification', id: data.id });
     res.json({ success: true, scheduled: data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -4583,7 +4759,7 @@ router.post(
       const { data, error } = await supabase
         .from('backup_snapshots').insert(insert).select('*').maybeSingle();
       if (error) throw error;
-      await logAdminAction('BACKUP_STARTED', { model: 'BackupSnapshot', id: data.id }, insert);
+      await auditFor(req)('BACKUP_STARTED', { model: 'BackupSnapshot', id: data.id }, insert);
       // Out-of-band completion: in production, a worker runs pg_dump and
       // updates this row. We mark it succeeded with a placeholder so the UI
       // reflects a deterministic state.
@@ -4721,11 +4897,11 @@ router.patch('/admins/:id/role', async (req, res) => {
     if (error) throw error;
     if (!data) return res.status(404).json({ success: false, error: 'Admin not found' });
 
-    await logAdminAction('ADMIN_ROLE_CHANGED', { model: 'Profile', id }, {
+    await auditFor(req)('ADMIN_ROLE_CHANGED', { model: 'Profile', id }, {
       previous: { role: prev?.role, is_active: prev?.is_active },
       next: { role: data.role, is_active: data.is_active },
       actorEmail: req.user.email,
-    }, req);
+    });
 
     // Permission change → security alert
     const { raiseSecurityAlert } = governance;
@@ -4781,9 +4957,9 @@ router.post('/admins', async (req, res) => {
 
     if (profileError) throw profileError;
 
-    await logAdminAction('ADMIN_CREATE', { model: 'Profile', id: profile.id }, {
+    await auditFor(req)('ADMIN_CREATE', { model: 'Profile', id: profile.id }, {
       email: profile.email, role, actorEmail: req.user.email,
-    }, req);
+    });
 
     const { raiseSecurityAlert } = governance;
     await raiseSecurityAlert({
@@ -4819,9 +4995,9 @@ router.delete('/admins/:id', async (req, res) => {
     if (error) throw error;
     if (!data) return res.status(404).json({ success: false, error: 'Admin not found' });
 
-    await logAdminAction('ADMIN_REVOKE', { model: 'Profile', id }, {
+    await auditFor(req)('ADMIN_REVOKE', { model: 'Profile', id }, {
       previous: { role: prev?.role }, next: { role: 'member' }, actorEmail: req.user.email,
-    }, req);
+    });
 
     const { raiseSecurityAlert } = governance;
     await raiseSecurityAlert({
@@ -4859,9 +5035,9 @@ router.patch('/admins/:id/status', async (req, res) => {
     if (!data) return res.status(404).json({ success: false, error: 'Admin not found' });
 
     const action = is_active === false ? 'ADMIN_SUSPENDED' : 'ADMIN_REACTIVATED';
-    await logAdminAction(action, { model: 'Profile', id }, {
+    await auditFor(req)(action, { model: 'Profile', id }, {
       previous: { is_active: prev?.is_active }, next: { is_active }, actorEmail: req.user.email,
-    }, req);
+    });
 
     if (is_active === false) {
       const { raiseSecurityAlert } = governance;
@@ -4936,7 +5112,7 @@ router.post('/organizations', async (req, res) => {
       .select('id, name, type, member_count, status, date_added, contact_email, address, created_at')
       .single();
     if (error) throw error;
-    await logAdminAction('ORG_CREATE', { model: 'Organization', id: data?.id }, { name });
+    await auditFor(req)('ORG_CREATE', { model: 'Organization', id: data?.id }, { name });
     res.json({ success: true, organization: data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -5094,7 +5270,7 @@ router.delete('/sessions/user/:userId', async (req, res) => {
 
     const result = await revokeSessionsForProfile(userId);
 
-    await logAdminAction(
+    await auditFor(req)(
       'SESSION_TERMINATE_USER',
       { model: 'User', id: userId },
       { cleared_sessions: result.clearedSessions, target: profile.email || profile.name },
@@ -5137,7 +5313,7 @@ router.delete('/sessions/terminate-others', async (req, res) => {
         .eq('id', adminId);
     }
 
-    await logAdminAction(
+    await auditFor(req)(
       'SESSION_TERMINATE_OTHERS',
       { model: 'Profile', id: adminId },
       { cleared_sessions: result.clearedSessions, kept_session: currentSessionId || null },
@@ -5182,7 +5358,7 @@ router.delete('/sessions/:id', async (req, res) => {
 
     const result = await revokeSessionsForProfile(row.profile_id);
 
-    await logAdminAction(
+    await auditFor(req)(
       'SESSION_TERMINATE',
       { model: 'Session', id: req.params.id },
       { profile_id: row.profile_id, cleared_sessions: result.clearedSessions },
@@ -5227,12 +5403,10 @@ router.post('/logout-events', async (req, res) => {
       });
     }
 
-    await logAdminAction(
+    await auditFor(req)(
       'LOGOUT',
       { model: 'Profile', id: profileId },
-      { reason: req.body?.reason || 'user-initiated' },
-      req,
-    );
+      { reason: req.body?.reason || 'user-initiated' });
 
     res.json({ success: true });
   } catch (err) {
@@ -5323,12 +5497,10 @@ router.post('/excel-uploads', async (req, res) => {
       throw error;
     }
 
-    await logAdminAction(
+    await auditFor(req)(
       'EXCEL_UPLOAD_RECORDED',
       { model: 'ExcelUpload', id: data.id },
-      { filename, type, record_count },
-      req,
-    );
+      { filename, type, record_count });
 
     res.status(201).json({ success: true, upload: data, data });
   } catch (err) {
@@ -5493,7 +5665,7 @@ router.get('/login-history/suspicious', async (req, res) => {
 
 router.post('/security/block', async (req, res) => {
   try {
-    await logAdminAction('SECURITY_BLOCK', {}, req.body || {});
+    await auditFor(req)('SECURITY_BLOCK', {}, req.body || {});
     res.json({ success: true, message: 'Block recorded' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -5595,7 +5767,7 @@ router.post('/reconciliation/reconcile', async (req, res) => {
     const status = action === 'approve' ? 'completed' : 'rejected';
     const { error } = await supabase.from('transactions').update({ status }).eq('id', transactionId);
     if (error) throw error;
-    await logAdminAction('RECONCILE', { model: 'Transaction', id: transactionId }, { action });
+    await auditFor(req)('RECONCILE', { model: 'Transaction', id: transactionId }, { action });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -5608,7 +5780,7 @@ router.post('/reconciliation/bulk-reconcile', async (req, res) => {
     const status = action === 'approve' ? 'completed' : 'rejected';
     const { error } = await supabase.from('transactions').update({ status }).in('id', transactionIds);
     if (error) throw error;
-    await logAdminAction('RECONCILE_BULK', {}, { count: transactionIds.length, action });
+    await auditFor(req)('RECONCILE_BULK', {}, { count: transactionIds.length, action });
     res.json({ success: true, updated: transactionIds.length });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -5631,7 +5803,7 @@ router.post('/reports/scheduled', async (req, res) => {
   try {
     const r = req.body || {};
     const id = require('crypto').randomUUID();
-    await logAdminAction('REPORT_SCHEDULE_CREATE', { model: 'Report', id }, r);
+    await auditFor(req)('REPORT_SCHEDULE_CREATE', { model: 'Report', id }, r);
     res.json({ success: true, data: { id, ...r, lastSent: null, nextSend: null } });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -5640,7 +5812,7 @@ router.post('/reports/scheduled', async (req, res) => {
 
 router.post('/reports/scheduled/:id/toggle', async (req, res) => {
   try {
-    await logAdminAction('REPORT_TOGGLE', { model: 'Report', id: req.params.id }, req.body || {});
+    await auditFor(req)('REPORT_TOGGLE', { model: 'Report', id: req.params.id }, req.body || {});
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -5649,7 +5821,7 @@ router.post('/reports/scheduled/:id/toggle', async (req, res) => {
 
 router.delete('/reports/scheduled/:id', async (req, res) => {
   try {
-    await logAdminAction('REPORT_DELETE', { model: 'Report', id: req.params.id }, {});
+    await auditFor(req)('REPORT_DELETE', { model: 'Report', id: req.params.id }, {});
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -5658,7 +5830,7 @@ router.delete('/reports/scheduled/:id', async (req, res) => {
 
 router.post('/reports/scheduled/:id/run', async (req, res) => {
   try {
-    await logAdminAction('REPORT_RUN', { model: 'Report', id: req.params.id }, {});
+    await auditFor(req)('REPORT_RUN', { model: 'Report', id: req.params.id }, {});
     res.json({ success: true, message: 'Report run initiated' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -5689,11 +5861,11 @@ router.post('/bulk/import-members', async (req, res) => {
         phoneConflicts.push({ email: m.email, phone: m.phone });
       }
     }
-    await logAdminAction('BULK_IMPORT_MEMBERS', {}, {
+    await auditFor(req)('BULK_IMPORT_MEMBERS', {}, {
       total: members.length,
       inserted,
       phoneConflicts: phoneConflicts.length,
-    }, req);
+    });
     res.json({
       success: true,
       message: `Imported ${inserted} of ${members.length} members`,
@@ -5724,7 +5896,7 @@ router.post('/bulk/import-contributions', async (req, res) => {
       });
       if (!error) inserted++;
     }
-    await logAdminAction('BULK_IMPORT_CONTRIBUTIONS', {}, { total: contributions.length, inserted });
+    await auditFor(req)('BULK_IMPORT_CONTRIBUTIONS', {}, { total: contributions.length, inserted });
     res.json({ success: true, message: `Imported ${inserted} of ${contributions.length} contributions`, inserted, total: contributions.length });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -6043,7 +6215,7 @@ router.put('/guarantors/settings', async (req, res) => {
       result = await supabase.from('guarantor_settings').insert(payload);
     }
     if (result.error) throw result.error;
-    await logAdminAction('GUARANTOR_SETTINGS_UPDATE', {}, req.body || {});
+    await auditFor(req)('GUARANTOR_SETTINGS_UPDATE', {}, req.body || {});
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -6060,7 +6232,7 @@ router.post('/guarantors/requests/:id/approve', async (req, res) => {
 
     const { error } = await supabase.from('loan_guarantors').update({ status: 'approved' }).eq('id', req.params.id);
     if (error) throw error;
-    await logAdminAction('GUARANTOR_APPROVE', { model: 'Guarantor', id: req.params.id }, {});
+    await auditFor(req)('GUARANTOR_APPROVE', { model: 'Guarantor', id: req.params.id }, {});
 
     // Guarantor and borrower both act on this decision, so tell both.
     notifyService
@@ -6102,7 +6274,7 @@ router.post('/guarantors/requests/:id/reject', async (req, res) => {
 
     const { error } = await supabase.from('loan_guarantors').update({ status: 'rejected' }).eq('id', req.params.id);
     if (error) throw error;
-    await logAdminAction('GUARANTOR_REJECT', { model: 'Guarantor', id: req.params.id }, {});
+    await auditFor(req)('GUARANTOR_REJECT', { model: 'Guarantor', id: req.params.id }, {});
 
     notifyService
       .notifyMember({
@@ -6219,7 +6391,7 @@ router.patch('/fraud-detection/:id', async (req, res) => {
         .catch((e) => logger.warn('fraud alert notify failed (non-fatal):', e.message));
     }
 
-    await logAdminAction('FRAUD_ALERT_ACTION', { model: 'FraudAlert', id: req.params.id }, { action, targetId });
+    await auditFor(req)('FRAUD_ALERT_ACTION', { model: 'FraudAlert', id: req.params.id }, { action, targetId });
     res.json({ success: true, action });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -6274,7 +6446,7 @@ router.post('/verification/:id/verify', async (req, res) => {
   try {
     const { error } = await supabase.from('profiles').update({ kyc_verified: true, kyc_status: 'verified' }).eq('id', req.params.id);
     if (error) throw error;
-    await logAdminAction('KYC_VERIFY', { model: 'Profile', id: req.params.id }, req.body || {});
+    await auditFor(req)('KYC_VERIFY', { model: 'Profile', id: req.params.id }, req.body || {});
     notifyService
       .notifyMember({
         profileId: req.params.id,
@@ -6295,7 +6467,7 @@ router.post('/verification/:id/reject', async (req, res) => {
   try {
     const { error } = await supabase.from('profiles').update({ kyc_verified: false, kyc_status: 'rejected' }).eq('id', req.params.id);
     if (error) throw error;
-    await logAdminAction('KYC_REJECT', { model: 'Profile', id: req.params.id }, req.body || {});
+    await auditFor(req)('KYC_REJECT', { model: 'Profile', id: req.params.id }, req.body || {});
     notifyService
       .notifyMember({
         profileId: req.params.id,
@@ -6316,7 +6488,7 @@ router.post('/verification/:id/request_resubmission', async (req, res) => {
   try {
     const { error } = await supabase.from('profiles').update({ kyc_status: 'resubmission_requested' }).eq('id', req.params.id);
     if (error) throw error;
-    await logAdminAction('KYC_RESUBMISSION', { model: 'Profile', id: req.params.id }, req.body || {});
+    await auditFor(req)('KYC_RESUBMISSION', { model: 'Profile', id: req.params.id }, req.body || {});
     notifyService
       .notifyMember({
         profileId: req.params.id,
@@ -6500,12 +6672,13 @@ router.put('/referrals/settings', async (req, res) => {
       logger.warn('admin referrals: settings column probe failed:', e.message);
     }
 
-    const payload = {
-      [flagColumn]: enabled !== false,
-      bonus_per_referral: bonusAmount ?? 0,
-      max_referrals_per_user: maxReferralsPerUser ?? 0,
-      updated_at: new Date().toISOString(),
-    };
+    // Only touch fields the caller actually sent. Defaulting an absent field to
+    // 0 silently wiped the referral bonus and cap on any partial update.
+    const payload = { updated_at: new Date().toISOString() };
+    if (enabled !== undefined) payload[flagColumn] = enabled !== false;
+    if (bonusAmount !== undefined) payload.bonus_per_referral = bonusAmount ?? 0;
+    if (maxReferralsPerUser !== undefined) payload.max_referrals_per_user = maxReferralsPerUser ?? 0;
+
     const existing = await supabase.from('referral_settings').select('id').limit(1).maybeSingle();
     let result;
     if (existing.data?.id) {
@@ -6514,7 +6687,7 @@ router.put('/referrals/settings', async (req, res) => {
       result = await supabase.from('referral_settings').insert(payload);
     }
     if (result.error) throw result.error;
-    await logAdminAction('REFERRAL_SETTINGS_UPDATE', {}, req.body || {});
+    await auditFor(req)('REFERRAL_SETTINGS_UPDATE', {}, req.body || {});
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -6628,7 +6801,7 @@ router.post(
         .select('*')
         .single();
       if (error) throw error;
-      await logAdminAction('FEE_TYPE_CREATED', { model: 'fee_types', id: data.id }, { name, category, amount }, req);
+      await auditFor(req)('FEE_TYPE_CREATED', { model: 'fee_types', id: data.id }, { name, category, amount });
       res.status(201).json({ success: true, fee_type: data });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
@@ -6664,7 +6837,7 @@ router.patch(
         .select('*')
         .single();
       if (error) throw error;
-      await logAdminAction('FEE_TYPE_UPDATED', { model: 'fee_types', id: req.params.id }, updates, req);
+      await auditFor(req)('FEE_TYPE_UPDATED', { model: 'fee_types', id: req.params.id }, updates);
       res.json({ success: true, fee_type: data });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
@@ -6702,11 +6875,11 @@ router.post(
         .select('*')
         .single();
       if (insErr) throw insErr;
-      await logAdminAction('FEE_ASSIGNED', { model: 'member_fees', id: fee.id }, {
+      await auditFor(req)('FEE_ASSIGNED', { model: 'member_fees', id: fee.id }, {
         profile_id: req.body.profile_id,
         fee_type: ft.name,
         amount,
-      }, req);
+      });
       res.status(201).json({ success: true, member_fee: fee });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
@@ -6748,7 +6921,7 @@ router.patch('/member-fees/:id', async (req, res) => {
       .select('*')
       .single();
     if (error) throw error;
-    await logAdminAction('MEMBER_FEE_UPDATED', { model: 'member_fees', id: req.params.id }, { status }, req);
+    await auditFor(req)('MEMBER_FEE_UPDATED', { model: 'member_fees', id: req.params.id }, { status });
     res.json({ success: true, member_fee: data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

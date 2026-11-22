@@ -14,6 +14,19 @@ They are **byte-identical** across `lib/`, `android/`, `assets/`, `ios/` and
 again). They have different histories — a shared initial commit, then separate
 commits — so **cherry-picking between them is unreliable. Copy files.**
 
+As of 2026-11-22 the drift had grown to **48 differing files**, because the
+repos forked on 2026-08-11 and each side kept committing (343 commits here, 278
+there). Resolved by syncing `Coopvest-Africa` to this repo's tree; both trees are
+now the same object. When they diverge again, sync **toward this repo**: it is
+the superset. `Coopvest-Africa` has no file under `backend/src` or `lib/` that
+this repo lacks, and this repo carries migrations 070-075 (disbursement,
+repayment split, recovery, and three RLS lock-downs) that the other does not.
+
+**Only this repo is deployed.** Render's `coopvest-api` builds
+`coopvestafrica-ops/Latest-Coopvest`, branch `main`, rootDir `backend`. Nothing
+deploys `Coopvest-Africa`, so a change made only there does not reach
+production even though the code looks identical.
+
 **Every change must land in both.** A one-sided change ships different behaviour
 for the same product, which has already happened twice:
 - the LGA fix landed only in a screen so dead it never ran, and
@@ -44,11 +57,61 @@ results were a crash or a dead tap.
 - Do not list a feature in the search catalog until a screen exists behind it.
 
 ## Loan eligibility lives on the server
-The six-month membership + contribution rule is enforced in
-`backend/src/routes/loans.js` via `backend/src/lib/loanPolicy.js`. It is **on by
-default**. Never re-introduce a client-side `isEligible = true`; the app's check
-is a courtesy that mirrors the server, not the gate. Staging can opt out with
+A new loan requires six months of membership AND six **consecutive** months of
+contributions with no month missed, plus contributions current at application.
+Enforced in `backend/src/routes/loans.js`; the rule itself is
+`assessEligibility()` in `backend/src/lib/contributionConsistency.js`, which
+combines the run length (`longestStreak`) and current standing so the two halves
+cannot drift apart. It is **on by default**; staging can opt out with
 `LOAN_MIN_ELIGIBILITY_DISABLED=true`.
+
+Two traps, both previously real bugs:
+
+- Do not measure eligibility with `countContributionMonths()`. It counts
+  distinct months *ever* paid, so a member who paid six months and then stopped
+  scores six. Only a longest-unbroken-run measure can see a gap or a stop.
+- Do not gate the check on `agreementVersion`. It is optional in the validator,
+  so gating let a caller skip the rule by omitting the field. Enforcement is
+  unconditional; the rule is disclosed in the published Loan Policy and in the
+  in-app agreement instead.
+
+Never re-introduce a client-side `isEligible = true`; the app's check is a
+courtesy that mirrors the server, not the gate. It must use the same
+longest-run measure, or it says "eligible" and then collects a 403.
+
+The app cannot compute the rule itself, so it asks:
+`GET /api/v1/loans/eligibility` returns the member's verdict from complete
+data. `loadContributions()` fetches only page 1 (20 rows, newest first), so a
+member with several rows per month can have their run understated and be told
+they are ineligible when they are not. Both this endpoint and the POST /apply
+gate call the same `computeEligibility()` helper - do not add a second copy of
+the arithmetic. `serverEligibilityProvider` in `loan_provider.dart` fetches it;
+the eligibility card and the application form prefer it and fall back to the
+local estimate only while the request is in flight or if it fails.
+
+Register `/eligibility` **before** `/:loanId`, or Express treats "eligibility"
+as a loan id.
+
+A refusal must say why, what clears it, and which terms section states the rule.
+`eligibilityRefusal()` builds that; the route sends `reason`, `guidance` and
+`termsSection`, and the app links to the cited section. The app has no
+eligibility screen, so this text is the only place a refused member learns the
+remedy. Keep the cited section id real - a test asserts it exists in terms.json.
+
+## Paid contribution statuses: one list
+`backend/src/lib/contributionStatuses.js` is the only definition of which
+contribution statuses mean money arrived. It used to be three lists -
+`loanPolicy`, `contributionConsistency` and `wallet` - and they disagreed:
+only the wallet's accepted `confirmed`, so that contribution counted toward the
+member's balance but not toward their eligibility. Their savings grew while the
+app told them they had not been saving.
+
+On the Dart side, `ContributionStatus` names only `successful` among the
+settled statuses the server writes. Parsing by enum name (`e.name == json[...]`)
+therefore mapped `completed`, `approved`, `confirmed` and `paid` all onto
+`pending`, so a paying member read as unpaid. Use
+`contributionStatusFrom(json['status'])`; `MonthlyContribution.fromJson` and
+`StatusHistory.fromJson` both do.
 
 ## Interest calculation (mobile-aligned)
 The backend interest logic in `src/services/referralService.js` MUST mirror the
@@ -1223,6 +1286,19 @@ the next deploy, which would apply all four listed files at once.
 Until that is decided, apply migrations explicitly and verify the result against
 the live database, rather than assuming a merge deployed them.
 
+`node run-pending-migrations.js --dry-run` (`npm run migrate:status`) now shows
+exactly which files are unapplied, and `npm run migrate:pending` applies them.
+It records what ran in `schema_migrations`. It accepts `SUPABASE_ACCESS_TOKEN`
+as well as `SUPABASE_DB_URL`, because the Management API is the only path that
+works with the credentials production actually has.
+
+**The ledger is empty on a database that already has schema.** That means the
+files were applied by hand, not that nothing ran. The runner refuses in that
+state rather than replaying every historical migration onto live data - several
+are not idempotent. `--baseline` records the current files as applied without
+executing them, which is what was done for production (69 files) after verifying
+that 070-072 were genuinely live.
+
 `pg_default_acl` in `public` has two entries: one owned by `postgres`, one by
 `supabase_admin`. `postgres` can change its own and not the other's, so a table
 created from the Supabase dashboard still arrives client-writable. The migration
@@ -1409,6 +1485,36 @@ migration not having run: `recordPledge` in `src/routes/guarantor.js` detects
 Nothing debits a pledge on default yet. The recovery worker notifies; it does
 not collect. Set-off is a policy decision, not a missing query.
 
+## Contribution currency (loan eligibility)
+
+`loanPolicy.countContributionMonths` counts months ever contributed, so a member
+who paid six months then stopped still passes the entry gate forever.
+`src/lib/contributionConsistency.js` supplies the missing question: are the
+contributions *current*? It is enforced in `POST /loans/apply` and returns
+`CONTRIBUTIONS_NOT_CURRENT` with a member-facing message.
+
+Three things to know before touching it:
+
+- **The rule is gated on consent.** `POLICY.minAgreementVersion` is `v1.1`, and
+  the check only runs when the application's `agreementVersion` is at least that.
+  `v1.0` applications are exempt because that agreement never disclosed the
+  clause. Bump the agreement version in the app *and* the policy version
+  together, or members will be refused under a rule they never accepted.
+- **The published text is enforced by tests.** `terms.json`
+  (`contribution_policy`) and the app's bundled copy in
+  `lib/data/models/terms_content.dart` must both state the 10-day grace period
+  and the "resumes automatically" outcome.
+  `__tests__/contributionPolicyPublication.test.js` fails if they drift.
+- **`savings.consecutive_months` is still never written.** Ten places read it
+  (wallet, member profile, reports, referral service) and it is always 0. Use
+  `assessConsistency` instead; do not start writing the column, because a
+  writer plus the readers would make a stale value look authoritative.
+
+Deposits count across every type in `CONTRIBUTION_TRANSACTION_TYPES`
+(`deposit`, `savings_deposit`, `transfer_in`, `salary_deduction`,
+`contribution`). An earlier version counted only `savings_deposit`, which
+reported payroll members as never having contributed.
+
 ## Recovery from savings
 
 `loan_settle_from_savings` (068) is the only code that takes money out of a
@@ -1422,3 +1528,171 @@ member's savings for a debt. Three invariants:
 
 Anything left over comes back as `shortfall`. It is not written off, and no
 other source is invented to cover it.
+
+## Loan decisions reach guarantors
+
+A guarantor who consents accepts liability for someone else's loan. They are
+told the outcome of the application either way, and the notification lives in
+one place: `backend/src/lib/guarantorNotifications.js`.
+
+Every code path that records a loan decision must call
+`notifyGuarantorsOfDecision`, and `guarantorDecisionWiring.test.js` fails if one
+stops:
+
+- `routes/adminApi.js` — `POST /loans/:id/decision`
+- `routes/adminApi.js` — `POST /loans/:id/approve`
+- `routes/adminApi.js` — `POST /loans/:id/reject`
+- `routes/adminApi.js` — `POST /loans/:id/disburse`
+- `lib/approvalRequests.js` — Approval Center execution
+
+Before this, only `/approve` notified guarantors. A rejection told the borrower
+alone, and the Approval Center told nobody but the borrower on either outcome,
+so a guarantor could be unaware they were liable for a loan that had gone
+through.
+
+Two deliberate choices in the wording:
+
+- A rejection says the guarantor is no longer liable. Nothing debits a pledge at
+  consent (`pledged_amount` is a recorded cap, applied only by
+  `loan_settle_from_savings`), so a refused loan genuinely ends the exposure.
+- The borrower's rejection reason is not repeated to guarantors. It is between
+  the borrower and the cooperative.
+
+Only consenting guarantors are notified, except that rows with no status at all
+are still notified — older rows predate the column being populated, and
+dropping them would leave the earliest guarantees permanently silent.
+
+The status vocabulary is not enforced by the schema, and readers had drifted:
+consent writes `'consented'`, but `loanRecoveryWorker` queried
+`eq('status','accepted')` — a value nothing writes. That filter matched no row,
+so no guarantor was ever told a loan had entered recovery, which is the moment
+their liability becomes real. Filter in JavaScript against `BOUND_STATUSES`
+(`'consented'`, `'accepted'`) via `boundGuarantorIds`; never filter on one
+spelling in SQL. Rows with no status are included (they predate the column);
+rows with a non-consent status are excluded, with no "if none matched use them
+all" fallback, because that resurrects a guarantor who explicitly refused.
+
+Send on `in_app` **and** `push`, via `notifyService.broadcast`. `sendInApp`
+alone only stores a row: a guarantor has no reason to open the app on the day
+someone else's loan is decided, so the notice would sit unread. Push is what
+makes the notification actually arrive; the row keeps it in their history.
+
+## Disbursement is what starts a loan
+
+`POST /api/admin/loans/:id/disburse` → `loan_disburse` (migration 070). It
+credits the principal to the member's wallet and moves the loan from `approved`
+to `active` in one transaction.
+
+Until it existed there was no way for loan money to reach a member. Approval
+left the loan at `approved`, and every downstream step keys on the later
+statuses, so an approved loan was inert:
+
+- `POST /loans/:loanId/repay` and `wallet_loan_repayment` only accept `active`,
+  `repaying` or `overdue` — the member could not repay.
+- `loanRecoveryWorker` only scans those same three statuses — arrears never
+  escalated and guarantors were never warned.
+- `loans.disbursed_by` existed and was never written.
+
+The only money that moved was a hand-verified bank deposit, which reduced
+`remaining_balance` while leaving the status at `approved` — a loan that could
+be partly repaid and never completed.
+
+Rules that keep it safe:
+
+- **Only `approved` qualifies.** A disbursement is the one irreversible credit
+  in the lifecycle; repeating it creates money no repayment is owed against. The
+  first successful run moves the status off `approved`, so a double click is
+  refused by the endpoint (409 `NOT_DISBURSABLE`) and again by the function.
+- **Write `active`, not `disbursed`.** The constraint permits `disbursed`, but
+  nothing reads it. `repaying` has the same problem: it is read in 18 places and
+  written by nothing.
+- **Lock the loan before the wallet**, matching `wallet_loan_repayment` and
+  `loan_settle_from_savings`, so a disbursement racing a repayment cannot
+  double-count the balance.
+- **Applied by hand, not by the deploy bootstrap.** Like 065/067/068 it creates
+  money in a member's wallet, so it is deliberately absent from
+  `governanceSchema.js` MIGRATIONS. Until applied, the endpoint returns 503
+  `MIGRATION_REQUIRED` rather than failing silently.
+
+Verified end to end on the live database: `approved` → wallet +250,000 →
+`active` → repay 65,000 → `remaining_balance` 195,000, second disburse refused,
+ledger showing `loan_disbursement/credit` and `loan_repayment/debit`.
+
+## Recovery escalation must be idempotent, and must not trap the member
+`loanRecoveryWorker` polls daily and acts on how many monthly instalments are
+unpaid. Three defects compounded into a trap that a member could not escape:
+
+- **The fine repeated.** Stage 2 matched `missedMonths === 2` and inserted an
+  unconditional `member_fees` row. A loan sitting at exactly two missed months
+  gained a fresh fine every morning the worker ran. `penalty_applied` was
+  written on each run and read nowhere, so it guarded nothing. The branch now
+  matches `>= 2` and charges once, checked against the fee row itself
+  (`hasOutstandingLateFine`) rather than only the loan flag - an admin
+  restructure can reset the flag while the obligation remains.
+- **Stage 3 was unreachable** once stage 2 matched `>= 2`, so it is a separate
+  `if`, not an `else if`.
+- **`in_recovery` blocked repayment.** Stage 3 sets `status = 'in_recovery'`,
+  and `wallet_loan_repayment` accepted only active/repaying/overdue. Nothing
+  moves a loan out of `in_recovery`, so from month three a member could not pay
+  at all. Recovery is a collections stage, not a bar on payment; migration 072
+  accepts it.
+
+Combined with `is_flagged`, which blocks login outright (`auth.js`), the old
+behaviour locked a defaulted member out of the app *and* out of repayment, with
+no path back.
+
+Two related invariants, both in migration 072:
+
+- **A loan at zero balance is `completed`.** Previously only the admin
+  payment-proof path set that, so a loan repaid from the wallet stayed `active`
+  and kept escalating - a settled loan could eventually be fined.
+- **Settling clears `is_flagged`**, and only when no other loan is in arrears.
+  The flag was previously lifted only in the payment-proof path, so a member who
+  repaid from their wallet stayed locked out after settling.
+
+Verified live: a loan approved 95 days ago with no repayments, worker run twice,
+produced exactly one fine; stage 3 fired; a full repayment was accepted while
+`in_recovery`, closed the loan, and cleared the login block.
+
+## Audit writes go through `lib/auditLog.js`, and the actor is not optional
+There were four copies of `logAdminAction` - in `adminApi`, `kycAdmin`,
+`adminPlatform` and `paymentProofAdmin` - with two different signatures
+(`target` vs `resource`) and two different column sets. Because `audit_logs`
+carries both column families, every write "succeeded" and nothing looked wrong.
+But only `adminApi`'s copy read the actor from the request, and it took `req` as
+an optional *fourth* argument that 44 of 60 call sites omitted. Live: 174 of the
+last 200 audit rows had `actor_id = NULL`, including loan approvals, KYC
+decisions and password resets. `kycAdmin`'s copy hardcoded `actor_id: null`, so
+KYC never had an actor even when `req` was passed.
+
+The dashboard hid it: `getAuditLogs` mapped the actor as
+`l.actor_id ?? "Administrator"`, so unattributed rows rendered as if an
+administrator had acted.
+
+One implementation now, in `src/lib/auditLog.js`. Call sites bind the request
+once, so there is no `req` argument left to forget:
+
+```js
+await auditFor(req)('LOAN_APPROVED', { model: 'Loan', id }, { adminId });
+```
+
+`auditFor(req)` writes the union of both column families (`actor_id`,
+`actor_role`, `target_model`, `target_id`, `metadata` *and* `resource`,
+`resource_id`, `target_profile_id`, `details`) so the audit screen, ledger views
+and existing SQL all keep working. It logs a warning when the actor is null
+rather than writing a silent NULL, and it never stores the request body.
+
+Two guards in `__tests__/auditLogAttribution.test.js` keep this from regressing:
+no route may define its own audit writer or hardcode `actor_id: null`, and every
+`logAction(`/`auditFor(` call must pass `req` first.
+
+Rows written before this fix stay unattributed - the actor cannot be recovered
+retroactively. The audit screen now labels them "System" with an *unattributed*
+badge instead of "Administrator", so the gap is visible rather than disguised.
+
+## A settings PUT must merge, not replace
+`PUT /admin/referrals/settings` read three fields and wrote
+`bonusAmount ?? 0` / `maxReferralsPerUser ?? 0`. Any caller sending a partial
+body - `{ enabled: true }` - silently zeroed the referral bonus and cap. It now
+sets only the keys present in the request. When adding a settings endpoint, treat
+an absent field as "leave it alone", not as "set it to zero".

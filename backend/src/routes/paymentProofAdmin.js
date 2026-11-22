@@ -15,6 +15,7 @@ const supabase = require('../config/supabase');
 const { requireAdmin } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const logger = require('../utils/logger');
+const { auditFor } = require('../lib/auditLog');
 const notifyService = require('../services/notifyService');
 
 router.use(requireAdmin);
@@ -25,21 +26,6 @@ function paging(req) {
   return { page, limit, from: (page - 1) * limit, to: page * limit - 1 };
 }
 
-async function logAdminAction(action, resource, resourceId, metadata = {}, req = null) {
-  try {
-    await supabase.from('audit_logs').insert({
-      actor_id: req?.user?.id || null,
-      action,
-      resource,
-      resource_id: resourceId,
-      details: { ...metadata, source: 'admin-web' },
-      ip_address: req?.ip || null,
-      user_agent: req?.get('user-agent') || null,
-    });
-  } catch (err) {
-    logger.warn('audit_logs insert failed:', err.message);
-  }
-}
 
 async function logMemberActivity(profileId, activityType, description, metadata = {}, req = null) {
   try {
@@ -338,10 +324,10 @@ router.patch(
 
       if (updateError) throw updateError;
 
-      await logAdminAction('PAYMENT_PROOF_MARKED_REVIEW', 'PaymentProof', id, {
+      await auditFor(req)('PAYMENT_PROOF_MARKED_REVIEW', { model: 'PaymentProof', id: id }, {
         previous_status: proof.status,
         new_status: 'under_review',
-      }, req);
+      });
 
       res.json({
         success: true,
@@ -560,12 +546,12 @@ router.post(
         .maybeSingle();
 
       // Log admin action
-      await logAdminAction('PAYMENT_PROOF_APPROVED', 'PaymentProof', id, {
+      await auditFor(req)('PAYMENT_PROOF_APPROVED', { model: 'PaymentProof', id: id }, {
         amount: proof.amount,
         payment_type: proof.payment_type,
         transaction_reference: proof.transaction_reference,
         has_receipt: !!receipt,
-      }, req);
+      });
 
       await logMemberActivity(proof.profile_id, 'payment_verified', 
         `Payment proof of ₦${parseFloat(proof.amount).toLocaleString()} has been verified and approved`,
@@ -661,12 +647,12 @@ router.post(
       if (updateError) throw updateError;
 
       // Log admin action
-      await logAdminAction('PAYMENT_PROOF_REJECTED', 'PaymentProof', id, {
+      await auditFor(req)('PAYMENT_PROOF_REJECTED', { model: 'PaymentProof', id: id }, {
         amount: proof.amount,
         payment_type: proof.payment_type,
         rejection_reason: reason,
         rejection_category,
-      }, req);
+      });
 
       await logMemberActivity(proof.profile_id, 'payment_rejected',
         `Payment proof of ₦${parseFloat(proof.amount).toLocaleString()} was rejected: ${reason}`,
@@ -738,9 +724,9 @@ router.post(
       }
 
       // Log the request
-      await logAdminAction('PAYMENT_PROOF_INFO_REQUESTED', 'PaymentProof', id, {
+      await auditFor(req)('PAYMENT_PROOF_INFO_REQUESTED', { model: 'PaymentProof', id: id }, {
         message,
-      }, req);
+      });
 
       await logMemberActivity(proof.profile_id, 'payment_info_requested',
         `Additional information requested for payment proof: ${message}`,

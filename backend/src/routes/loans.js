@@ -22,10 +22,10 @@ const loanPolicy = require('../lib/loanPolicy');
 const { LATE_REPAYMENT_FINE } = require('../config/feeDisclosure');
 const { kycGateFor } = require('../lib/kycGate');
 const { evaluateGuarantorEligibility } = require('../lib/guarantorEligibility');
+const contributionConsistency = require('../lib/contributionConsistency');
 const logger = require('../utils/logger');
 
 const ADMIN_ROLES = ['admin', 'superadmin', 'super_admin', 'staff'];
-const AGREEMENT_VERSION = 'v1.0';
 
 const LOAN_TYPES = [
   // Mobile app loan types
@@ -81,6 +81,59 @@ const auditLog = async (actorId, action, targetId, metadata = {}) => {
 };
 
 const newLoanId = () => `LN-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+/**
+ * The member's loan-eligibility verdict, read from complete data.
+ *
+ * Both the application gate and `GET /loans/eligibility` use this, so the
+ * number the app shows and the rule the server enforces cannot disagree. The
+ * client cannot compute this reliably: it only holds the first page of
+ * contribution rows, so a member with several rows per month can have their
+ * run understated and be told they are ineligible when they are not.
+ */
+async function computeEligibility(profileId) {
+  const { data: profileDates, error: datesErr } = await supabase
+    .from('profiles')
+    .select('created_at')
+    .eq('id', profileId)
+    .maybeSingle();
+  if (datesErr) throw datesErr;
+
+  const { data: memberContributions, error: contribErr } = await supabase
+    .from('contributions')
+    .select('status, contribution_month, created_at')
+    .eq('profile_id', profileId);
+  if (contribErr) throw contribErr;
+
+  // Wallet and payroll deposits write no `contributions` row, so counting only
+  // that table reports those members as never having paid.
+  const { data: depositRows } = await supabase
+    .from('transactions')
+    .select('created_at')
+    .eq('profile_id', profileId)
+    .in('type', contributionConsistency.CONTRIBUTION_TRANSACTION_TYPES)
+    .eq('status', 'completed')
+    .order('created_at', { ascending: false })
+    .limit(60);
+
+  const membershipMonths = loanPolicy.monthsBetween(profileDates?.created_at);
+  const verdict = contributionConsistency.assessEligibility({
+    contributions: memberContributions,
+    deposits: depositRows || [],
+  });
+
+  const membershipMet = membershipMonths >= loanPolicy.MIN_MEMBERSHIP_MONTHS;
+  const refusal = verdict.eligible ? null : contributionConsistency.eligibilityRefusal(verdict);
+
+  return {
+    membershipMonths,
+    membershipRequired: loanPolicy.MIN_MEMBERSHIP_MONTHS,
+    membershipMet,
+    verdict,
+    refusal,
+    eligible: membershipMet && verdict.eligible,
+  };
+}
 
 /**
  * POST /api/v1/loans/apply
@@ -199,40 +252,62 @@ router.post(
       }
 
       // ── Minimum membership & contribution history (Loan Policy §3) ─────────
-      // A new loan requires six months of membership AND six months of
-      // successful contributions. The app used to be the only place that
-      // checked this, and its check was disabled with a `TESTING ONLY` flag, so
-      // the rule was enforced nowhere. The server is now authoritative.
+      // A new loan requires six months of membership AND six consecutive months
+      // of contributions with no month missed in between, still up to date at
+      // the time of application.
+      //
+      // This is enforced unconditionally. It used to be gated on
+      // `policyAppliesTo(agreementVersion)`, which exempted any caller that
+      // omitted the version - and `agreementVersion` is an optional field, so a
+      // member who had stopped contributing months earlier was approved by
+      // simply leaving it out. The rule is now disclosed in the published terms
+      // (Loan Policy §1) and in the in-app agreement, so every applicant has
+      // been shown it and it applies to all of them.
       if (!loanPolicy.minEligibilityDisabled()) {
-        const { data: profileDates, error: datesErr } = await supabase
-          .from('profiles')
-          .select('created_at')
-          .eq('id', profileId)
-          .maybeSingle();
-        if (datesErr) throw datesErr;
+        const { membershipMonths, verdict } = await computeEligibility(profileId);
 
-        const { data: memberContributions, error: contribErr } = await supabase
-          .from('contributions')
-          .select('status, contribution_month, created_at')
-          .eq('profile_id', profileId);
-        if (contribErr) throw contribErr;
-
-        const membershipMonths = loanPolicy.monthsBetween(profileDates?.created_at);
-        const contributionMonths = loanPolicy.countContributionMonths(memberContributions);
-
-        if (membershipMonths < loanPolicy.MIN_MEMBERSHIP_MONTHS
-          || contributionMonths < loanPolicy.MIN_CONTRIBUTION_MONTHS) {
+        if (membershipMonths < loanPolicy.MIN_MEMBERSHIP_MONTHS) {
           return res.status(403).json({
             success: false,
             code: 'LOAN_ELIGIBILITY_NOT_MET',
-            error: 'A new loan requires at least '
-              + `${loanPolicy.MIN_MEMBERSHIP_MONTHS} months of membership and `
-              + `${loanPolicy.MIN_CONTRIBUTION_MONTHS} months of consistent contributions.`,
+            error: `A new loan requires at least ${loanPolicy.MIN_MEMBERSHIP_MONTHS} months of membership. `
+              + `You have been a member for ${membershipMonths} month${membershipMonths === 1 ? '' : 's'}.`,
             eligibility: {
               membershipMonths,
-              contributionMonths,
               membershipRequired: loanPolicy.MIN_MEMBERSHIP_MONTHS,
-              contributionsRequired: loanPolicy.MIN_CONTRIBUTION_MONTHS,
+              consecutiveMonths: verdict.longestStreak,
+              consecutiveRequired: verdict.requiredConsecutiveMonths,
+            },
+          });
+        }
+
+        if (!verdict.eligible) {
+          const refusal = contributionConsistency.eligibilityRefusal(verdict);
+          return res.status(403).json({
+            success: false,
+            code: verdict.reason,
+            // `error` is what the app shows the member: the reason, what clears
+            // it, and which terms section spells the rule out.
+            error: contributionConsistency.eligibilityMessage(verdict),
+            reason: refusal ? refusal.reason : undefined,
+            guidance: refusal ? refusal.guidance : undefined,
+            termsSection: refusal
+              ? { id: refusal.termsSectionId, title: refusal.termsSectionTitle }
+              : undefined,
+            policyVersion: contributionConsistency.POLICY.version,
+            standing: contributionConsistency.standingFor(
+              verdict.currentStreak,
+              verdict.monthsSinceLast,
+            ),
+            eligibility: {
+              membershipMonths,
+              membershipRequired: loanPolicy.MIN_MEMBERSHIP_MONTHS,
+              consecutiveMonths: verdict.longestStreak,
+              consecutiveRequired: verdict.requiredConsecutiveMonths,
+              currentStreak: verdict.currentStreak,
+              monthsSinceLast: verdict.monthsSinceLast,
+              lastPaidMonth: verdict.lastPaidMonth,
+              graceDays: contributionConsistency.POLICY.graceDays,
             },
           });
         }
@@ -338,7 +413,12 @@ router.post(
         savings_from_bonus: calc.totalSavingsFromBonus,
         status: 'pending',
         agreement_accepted_at: new Date().toISOString(),
-        agreement_version: agreementVersion || AGREEMENT_VERSION,
+        // Record what the member actually accepted. Defaulting to the *current*
+        // version would manufacture consent evidence for a client that sent
+        // none, and the contribution gate keys off this value. Omitting the key
+        // when the client sent nothing lets the column default apply, which is
+        // the baseline version they are treated as having accepted.
+        ...(agreementVersion ? { agreement_version: agreementVersion } : {}),
         monthly_contribution_at_application: currentContribution,
       };
 
@@ -369,7 +449,11 @@ router.post(
       const { error: agreementErr } = await supabase.from('loan_agreements').insert({
         loan_id: loan.id,
         profile_id: profileId,
-        agreement_version: agreementVersion || AGREEMENT_VERSION,
+        // Record what the member actually accepted. Omitting the key when the
+        // client sent no version lets the column default apply; the column is
+        // NOT NULL, so an explicit null would fail the insert and lose the
+        // consent record entirely.
+        ...(agreementVersion ? { agreement_version: agreementVersion } : {}),
         accepted_at: new Date().toISOString(),
         ip_address: (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || null,
         user_agent: req.headers['user-agent'] || null,
@@ -527,6 +611,50 @@ router.post(
     }
   }
 );
+
+/**
+ * GET /api/v1/loans/eligibility
+ *
+ * The member's own standing, computed from complete data. The app shows this
+ * rather than inferring eligibility from the first page of contributions,
+ * which understates the run for a member with several rows per month.
+ */
+router.get('/eligibility', authenticate, async (req, res) => {
+  try {
+    if (loanPolicy.minEligibilityDisabled()) {
+      return res.json({
+        success: true,
+        enforced: false,
+        eligible: true,
+        message: 'Loan eligibility checks are disabled on this environment.',
+      });
+    }
+
+    const { membershipMonths, membershipRequired, membershipMet, verdict, refusal } =
+      await computeEligibility(req.user.id);
+
+    res.json({
+      success: true,
+      enforced: true,
+      eligible: membershipMet && verdict.eligible,
+      membershipMonths,
+      membershipRequired,
+      membershipMet,
+      consecutiveMonths: verdict.longestStreak,
+      consecutiveRequired: verdict.requiredConsecutiveMonths,
+      isCurrent: verdict.inGoodStanding,
+      reason: refusal ? refusal.reason : null,
+      guidance: refusal ? refusal.guidance : null,
+      termsSection: refusal
+        ? { id: refusal.termsSectionId, title: refusal.termsSectionTitle }
+        : null,
+      policyVersion: contributionConsistency.POLICY.version,
+    });
+  } catch (err) {
+    logger.error('eligibility lookup error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 /**
  * GET /api/v1/loans

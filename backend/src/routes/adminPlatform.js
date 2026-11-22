@@ -35,6 +35,7 @@ const { normalizeTransaction, mergeLedgerRows } = require('../services/ledgerMer
 const { requireSuperAdmin } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const logger = require('../utils/logger');
+const { auditFor } = require('../lib/auditLog');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -43,23 +44,6 @@ const logger = require('../utils/logger');
 const SUPER_ADMIN_ROLES = ['superadmin', 'super_admin'];
 const isSuperAdmin = (req) => SUPER_ADMIN_ROLES.includes(req.user?.role || '');
 
-async function logAdminAction(action, target, metadata = {}, req = null) {
-  try {
-    const ip = (req?.headers['x-forwarded-for'] || '').split(',')[0].trim() || null;
-    await supabase.from('audit_logs').insert({
-      actor_id: req?.user?.id || null,
-      actor_role: req?.user?.role || null,
-      action,
-      target_model: target?.model || null,
-      target_id: target?.id || null,
-      metadata: { ...metadata, source: 'admin-web' },
-      ip_address: ip || null,
-      user_agent: req?.headers['user-agent'] || null,
-    });
-  } catch (err) {
-    logger.warn('audit_logs insert failed:', err.message);
-  }
-}
 
 async function getSetting(key, fallback) {
   const { data } = await supabase.from('system_settings').select('value').eq('key', key).maybeSingle();
@@ -176,10 +160,10 @@ router.put(
       updates.push(setSetting('emergency.updated_at', now));
       await Promise.all(updates);
 
-      await logAdminAction('EMERGENCY_CONTROL_UPDATED', { model: 'EmergencyControl' }, {
+      await auditFor(req)('EMERGENCY_CONTROL_UPDATED', { model: 'EmergencyControl' }, {
         changes: b,
         admin: req.user.email,
-      }, req);
+      });
 
       res.json({ success: true, state: await loadEmergencyState() });
     } catch (err) {
@@ -201,9 +185,9 @@ router.post(
         .from('profiles').update({ is_active: false }).eq('id', adminId).select('id, name, email').maybeSingle();
       if (error) throw error;
       await setSetting('emergency.disable_compromised_admin', { adminId, at: new Date().toISOString() });
-      await logAdminAction('ADMIN_DISABLED_EMERGENCY', { model: 'Profile', id: adminId }, {
+      await auditFor(req)('ADMIN_DISABLED_EMERGENCY', { model: 'Profile', id: adminId }, {
         admin: req.user.email, disabled: data,
-      }, req);
+      });
       res.json({ success: true, disabled: data });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
@@ -428,10 +412,10 @@ router.post(
         await Promise.resolve(supabase.from(origTable).update({ reversed: true, reversal_of: reversal.id }).eq('id', id)).catch(() => {});
       }
 
-      await logAdminAction('LEDGER_REVERSAL', { model: 'LedgerEntry', id }, {
+      await auditFor(req)('LEDGER_REVERSAL', { model: 'LedgerEntry', id }, {
         originalReference: original.reference,
         amount, reason, reversedBy: req.user.email, reversalId: reversal?.id,
-      }, req);
+      });
 
       res.json({ success: true, reversal });
     } catch (err) {
@@ -817,7 +801,7 @@ router.put(
       if (!isSuperAdmin(req)) return res.status(403).json({ success: false, error: 'Only the Super Admin may configure the approval matrix' });
       const thresholds = { levels: req.body.levels };
       await setSetting('loan_approval.thresholds', thresholds, 'Loan approval amount thresholds per role');
-      await logAdminAction('LOAN_APPROVAL_MATRIX_UPDATED', { model: 'SystemSetting', id: 'loan_approval.thresholds' }, { levels: thresholds.levels, admin: req.user.email }, req);
+      await auditFor(req)('LOAN_APPROVAL_MATRIX_UPDATED', { model: 'SystemSetting', id: 'loan_approval.thresholds' }, { levels: thresholds.levels, admin: req.user.email });
       res.json({ success: true, thresholds });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
@@ -895,7 +879,7 @@ router.put(
         enabled: req.body.enabled ?? existing.enabled ?? true,
       };
       await setSetting(`notification_template.${key}`, merged, `Notification template: ${key}`);
-      await logAdminAction('NOTIFICATION_TEMPLATE_UPDATED', { model: 'SystemSetting', id: `notification_template.${key}` }, { key, admin: req.user.email }, req);
+      await auditFor(req)('NOTIFICATION_TEMPLATE_UPDATED', { model: 'SystemSetting', id: `notification_template.${key}` }, { key, admin: req.user.email });
       res.json({ success: true, template: merged });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
@@ -932,9 +916,9 @@ router.post('/documents/:id/access', [body('action').isIn(['view', 'download'])]
   try {
     const { id } = req.params;
     const { action } = req.body;
-    await logAdminAction(`DOCUMENT_${action.toUpperCase()}`, { model: 'Document', id }, {
+    await auditFor(req)(`DOCUMENT_${action.toUpperCase()}`, { model: 'Document', id }, {
       admin: req.user.email, action,
-    }, req);
+    });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
