@@ -70,7 +70,8 @@ function monthsBetween(from, to = new Date()) {
  * (which the admin bulk import and several payment paths write) saw
  * "You are eligible" in the app and then a 403 from the server.
  */
-const SETTLED_CONTRIBUTION_STATUSES = new Set(['successful', 'completed', 'approved', 'paid']);
+const { PAID_CONTRIBUTION_STATUS_SET: SETTLED_CONTRIBUTION_STATUSES } =
+  require('./contributionStatuses');
 
 function countContributionMonths(contributions) {
   const months = new Set();

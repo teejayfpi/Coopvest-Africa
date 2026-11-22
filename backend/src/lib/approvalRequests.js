@@ -10,6 +10,7 @@
 const supabase = require('../config/supabase');
 const logger = require('../utils/logger');
 const notifyService = require('../services/notifyService');
+const guarantorNotifications = require('./guarantorNotifications');
 
 const APPROVAL_PREFIX = '[approval] ';
 
@@ -148,6 +149,10 @@ async function executeLoanApprovalDecision(payload, decision, decidedBy, reason)
   } catch (err) {
     logger.warn('approvalRequests: borrower notification failed:', err.message);
   }
+
+  // Guarantors were told nothing on this path, for either outcome, so a loan
+  // approved through the Approval Center left them unaware they were liable.
+  await guarantorNotifications.notifyGuarantorsOfDecision(loan, approve, reason);
 
   return { executed: true };
 }

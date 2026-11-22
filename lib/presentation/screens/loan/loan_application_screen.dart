@@ -6,11 +6,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/utils/loan_eligibility.dart';
 import '../../../presentation/providers/auth_provider.dart';
 import '../../../presentation/providers/contributions/contribution_provider.dart';
 import '../../../presentation/providers/kyc_provider.dart';
+import '../../../presentation/providers/loan_provider.dart';
 import '../../../data/models/referral_models.dart';
 import '../../../presentation/providers/referral_provider.dart';
+import '../../../presentation/providers/terms_provider.dart';
+import '../auth/terms_section_screen.dart';
 import '../../../presentation/providers/wallet_provider.dart';
 import '../../../presentation/widgets/common/buttons.dart';
 import '../../../presentation/widgets/common/cards.dart';
@@ -102,6 +106,8 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
   String? _qrCodeData; // Full QR code data string from backend
   String? _qrImageDataUrl; // Backend-generated QR PNG data URL (persisted on loan_qrs)
   String? _rejectionReason;
+  /// Terms section the server cited for a refusal, so the banner can link to it.
+  String? _rejectionTermsSectionId;
   bool _showQrCode = false;
   bool _isSubmitting = false;
   // The referral discount is spent per loan, so the member opts in explicitly.
@@ -138,7 +144,8 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
   String get _formattedLoanId => 'COOP-$_loanId';
 
   // Check if user is eligible for loan based on membership duration and contributions
-  // Requirements: At least 6 months membership AND at least 6 months of consistent contributions
+  // Requirements: At least 6 months membership AND 6 consecutive months of
+  // contributions with no month missed
   Map<String, dynamic> _checkLoanEligibility() {
     // Get user from auth provider
     final authState = ref.read(authProvider);
@@ -147,7 +154,6 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
     // Get contributions from contribution provider
     final contributionState = ref.read(contributionProvider);
     final contributions = contributionState.contributions;
-    final summary = contributionState.summary;
     
     // Check membership duration
     int membershipMonths = 0;
@@ -155,56 +161,37 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
       membershipMonths = user.membershipDurationMonths;
     }
     
-    // Count months with successful contributions
-    final now = DateTime.now();
-    final sixMonthsAgo = DateTime(now.year, now.month - 6, 1);
-    
-    // Count settled contributions in the last 6 months. The settled set must
-    // match the server's loanPolicy.countContributionMonths, or the app says
-    // "eligible" and the server answers 403 (or the reverse).
-    const settledStatuses = {'successful', 'completed', 'approved', 'paid'};
-    final successfulContributions = contributions.where((c) {
-      if (!settledStatuses.contains(c.status.name)) {
-        return false;
-      }
-      // Check if contribution is from the last 6 months
-      if (c.postedDate != null) {
-        return c.postedDate!.isAfter(sixMonthsAgo) || 
-               c.postedDate!.isAtSameMomentAs(sixMonthsAgo);
-      }
-      return c.createdAt.isAfter(sixMonthsAgo) || 
-             c.createdAt.isAtSameMomentAs(sixMonthsAgo);
-    }).toList();
-    
-    // Get unique months with successful contributions
-    final uniqueContributionMonths = <String>{};
-    for (final c in successfulContributions) {
-      uniqueContributionMonths.add(c.contributionMonth);
-    }
-    
-    final contributionMonths = uniqueContributionMonths.length;
-    
-    // Also check from summary if available
-    final summaryContributionMonths = summary?.monthsContributed ?? 0;
-    
-    // Use the higher of the two values
-    final finalContributionMonths = contributionMonths > summaryContributionMonths 
-        ? contributionMonths 
-        : summaryContributionMonths;
-    
-    // Determine eligibility — Loan Policy: six months of membership AND six
-    // months of consistent contributions. This must stay a real check: the
+    // Prefer the server's verdict: it sees every contribution row, while the
+    // provider holds only the first page, so a member with several rows per
+    // month could be told here that they are short when they are not.
+    final server = ref.read(serverEligibilityProvider).valueOrNull;
+
+    // Longest unbroken run of contributed months. Shared with the dashboard
+    // card so the two cannot disagree; the server re-checks authoritatively.
+    final longestRun = server?.consecutiveMonths ??
+        LoanEligibility.longestConsecutiveRun(contributions);
+    final membershipRequired =
+        server?.membershipRequired ?? LoanEligibility.membershipMonthsRequired;
+    final contributionsRequired =
+        server?.consecutiveRequired ?? LoanEligibility.consecutiveMonthsRequired;
+
+    // Loan Policy: six months of membership AND six consecutive months of
+    // contributions with no month missed. This must stay a real check: the
     // client gate is what stops an ineligible member at the form, and a
     // hardcoded `true` here shipped a working loan application to every member
     // on day one.
-    final isEligible = membershipMonths >= 6 && finalContributionMonths >= 6;
-    
+    final isEligible = server?.eligible ??
+        (membershipMonths >= membershipRequired &&
+            longestRun >= contributionsRequired);
+
     return {
       'isEligible': isEligible,
       'membershipMonths': membershipMonths,
-      'contributionMonths': finalContributionMonths,
-      'membershipRequired': 6,
-      'contributionsRequired': 6,
+      'contributionMonths': longestRun,
+      'membershipRequired': membershipRequired,
+      'contributionsRequired': contributionsRequired,
+      'serverReason': server?.reason,
+      'termsSectionId': server?.termsSectionId,
     };
   }
 
@@ -256,11 +243,11 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
       // User is NOT eligible - show red warning
       String reason = '';
       if (membershipMonths < 6 && contributionMonths < 6) {
-        reason = 'You need at least $membershipRequired months of membership AND $contributionsRequired months of consistent contributions to be eligible for a loan.';
+        reason = 'You need at least $membershipRequired months of membership AND $contributionsRequired consecutive months of contributions with no month missed.';
       } else if (membershipMonths < 6) {
         reason = 'You need at least $membershipRequired months of membership. You currently have $membershipMonths months.';
       } else if (contributionMonths < 6) {
-        reason = 'You need at least $contributionsRequired months of consistent contributions. You currently have $contributionMonths months.';
+        reason = 'You need at least $contributionsRequired consecutive months of contributions with no month missed. Your longest unbroken run is $contributionMonths months.';
       }
       
       return AppCard(
@@ -310,7 +297,7 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
                   ),
                   const SizedBox(height: 8),
                   _buildEligibilityRow(
-                    'Consistent Contributions',
+                    'Consecutive Contributions',
                     '$contributionMonths / $contributionsRequired months',
                     contributionMonths >= contributionsRequired,
                   ),
@@ -319,14 +306,62 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
             ),
             const SizedBox(height: 12),
             Text(
-              'Continue making your monthly contributions to become eligible for a loan.',
+              membershipMonths < membershipRequired
+                ? 'Continue your membership and make your monthly contributions to '
+                  'become eligible for a loan.'
+                : 'Keep contributing every month with no month missed to become '
+                  'eligible. A month with no contribution breaks the run and the '
+                  'count restarts from the first month you pay after a gap.',
               style: TextStyle(
                 color: isDarkMode ? Colors.white60 : CoopvestColors.mediumGray,
                 fontSize: 12,
                 fontStyle: FontStyle.italic,
               ),
             ),
+            const SizedBox(height: 8),
+            // The rule is in the published terms, so point at the section that
+            // states it rather than telling the member to go and find it.
+            GestureDetector(
+              onTap: () => _openTermsSection('loan_policy'),
+              child: const Text(
+                'Read the Loan Policy in our Terms & Conditions',
+                style: TextStyle(
+                  color: CoopvestColors.primary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+            ),
           ],
+        ),
+      );
+    }
+  }
+
+  /// Opens one policy section of the served terms document.
+  ///
+  /// Reads the same document the backend serves so a member who was refused
+  /// under a rule reads the current wording, not a stale bundled copy.
+  Future<void> _openTermsSection(String sectionId) async {
+    try {
+      final doc = await ref.read(termsDocumentProvider.future);
+      final matches = doc.sections.where((s) => s.id == sectionId);
+      if (matches.isEmpty) throw StateError('section $sectionId unavailable');
+      if (!mounted) return;
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => TermsSectionScreen(section: matches.first),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'The Terms & Conditions are unavailable right now. Please try '
+            'again, or contact support for the eligibility rules.',
+          ),
         ),
       );
     }
@@ -369,10 +404,15 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
   /// member sees the actual policy rule they hit (default restriction,
   /// savings limit, missing agreement, ...).
   String _extractApiError(Object e) {
+    _rejectionTermsSectionId = null;
     try {
       final dynamic err = e;
       final data = err.response?.data;
       if (data is Map) {
+        final section = data['termsSection'];
+        if (section is Map && section['id'] != null) {
+          _rejectionTermsSectionId = section['id'].toString();
+        }
         if (data['error'] != null) return data['error'].toString();
         if (data['message'] != null) return data['message'].toString();
       }
@@ -430,7 +470,16 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
                           '4. If repayment is missed for 3 consecutive months without approved arrangements, '
                           'guarantors may become responsible for the outstanding balance in accordance with '
                           'Coopvest Africa\'s loan policy.\n\n'
-                          '5. By proceeding, you authorise Coopvest Africa to disburse the approved amount '
+                          '5. To qualify for a loan you need at least six (6) months of membership and at least '
+                          'six (6) consecutive months of contributions with no month missed. A month in which no '
+                          'contribution is received breaks the run, and the count restarts from the first month paid '
+                          'after the gap.\n\n'
+                          '6. Your monthly contribution must be current, not merely historical. '
+                          'You have ten (10) days from the start of each month to pay it. If it is still unpaid after '
+                          'that, borrowing (and guaranteeing others) is paused until the outstanding months are paid. '
+                          'No penalty is charged and no savings are taken, and borrowing resumes automatically once '
+                          'you are up to date.\n\n'
+                          '7. By proceeding, you authorise Coopvest Africa to disburse the approved amount '
                           'to your registered account and to apply the terms above.',
                           style: TextStyle(fontSize: 12, height: 1.6),
                         ),
@@ -687,7 +736,7 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
           'tenureMonths': loanInfo['duration'],
           'purpose': _purposeController.text.trim(),
           'agreementAccepted': true,
-          'agreementVersion': 'v1.0',
+          'agreementVersion': 'v1.2',
           'applyReferralBonus': _useReferralBonus && hasBonus,
         });
 
@@ -761,6 +810,7 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
         _qrCodeData = qrCodeData;
         _loanStatus = 'Pending Review';
         _rejectionReason = null;
+        _rejectionTermsSectionId = null;
         _showQrCode = showQr;
         _isSubmitting = false;
       });
@@ -1287,6 +1337,24 @@ class _LoanApplicationScreenState extends ConsumerState<LoanApplicationScreen> {
                     color: CoopvestColors.errorText,
                   ),
                 ),
+                // Eligibility refusals are the common case here, and the rule
+                // lives in the terms. The server names the section it applied,
+                // so link to that one instead of leaving the member to hunt.
+                if (_rejectionTermsSectionId != null) ...[
+                  const SizedBox(height: 8),
+                  GestureDetector(
+                    onTap: () => _openTermsSection(_rejectionTermsSectionId!),
+                    child: const Text(
+                      'Read the rule in our Terms & Conditions',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: CoopvestColors.primary,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

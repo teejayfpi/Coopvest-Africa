@@ -56,7 +56,7 @@ class TermsContent {
   TermsContent._();
 
   /// Version of the bundled document. Bump whenever the text changes.
-  static const String version = '2026-11-08';
+  static const String version = '2026-11-21';
 
   static const List<TermsSection> sections = [
     TermsSection(
@@ -96,7 +96,8 @@ class TermsContent {
       title: 'Contribution Policy',
       summary:
           'Monthly contribution rules: minimum ₦5,000, increases anytime, '
-          'reductions require 3-month notice.',
+          'reductions require 3-month notice, and contributions must be current '
+          'to borrow.',
       body:
           '1. Every member must make a minimum monthly contribution of ₦5,000. '
           'A one-time, non-refundable registration fee of ₦5,000 also applies to '
@@ -111,17 +112,52 @@ class TermsContent {
           'by salary deduction (payroll) through your employer.\n\n'
           '5. Consistent contributions improve eligibility for future financial '
           'support services. Contribution history and account records are '
-          'tracked digitally for transparency.',
+          'tracked digitally for transparency.\n\n'
+          '6. Contributions must be current, not merely historical, to qualify '
+          'for a new loan. A member whose contributions have lapsed is not '
+          'eligible to borrow until the outstanding months are paid.\n\n'
+          '7. A grace period of ten (10) days applies at the start of each '
+          'month. A contribution paid within the first ten days of the month is '
+          'treated as on time for that month.\n\n'
+          '8. Where a contribution remains unpaid after the grace period, '
+          'borrowing is paused from that point. No penalty, fine or interest is '
+          'charged for a lapse, and no savings are taken. Borrowing resumes '
+          'automatically, without a new application, as soon as the outstanding '
+          'months are paid.\n\n'
+          '9. A member who has never contributed is not in arrears; their first '
+          'contribution starts their record.\n\n'
+          '10. This rule applies to loan applications submitted under the '
+          'Digital Loan Agreement version that discloses it. Applications made '
+          'under an earlier version are assessed on the terms in force when they '
+          'were submitted.\n\n'
+          '11. If you believe your contribution record is wrong, contact '
+          'support before applying. Records are corrected where a payment was '
+          'made but not reflected.',
     ),
     TermsSection(
       id: 'loan_policy',
       title: 'Loan Policy',
       summary:
-          'Loan eligibility criteria, guarantor requirements, and repayment '
-          'obligations.',
+          'Loan eligibility criteria (six months of membership and six '
+          'consecutive months of contributions, with contributions current at '
+          'application), guarantor requirements, and repayment obligations.',
       body:
           '1. Loan eligibility is based on membership duration, contribution '
-          'history, and the cooperative\'s prevailing credit policy.\n\n'
+          'history, and the cooperative\'s prevailing credit policy. To qualify '
+          'for a new loan a member must satisfy all of the following:\n\n'
+          '   (a) at least six (6) months of membership;\n\n'
+          '   (b) at least six (6) consecutive months of contributions with no '
+          'month missed; and\n\n'
+          '   (c) contributions that are current at the time of application, not '
+          'merely historical. You have ten (10) days from the start of each month '
+          'to pay that month\'s contribution. If it is still unpaid after that '
+          'period, borrowing and guaranteeing others are paused until the '
+          'outstanding months are paid. No penalty is charged and no savings are '
+          'taken, and borrowing resumes automatically once you are up to date.\n\n'
+          'A month in which no contribution is received breaks the consecutive '
+          'run, and the count of consecutive months restarts from the first month '
+          'paid after the gap. Months in which contributions were made before a '
+          'gap do not count towards the six-month requirement.\n\n'
           '2. Loan amounts, interest rates, and tenures are determined by the '
           'loan product selected and are displayed in the app before you apply.\n\n'
           '3. Approved loans are disbursed to the bank account verified during '

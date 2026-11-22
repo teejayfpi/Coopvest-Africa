@@ -4,6 +4,8 @@ import '../../core/services/logger_service.dart';
 import '../../data/api/loan_api_service.dart';
 import '../../data/models/loan_models.dart';
 import '../../data/repositories/auth_repository.dart';
+import '../../core/network/api_client.dart';
+import '../../core/utils/loan_eligibility.dart';
 
 /// Convert LoanData (API model) to Loan (domain model)
 Loan _convertLoanDataToLoan(LoanData data) {
@@ -40,6 +42,27 @@ final loanProvider = StateNotifierProvider<LoanNotifier, LoansState>((ref) {
   final authRepository = ref.watch(authRepositoryProvider);
   final loanApiService = ref.watch(loanApiServiceProvider);
   return LoanNotifier(authRepository, loanApiService);
+});
+
+/// The member's eligibility, as the server computes it.
+///
+/// Watched by the dashboard card and the application form so both show the
+/// authoritative figures. Falls back to null on failure, where the caller uses
+/// its own local estimate rather than blocking the member.
+final serverEligibilityProvider = FutureProvider<ServerEligibility?>((ref) async {
+  try {
+    final api = ref.watch(apiClientProvider);
+    final response = await api.get('/loans/eligibility');
+    if (response is! Map) return null;
+    final body = Map<String, dynamic>.from(response);
+    // Some endpoints wrap the payload in `data`; accept either shape.
+    final payload =
+        body['data'] is Map ? Map<String, dynamic>.from(body['data'] as Map) : body;
+    return ServerEligibility.fromJson(payload);
+  } catch (e) {
+    logger.e('serverEligibilityProvider failed: $e');
+    return null;
+  }
 });
 
 /// Loan Notifier

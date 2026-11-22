@@ -6,6 +6,7 @@ import '../../../config/theme_extension.dart';
 import '../../../core/extensions/number_extensions.dart';
 import '../../../data/models/loan_models.dart';
 import '../../../core/network/api_client.dart';
+import '../../../presentation/providers/contributions/contribution_provider.dart';
 import '../../../presentation/providers/loan_provider.dart';
 import '../../../presentation/navigation/rollover_routes.dart';
 import '../../../presentation/providers/wallet_provider.dart';
@@ -38,6 +39,11 @@ class _LoanDashboardScreenState extends ConsumerState<LoanDashboardScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(loanProvider.notifier).getLoans();
+      // The eligibility card reads contribution history to decide whether the
+      // member has six consecutive saving months. Without this the card saw an
+      // empty list and reported zero savings progress on a screen the home tab
+      // had already loaded.
+      ref.read(contributionProvider.notifier).loadContributions();
     });
   }
 
