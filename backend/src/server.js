@@ -646,6 +646,13 @@ fraudDetectionWorker.start();
 const referralConfirmationWorker = require('./workers/referralConfirmationWorker');
 referralConfirmationWorker.start();
 
+// Monthly administrative fee worker — creates the NGN1,500 monthly obligation.
+// Nothing else did: `computeObligations` only totals `member_fees` rows that
+// already exist, so without this the charge never reached any member's "amount
+// due" unless an admin assigned it by hand.
+const monthlyAdministrativeFeeWorker = require('./workers/monthlyAdministrativeFeeWorker');
+monthlyAdministrativeFeeWorker.start();
+
 // Surface a misconfigured payment gateway at boot instead of letting members
 // discover it as an opaque "online payment failed" at checkout.
 const { paystackConfigured } = require('./lib/paystackCharge');

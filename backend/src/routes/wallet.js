@@ -188,7 +188,13 @@ async function recordTransaction(profileId, row) {
  * source of "amount due". Used by GET /wallet/obligations (member) and
  * GET /admin/members/:id/obligations (admin).
  */
-const ACTIVE_LOAN_STATUSES = ['active', 'repaying', 'overdue', 'approved', 'disbursed'];
+// Loans that still owe money, so the monthly repayment belongs in amount due.
+// `in_recovery` and `defaulted` are included deliberately: the recovery worker
+// moves a loan to `in_recovery` at the third missed month, and omitting it made
+// the repayment disappear from amount due exactly when the member was most in
+// arrears. `disbursed` is not in the loans status CHECK constraint, so it never
+// matched a row.
+const ACTIVE_LOAN_STATUSES = ['approved', 'active', 'repaying', 'overdue', 'defaulted', 'in_recovery'];
 
 // A contribution row in any of these states means the money is in — the
 // monthly contribution has been paid for that month.

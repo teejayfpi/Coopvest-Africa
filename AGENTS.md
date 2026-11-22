@@ -172,6 +172,38 @@ member sees in the app.
 - Admin dashboard is a separate Vite/React app in
   `../Admin-Dashboard` deployed on Vercel.
 
+### Migration ledger is the source of truth, not the files
+`backend/run-pending-migrations.js` records each applied file in
+`schema_migrations`. Run it with `--dry-run` first; it needs both
+`SUPABASE_ACCESS_TOKEN` and `SUPABASE_PROJECT_REF` (the project ref is
+`nyoauzqezpxeonmrxxgi`), otherwise it reports "no database connection
+configured" and exits 0 — which reads like success and is not.
+
+Migrations 073–076 were applied in November 2026 and the ledger is now complete
+(73/73). Before that, 065–075 had been applied by hand without being recorded, so
+the ledger understated production and a fresh clone looked like it was missing
+the whole money-path fix set. When you add a migration, apply it through the
+runner so the record stays honest.
+
+### Monthly administrative fee worker
+`backend/src/workers/monthlyAdministrativeFeeWorker.js` creates the NGN1,500
+monthly `member_fees` row (NGN1,000 administrative + NGN500 development levy).
+Nothing did before it, so the charge never reached "amount due" except where an
+admin assigned it by hand.
+
+- Ticks 24h after boot, first pass 10 min after start.
+- Idempotent on `(profile_id, fee_type_id, billing_month)` via a partial unique
+  index (migration 076); `23505` is treated as `already_billed`, not an error.
+- Bills the current month only — no back-billing.
+- Skips staff, salary-deduction members (via `isAdministrativeFeeExempt`),
+  inactive/flagged accounts.
+- Kill switch: `MONTHLY_ADMIN_FEE_DISABLED=1` on Render, no deploy needed.
+
+A tick that bills nobody is normal on a small dataset and is not evidence of
+failure: verify by checking that the profile columns selected in `processDue`
+still exist, since a missing column makes the Supabase query error and the tick
+logs a warning while billing zero members.
+
 ## Registration fee: a self-declared employer defers, it does not exempt
 
 `isRegistrationFeeSettled` / `isAdministrativeFeeExempt`

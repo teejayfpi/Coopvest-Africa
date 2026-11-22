@@ -29,7 +29,9 @@ WHERE label = 'Mobile App Fee';
 -- The fee was switched off in the admin catalogue. The monthly administrative
 -- charge is a standing obligation, so it is active. (Fee activity is driven by
 -- whether an outstanding member_fees row exists; this flag drives the admin
--- catalogue and the member's "amount due" breakdown.)
+-- catalogue only. It does NOT affect the member's "amount due" breakdown —
+-- `computeObligations` never reads `is_active`, so flipping it changes nothing
+-- a member sees.)
 UPDATE public.fee_types
 SET is_active  = true,
     updated_at = now()
