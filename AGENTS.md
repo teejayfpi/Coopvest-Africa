@@ -66,11 +66,39 @@ Never re-introduce a client-side `isEligible = true`; the app's check is a
 courtesy that mirrors the server, not the gate. It must use the same
 longest-run measure, or it says "eligible" and then collects a 403.
 
+The app cannot compute the rule itself, so it asks:
+`GET /api/v1/loans/eligibility` returns the member's verdict from complete
+data. `loadContributions()` fetches only page 1 (20 rows, newest first), so a
+member with several rows per month can have their run understated and be told
+they are ineligible when they are not. Both this endpoint and the POST /apply
+gate call the same `computeEligibility()` helper - do not add a second copy of
+the arithmetic. `serverEligibilityProvider` in `loan_provider.dart` fetches it;
+the eligibility card and the application form prefer it and fall back to the
+local estimate only while the request is in flight or if it fails.
+
+Register `/eligibility` **before** `/:loanId`, or Express treats "eligibility"
+as a loan id.
+
 A refusal must say why, what clears it, and which terms section states the rule.
 `eligibilityRefusal()` builds that; the route sends `reason`, `guidance` and
 `termsSection`, and the app links to the cited section. The app has no
 eligibility screen, so this text is the only place a refused member learns the
 remedy. Keep the cited section id real - a test asserts it exists in terms.json.
+
+## Paid contribution statuses: one list
+`backend/src/lib/contributionStatuses.js` is the only definition of which
+contribution statuses mean money arrived. It used to be three lists -
+`loanPolicy`, `contributionConsistency` and `wallet` - and they disagreed:
+only the wallet's accepted `confirmed`, so that contribution counted toward the
+member's balance but not toward their eligibility. Their savings grew while the
+app told them they had not been saving.
+
+On the Dart side, `ContributionStatus` names only `successful` among the
+settled statuses the server writes. Parsing by enum name (`e.name == json[...]`)
+therefore mapped `completed`, `approved`, `confirmed` and `paid` all onto
+`pending`, so a paying member read as unpaid. Use
+`contributionStatusFrom(json['status'])`; `MonthlyContribution.fromJson` and
+`StatusHistory.fromJson` both do.
 
 ## Interest calculation (mobile-aligned)
 The backend interest logic in `src/services/referralService.js` MUST mirror the
