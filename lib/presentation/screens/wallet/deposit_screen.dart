@@ -9,6 +9,7 @@ import '../../widgets/paystack_checkout_dialog.dart';
 import '../../../config/theme_config.dart';
 import '../../../config/theme_extension.dart';
 import '../../../core/utils/utils.dart';
+import '../../../core/utils/split_allocations.dart';
 import '../../../core/network/api_client.dart';
 import '../../../presentation/providers/wallet_provider.dart';
 import '../../../presentation/providers/loan_provider.dart';
@@ -922,8 +923,6 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
 
   /// The split payload. Known fee rows are sent one allocation each, with
   /// their `fee_id`, so several rows of the same type settle independently.
-  /// A typed amount that exceeds the known rows leaves a remainder without an
-  /// id, which the backend applies to the oldest outstanding row of that type.
   List<Map<String, dynamic>> _buildMixedAllocations() {
     double typed(TextEditingController c) =>
         double.tryParse(c.text.replaceAll(',', '')) ?? 0;
@@ -931,28 +930,20 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
     final allocations = <Map<String, dynamic>>[];
 
     void add(String type, double amount) {
-      if (amount > 0) allocations.add({'type': type, 'amount': amount});
+      if (amount > 0) allocations.add(allocation(type, amount));
     }
 
     add('savings', typed(_splitSavingsController));
     add('loan_repayment', typed(_splitLoanController));
 
     for (final entry in {'fine': _splitFineController, 'fee': _splitFeeController}.entries) {
-      var remaining = typed(entry.value);
-      if (remaining <= 0) continue;
-      for (final row in _pendingFeeRows[entry.key]!) {
-        if (remaining <= 0) break;
-        final rowAmount = row['amount'] as double;
-        final applied = rowAmount > remaining ? remaining : rowAmount;
-        if (applied <= 0) continue;
-        allocations.add({
-          'type': entry.key,
-          'amount': applied,
-          'fee_id': row['id'],
-        });
-        remaining -= applied;
-      }
-      add(entry.key, remaining);
+      final rows = _pendingFeeRows[entry.key]!
+          .map((r) => KnownFeeRow(
+                id: r['id'] as String,
+                amount: r['amount'] as double,
+              ))
+          .toList();
+      allocations.addAll(allocateFeeAmount(entry.key, typed(entry.value), rows));
     }
 
     return allocations;
