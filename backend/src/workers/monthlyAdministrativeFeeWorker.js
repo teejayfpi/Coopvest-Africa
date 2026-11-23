@@ -12,9 +12,12 @@
  * back-billing every month since a member joined would present a lump sum they
  * were never told they owed, which is a worse harm than the missed charge.
  *
- * Salary-deduction members are skipped. Their fee is recovered from payroll, and
- * `isAdministrativeFeeExempt` is the same predicate `computeObligations` uses to
- * hide the row - billing them here would contradict that and double-charge.
+ * Every member is billed, including salary-deduction members. The fee used to be
+ * skipped for them on the premise that payroll recovers it, but no payroll path
+ * can: `payroll_batch_lines` carries `contribution_amount` and
+ * `registration_fee_amount` and nothing else, and `organizationFinance` totals
+ * only those two. So the charge was neither billed in-app nor deducted from
+ * salary - it was collected by nobody, for every enrolled org.
  *
  * Idempotent on `(profile_id, fee_type_id, billing_month)` via a partial unique
  * index, so a re-run or an overlapping tick cannot create a second charge.
@@ -23,7 +26,6 @@
 const supabase = require('../config/supabase');
 const logger = require('../utils/logger');
 const { ADMINISTRATIVE_FEE } = require('../config/feeDisclosure');
-const { isAdministrativeFeeExempt } = require('../lib/activationGate');
 const { isStaffRole } = require('../lib/permissions');
 
 const POLL_INTERVAL_MS = 24 * 60 * 60 * 1000; // daily
@@ -47,7 +49,8 @@ function shouldBill(profile, month) {
   if (profile.is_active === false || profile.is_flagged === true) return false;
   // Staff and admin accounts are not members; the member charge does not apply.
   if (isStaffRole(profile.role)) return false;
-  if (isAdministrativeFeeExempt(profile)) return false;
+  // Salary-deduction members are billed too - see the note at the top of this
+  // file. Their employer cannot recover this charge, so the app must.
   if (profile.created_at) {
     const joined = billingMonth(new Date(profile.created_at));
     if (Number.isNaN(new Date(profile.created_at).getTime())) return false;
