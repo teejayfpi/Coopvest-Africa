@@ -61,10 +61,10 @@ function buildSchedule() {
         frequency: 'monthly',
         refundable: null,
         components: ADMINISTRATIVE_FEE.components.map(({ name, amount }) => ({ name, amount })),
-        // Must not promise salary recovery: payroll carries only
-        // `contribution_amount` and `registration_fee_amount`, so no employer
-        // deduction can settle this charge. Every member pays it in-app.
-        note: 'Payable monthly by every member, including members whose contributions are deducted from salary. It appears in your obligations each month.',
+        // Salary-deduction members are exempt: their employer withholds the
+        // charge from pay, so they must not be told to pay it in the app as
+        // well. Direct-deposit members pay it here.
+        note: 'Deducted from salary where your employer withholds contributions. If you contribute by direct deposit, it appears in your obligations each month and is payable in the app.',
       },
       {
         id: 'late_repayment_fine',

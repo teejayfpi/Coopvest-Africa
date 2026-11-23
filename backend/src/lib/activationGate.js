@@ -129,12 +129,11 @@ function isPayrollMember(profile) {
  * True when the member's employer is expected to withhold the monthly
  * administrative fee from salary.
  *
- * This is a *note*, never a suppression. No payroll path carries the charge —
- * `payroll_batch_lines` records only `contribution_amount` and
- * `registration_fee_amount` — so treating it as an exemption hid the fee from
- * the only channel that could collect it. The obligation is always raised and
- * always shown; this flag only lets the app explain that a salary deduction may
- * also cover it.
+ * This is a real suppression, not a note. The employer withholds the charge
+ * from pay, so raising it in the app as well would collect the same month
+ * twice. The billing worker and `computeObligations` both consult this
+ * predicate, so neither a `member_fees` row nor an obligation appears for an
+ * exempt member.
  *
  * Fines are deliberately NOT covered: a penalty is not part of the standard
  * monthly deduction, so it stays payable in the app.

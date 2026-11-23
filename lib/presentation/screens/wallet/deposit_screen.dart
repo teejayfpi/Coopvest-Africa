@@ -73,11 +73,17 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
   final _splitLoanController = TextEditingController();
   final _splitFineController = TextEditingController();
   final _splitFeeController = TextEditingController();
-  // Exact member_fees ids carried in from the obligations card, per type, in
-  // order. The split payload rebuilds allocations from the amount fields and
-  // would otherwise lose them, leaving the backend to settle the *oldest*
-  // outstanding fee of that type — which may not be the one shown as due.
-  final Map<String, List<String>> _pendingFeeIds = {'fine': [], 'fee': []};
+  // Exact member_fees rows carried in from the obligations card, per type, in
+  // order, each with its own amount. The split payload rebuilds allocations
+  // from the amount fields and would otherwise lose them, leaving the backend
+  // to settle the *oldest* outstanding fee of that type — which may not be the
+  // one shown as due. The amount is kept per row so two fines of the same type
+  // are sent as two allocations; collapsing them would settle only the first
+  // and mark it paid for the whole sum.
+  final Map<String, List<Map<String, dynamic>>> _pendingFeeRows = {
+    'fine': [],
+    'fee': [],
+  };
   bool _isProcessing = false;
   // MANUAL DEPOSIT DISABLED — proof-of-payment upload removed.
   // File? _proofFile;
@@ -116,7 +122,10 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
         final t = entry['type'];
         final id = entry['fee_id'];
         if ((t == 'fine' || t == 'fee') && id != null) {
-          _pendingFeeIds[t]!.add(id.toString());
+          _pendingFeeRows[t]!.add({
+            'id': id.toString(),
+            'amount': (entry['amount'] as num?)?.toDouble() ?? 0.0,
+          });
         }
       }
 
@@ -494,28 +503,7 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
         );
         return;
       }
-      final allocations = isMixed
-          ? [
-              {'type': 'savings', 'amount': double.tryParse(_splitSavingsController.text.replaceAll(',', '')) ?? 0},
-              {'type': 'loan_repayment', 'amount': double.tryParse(_splitLoanController.text.replaceAll(',', '')) ?? 0},
-              {'type': 'fine', 'amount': double.tryParse(_splitFineController.text.replaceAll(',', '')) ?? 0},
-              {'type': 'fee', 'amount': double.tryParse(_splitFeeController.text.replaceAll(',', '')) ?? 0},
-            ]
-              // Carry the exact fee row through, when the breakdown came from a
-              // known obligation (obligations "Pay Now"). Without it the backend
-              // settles the oldest outstanding fee of that type. Zero-amount
-              // rows are dropped first so they cannot consume a pending id.
-              .where((a) => (a['amount'] as double) > 0)
-              .map((a) {
-                final t = a['type'] as String;
-                final ids = _pendingFeeIds[t];
-                if (ids != null && ids.isNotEmpty) {
-                  return {...a, 'fee_id': ids.removeAt(0)};
-                }
-                return a;
-              })
-              .toList()
-          : null;
+      final allocations = isMixed ? _buildMixedAllocations() : null;
 
       final apiClient = ref.read(apiClientProvider);
       final resp = await apiClient.dio.post('/payments/initialize', data: {
@@ -931,6 +919,44 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
     );
   }
   */
+
+  /// The split payload. Known fee rows are sent one allocation each, with
+  /// their `fee_id`, so several rows of the same type settle independently.
+  /// A typed amount that exceeds the known rows leaves a remainder without an
+  /// id, which the backend applies to the oldest outstanding row of that type.
+  List<Map<String, dynamic>> _buildMixedAllocations() {
+    double typed(TextEditingController c) =>
+        double.tryParse(c.text.replaceAll(',', '')) ?? 0;
+
+    final allocations = <Map<String, dynamic>>[];
+
+    void add(String type, double amount) {
+      if (amount > 0) allocations.add({'type': type, 'amount': amount});
+    }
+
+    add('savings', typed(_splitSavingsController));
+    add('loan_repayment', typed(_splitLoanController));
+
+    for (final entry in {'fine': _splitFineController, 'fee': _splitFeeController}.entries) {
+      var remaining = typed(entry.value);
+      if (remaining <= 0) continue;
+      for (final row in _pendingFeeRows[entry.key]!) {
+        if (remaining <= 0) break;
+        final rowAmount = row['amount'] as double;
+        final applied = rowAmount > remaining ? remaining : rowAmount;
+        if (applied <= 0) continue;
+        allocations.add({
+          'type': entry.key,
+          'amount': applied,
+          'fee_id': row['id'],
+        });
+        remaining -= applied;
+      }
+      add(entry.key, remaining);
+    }
+
+    return allocations;
+  }
 
   @override
   Widget build(BuildContext context) {

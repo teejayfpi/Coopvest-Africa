@@ -175,12 +175,12 @@ class FeeSchedule {
                 amount: AppConfig.developmentLevy,
               ),
             ],
-            // Payroll cannot settle this charge — a batch carries only the
-            // contribution and the registration fee — so the schedule must not
-            // imply a salary deduction covers it.
-            note: 'Payable monthly by every member, including members whose '
-                'contributions are deducted from salary. It appears in your '
-                'obligations each month.',
+            // Salary-deduction members are exempt: the employer withholds the
+            // charge from pay. Direct-deposit members pay it in the app, so the
+            // note has to cover both without contradicting either.
+            note: 'Deducted from salary where your employer withholds '
+                'contributions. If you contribute by direct deposit, it appears '
+                'in your obligations each month and is payable in the app.',
           ),
           FeeCharge(
             id: 'late_repayment_fine',

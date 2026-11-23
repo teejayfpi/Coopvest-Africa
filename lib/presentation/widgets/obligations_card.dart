@@ -87,10 +87,24 @@ class ObligationsCard extends ConsumerWidget {
             (advance['savings'] as num?)?.toDouble() ?? 0.0;
         final advanceFee =
             (advance['administrative_fee'] as num?)?.toDouble() ?? 0.0;
+        // Fines are owed now whatever month is being paid for, so the backend
+        // folds them into the offer; the ids let each row settle exactly.
+        final advanceFines =
+            ((advance['fines'] as List?) ?? const [])
+                .whereType<Map>()
+                .map((f) => {
+                      'id': f['id']?.toString() ?? '',
+                      'label': f['label']?.toString() ?? 'Fine',
+                      'amount': (f['amount'] as num?)?.toDouble() ?? 0.0,
+                    })
+                .where((f) => (f['amount'] as double) > 0)
+                .toList();
+        final advanceFinesTotal = advanceFines.fold<double>(
+            0.0, (s, f) => s + (f['amount'] as double));
         final advanceTotal = advanceMonth.isEmpty
             ? 0.0
             : (advance['total'] as num?)?.toDouble() ??
-                (advanceSavings + advanceFee);
+                (advanceSavings + advanceFee + advanceFinesTotal);
 
         // Nothing due: show the "all caught up" state rather than a card of
         // ₦0 rows, which reads like a broken screen. The green check plus the
@@ -310,9 +324,18 @@ class ObligationsCard extends ConsumerWidget {
                     // sent explicitly. Without it the backend would credit the
                     // current month and the member would pay twice for one
                     // month while still owing the next.
+                    // An exempt member's employer withholds the fee, so the
+                    // backend prices it at zero and no fee leg is sent.
                     final allocations = <Map<String, dynamic>>[
                       {'type': 'savings', 'amount': advanceSavings},
-                      {'type': 'fee', 'amount': advanceFee},
+                      if (advanceFee > 0)
+                        {'type': 'fee', 'amount': advanceFee},
+                      for (final f in advanceFines)
+                        {
+                          'type': 'fine',
+                          'amount': f['amount'],
+                          'fee_id': f['id'],
+                        },
                     ];
                     Navigator.push(
                       context,
@@ -334,8 +357,12 @@ class ObligationsCard extends ConsumerWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Covers your ₦${advanceSavings.formatNumber()} contribution and '
-                  '₦${advanceFee.formatNumber()} administrative fee for that month.',
+                  _advanceCaption(
+                    savings: advanceSavings,
+                    fee: advanceFee,
+                    finesTotal: advanceFinesTotal,
+                    monthLabel: _monthLabel(advanceMonth),
+                  ),
                   style: TextStyle(fontSize: 11, color: context.textSecondary),
                 ),
               ],
@@ -410,4 +437,27 @@ class ObligationsCard extends ConsumerWidget {
     if (entry is Map) return (entry['amount'] as num?)?.toDouble() ?? 0;
     return 0;
   }
+}
+
+/// What the advance offer covers, spelled out so a member never has to infer it
+/// from the total. An exempt member has no fee line at all — their employer
+/// withholds it — so saying "₦0 administrative fee" would be misleading.
+String _advanceCaption({
+  required double savings,
+  required double fee,
+  required double finesTotal,
+  required String monthLabel,
+}) {
+  final parts = <String>[
+    '₦${savings.formatNumber()} contribution',
+    if (fee > 0) '₦${fee.formatNumber()} administrative fee',
+    if (finesTotal > 0) '₦${finesTotal.formatNumber()} in outstanding fines',
+  ];
+  final covered = parts.length == 1
+      ? parts.single
+      : '${parts.sublist(0, parts.length - 1).join(', ')} and ${parts.last}';
+  final feeNote = fee > 0
+      ? ''
+      : ' Your administrative fee is deducted from salary, so it is not included.';
+  return 'Covers your $covered for $monthLabel.$feeNote';
 }
