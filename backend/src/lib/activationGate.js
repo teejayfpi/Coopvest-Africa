@@ -126,16 +126,15 @@ function isPayrollMember(profile) {
 }
 
 /**
- * True when the monthly administrative fee is recovered from the member's
- * salary rather than paid in-app.
+ * True when the member's employer is expected to withhold the monthly
+ * administrative fee from salary.
  *
- * Same mechanism as the registration-fee exemption above: the employer
- * deduction is the channel, so showing the fee as an in-app obligation would
- * charge the member a second time for money their employer already withholds.
- * An employer must be on file for the same reason — without one there is no
- * deduction to recover the fee from, so the in-app obligation stands. And, as
- * above, only a *linked* employer or a named one still inside its deferral
- * window counts; a stale self-declared name must not hide the fee forever.
+ * This is a *note*, never a suppression. No payroll path carries the charge —
+ * `payroll_batch_lines` records only `contribution_amount` and
+ * `registration_fee_amount` — so treating it as an exemption hid the fee from
+ * the only channel that could collect it. The obligation is always raised and
+ * always shown; this flag only lets the app explain that a salary deduction may
+ * also cover it.
  *
  * Fines are deliberately NOT covered: a penalty is not part of the standard
  * monthly deduction, so it stays payable in the app.

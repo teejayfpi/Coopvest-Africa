@@ -61,7 +61,10 @@ function buildSchedule() {
         frequency: 'monthly',
         refundable: null,
         components: ADMINISTRATIVE_FEE.components.map(({ name, amount }) => ({ name, amount })),
-        note: 'Recovered from your contribution, or from salary where an employer deducts contributions.',
+        // Must not promise salary recovery: payroll carries only
+        // `contribution_amount` and `registration_fee_amount`, so no employer
+        // deduction can settle this charge. Every member pays it in-app.
+        note: 'Payable monthly by every member, including members whose contributions are deducted from salary. It appears in your obligations each month.',
       },
       {
         id: 'late_repayment_fine',
