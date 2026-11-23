@@ -1795,3 +1795,28 @@ badge instead of "Administrator", so the gap is visible rather than disguised.
 body - `{ enabled: true }` - silently zeroed the referral bonus and cap. It now
 sets only the keys present in the request. When adding a settings endpoint, treat
 an absent field as "leave it alone", not as "set it to zero".
+
+## Approving a payment proof must not assume a savings row exists
+`savings` is created lazily by the API on first read, so a member who has never
+opened the Savings screen has no row. `handle_payment_proof_approval()` credited
+it with a bare `update ... where profile_id = ...`, which matched zero rows and
+raised nothing, while the surrounding `exception when others then null` hid any
+real failure too. Contributions were recorded as `successful` with
+`savings.total_saved` still 0 and no ledger entry: the member paid and the money
+showed nowhere.
+
+Migration 078 calls `ensure_savings_row()` before the update, mirrors
+`total_saved` into `balance`, and replaces those silent handlers with
+`raise warning`. When a trigger credits an aggregate row, create the row first
+and never swallow the error - a zero-row UPDATE is not an error in SQL.
+
+Existing drift is deliberately not rewritten; moving money needs a human
+decision. The reconciliation job's `savings_vs_contributions` check names every
+affected member so it can be settled individually.
+
+## Parse the status string the API actually sends
+`User.fromJson` read `kycVerified` (a boolean the API no longer sends) and fell
+back to `'pending'`, so `/auth/me` reported `kycStatus: 'approved'` while the app
+rendered "pending" for every signed-in member. Prefer the explicit status field,
+then the snake_case variant, then any boolean. Do not let a boolean that is
+merely absent override a status string that is present.
