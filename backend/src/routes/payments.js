@@ -30,6 +30,7 @@ const logger = require('../utils/logger');
 const notifyService = require('../services/notifyService');
 const { ALLOWED_PAYMENT_TYPES, DB_PAYMENT_TYPE, normalizeAllocations } = require('../lib/allocations');
 const { paystackFetch, secretKey, classifyFailure } = require('../lib/paystackCharge');
+const { resolveTargetMonth } = require('../lib/billingMonth');
 const { recordFailedCharge, alertFailedCharge } = require('../lib/failedChargeAudit');
 
 const MIN_AMOUNT_NGN = 100;
@@ -153,7 +154,13 @@ async function applyAllocations(proof, { recordedBy = null } = {}) {
 
     // 3. Fines / fees → settle outstanding member_fees obligations.
 
+    // An advance payment's fee was already settled by `applyTargetMonth`, which
+    // creates the row for the chosen month and marks it paid. Running the fee
+    // leg again would fall back to the oldest *other* outstanding fee and clear
+    // a second month with the same money.
+    const advanceFeeSettled = Boolean(metadata.target_month);
     for (const alloc of feeAllocs) {
+      if (advanceFeeSettled && alloc.type === 'fee') continue;
       const amt = Number(alloc.amount) || 0;
       if (amt <= 0) continue;
       let feeRow = null;
@@ -196,6 +203,100 @@ async function applyAllocations(proof, { recordedBy = null } = {}) {
     // Never fail the settlement because of an allocation application — the
     // proof is already approved and reconcile-able later.
     logger.error(`paystack settle: allocation application failed (non-fatal): ${applyErr.message}`);
+  }
+}
+
+/**
+ * Move a contribution to the month the member paid for, and bill that month's
+ * administrative fee.
+ *
+ * `payment_proofs.metadata.target_month` is the month chosen at checkout. When
+ * it is absent the member paid for the current month and there is nothing to
+ * do. When it is present and future, the row the trigger wrote against
+ * `payment_date` is moved onto it, so the advance actually clears the month the
+ * member intended instead of double-crediting the current one.
+ *
+ * The monthly administrative fee recurs, so an advance month needs its own fee
+ * row: the billing worker only creates the row once the month arrives, and by
+ * then the member has already paid. The row is created here, marked paid, and
+ * linked to this proof — idempotent on `(profile_id, fee_type_id,
+ * billing_month)` via the partial unique index from migration 076.
+ */
+async function applyTargetMonth(proof) {
+  const targetMonth = proof?.metadata?.target_month;
+  if (!targetMonth) return;
+
+  try {
+    const { data: rows } = await supabase
+      .from('contributions')
+      .select('id, contribution_month')
+      .eq('profile_id', proof.profile_id)
+      .eq('payment_proof_id', proof.id);
+    for (const row of rows || []) {
+      if (row.contribution_month === targetMonth) continue;
+      await supabase
+        .from('contributions')
+        .update({ contribution_month: targetMonth })
+        .eq('id', row.id);
+      logger.info(`paystack settle: contribution ${row.id} moved ${row.contribution_month} → ${targetMonth} (proof ${proof.id})`);
+    }
+  } catch (err) {
+    logger.warn(`paystack settle: target month move failed for proof ${proof.id}: ${err.message}`);
+  }
+
+  // Settle (or create) that month's administrative fee — but only when the
+  // member actually paid it. Creating a paid row for money that was not
+  // collected would record a fee as settled when the cooperative received only
+  // the contribution, which is worse than leaving it outstanding.
+  const allocations = Array.isArray(proof?.metadata?.allocations) ? proof.metadata.allocations : [];
+  const feeAllocated = allocations.some(
+    (a) => a && a.type === 'fee' && Number(a.amount) > 0,
+  );
+  if (!feeAllocated) return;
+
+  try {
+    const { data: feeType } = await supabase
+      .from('fee_types')
+      .select('id')
+      .eq('name', 'Administrative Fee')
+      .eq('category', 'fee')
+      .maybeSingle();
+    if (!feeType?.id) return;
+
+    const { data: existing } = await supabase
+      .from('member_fees')
+      .select('id, status')
+      .eq('profile_id', proof.profile_id)
+      .eq('fee_type_id', feeType.id)
+      .eq('billing_month', targetMonth)
+      .maybeSingle();
+
+    const now = new Date().toISOString();
+    if (existing) {
+      if (existing.status !== 'paid') {
+        await supabase
+          .from('member_fees')
+          .update({ status: 'paid', paid_at: now, deposit_id: proof.id })
+          .eq('id', existing.id);
+      }
+      return;
+    }
+
+    const { ADMINISTRATIVE_FEE } = require('../config/feeDisclosure');
+    await supabase.from('member_fees').insert({
+      profile_id: proof.profile_id,
+      fee_type_id: feeType.id,
+      fee_type: 'fee',
+      label: 'Administrative Fee',
+      amount: ADMINISTRATIVE_FEE.total,
+      status: 'paid',
+      paid_at: now,
+      deposit_id: proof.id,
+      billing_month: targetMonth,
+    });
+    logger.info(`paystack settle: administrative fee for ${targetMonth} settled in advance (proof ${proof.id})`);
+  } catch (err) {
+    logger.warn(`paystack settle: advance fee settlement failed for proof ${proof.id}: ${err.message}`);
   }
 }
 
@@ -253,6 +354,16 @@ async function settleSuccessfulCharge(reference) {
       .eq('fee_type', 'registration_fee')
       .eq('status', 'outstanding');
   }
+
+  // Credit an advance payment to the month the member chose.
+  //
+  // The approval trigger writes `contribution_month` from `payment_date`, so a
+  // payment made in November for December lands on November: the member is
+  // charged twice for a month already paid and December still shows as owed.
+  // The chosen month travels in `metadata.target_month`; when it differs from
+  // the month the trigger wrote, move the row. Runs before `applyAllocations`
+  // so the savings leg sees the corrected record.
+  await applyTargetMonth(proof);
 
   // Apply the allocation breakdown (savings/loan/fines/fees) for every
   // instant type — straight monthly proofs reuse the DB trigger for savings,
@@ -417,11 +528,29 @@ router.post(
     body('allocation_type').optional().isIn(['monthly_contribution', 'loan_repayment', 'fine', 'fee', 'registration_fee', 'mixed']),
     body('allocations').optional().isArray(),
     body('loan_id').optional().isString(),
+    // Which month this payment settles. Absent means the current month, which
+    // is what every existing caller sends. A future month is a legitimate
+    // advance payment; a past one is rejected (see resolveTargetMonth).
+    body('month').optional().isString(),
   ],
   validate,
   async (req, res) => {
     try {
       const amountNgn = Number(req.body.amount);
+
+      // Which month this payment is for. Validated here rather than stored
+      // blindly: the month decides which contribution record the money clears,
+      // so an out-of-range value would credit a month the member does not owe.
+      const target = resolveTargetMonth(req.body.month);
+      if (!target.ok) {
+        return res.status(400).json({
+          success: false,
+          code: 'INVALID_TARGET_MONTH',
+          error: target.reason,
+        });
+      }
+      const targetMonth = target.month;
+
       const paymentType = ALLOWED_PAYMENT_TYPES.has(req.body.payment_type)
         ? req.body.payment_type
         : 'monthly_contribution';
@@ -452,6 +581,10 @@ router.post(
             payment_type: paymentType,
             allocation_type: allocationType,
             allocations,
+            // Carried through Paystack so the webhook (the authoritative
+            // channel) credits the same month the member chose, not the month
+            // the confirmation happened to arrive in.
+            target_month: targetMonth,
             source: 'mobile_app',
           },
         }),
@@ -481,6 +614,7 @@ router.post(
           source: 'mobile_app',
           allocation_type: allocationType,
           allocations,
+          target_month: targetMonth,
           ...(req.body.loan_id ? { loan_id: req.body.loan_id } : {}),
         },
       };

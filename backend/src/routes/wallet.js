@@ -199,16 +199,8 @@ const ACTIVE_LOAN_STATUSES = ['approved', 'active', 'repaying', 'overdue', 'defa
 // A contribution row in any of these states means the money is in — the
 // monthly contribution has been paid for that month.
 const { PAID_CONTRIBUTION_STATUSES } = require('../lib/contributionStatuses');
-
-/** 'YYYY-MM' for a date (defaults to now). */
-function monthKey(date = new Date()) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-}
-
-/** 'YYYY-MM' for the calendar month after `date` (defaults to now). */
-function nextMonthKey(date = new Date()) {
-  return monthKey(new Date(date.getFullYear(), date.getMonth() + 1, 1));
-}
+const { monthKey, nextMonthKey, monthKeyOffset, maxAdvanceMonths } = require('../lib/billingMonth');
+const { ADMINISTRATIVE_FEE } = require('../config/feeDisclosure');
 
 /** True when both dates fall in the same calendar month. False if either is unparseable. */
 function isSameMonth(a, b = new Date()) {
@@ -258,7 +250,7 @@ async function hasPaidThisSavingsMonth(profileId, { lastSavingsDate, now = new D
  */
 function applyPaidMonthRule(
   obligations,
-  { paidThisMonth, joinedThisMonth = false, now = new Date() } = {},
+  { paidThisMonth, joinedThisMonth = false, paidMonths = [], now = new Date() } = {},
 ) {
   obligations.month_paid_savings = Boolean(paidThisMonth);
   obligations.joined_this_month = Boolean(joinedThisMonth);
@@ -274,6 +266,37 @@ function applyPaidMonthRule(
   obligations.savings_due = savingsDue;
   obligations.next_month_savings =
     obligations.month_paid_savings ? obligations.monthly_savings : 0;
+
+  // What paying a month in advance would cost. The contribution is the standing
+  // amount; the administrative fee recurs monthly, so it is included at its
+  // catalogue amount rather than read from a `member_fees` row — the billing
+  // worker only creates the row when the month arrives, and the member needs to
+  // see the price before then.
+  //
+  // The target is the first month that is not already paid, not blindly "next
+  // month": a member who has already pre-paid two months must be offered the
+  // third, otherwise the button charges them for a month they have settled.
+  const paid = new Set(Array.isArray(paidMonths) ? paidMonths : []);
+  const current = monthKey(now);
+  let advanceMonth = nextMonthKey(now);
+  for (let i = 1; i <= maxAdvanceMonths(); i += 1) {
+    const candidate = monthKeyOffset(now, i);
+    if (!paid.has(candidate)) {
+      advanceMonth = candidate;
+      break;
+    }
+  }
+  const advanceFee = obligations.monthly_administrative_fee || 0;
+  obligations.advance = {
+    month: advanceMonth,
+    savings: obligations.monthly_savings,
+    administrative_fee: advanceFee,
+    total: (obligations.monthly_savings || 0) + advanceFee,
+    // `paidThisMonth` covers the wallet-deposit flow, which never writes a
+    // future-dated contribution row; the set covers explicit advance payments.
+    current_month_paid: Boolean(paidThisMonth) || paid.has(current),
+    max_months_ahead: maxAdvanceMonths(),
+  };
 
   const loanMonthly = obligations.loans.reduce((s, l) => s + (Number(l.monthly_repayment) || 0), 0);
   const finesTotal = obligations.fines.reduce((s, f) => s + (Number(f.amount) || 0), 0);
@@ -311,6 +334,10 @@ async function resolveAdminFeeTypeId() {
 async function computeObligations(profileId) {
   const obligations = {
     monthly_savings: 0,
+    // The recurring monthly charge, at its catalogue amount. Read from config so
+    // the advance-payment quote can price a month whose `member_fees` row does
+    // not exist yet.
+    monthly_administrative_fee: ADMINISTRATIVE_FEE.total,
     loans: [],       // [{ loan_id, monthly_repayment, remaining_balance, status }]
     fines: [],       // outstanding member_fees rows (type='fine')
     fees: [],        // outstanding member_fees rows (type='fee'|'registration_fee')
@@ -380,13 +407,16 @@ async function computeObligations(profileId) {
 
   // Outstanding fines / fees
   //
-  // A member whose contributions are withheld by an employer has the monthly
-  // administrative fee recovered from their salary, so it must not also appear
-  // here as an in-app obligation — that would charge them twice for the same
-  // month. Only the administrative fee is skipped; fines and any other fee stay
-  // payable. The fee is identified by its catalogue link (`fee_type_id`), so a
-  // second 'fee' category entry is unaffected, with the label as a fallback for
-  // rows assigned before the link was recorded.
+  // Every member sees the administrative fee, including salary-deduction
+  // members. It used to be hidden for them on the premise that payroll recovers
+  // it, but no payroll path can: `payroll_batch_lines` records only
+  // `contribution_amount` and `registration_fee_amount`, and
+  // `organizationFinance` totals only those two. Hiding the row therefore hid
+  // the charge from the only channel that could ever collect it.
+  //
+  // `administrative_fee_exempt` is still reported for members with a linked
+  // employer, so the app can explain that the fee *may* also be deducted from
+  // salary. It is a note, not a suppression: the obligation itself stands.
   const adminFeeExempt = isAdministrativeFeeExempt(profile);
   const adminFeeTypeId = await resolveAdminFeeTypeId();
   const isAdministrativeFeeRow = (mf) => {
@@ -397,7 +427,7 @@ async function computeObligations(profileId) {
   try {
     const { data: memberFees } = await supabase
       .from('member_fees')
-      .select('id, fee_type, fee_type_id, label, loan_id, amount, created_at')
+      .select('id, fee_type, fee_type_id, label, loan_id, amount, created_at, billing_month')
       .eq('profile_id', profileId)
       .eq('status', 'outstanding')
       .order('created_at', { ascending: false });
@@ -408,10 +438,11 @@ async function computeObligations(profileId) {
         loan_id: mf.loan_id,
         amount: Number(mf.amount) || 0,
         created_at: mf.created_at,
+        billing_month: mf.billing_month || null,
       };
       if (mf.fee_type === 'fine') obligations.fines.push(row);
-      else if (adminFeeExempt && isAdministrativeFeeRow(mf)) obligations.administrative_fee_exempt = true;
       else obligations.fees.push(row);
+      if (adminFeeExempt && isAdministrativeFeeRow(mf)) obligations.administrative_fee_exempt = true;
     }
   } catch (fErr) {
     logger.warn('obligations: member_fees lookup failed:', fErr.message);
@@ -435,7 +466,25 @@ async function computeObligations(profileId) {
   // was already N days overdue.
   const joinedThisMonth = isSameMonth(profile?.created_at, new Date());
 
-  return applyPaidMonthRule(obligations, { paidThisMonth, joinedThisMonth });
+  // Which future months are already settled. Needed so the advance-payment
+  // offer points at a month the member actually owes rather than one they have
+  // already paid for.
+  let paidMonths = [];
+  try {
+    const { data: futureRows } = await supabase
+      .from('contributions')
+      .select('contribution_month, status')
+      .eq('profile_id', profileId)
+      .gt('contribution_month', monthKey(new Date()))
+      .in('status', PAID_CONTRIBUTION_STATUSES);
+    paidMonths = (futureRows || [])
+      .map((r) => r.contribution_month)
+      .filter(Boolean);
+  } catch (pmErr) {
+    logger.warn('obligations: future contribution months lookup failed:', pmErr.message);
+  }
+
+  return applyPaidMonthRule(obligations, { paidThisMonth, joinedThisMonth, paidMonths });
 }
 
 /**
