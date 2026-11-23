@@ -1796,23 +1796,35 @@ body - `{ enabled: true }` - silently zeroed the referral bonus and cap. It now
 sets only the keys present in the request. When adding a settings endpoint, treat
 an absent field as "leave it alone", not as "set it to zero".
 
-## Approving a payment proof must not assume a savings row exists
-`savings` is created lazily by the API on first read, so a member who has never
-opened the Savings screen has no row. `handle_payment_proof_approval()` credited
-it with a bare `update ... where profile_id = ...`, which matched zero rows and
-raised nothing, while the surrounding `exception when others then null` hid any
-real failure too. Contributions were recorded as `successful` with
-`savings.total_saved` still 0 and no ledger entry: the member paid and the money
-showed nowhere.
+## Approving a payment proof must actually post the money
+Approving a proof is supposed to write the contribution, the savings credit, a
+wallet transaction and the append-only ledger entry. Four separate defects meant
+the last three never happened, and every handler was `exception when others then
+null`, so approvals looked successful while the money vanished:
 
-Migration 078 calls `ensure_savings_row()` before the update, mirrors
-`total_saved` into `balance`, and replaces those silent handlers with
-`raise warning`. When a trigger credits an aggregate row, create the row first
-and never swallow the error - a zero-row UPDATE is not an error in SQL.
+1. Savings was credited with a bare `update ... where profile_id = ...`.
+   `savings` is created lazily by the API, so a first-time payer has no row and
+   the update matched zero rows. A zero-row UPDATE is not an error in SQL.
+2. `transactions.transaction_id` is NOT NULL with no default and the insert
+   never supplied it.
+3. `transactions` has CHECK constraints: `category` is credit|debit, `status` is
+   pending|processing|completed|failed|cancelled|reversed, and `type` comes from
+   a fixed list. The old row used `type='credit'`, `category='payment_proof'`,
+   `status='successful'` - all three invalid.
+4. The ledger insert compared `loan_repayments.reference` (text) to `new.id`
+   (uuid) with no cast: `operator does not exist: text = uuid`.
 
-Existing drift is deliberately not rewritten; moving money needs a human
-decision. The reconciliation job's `savings_vs_contributions` check names every
-affected member so it can be settled individually.
+On production this left `transactions` and `ledger_entries` completely empty for
+every approval ever made. Migration 078 fixes all four and raises a warning with
+the real message instead of discarding it.
+
+When a trigger credits an aggregate row, create the row first, check the column
+types and CHECK constraints you are inserting into, and never swallow the error.
+`__tests__/paymentProofApproval.test.js` pins each mistake; three of its five
+assertions fail against the pre-078 function.
+
+Back-posting existing drift is a separate, human-approved step. The
+reconciliation job's `savings_vs_contributions` check names affected members.
 
 ## Parse the status string the API actually sends
 `User.fromJson` read `kycVerified` (a boolean the API no longer sends) and fell

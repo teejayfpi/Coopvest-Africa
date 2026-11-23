@@ -1,26 +1,40 @@
 -- ---------------------------------------------------------------------------
--- 078  Approving a payment proof must credit a member who has no savings row
+-- 078  Make payment-proof approval actually post the money it records
 -- ---------------------------------------------------------------------------
--- `handle_payment_proof_approval()` credited savings with a bare
+-- Approving a payment proof is supposed to write the contribution, the savings
+-- credit, a wallet transaction and the append-only ledger entry. Three separate
+-- defects meant none of the money reached the tables, and
+-- `exception when others then null` discarded every error:
 --
---   update public.savings set total_saved = total_saved + new.amount
---    where profile_id = new.profile_id;
+--   1. Savings was credited with a bare `update ... where profile_id = ...`.
+--      `savings` is created lazily by the API on first read, so a member who had
+--      never opened the Savings screen had no row: the update matched zero rows
+--      and credited nothing. A zero-row UPDATE is not an error, so nothing was
+--      raised. Confirmed on production - two 5000 contributions approved at
+--      05:15 and 05:17 were 'successful' while savings.total_saved stayed 0 and
+--      the savings row itself was not created until 15:11.
 --
--- A member who has never opened the Savings screen has no row in `savings` yet
--- — the API creates it lazily on first read. For those members the update
--- matched zero rows, credited nothing, and raised no error, so the surrounding
--- `exception when others then null` never fired. The result was a contribution
--- recorded as 'successful' with `savings.total_saved` still 0 and no ledger
--- entry: the member had paid, the money showed nowhere.
+--   2. The wallet transaction insert never supplied `transaction_id`, which is
+--      NOT NULL with no default, so it failed every time:
+--      'null value in column "transaction_id" of relation "transactions"
+--       violates not-null constraint'.
 --
--- The same block also swallowed genuine failures, which is what hid the bug.
--- It now creates the row first (ensure_savings_row, the helper the atomic
--- wallet operations already use) and logs any real failure instead of
--- discarding it.
+--   3. The ledger insert compared `loan_repayments.reference` (text) to
+--      `new.id` (uuid) with no cast, so it failed every time:
+--      'operator does not exist: text = uuid'.
 --
--- Already-affected members are not repaired here: rewriting savings balances is
--- a money movement that needs a human decision. The reconciliation job's new
--- `savings_vs_contributions` check surfaces every such member.
+-- The net effect was that `transactions` and `ledger_entries` were both empty
+-- for every approval ever made, so no statement or reconciliation could
+-- reconstruct what a member had paid.
+--
+-- Each block now raises a warning carrying the real message instead of
+-- swallowing it, so the next failure of this kind appears in the Postgres log
+-- rather than silently costing a member their money.
+--
+-- Existing drift is not rewritten here: crediting savings and back-posting
+-- ledger rows is a money movement that needs a human decision. The
+-- reconciliation job's `savings_vs_contributions` check names every affected
+-- member.
 CREATE OR REPLACE FUNCTION public.handle_payment_proof_approval()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -56,10 +70,12 @@ begin
         new.contribution_id := new_contribution_id;
       exception when others then
         new_contribution_id := null;
+        raise warning 'payment proof %: contribution insert failed: %', new.id, sqlerrm;
       end;
 
       begin
-        -- A member who has never opened the Savings screen has no row here yet.
+        -- `savings` is created lazily by the API, so a member paying for the
+        -- first time has no row yet and the update below would match nothing.
         perform public.ensure_savings_row(new.profile_id);
         update public.savings
            set total_saved = coalesce(total_saved, 0) + new.amount,
@@ -86,19 +102,30 @@ begin
       new.approved_at, 'Coopvest Africa'
     );
 
-    -- Wallet top-up transaction (best-effort)
+    -- Wallet transaction. Three constraints on `transactions` rejected the old
+    -- row: `transaction_id` is NOT NULL with no default, `type` must come from a
+    -- fixed list, `category` must be 'credit' or 'debit', and `status` must be
+    -- one of pending/processing/completed/failed/cancelled/reversed.
     if new.payment_type in ('monthly_contribution', 'investment', 'other') then
       begin
         insert into public.transactions (
-          profile_id, type, category, amount, description, reference, status
+          transaction_id, profile_id, type, category, amount, description,
+          reference, status, completed_at
         ) values (
-          new.profile_id, 'credit', 'payment_proof', new.amount,
+          'TXN-' || gen_random_uuid()::text,
+          new.profile_id,
+          case new.payment_type
+            when 'monthly_contribution' then 'savings_deposit'
+            when 'investment' then 'investment'
+            else 'deposit'
+          end,
+          'credit', new.amount,
           case new.payment_type
             when 'monthly_contribution' then 'Monthly Contribution via Payment Proof'
             when 'investment' then 'Investment via Payment Proof'
             else 'Payment via Proof'
           end,
-          new.transaction_reference, 'successful'
+          new.transaction_reference, 'completed', now()
         );
       exception when others then
         raise warning 'payment proof %: wallet transaction insert failed: %', new.id, sqlerrm;
@@ -123,7 +150,8 @@ begin
         public.next_ledger_txn_no(),
         member_record.name, member_record.user_id,
         new.payment_method, new.receiving_bank, new.amount,
-        (select loan_id from public.loan_repayments where reference = new.id limit 1),
+        -- loan_repayments.reference is text; new.id is uuid.
+        (select loan_id from public.loan_repayments where reference = new.id::text limit 1),
         new.id, '{}'::jsonb,
         new.approved_by
       );
