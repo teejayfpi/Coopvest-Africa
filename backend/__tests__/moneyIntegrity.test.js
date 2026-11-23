@@ -16,6 +16,7 @@ const {
   loanOutstandingMirrorMismatch,
   stalePendingTransactions,
   negativeWalletBalance,
+  savingsVsContributions,
 } = require('../src/lib/moneyIntegrity');
 
 /**
@@ -155,6 +156,39 @@ describe('negativeWalletBalance', () => {
   });
 });
 
+describe('savingsVsContributions', () => {
+  test('flags a member whose savings trail their paid contributions', async () => {
+    const db = fakeDb({
+      savings: [
+        { profile_id: 'p1', total_saved: 0 },
+        { profile_id: 'p2', total_saved: 10000 },
+      ],
+      contributions: [
+        { profile_id: 'p1', amount: 5000, status: 'successful' },
+        { profile_id: 'p1', amount: 5000, status: 'successful' },
+        { profile_id: 'p2', amount: 10000, status: 'successful' },
+      ],
+    });
+    const result = await savingsVsContributions(db, { sampleLimit: 10 });
+    expect(result.count).toBe(1);
+    expect(result.samples[0]).toMatchObject({
+      profileId: 'p1', contributed: 10000, totalSaved: 0, shortfall: 10000,
+    });
+  });
+
+  test('ignores unpaid contributions and members with no savings row', async () => {
+    const db = fakeDb({
+      savings: [{ profile_id: 'p1', total_saved: 0 }],
+      contributions: [
+        { profile_id: 'p1', amount: 5000, status: 'pending' },
+        { profile_id: 'p2', amount: 5000, status: 'successful' },
+      ],
+    });
+    const result = await savingsVsContributions(db, { sampleLimit: 10 });
+    expect(result.count).toBe(0);
+  });
+});
+
 describe('runIntegrityChecks', () => {
   test('aggregates results and names the critical checks that found something', async () => {
     const now = new Date().toISOString();
@@ -164,7 +198,7 @@ describe('runIntegrityChecks', () => {
       loans: [],
     });
     const { totals, results } = await runIntegrityChecks({ db, sampleLimit: 5 });
-    expect(totals.checksRun).toBe(5);
+    expect(totals.checksRun).toBe(6);
     expect(totals.critical).toContain('negative_wallet_balance');
     // A clean check reports zero and is not named.
     expect(totals.critical).not.toContain('duplicate_completed_references');
