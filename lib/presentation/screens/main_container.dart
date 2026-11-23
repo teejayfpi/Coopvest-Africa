@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../config/theme_config.dart';
+import '../../core/services/tutorial_store.dart';
 import '../providers/auth_provider.dart';
 import 'home/home_dashboard_screen.dart';
+import 'tutorial/app_tutorial_screen.dart';
 import 'wallet/wallet_dashboard_screen.dart';
 import 'loan/loan_dashboard_screen.dart';
 import 'profile/profile_settings_screen.dart';
@@ -21,6 +23,10 @@ class _MainContainerState extends ConsumerState<MainContainer> {
   // rebuilding the list on every frame while still reacting to user changes.
   late final List<Widget> _screens;
 
+  /// Guards the first-run check so it runs at most once per mount. Without this
+  /// a provider rebuild would re-read the flag and could stack two tutorials.
+  bool _tutorialCheckStarted = false;
+
   @override
   void initState() {
     super.initState();
@@ -33,6 +39,44 @@ class _MainContainerState extends ConsumerState<MainContainer> {
       _LoanTab(),
       ProfileSettingsScreen(),
     ];
+
+    // Deferred to after the first frame: showing a route during initState runs
+    // while the tree is still being built, and the dashboard has to be mounted
+    // underneath the tutorial anyway.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeShowTutorial());
+  }
+
+  /// Show the walkthrough once, the first time this member reaches the
+  /// dashboard.
+  ///
+  /// The flag is per member id, so a second account on the same device still
+  /// gets the tutorial. Any failure here is swallowed — a walkthrough is a
+  /// convenience and must never stand between a member and their dashboard.
+  Future<void> _maybeShowTutorial() async {
+    if (_tutorialCheckStarted || !mounted) return;
+    _tutorialCheckStarted = true;
+
+    final userId = ref.read(currentUserProvider)?.id ?? '';
+    if (userId.isEmpty) return;
+
+    if (await TutorialStore.hasSeen(userId)) return;
+    if (!mounted) return;
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => AppTutorialScreen(
+          onDone: () {
+            if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+          },
+        ),
+      ),
+    );
+
+    // Recorded here rather than in `onDone` so that *every* way out counts —
+    // Skip, "Get started", and the system back gesture all dismiss it, and none
+    // of them should bring it back on the next launch.
+    await TutorialStore.markSeen(userId);
   }
 
   @override

@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/network/api_client.dart';
 import '../../core/services/notification_service.dart';
 import '../../core/services/registration_fee_status_store.dart';
+import '../../core/services/tutorial_store.dart';
 import '../../core/utils/utils.dart';
 import '../../data/models/auth_models.dart';
 import '../../data/models/kyc_models.dart';
@@ -207,6 +208,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
       // Drop the device's "fee settled" confirmation with the session, so it
       // cannot carry over to the next member who signs in on this device.
       if (userId != null) await RegistrationFeeStatusStore.clear(userId);
+      // Same reasoning for the tutorial: the next member on this device has not
+      // seen it, so they should get the walkthrough.
+      if (userId != null) await TutorialStore.clear(userId);
       state = const AuthState(status: AuthStatus.unauthenticated);
     } catch (e) {
       logger.e('Logout error: $e');
