@@ -22,11 +22,18 @@ describe('shouldBill', () => {
     expect(shouldBill(base, '2026-11')).toBe(true);
   });
 
-  test('a salary-deduction member with an employer is not billed in-app', () => {
-    // Their fee is recovered from payroll; billing them here would double-charge.
+  test('a salary-deduction member is billed like everyone else', () => {
+    // Payroll cannot recover this charge - `payroll_batch_lines` has no field
+    // for it - so skipping these members left the fee collected by nobody.
     expect(
       shouldBill({ ...base, contribution_method: 'payroll', organization_id: 'org-1' }, '2026-11'),
-    ).toBe(false);
+    ).toBe(true);
+    expect(
+      shouldBill(
+        { ...base, contribution_method: 'payroll', pending_organization_name: 'Bowen University, Iwo' },
+        '2026-11',
+      ),
+    ).toBe(true);
   });
 
   test('a deactivated or flagged member is skipped', () => {

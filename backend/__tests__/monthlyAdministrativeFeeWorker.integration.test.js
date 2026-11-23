@@ -98,11 +98,13 @@ describe('processDue', () => {
     expect(state.inserted).toHaveLength(0);
   });
 
-  test('a payroll member with an employer is not billed', async () => {
+  test('a payroll member with an employer is billed like everyone else', async () => {
+    // Payroll cannot recover this charge, so it must be billed in-app. Skipping
+    // these members is what left the fee collected by nobody.
     state.profiles = [member({ contribution_method: 'payroll', organization_id: 'org-1' })];
     const res = await processDue({ now });
-    expect(state.inserted).toHaveLength(0);
-    expect(res.tally.skipped).toBe(1);
+    expect(state.inserted).toHaveLength(1);
+    expect(res.tally.billed).toBe(1);
   });
 
   test('a missing catalogue row stops the run instead of billing a wrong amount', async () => {

@@ -79,6 +79,19 @@ class ObligationsCard extends ConsumerWidget {
         final payableNow =
             savingsDue + monthlyLoanRepayment + finesTotal + feesTotal;
 
+        // Paying a month ahead. `advance` is priced by the backend so the fee
+        // and the contribution cannot drift apart between client and server.
+        final advance = (data['advance'] as Map?) ?? const {};
+        final advanceMonth = advance['month']?.toString() ?? '';
+        final advanceSavings =
+            (advance['savings'] as num?)?.toDouble() ?? 0.0;
+        final advanceFee =
+            (advance['administrative_fee'] as num?)?.toDouble() ?? 0.0;
+        final advanceTotal = advanceMonth.isEmpty
+            ? 0.0
+            : (advance['total'] as num?)?.toDouble() ??
+                (advanceSavings + advanceFee);
+
         // Nothing due: show the "all caught up" state rather than a card of
         // ₦0 rows, which reads like a broken screen. The green check plus the
         // copy means the good news is not conveyed by colour alone.
@@ -286,6 +299,43 @@ class ObligationsCard extends ConsumerWidget {
                 Text(
                   'Pays ₦${payableNow.formatNumber()} — your monthly savings, '
                   'loan repayment, fines and fees combined.',
+                  style: TextStyle(fontSize: 11, color: context.textSecondary),
+                ),
+              ],
+              if (advanceTotal > 0) ...[
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    // Advance payment settles a *future* month, so the month is
+                    // sent explicitly. Without it the backend would credit the
+                    // current month and the member would pay twice for one
+                    // month while still owing the next.
+                    final allocations = <Map<String, dynamic>>[
+                      {'type': 'savings', 'amount': advanceSavings},
+                      {'type': 'fee', 'amount': advanceFee},
+                    ];
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => DepositScreen(
+                          initialAmount: advanceTotal,
+                          initialAllocations: allocations,
+                          initialAllocationType: 'mixed',
+                          initialTargetMonth: advanceMonth,
+                        ),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.event_repeat, size: 18),
+                  label: Text(
+                    'Pay ${_monthLabel(advanceMonth)} in advance '
+                    '(₦${advanceTotal.formatNumber()})',
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Covers your ₦${advanceSavings.formatNumber()} contribution and '
+                  '₦${advanceFee.formatNumber()} administrative fee for that month.',
                   style: TextStyle(fontSize: 11, color: context.textSecondary),
                 ),
               ],

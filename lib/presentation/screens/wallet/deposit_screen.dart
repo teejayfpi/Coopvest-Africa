@@ -42,6 +42,12 @@ class DepositScreen extends ConsumerStatefulWidget {
   /// being credited wholly to savings.
   final List<Map<String, dynamic>>? initialAllocations;
 
+  /// The billing month this payment settles ('YYYY-MM'). Set when the member
+  /// pays a month in advance; null means the current month, which is what the
+  /// ordinary "Pay Now" flow wants. The backend credits the contribution and
+  /// the administrative fee to this month.
+  final String? initialTargetMonth;
+
   const DepositScreen({
     super.key,
     this.userId,
@@ -49,6 +55,7 @@ class DepositScreen extends ConsumerStatefulWidget {
     this.initialLoanId,
     this.initialAmount,
     this.initialAllocations,
+    this.initialTargetMonth,
   });
 
   @override
@@ -517,6 +524,10 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
         'allocation_type': _allocationType,
         if (allocations != null && allocations.isNotEmpty) 'allocations': allocations,
         if (isLoanRepay && _selectedLoanId != null) 'loan_id': _selectedLoanId,
+        // Only sent for an advance payment; the backend defaults to the
+        // current month when it is absent.
+        if (widget.initialTargetMonth != null)
+          'month': widget.initialTargetMonth,
       });
       final data = resp.data as Map<String, dynamic>;
       final url = data['authorization_url'] as String?;
