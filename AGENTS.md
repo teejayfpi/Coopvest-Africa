@@ -389,6 +389,38 @@ direct_deposit vs salary_deduction once. The onboarding `_ContributionStep`
 no longer re-asks it — `contribution_method` is derived from `contributionType`
 (`salary_deduction`→`'payroll'`, else `'manual'`). Removed `_MethodCard`.
 
+## Help centre: answer first, ticket second
+`lib/core/content/help_faq.dart` holds the member-facing answers and
+`lib/presentation/screens/support/help_center_screen.dart` presents them. It
+sits in front of the ticket system, not instead of it: every answer ends in
+"Still need help?" which opens a ticket in the matching category.
+
+Rules that keep it honest:
+
+- **Never state a money amount.** Registration and administrative fees live in
+  `member_fees` / `fee_schedule`, not in code, so a figure in copy can disagree
+  with what the member is billed. Point at the screen that shows the live number.
+- **Never state an eligibility verdict.** The server decides, via
+  `assessEligibility()`. Help copy explains the rule; it must not predict the
+  answer.
+- **`HelpCategory.ticketCategory` must be a real `tickets.category` value.**
+  `help_faq_test.dart` asserts this against the CHECK constraint list, because a
+  wrong one fails at ticket submit time, after the member has typed everything.
+- **Search must return nothing rather than a wrong article.** Three rules do
+  this, each added after a real mis-ranking:
+  - A **majority of query words** must match, so "mortgage rates in london" does
+    not resolve to the loan-interest article on "rate" alone.
+  - At least one word must match the **question or keywords**, not only the
+    answer body. "money not arrived" otherwise ranked a contribution article
+    above the withdrawal one because both words appear in its prose.
+  - Results sort by **how many** query words matched before where they matched,
+    or a 1-of-2 match ties with a 2-of-2 match and wins on the id tiebreak.
+- Matching tolerates **plurals** and **word forms**: "loans" finds "loan" and
+  "withdrawal" finds "withdraw". Both were gaps that silently hid the most
+  relevant article from its own topic. Do not loosen this to a bare
+  `startsWith` - "payout" then matches "pay" and ranks "Can I pay off my loan
+  early?" above the withdrawal article. See `_similar`.
+
 ## Notifications realtime
 `notifications` must be in the `supabase_realtime` publication + `REPLICA
 IDENTITY FULL` (see `backend/migrations/029_notifications_realtime.sql`),

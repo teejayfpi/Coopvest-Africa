@@ -5,6 +5,7 @@ import '../../../config/theme_extension.dart';
 import 'ticket_list_screen.dart';
 import 'ticket_creation_screen.dart';
 import 'live_chat_screen.dart';
+import 'help_center_screen.dart';
 
 /// Support/Complaints Home Screen
 class SupportHomeScreen extends ConsumerWidget {
@@ -62,6 +63,30 @@ class SupportHomeScreen extends ConsumerWidget {
               // Quick Actions
               Text('Submit a Complaint', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: context.textPrimary)),
               const SizedBox(height: 16),
+
+              // The help centre comes first: most members arrive with a question
+              // a written answer already covers, and a ticket costs them a wait.
+              SizedBox(
+                width: double.infinity, height: 56,
+                child: ElevatedButton.icon(
+                  onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const HelpCenterScreen())),
+                  icon: const Icon(Icons.menu_book_outlined, color: Colors.white),
+                  label: const Text('Find an Answer', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(backgroundColor: CoopvestColors.primary, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              SizedBox(
+                width: double.infinity, height: 56,
+                child: ElevatedButton.icon(
+                  onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const TicketCreationScreen())),
+                  icon: const Icon(Icons.report_problem, color: Colors.white),
+                  label: const Text('Submit New Complaint', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(backgroundColor: CoopvestColors.primary, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                ),
+              ),
               
               SizedBox(
                 width: double.infinity, height: 56,
