@@ -26,6 +26,7 @@ import 'notifications_screen.dart';
 import '../transactions/statement_download_screen.dart';
 import '../referral/referral_dashboard_screen.dart';
 import '../referral/referral_sharing_screen.dart';
+import '../tutorial/app_tutorial_screen.dart';
 import '../rollover/rollover_eligibility_screen.dart';
 import '../contributions/manage_contribution_plan_screen.dart';
 
@@ -122,6 +123,11 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
     {
       'title': 'Preferences',
       'items': [
+        {
+          'icon': Icons.school_outlined,
+          'label': 'Replay Tutorial',
+          'subtitle': 'Walk through how the app works again',
+        },
         {
           'icon': Icons.notifications_none_outlined,
           'label': 'Notifications',
@@ -592,6 +598,21 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
       case 'Manage Contribution Plan':
         Navigator.of(context).push(
           MaterialPageRoute(builder: (context) => const ManageContributionPlanScreen()),
+        );
+        break;
+      case 'Replay Tutorial':
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            fullscreenDialog: true,
+            // Replaying does not need to touch the stored flag: it is already
+            // true, and re-marking it is a no-op. Keeping the screen free of
+            // storage writes is what lets it be tested on its own.
+            builder: (_) => AppTutorialScreen(
+              onDone: () {
+                if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+              },
+            ),
+          ),
         );
         break;
       case 'Notifications':

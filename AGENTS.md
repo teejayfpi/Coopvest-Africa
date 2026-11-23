@@ -389,6 +389,26 @@ direct_deposit vs salary_deduction once. The onboarding `_ContributionStep`
 no longer re-asks it — `contribution_method` is derived from `contributionType`
 (`salary_deduction`→`'payroll'`, else `'manual'`). Removed `_MethodCard`.
 
+## In-app tutorial: one screen, one flag, per member
+`lib/presentation/screens/tutorial/app_tutorial_screen.dart` is a standalone
+walkthrough, not a coach-mark overlay on the live dashboard. Coach marks anchor
+to real widgets, so they break whenever a card is renamed or conditionally
+hidden (`Make Contribution` becomes `View Contributions` for salary-deduction
+members). A standalone screen cannot drift, and it can be reopened from Profile
+— which a first-launch-only overlay cannot.
+
+- Shown once from `MainContainer` after the first frame, only when
+  `TutorialStore.hasSeen(userId)` is false.
+- `TutorialStore` is keyed by member id, like `RegistrationFeeStatusStore`, so a
+  shared device does not let one member's "seen it" hide it from the next. It is
+  cleared on logout.
+- Completion is recorded **after** the pushed route returns, not in `onDone`, so
+  the system back gesture also counts as dismissing. Recording it in `onDone`
+  alone makes the tutorial reappear on the next launch.
+- `AppTutorialScreen.steps` is asserted against the real bottom-nav tabs by
+  `test/unit/tutorial_screen_test.dart`. Adding a step that names a tab which
+  does not exist fails that test — update the copy, not the test.
+
 ## Notifications realtime
 `notifications` must be in the `supabase_realtime` publication + `REPLICA
 IDENTITY FULL` (see `backend/migrations/029_notifications_realtime.sql`),
