@@ -161,6 +161,10 @@ router.get('/', async (req, res) => {
       .from('notifications')
       .select('*', { count: 'exact' })
       .eq('profile_id', req.user.id)
+      // `is_archived` is nullable, so exclude only an explicit true: filtering
+      // on `= false` would drop every row written before the column default
+      // applied and empty a member's history.
+      .not('is_archived', 'is', true)
       .order('created_at', { ascending: false })
       .range((page - 1) * limit, page * limit - 1);
     if (req.query.type) q = q.eq('type', req.query.type);
@@ -189,6 +193,7 @@ router.get('/unread-count', async (req, res) => {
       .select('id', { count: 'exact', head: true })
       .eq('profile_id', req.user.id)
       .eq('is_read', false)
+      .not('is_archived', 'is', true)
     if (error) throw error;
     res.json({ success: true, count: count || 0 });
   } catch (err) {
@@ -206,6 +211,7 @@ router.get('/unread', async (req, res) => {
       .select('*')
       .eq('profile_id', req.user.id)
       .eq('is_read', false)
+      .not('is_archived', 'is', true)
       .order('created_at', { ascending: false });
     if (error) throw error;
     res.json({ success: true, data: (data || []).map(serializeNotification) });
@@ -275,9 +281,11 @@ router.post('/mark-all-read', async (req, res) => {
  */
 router.patch('/:id/archive', async (req, res) => {
   try {
+    // Archive, do not merely mark read: the member asked for the notice to
+    // leave the feed, and `is_read` alone left it in place.
     const { data, error } = await supabase
       .from('notifications')
-      .update({ is_read: true })
+      .update({ is_read: true, is_archived: true, archived_at: new Date().toISOString() })
       .eq('id', req.params.id)
       .eq('profile_id', req.user.id)
       .select('*')
@@ -297,8 +305,9 @@ router.post('/archive-all', async (req, res) => {
   try {
     const { error } = await supabase
       .from('notifications')
-      .update({ is_read: true })
-      .eq('profile_id', req.user.id);
+      .update({ is_read: true, is_archived: true, archived_at: new Date().toISOString() })
+      .eq('profile_id', req.user.id)
+      .not('is_archived', 'is', true);
     if (error) throw error;
     res.json({ success: true });
   } catch (err) {

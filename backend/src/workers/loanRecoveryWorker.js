@@ -136,7 +136,62 @@ async function notifyGuarantors(loan) {
 }
 
 
+/**
+ * Retire recovery notices whose loan no longer exists.
+ *
+ * A member received "Loan Recovery Initiated" and "Late Repayment Penalty
+ * Applied" for a loan that had been deleted, and the late fine the second
+ * notice announced did not exist either. The feed is the member's record of
+ * what the cooperative says they owe, so a notice about a loan that is gone is
+ * a false claim that nothing else corrects.
+ *
+ * Only notices tagged with `reference_model = 'loans'` are considered, so
+ * ordinary announcements are never touched. Fails soft: a lookup problem must
+ * not stop the recovery pass.
+ */
+async function retireOrphanedLoanNotices() {
+  try {
+    const { data: notices, error } = await supabase
+      .from('notifications')
+      .select('id, reference_id')
+      .eq('reference_model', 'loans')
+      .eq('is_archived', false);
+    if (error || !notices || notices.length === 0) return 0;
+
+    const loanIds = [...new Set(notices.map((n) => n.reference_id).filter(Boolean))];
+    if (loanIds.length === 0) return 0;
+
+    const { data: liveLoans, error: loanErr } = await supabase
+      .from('loans')
+      .select('id')
+      .in('id', loanIds);
+    if (loanErr) return 0;
+
+    const live = new Set((liveLoans || []).map((l) => l.id));
+    const orphaned = notices.filter((n) => n.reference_id && !live.has(n.reference_id));
+    if (orphaned.length === 0) return 0;
+
+    const now = new Date().toISOString();
+    const { error: archiveErr } = await supabase
+      .from('notifications')
+      .update({ is_archived: true, archived_at: now, updated_at: now })
+      .in('id', orphaned.map((n) => n.id));
+    if (archiveErr) {
+      logger.warn('loanRecoveryWorker: orphan notice archive failed:', archiveErr.message);
+      return 0;
+    }
+    logger.info(`loanRecoveryWorker: archived ${orphaned.length} notice(s) for deleted loans`);
+    return orphaned.length;
+  } catch (err) {
+    logger.warn('loanRecoveryWorker: orphan notice sweep failed:', err.message);
+    return 0;
+  }
+}
+
 async function processDue() {
+  // Retire stale notices first, so a deleted loan cannot keep alarming the
+  // member while the rest of the pass runs.
+  await retireOrphanedLoanNotices();
   try {
     // Fetch all active/repaying loans
     // NOTE: `disbursed_at` does not exist on the loans table (only
@@ -168,6 +223,7 @@ async function processDue() {
             channels: ['in_app', 'email'],
             title: 'Loan Repayment Reminder',
             body: `Your loan repayment is overdue. Please make your payment to avoid late fees. Late loan repayments may attract a ${FINE_LABEL} penalty fee after repeated default notices.`,
+            reference: { model: 'loans', id: loan.id },
           });
 
           // Mark status as overdue if not already
@@ -230,6 +286,7 @@ async function processDue() {
               channels: ['in_app', 'email'],
               title: '⚠️ Late Repayment Penalty Applied',
               body: `A ${FINE_LABEL} late repayment fine has been added to your obligations as a separate fee due to 2 consecutive missed payments. Please arrange a repayment plan immediately.`,
+              reference: { model: 'loans', id: loan.id },
             });
 
             logger.info(`loanRecoveryWorker: Stage 2 fine recorded — loan ${loan.loan_id || loan.id}`);
@@ -269,6 +326,7 @@ async function processDue() {
             channels: ['in_app', 'email'],
             title: '🚨 Loan Recovery Initiated',
             body: `Your loan has been overdue for 3 consecutive months. The loan recovery process has been initiated and your guarantors have been contacted in accordance with Coopvest Africa's loan policy. Please contact us immediately to resolve this.`,
+            reference: { model: 'loans', id: loan.id },
           });
 
           // Notify admin
