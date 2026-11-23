@@ -22,6 +22,22 @@ void main() {
       expect(user.membershipStatus, 'active');
     });
 
+    test('should prefer the explicit kycStatus string over kycVerified', () {
+      // /auth/me reports kycStatus and no kycVerified; reading the boolean alone
+      // showed an approved member as pending.
+      final json = {
+        'userId': 'user_789',
+        'email': 'approved@test.com',
+        'name': 'Approved Member',
+        'kycStatus': 'approved',
+        'createdAt': '2024-03-01T09:00:00Z',
+      };
+
+      final user = User.fromJson(json);
+
+      expect(user.kycStatus, 'approved');
+    });
+
     test('should handle missing optional fields', () {
       final json = {
         'userId': 'user_456',
