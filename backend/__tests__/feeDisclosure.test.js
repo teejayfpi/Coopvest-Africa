@@ -227,4 +227,49 @@ describe('fee disclosure', () => {
       expect(dart).not.toMatch(/AGM/);
     });
   });
+
+  describe('the administrative fee note matches who actually pays it', () => {
+    // Salary-deduction members have the fee withheld from pay, so the schedule
+    // must not tell them to pay it in the app as well. The note is the only
+    // place a member learns this, so a drift here is a double charge.
+    const note = () => {
+      const { buildSchedule } = require('../src/routes/fees');
+      return buildSchedule().charges.find((c) => c.id === 'administrative_fee').note || '';
+    };
+
+    test('the served schedule does not claim every member pays it in-app', () => {
+      expect(note()).not.toMatch(/every member/i);
+      expect(note()).not.toMatch(/including members whose contributions are deducted/i);
+    });
+
+    test('the served schedule says the fee is deducted from salary', () => {
+      expect(note()).toMatch(/deducted from salary/i);
+    });
+
+    test('the bundled Flutter terms say the same', () => {
+      // Scope to the administrative-fee sentence: "every member" legitimately
+      // appears elsewhere in the terms, about the minimum contribution.
+      const feeSentence = dart.match(/Monthly administrative fee:[^']*/)?.[0] || '';
+      expect(feeSentence).toMatch(/recovered from your salary/i);
+      expect(feeSentence).not.toMatch(/every member/i);
+    });
+
+    test('the bundled Flutter fee schedule says the same', () => {
+      // Adjacent string literals are split across lines, so join them first.
+      const schedule = fs
+        .readFileSync(
+          path.join(ROOT, 'lib', 'data', 'models', 'fee_schedule.dart'),
+          'utf8'
+        )
+        .replace(/['"]\s*\n\s*['"]/g, '');
+      expect(schedule).not.toMatch(/every member/i);
+      expect(schedule).toMatch(/deducted from salary/i);
+    });
+
+    test('the disclosure agrees with the schedule', () => {
+      const text = sectionById('fees_and_charges').body;
+      expect(text).toMatch(/recovered from your salary/i);
+      expect(text).not.toMatch(/every member/i);
+    });
+  });
 });

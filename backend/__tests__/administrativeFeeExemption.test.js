@@ -1,17 +1,11 @@
 /**
- * The monthly administrative fee is payable by every member, including those on
- * salary deduction.
- *
- * It used to be hidden for salary-deduction members on the premise that payroll
- * recovers it. No payroll path can: `payroll_batch_lines` records only
- * `contribution_amount` and `registration_fee_amount`, and `organizationFinance`
- * totals only those two. Hiding the row therefore hid the charge from the only
- * channel that could collect it, and every enrolled member's fee went uncollected.
+ * The monthly administrative fee is withheld from salary for salary-deduction
+ * members, and paid in-app by everyone else.
  *
  * These tests drive the real `computeObligations` against a stubbed Supabase, so
- * the rule is pinned at the point the app actually reads it. The
- * `administrative_fee_exempt` flag survives as an explanation ("this may also be
- * deducted from your salary"), not as a suppression.
+ * the rule is pinned at the point the app actually reads it. An exempt member
+ * must not see the fee row at all — showing it would ask them to pay a charge
+ * their employer has already withheld.
  */
 const mockTables = {};
 
@@ -75,8 +69,8 @@ function resetTables({ profile, memberFees = [], loans = [] }) {
   mockTables.fee_types = { id: ADMIN_FEE_TYPE_ID };
 }
 
-describe('the administrative fee is payable by salary-deduction members too', () => {
-  test('a payroll member with a linked employer is billed the fee', async () => {
+describe('salary-deduction members do not pay the fee in-app', () => {
+  test('a payroll member with a linked employer is not shown the fee', async () => {
     resetTables({
       profile: {
         contribution_method: 'payroll',
@@ -89,14 +83,13 @@ describe('the administrative fee is payable by salary-deduction members too', ()
 
     const o = await computeObligations('p1');
 
-    expect(o.fees).toHaveLength(1);
-    expect(o.fees[0].amount).toBe(1500);
-    // Savings ₦5,000 + fee ₦1,500. The employer cannot deduct this, so it is
-    // owed in the app like any other member's.
-    expect(o.total_due).toBe(6500);
+    // The employer withholds it, so it is not an in-app obligation. Savings
+    // ₦5,000 alone is due.
+    expect(o.fees).toHaveLength(0);
+    expect(o.total_due).toBe(5000);
   });
 
-  test('the KYC spelling salary_deduction is billed the same way', async () => {
+  test('the KYC spelling salary_deduction is exempt the same way', async () => {
     resetTables({
       profile: {
         contribution_method: null,
@@ -107,13 +100,13 @@ describe('the administrative fee is payable by salary-deduction members too', ()
     });
 
     const o = await computeObligations('p1');
-    expect(o.fees).toHaveLength(1);
-    expect(o.total_due).toBe(6500);
+    expect(o.fees).toHaveLength(0);
+    expect(o.total_due).toBe(5000);
   });
 
-  test('a pending employer enrolment is still billed the fee', async () => {
-    // A pending enrolment is an intention, not a deduction. Billing it on the
-    // strength of an unverified claim is how the fee went uncollected.
+  test('a pending employer enrolment is exempt while the window is open', async () => {
+    // An employer is named and still inside the deferral window, so a deduction
+    // is expected; charging here would take the month twice.
     resetTables({
       profile: {
         contribution_method: 'payroll',
@@ -126,8 +119,8 @@ describe('the administrative fee is payable by salary-deduction members too', ()
     });
 
     const o = await computeObligations('p1');
-    expect(o.fees).toHaveLength(1);
-    expect(o.total_due).toBe(6500);
+    expect(o.fees).toHaveLength(0);
+    expect(o.total_due).toBe(5000);
   });
 
   test('the fee returns once a self-declared employer window lapses', async () => {
@@ -149,7 +142,7 @@ describe('the administrative fee is payable by salary-deduction members too', ()
     expect(o.total_due).toBe(6500);
   });
 
-  test('the exemption is reported so the app can explain the waiver', async () => {
+  test('the exemption is reported so the app can explain the deduction', async () => {
     resetTables({
       profile: { contribution_method: 'payroll', contribution_type: 'salary_deduction', organization_id: 'org-1' },
       memberFees: [ADMIN_FEE_ROW],
@@ -171,7 +164,7 @@ describe('the exemption does not leak', () => {
 
     expect(o.fees).toHaveLength(1);
     expect(o.fees[0].amount).toBe(1500);
-    expect(o.administrative_fee_exempt).toBeUndefined();
+    expect(o.administrative_fee_exempt).toBe(false);
     expect(o.total_due).toBe(6500);
   });
 
@@ -194,7 +187,7 @@ describe('the exemption does not leak', () => {
     expect(o.total_due).toBe(6500);
   });
 
-  test('a fine stays payable alongside the fee for a payroll member', async () => {
+  test('a fine stays payable even when the fee is exempt', async () => {
     resetTables({
       profile: { contribution_method: 'payroll', contribution_type: 'salary_deduction', organization_id: 'org-1' },
       memberFees: [FINE_ROW, ADMIN_FEE_ROW],
@@ -204,12 +197,13 @@ describe('the exemption does not leak', () => {
 
     expect(o.fines).toHaveLength(1);
     expect(o.fines[0].amount).toBe(3000);
-    expect(o.fees).toHaveLength(1);
-    // ₦5,000 savings + ₦3,000 fine + ₦1,500 fee.
-    expect(o.total_due).toBe(9500);
+    // The fee is withheld from salary, but a penalty is not part of the
+    // standard deduction, so it stays payable in the app.
+    expect(o.fees).toHaveLength(0);
+    expect(o.total_due).toBe(8000);
   });
 
-  test('every fee row is payable for a payroll member', async () => {
+  test('only the administrative fee is withheld, not other fee rows', async () => {
     resetTables({
       profile: { contribution_method: 'payroll', contribution_type: 'salary_deduction', organization_id: 'org-1' },
       memberFees: [OTHER_FEE_ROW, ADMIN_FEE_ROW],
@@ -217,7 +211,10 @@ describe('the exemption does not leak', () => {
 
     const o = await computeObligations('p1');
 
-    expect(o.fees).toHaveLength(2);
-    expect(o.total_due).toBe(7000);
+    // The development levy is not part of the payroll deduction, so it is still
+    // owed; only the administrative fee row is suppressed.
+    expect(o.fees).toHaveLength(1);
+    expect(o.fees[0].label).toBe('Development Levy');
+    expect(o.total_due).toBe(5500);
   });
 });
