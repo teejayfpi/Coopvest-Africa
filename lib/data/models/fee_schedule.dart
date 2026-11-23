@@ -175,8 +175,12 @@ class FeeSchedule {
                 amount: AppConfig.developmentLevy,
               ),
             ],
-            note: 'Recovered from your contribution, or from salary where an '
-                'employer deducts contributions.',
+            // Payroll cannot settle this charge — a batch carries only the
+            // contribution and the registration fee — so the schedule must not
+            // imply a salary deduction covers it.
+            note: 'Payable monthly by every member, including members whose '
+                'contributions are deducted from salary. It appears in your '
+                'obligations each month.',
           ),
           FeeCharge(
             id: 'late_repayment_fine',

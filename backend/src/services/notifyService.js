@@ -126,6 +126,7 @@ async function sendInApp({
   category = 'info',
   priority = 'normal',
   data,
+  reference,
 }) {
   const dbType = normalizeNotifType(type);
   const dbCategory = normalizeNotifCategory(category, type);
@@ -148,6 +149,13 @@ async function sendInApp({
     priority,
   };
   if (data !== undefined) insert.data = data;
+  // Tag the row with the record it describes so a later reversal (a loan
+  // deleted, a fine cancelled) can retire the notice. Untagged alerts stay in
+  // the member's feed forever, even after the obligation they announce is gone.
+  if (reference?.model && reference?.id) {
+    insert.reference_model = reference.model;
+    insert.reference_id = reference.id;
+  }
   const { data: row, error } = await supabase
     .from('notifications')
     .insert(insert)
@@ -546,7 +554,7 @@ async function notifyRolloverGuarantorReplaced({
 /**
  * High-level fan-out: deliver to multiple profiles across multiple channels.
  */
-async function broadcast({ profileIds, channels = ['in_app'], title, body, subject, type, category, priority = 'normal', data }) {
+async function broadcast({ profileIds, channels = ['in_app'], title, body, subject, type, category, priority = 'normal', data, reference }) {
   const results = [];
 
   for (const pid of profileIds) {
@@ -559,7 +567,7 @@ async function broadcast({ profileIds, channels = ['in_app'], title, body, subje
     if (!profile) continue;
 
     if (channels.includes('in_app')) {
-      results.push(await sendInApp({ profileId: pid, title, body, type, category, priority, data }));
+      results.push(await sendInApp({ profileId: pid, title, body, type, category, priority, data, reference }));
     }
     if (channels.includes('email') && profile.email) {
       results.push(await sendEmail({ to: profile.email, subject: subject || title, text: body }));
