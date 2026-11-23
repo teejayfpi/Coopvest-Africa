@@ -195,11 +195,10 @@ admin assigned it by hand.
 - Idempotent on `(profile_id, fee_type_id, billing_month)` via a partial unique
   index (migration 076); `23505` is treated as `already_billed`, not an error.
 - Bills the current month only — no back-billing.
-- Bills every member, including salary-deduction members. It used to skip them
-  on the premise that payroll recovers the fee; no payroll path can, because
-  `payroll_batch_lines` records only `contribution_amount` and
-  `registration_fee_amount`. See "the payroll exemption below is not a
-  suppression" further down.
+- Skips salary-deduction members whose employer withholds the charge
+  (`isAdministrativeFeeExempt`). The employer takes it from pay, so billing it
+  here as well collected the same month twice. See "the monthly fee exemption is
+  a suppression" further down for why the earlier reasoning was wrong.
 - Skips staff and inactive/flagged accounts only.
 - Kill switch: `MONTHLY_ADMIN_FEE_DISABLED=1` on Render, no deploy needed.
 
@@ -216,11 +215,13 @@ SQL twin `public.member_registration_fee_settled()` (migration 063) mirrors it.
 That exemption is sound because `payroll_batch_lines.registration_fee_amount`
 exists, so payroll really can collect that fee.
 
-`isAdministrativeFeeExempt` is the sibling for the *monthly* charge, and it is
-**not** used to suppress anything any more: payroll has no column that can carry
-the monthly administrative fee, so a payroll member owes it in the app like
-everyone else. The function survives only to set the explanatory
-`administrative_fee_exempt` flag.
+`isAdministrativeFeeExempt` is the sibling for the *monthly* charge, and unlike
+the registration fee it **is** a real suppression: the employer withholds the
+charge from pay, so billing it in the app as well takes the same month twice.
+Both the billing worker and `computeObligations` call it, so neither a
+`member_fees` row nor an obligation appears for an exempt member. Fines are
+excluded — a penalty is not part of the standard deduction, so it stays payable
+in the app.
 
 The two kinds of "employer on file" are NOT equivalent, and conflating them was
 a live fee-evasion hole:
@@ -1177,26 +1178,31 @@ outstanding fines + outstanding fees. `GET /api/v1/wallet/obligations`
 - A split payment carries `fee_id` per allocation so the backend settles the
   exact `member_fees` row shown as due, not merely the oldest outstanding one.
 
-### Salary-deduction members are NOT exempt from the in-app administrative fee
-Every member is billed the monthly administrative fee, including members whose
-contributions are withheld by an employer. `computeObligations`
-(`backend/src/routes/wallet.js`) puts the row in `fees` like any other.
+### Salary-deduction members are exempt from the in-app administrative fee
+A member whose employer withholds the monthly administrative fee from pay does
+not also owe it in the app. `isAdministrativeFeeExempt`
+(`backend/src/lib/activationGate.js`) is the single predicate, consulted by both
+`monthlyAdministrativeFeeWorker` and `computeObligations`
+(`backend/src/routes/wallet.js`), so a row is neither billed nor shown.
 
-This reverses an earlier rule that hid the fee for payroll members on the
-premise that payroll recovers it. That premise was false and cost real money:
-`payroll_batch_lines` carries `contribution_amount` and `registration_fee_amount`
-and no administrative-fee column, and `organizationFinance` totals only those
-two. So the employer never deducted it and the app never asked for it - the fee
-was collected by nobody, for every enrolled organisation.
+The exemption is bounded. A linked employer (`profiles.organization_id`) exempts
+indefinitely; a self-declared one only defers for
+`PENDING_EMPLOYER_FEE_GRACE_DAYS` (default 45) from
+`pending_organization_requested_at`, after which the fee is billed again. Without
+that bound, a member could type any employer name and never pay.
 
-`administrative_fee_exempt` is still returned for a payroll member with an
-employer on file, but it is now **explanatory only** - it lets the app say the
-fee may also be deducted from salary. It must never suppress the obligation. If
-a payroll deduction is ever added, the flag must become a real settlement (mark
-the `member_fees` row paid on remittance), not a hidden row.
+A stale row — raised before the employer was linked, or assigned by an admin by
+hand — is suppressed from the obligation list too, because the employer is
+already withholding that month. Fines and other fee rows are untouched: a
+penalty is not part of the standard deduction.
+
+The exemption is a suppression, not a note. The charge is genuinely collected by
+the employer, which is why hiding it is correct here and was wrong for the
+registration fee before payroll could carry that one.
 
 Tests: `backend/__tests__/administrativeFeeExemption.test.js`,
-`administrativeFeePayable.test.js`, `monthlyAdministrativeFeeWorker.test.js`.
+`administrativeFeePayable.test.js`, `monthlyAdministrativeFeeWorker.test.js`,
+`advanceOfferComposition.test.js`.
 
 ### Paying a month in advance
 A contribution belongs to a billing month, not to the instant it was paid.
@@ -1221,6 +1227,14 @@ disagreement between the two shows a member a month no payment can clear.
   so a member who already pre-paid is offered the next one rather than being
   charged twice. `current_month_paid` distinguishes the wallet-deposit flow
   (which writes no contribution row) from an explicit advance.
+- The offer is contribution + administrative fee + outstanding fines, with each
+  fine's `id` in `advance.fines`. A fine is owed now whatever month is being
+  paid for, so leaving it out let a member clear a future month and still owe
+  money they already had. An exempt member's offer carries no fee leg at all —
+  see the exemption section above.
+- `DepositScreen._buildMixedAllocations` sends one allocation per known fee row
+  rather than one per type. Collapsing them settled only the first row and
+  marked it paid for the whole sum, so two fines lost one.
 
 ## Client IP must come from Express, and `trust proxy` must be a hop count
 The rate limiters, the admin IP whitelist and the login-history recorder all
