@@ -223,6 +223,67 @@ async function stalePendingTransactions(db, { sampleLimit, olderThanHours = 24 }
 }
 
 /**
+ * A member's savings total should cover what they are recorded as having paid.
+ *
+ * Approving a payment proof credits `savings.total_saved`. Before migration 078
+ * that credit was a bare UPDATE, so a member with no savings row yet was
+ * credited nothing and the shortfall was silent. Savings can legitimately sit
+ * below contributions (withdrawals, loan liens), so this compares against
+ * `total_saved` only and leaves the judgement to a human.
+ */
+async function savingsVsContributions(db, { sampleLimit }) {
+  const { data: savingsRows, error: sErr } = await db
+    .from('savings')
+    .select('profile_id, total_saved')
+    .limit(WALLET_SCAN_CAP);
+  if (sErr) return { error: sErr.message };
+
+  const profileIds = (savingsRows || []).map((s) => s.profile_id).filter(Boolean);
+  if (profileIds.length === 0) return { count: 0, samples: [], truncated: false };
+
+  const savedByProfile = new Map(
+    (savingsRows || []).map((s) => [s.profile_id, toNumber(s.total_saved)]),
+  );
+  const contributedByProfile = new Map();
+
+  const BATCH = 200;
+  for (let i = 0; i < profileIds.length; i += BATCH) {
+    const { data: contribs, error: cErr } = await db
+      .from('contributions')
+      .select('profile_id, amount, status')
+      .in('profile_id', profileIds.slice(i, i + BATCH))
+      .in('status', ['completed', 'successful', 'approved']);
+    if (cErr) return { error: cErr.message };
+    for (const c of contribs || []) {
+      contributedByProfile.set(
+        c.profile_id,
+        (contributedByProfile.get(c.profile_id) || 0) + toNumber(c.amount),
+      );
+    }
+  }
+
+  const mismatches = [];
+  for (const profileId of profileIds) {
+    const contributed = money(contributedByProfile.get(profileId) || 0);
+    const saved = money(savedByProfile.get(profileId) || 0);
+    if (contributed > 0 && saved + 0.01 < contributed) {
+      mismatches.push({
+        profileId,
+        contributed,
+        totalSaved: saved,
+        shortfall: money(contributed - saved),
+      });
+    }
+  }
+
+  return {
+    count: mismatches.length,
+    samples: mismatches.slice(0, sampleLimit),
+    truncated: mismatches.length > sampleLimit,
+  };
+}
+
+/**
  * The registry the route iterates. `severity` drives whether a non-zero count
  * raises an admin alert: `critical` always alerts, `warning` only records.
  */
@@ -230,6 +291,7 @@ const CHECKS = [
   { id: 'wallet_balance_vs_ledger', title: 'Wallet balance disagrees with the transaction ledger', severity: 'critical', run: walletBalanceVsLedger },
   { id: 'duplicate_completed_references', title: 'Duplicate completed transactions sharing a reference', severity: 'critical', run: duplicateCompletedReferences },
   { id: 'negative_wallet_balance', title: 'Wallet with a negative balance', severity: 'critical', run: negativeWalletBalance },
+  { id: 'savings_vs_contributions', title: 'Savings total is below the contributions recorded as paid', severity: 'critical', run: savingsVsContributions },
   { id: 'loan_outstanding_mirror_mismatch', title: 'Loan outstanding_balance does not mirror remaining_balance', severity: 'warning', run: loanOutstandingMirrorMismatch },
   { id: 'stale_pending_transactions', title: 'Transaction pending for more than 24 hours', severity: 'warning', run: stalePendingTransactions },
 ];
@@ -287,4 +349,5 @@ module.exports = {
   duplicateCompletedReferences,
   loanOutstandingMirrorMismatch,
   stalePendingTransactions,
+  savingsVsContributions,
 };
