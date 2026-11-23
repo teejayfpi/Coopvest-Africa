@@ -761,9 +761,19 @@ export PATH="/tmp/flutter/bin:$PATH"
 ```
 
 Then `flutter pub get`, `flutter analyze`, `flutter test`. The full Dart suite
-is ~297 tests and runs in well under a minute. Do NOT push a Dart change having
+is 338 tests and runs in well under a minute. Do NOT push a Dart change having
 only run the backend suite — the app tests are the only local check that the
 app compiles.
+
+Verified 2026-11-23 on Flutter 3.50.1 / Dart 3.14.0: `flutter analyze` reports
+0 errors and 2 warnings, both pre-existing and in files unrelated to any fee
+work (`auth_repository.dart` unused catch, `loan_eligibility_card_test.dart`
+unused import). Treat those two as the baseline; anything beyond them is yours.
+
+`flutter pub get` rewrites `pubspec.lock` — it bumps transitive pins
+(`matcher`, `meta`, `clock`, …) under a newer SDK. That churn is not part of a
+fix, so `git checkout pubspec.lock` before committing. Stage files explicitly
+rather than `git add -A`.
 
 ## Loans table has NO `disbursed_at` column
 Only `disbursed_by` exists. Selecting `disbursed_at` makes PostgREST reject
