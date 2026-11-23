@@ -12,12 +12,11 @@
  * back-billing every month since a member joined would present a lump sum they
  * were never told they owed, which is a worse harm than the missed charge.
  *
- * Every member is billed, including salary-deduction members. The fee used to be
- * skipped for them on the premise that payroll recovers it, but no payroll path
- * can: `payroll_batch_lines` carries `contribution_amount` and
- * `registration_fee_amount` and nothing else, and `organizationFinance` totals
- * only those two. So the charge was neither billed in-app nor deducted from
- * salary - it was collected by nobody, for every enrolled org.
+ * Direct-deposit members are billed; salary-deduction members are not. Their
+ * employer withholds the charge from pay, so billing it in-app as well would
+ * charge them twice for the same month. `isAdministrativeFeeExempt` is the same
+ * predicate `computeObligations` uses to keep the row off their obligations, so
+ * the worker and the wallet must stay in step.
  *
  * Idempotent on `(profile_id, fee_type_id, billing_month)` via a partial unique
  * index, so a re-run or an overlapping tick cannot create a second charge.
@@ -27,6 +26,7 @@ const supabase = require('../config/supabase');
 const logger = require('../utils/logger');
 const { ADMINISTRATIVE_FEE } = require('../config/feeDisclosure');
 const { isStaffRole } = require('../lib/permissions');
+const { isAdministrativeFeeExempt } = require('../lib/activationGate');
 
 const POLL_INTERVAL_MS = 24 * 60 * 60 * 1000; // daily
 const STARTUP_DELAY_MS = 10 * 60 * 1000;
@@ -44,13 +44,14 @@ function billingMonth(date = new Date()) {
  * month rather than by instant: a member who joined in the current month is
  * billed, because the charge is for the month they are in.
  */
-function shouldBill(profile, month) {
+function shouldBill(profile, month, nowMs = Date.now()) {
   if (!profile || !profile.id) return false;
   if (profile.is_active === false || profile.is_flagged === true) return false;
   // Staff and admin accounts are not members; the member charge does not apply.
   if (isStaffRole(profile.role)) return false;
-  // Salary-deduction members are billed too - see the note at the top of this
-  // file. Their employer cannot recover this charge, so the app must.
+  // Salary-deduction members have this charge withheld from pay by their
+  // employer; billing them here would take it twice.
+  if (isAdministrativeFeeExempt(profile, nowMs)) return false;
   if (profile.created_at) {
     const joined = billingMonth(new Date(profile.created_at));
     if (Number.isNaN(new Date(profile.created_at).getTime())) return false;
@@ -74,8 +75,8 @@ async function resolveFeeTypeId() {
  * Bill one member for one month. Returns the outcome as a short string so the
  * tick can tally what happened.
  */
-async function billMember(profile, { feeType, month }) {
-  if (!shouldBill(profile, month)) return 'skipped';
+async function billMember(profile, { feeType, month, nowMs = Date.now() }) {
+  if (!shouldBill(profile, month, nowMs)) return 'skipped';
 
   const { error } = await supabase.from('member_fees').insert({
     profile_id: profile.id,
@@ -116,8 +117,9 @@ async function processDue({ now = new Date() } = {}) {
     if (error) throw error;
 
     const tally = {};
+    const nowMs = now.getTime();
     for (const member of members || []) {
-      const outcome = await billMember(member, { feeType, month });
+      const outcome = await billMember(member, { feeType, month, nowMs });
       tally[outcome] = (tally[outcome] || 0) + 1;
     }
     logger.info(`monthlyAdministrativeFeeWorker: ${month} ${JSON.stringify(tally)}`);

@@ -273,6 +273,14 @@ function applyPaidMonthRule(
   // worker only creates the row when the month arrives, and the member needs to
   // see the price before then.
   //
+  // Outstanding fines are included too: a fine is owed now regardless of which
+  // month is being paid for, so a member clearing a month ahead should clear it
+  // in the same payment rather than discover it afterwards. Fines are never
+  // waived by paying in advance — `applyAllocations` settles them by id.
+  //
+  // An exempt member's employer withholds the administrative fee, so the offer
+  // must not include it; charging it here would take it twice.
+  //
   // The target is the first month that is not already paid, not blindly "next
   // month": a member who has already pre-paid two months must be offered the
   // third, otherwise the button charges them for a month they have settled.
@@ -286,12 +294,22 @@ function applyPaidMonthRule(
       break;
     }
   }
-  const advanceFee = obligations.monthly_administrative_fee || 0;
+  const advanceFee = obligations.administrative_fee_exempt
+    ? 0
+    : (obligations.monthly_administrative_fee || 0);
+  const advanceFines = (obligations.fines || []).map((f) => ({
+    id: f.id,
+    label: f.label,
+    amount: Number(f.amount) || 0,
+  }));
+  const advanceFinesTotal = advanceFines.reduce((s, f) => s + f.amount, 0);
   obligations.advance = {
     month: advanceMonth,
     savings: obligations.monthly_savings,
     administrative_fee: advanceFee,
-    total: (obligations.monthly_savings || 0) + advanceFee,
+    fines: advanceFines,
+    fines_total: advanceFinesTotal,
+    total: (obligations.monthly_savings || 0) + advanceFee + advanceFinesTotal,
     // `paidThisMonth` covers the wallet-deposit flow, which never writes a
     // future-dated contribution row; the set covers explicit advance payments.
     current_month_paid: Boolean(paidThisMonth) || paid.has(current),
@@ -407,17 +425,17 @@ async function computeObligations(profileId) {
 
   // Outstanding fines / fees
   //
-  // Every member sees the administrative fee, including salary-deduction
-  // members. It used to be hidden for them on the premise that payroll recovers
-  // it, but no payroll path can: `payroll_batch_lines` records only
-  // `contribution_amount` and `registration_fee_amount`, and
-  // `organizationFinance` totals only those two. Hiding the row therefore hid
-  // the charge from the only channel that could ever collect it.
+  // Salary-deduction members are exempt: their employer withholds this charge
+  // from pay, so showing it here as well would ask them to pay it twice. That
+  // exemption is the *same* predicate the billing worker uses, so no `member_fees`
+  // row is ever created for them and the two paths cannot drift apart.
   //
-  // `administrative_fee_exempt` is still reported for members with a linked
-  // employer, so the app can explain that the fee *may* also be deducted from
-  // salary. It is a note, not a suppression: the obligation itself stands.
+  // Direct-deposit members — and salary members with no employer on file, where
+  // no deduction can happen — pay it in the app.
   const adminFeeExempt = isAdministrativeFeeExempt(profile);
+  // Published on the object (not just as a row-level flag) because the pure
+  // "paid this month" rule needs it to price the advance offer.
+  obligations.administrative_fee_exempt = adminFeeExempt;
   const adminFeeTypeId = await resolveAdminFeeTypeId();
   const isAdministrativeFeeRow = (mf) => {
     if (mf.fee_type !== 'fee') return false;
@@ -440,9 +458,14 @@ async function computeObligations(profileId) {
         created_at: mf.created_at,
         billing_month: mf.billing_month || null,
       };
+      // An exempt member is never billed, so a row here is stale — raised before
+      // their employer was linked, or by an admin by hand. It must not be shown:
+      // the employer is already withholding it, and leaving the row in place
+      // would ask for the same month twice. Fines are untouched; a penalty is
+      // not part of the standard deduction.
+      if (adminFeeExempt && isAdministrativeFeeRow(mf)) continue;
       if (mf.fee_type === 'fine') obligations.fines.push(row);
       else obligations.fees.push(row);
-      if (adminFeeExempt && isAdministrativeFeeRow(mf)) obligations.administrative_fee_exempt = true;
     }
   } catch (fErr) {
     logger.warn('obligations: member_fees lookup failed:', fErr.message);

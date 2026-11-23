@@ -22,17 +22,29 @@ describe('shouldBill', () => {
     expect(shouldBill(base, '2026-11')).toBe(true);
   });
 
-  test('a salary-deduction member is billed like everyone else', () => {
-    // Payroll cannot recover this charge - `payroll_batch_lines` has no field
-    // for it - so skipping these members left the fee collected by nobody.
+  test('a salary-deduction member is skipped: the employer withholds it', () => {
     expect(
       shouldBill({ ...base, contribution_method: 'payroll', organization_id: 'org-1' }, '2026-11'),
-    ).toBe(true);
+    ).toBe(false);
+    // A named employer inside its deferral window counts as a deduction
+    // channel, so the fee must not be billed in-app as well.
     expect(
       shouldBill(
-        { ...base, contribution_method: 'payroll', pending_organization_name: 'Bowen University, Iwo' },
+        {
+          ...base,
+          contribution_method: 'payroll',
+          pending_organization_name: 'Bowen University, Iwo',
+          pending_organization_requested_at: new Date().toISOString(),
+        },
         '2026-11',
       ),
+    ).toBe(false);
+  });
+
+  test('a salary member with no employer on file is billed', () => {
+    // No employer means no deduction, so the in-app obligation stands.
+    expect(
+      shouldBill({ ...base, contribution_method: 'payroll' }, '2026-11'),
     ).toBe(true);
   });
 

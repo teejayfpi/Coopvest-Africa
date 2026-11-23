@@ -1,14 +1,9 @@
 /**
- * The monthly administrative fee must be part of the amount a member is asked
- * to pay, and a member must be able to settle the contribution and the fee in
- * one payment.
+ * Who pays the monthly administrative fee.
  *
- * The fee row is what `computeObligations` totals, so the obligation only
- * exists once the billing worker has created it. That worker used to skip
- * salary-deduction members on the premise that payroll recovers the fee. No
- * payroll path can — `payroll_batch_lines` carries `contribution_amount` and
- * `registration_fee_amount` and nothing else — so the fee was collected by
- * nobody. These tests pin the worker's decision directly.
+ * Salary-deduction members do not: their employer withholds the charge from
+ * pay, so billing them in-app as well would take it twice. Direct-deposit
+ * members do. These tests pin the worker's decision directly.
  */
 
 const { shouldBill } = require('../src/workers/monthlyAdministrativeFeeWorker');
@@ -21,15 +16,25 @@ const BASE = {
   is_flagged: false,
 };
 
-describe('the administrative fee is billed to every member', () => {
-  test('a salary-deduction member with a linked employer is billed', () => {
+describe('who the administrative fee is billed to', () => {
+  test('a salary-deduction member with a linked employer is not billed', () => {
     expect(
       shouldBill({ ...BASE, contribution_method: 'payroll', organization_id: 'org-1' }, '2026-11'),
-    ).toBe(true);
+    ).toBe(false);
   });
 
-  test('a salary-deduction member awaiting employer enrolment is billed', () => {
-    // An unverified claim of a future payroll deduction is not a deduction.
+  test('the KYC spelling salary_deduction is exempt too', () => {
+    expect(
+      shouldBill(
+        { ...BASE, contribution_type: 'salary_deduction', organization_id: 'org-1' },
+        '2026-11',
+      ),
+    ).toBe(false);
+  });
+
+  test('a salary member awaiting employer enrolment is not billed', () => {
+    // The employer is on file and inside its deferral window, so a deduction is
+    // expected. Billing here would charge the month twice once it lands.
     expect(
       shouldBill(
         {
@@ -37,6 +42,23 @@ describe('the administrative fee is billed to every member', () => {
           contribution_method: 'payroll',
           pending_organization_name: 'Bowen University, Iwo',
           pending_organization_requested_at: new Date().toISOString(),
+        },
+        '2026-11',
+      ),
+    ).toBe(false);
+  });
+
+  test('a salary member whose employer claim has lapsed is billed', () => {
+    // A stale self-declared employer is not a deduction. Without this the fee
+    // would be hidden forever by a name nobody ever verified.
+    const longAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
+    expect(
+      shouldBill(
+        {
+          ...BASE,
+          contribution_method: 'payroll',
+          pending_organization_name: 'Bowen University, Iwo',
+          pending_organization_requested_at: longAgo,
         },
         '2026-11',
       ),
