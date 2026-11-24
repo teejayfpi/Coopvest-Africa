@@ -1277,6 +1277,16 @@ disagreement between the two shows a member a month no payment can clear.
 - `DepositScreen._buildMixedAllocations` sends one allocation per known fee row
   rather than one per type. Collapsing them settled only the first row and
   marked it paid for the whole sum, so two fines lost one.
+- The monthly charge is part of **this month's** obligation even before the
+  worker has billed it, so `administrative_fee_due` prices it from the catalogue
+  and adds it to `total_due`. The worker writes one row per member per day-tick,
+  so on the first day of a month (or any member not yet reached) no row existed
+  and the total silently omitted a charge that was owed — a member could pay the
+  figure shown and still owe the fee. `backend/src/lib/administrativeFeeDue.js`
+  returns 0 once any row covers the month, `outstanding` or `paid`, so the
+  catalogue price is never added on top of a real row. Rows predating
+  `billing_month` are treated as covering the month when still outstanding,
+  because they are already counted in `fees`. An exempt member is always 0.
 
 ## Client IP must come from Express, and `trust proxy` must be a hop count
 The rate limiters, the admin IP whitelist and the login-history recorder all

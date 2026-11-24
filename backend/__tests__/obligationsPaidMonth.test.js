@@ -10,11 +10,17 @@ const {
  * expectation instead. This rule is pure so it can be pinned without a DB.
  */
 describe('obligations paid-month rule', () => {
+  // A direct-deposit member, so the monthly administrative fee is theirs to pay
+  // in the app. `memberFeeRows` empty means the billing worker has not yet
+  // written this month's row - the fee is still owed, which is the point of
+  // `administrative_fee_due`.
   const base = () => ({
     monthly_savings: 5000,
+    monthly_administrative_fee: 1500,
     loans: [],
     fines: [],
     fees: [],
+    memberFeeRows: [],
   });
 
   test('unpaid month keeps the savings due and total as before', () => {
@@ -22,7 +28,9 @@ describe('obligations paid-month rule', () => {
     expect(out.month_paid_savings).toBe(false);
     expect(out.savings_due).toBe(5000);
     expect(out.next_month_savings).toBe(0);
-    expect(out.total_due).toBe(5000);
+    // Savings plus the monthly administrative fee, which is owed whether or not
+    // the billing worker has written a row for it yet.
+    expect(out.total_due).toBe(6500);
   });
 
   test('paid month zeroes the savings due and moves it to next month', () => {
@@ -30,8 +38,9 @@ describe('obligations paid-month rule', () => {
     expect(out.month_paid_savings).toBe(true);
     expect(out.savings_due).toBe(0);
     expect(out.next_month_savings).toBe(5000);
-    // Nothing else is owed, so the member is square for this month.
-    expect(out.total_due).toBe(0);
+    // The savings is settled but this month's administrative fee is not: the
+    // two are billed separately and paying one does not clear the other.
+    expect(out.total_due).toBe(1500);
   });
 
   test('a paid member still owes fines, fees and loan repayments', () => {
@@ -45,7 +54,7 @@ describe('obligations paid-month rule', () => {
       { paidThisMonth: true }
     );
     expect(out.savings_due).toBe(0);
-    expect(out.total_due).toBe(12000 + 500 + 250);
+    expect(out.total_due).toBe(12000 + 500 + 250 + 1500);
     expect(out.next_month_savings).toBe(5000);
   });
 
@@ -59,7 +68,7 @@ describe('obligations paid-month rule', () => {
       },
       { paidThisMonth: false }
     );
-    expect(out.total_due).toBe(17000);
+    expect(out.total_due).toBe(17000 + 1500);
   });
 
   test('month keys are zero-padded and roll over the year', () => {
@@ -79,7 +88,7 @@ describe('obligations paid-month rule', () => {
       },
       { paidThisMonth: false }
     );
-    expect(out.total_due).toBe(17500);
+    expect(out.total_due).toBe(17500 + 1500);
   });
 
   test('a member who joined this month is not yet due', () => {
@@ -90,7 +99,9 @@ describe('obligations paid-month rule', () => {
     expect(out.joined_this_month).toBe(true);
     expect(out.month_paid_savings).toBe(false);
     expect(out.savings_due).toBe(0);
-    expect(out.total_due).toBe(0);
+    // The contribution is not yet due, but the monthly fee for the month they
+    // joined in is - the billing worker bills a joiner for their join month.
+    expect(out.total_due).toBe(1500);
     // The standing amount is not "next month's" either — they simply haven't
     // started yet, so the app should show the neutral all-caught-up copy.
     expect(out.next_month_savings).toBe(0);
@@ -107,7 +118,7 @@ describe('obligations paid-month rule', () => {
       { paidThisMonth: false, joinedThisMonth: true }
     );
     expect(out.savings_due).toBe(0);
-    expect(out.total_due).toBe(750);
+    expect(out.total_due).toBe(750 + 1500);
   });
 
   test('paid status wins over a join date in the same month', () => {
@@ -117,7 +128,30 @@ describe('obligations paid-month rule', () => {
     });
     expect(out.month_paid_savings).toBe(true);
     expect(out.next_month_savings).toBe(5000);
-    expect(out.total_due).toBe(0);
+    expect(out.total_due).toBe(1500);
+  });
+
+  test('an exempt member owes no administrative fee', () => {
+    const out = applyPaidMonthRule(
+      { ...base(), administrative_fee_exempt: true },
+      { paidThisMonth: false },
+    );
+    expect(out.administrative_fee_due).toBe(0);
+    expect(out.total_due).toBe(5000);
+  });
+
+  test('the fee is not counted twice once this month is billed', () => {
+    const out = applyPaidMonthRule(
+      {
+        ...base(),
+        fees: [{ id: 'mf1', label: 'Administrative Fee', amount: 1500 }],
+        administrative_fee_rows: [{ billing_month: '2026-11', amount: 1500 }],
+      },
+      { paidThisMonth: false, now: new Date(2026, 10, 20) },
+    );
+    expect(out.administrative_fee_due).toBe(0);
+    // 5000 savings + the one billed fee row, which is already in `fees`.
+    expect(out.total_due).toBe(6500);
   });
 });
 
