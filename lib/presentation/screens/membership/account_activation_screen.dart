@@ -124,6 +124,23 @@ class _AccountActivationScreenState
       final serverCode = e is DioException && e.response?.data is Map
           ? (e.response!.data as Map)['code']
           : null;
+      // A refused duplicate is not a failure: the money was already taken, or a
+      // checkout is still open. For the registration fee the gate has already
+      // flipped, so the member belongs on the dashboard, not staring at an
+      // error. Refresh and continue rather than asking them to pay again.
+      if (serverCode == 'ALREADY_PAID') {
+        await ref.read(authProvider.notifier).refreshCurrentUser();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'Your membership is already paid for — you have not been charged again.'),
+            backgroundColor: CoopvestColors.success,
+          ),
+        );
+        Navigator.of(context).pushReplacementNamed('/home');
+        return;
+      }
       final String detail;
       if (serverCode == 'SESSION_REPLACED') {
         detail = 'Your session ended because you signed in on another device. '

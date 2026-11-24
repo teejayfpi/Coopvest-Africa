@@ -586,6 +586,28 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
       }
     } catch (e) {
       if (!mounted) return;
+      final serverCode = e is DioException && e.response?.data is Map
+          ? (e.response!.data as Map)['code']
+          : null;
+      // A refused duplicate is not a failed payment. Say so plainly and refresh
+      // the wallet, so the member sees the first payment that already landed
+      // instead of retrying and being charged twice.
+      if (serverCode == 'ALREADY_PAID' || serverCode == 'PAYMENT_IN_PROGRESS') {
+        await ref.read(walletProvider.notifier).loadWallet();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              serverCode == 'ALREADY_PAID'
+                  ? 'This has already been paid — you have not been charged again. 🌱'
+                  : 'A payment for this is already in progress. Finish it in the checkout you already opened.',
+            ),
+            backgroundColor: CoopvestColors.warning,
+            duration: const Duration(seconds: 6),
+          ),
+        );
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Online payment failed: ${e is DioException ? (e.response?.data?['error'] ?? e.message) : e}'),
