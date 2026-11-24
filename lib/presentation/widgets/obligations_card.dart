@@ -114,10 +114,28 @@ class ObligationsCard extends ConsumerWidget {
                 .toList();
         final advanceFinesTotal = advanceFines.fold<double>(
             0.0, (s, f) => s + (f['amount'] as double));
+        // The loan instalment recurs monthly, so the backend prices it into the
+        // advance offer. Each entry carries the loan UUID, which is what the
+        // allocation must target - the human-readable reference would fall back
+        // to whichever loan has the largest balance.
+        final advanceLoans = ((advance['loans'] as List?) ?? const [])
+            .whereType<Map>()
+            .map((l) => {
+                  'loan_id': l['loan_id']?.toString() ?? '',
+                  'reference': l['reference']?.toString() ?? 'Loan',
+                  'amount': (l['amount'] as num?)?.toDouble() ?? 0.0,
+                })
+            .where((l) => (l['amount'] as double) > 0)
+            .toList();
+        final advanceLoansTotal = advanceLoans.fold<double>(
+            0.0, (s, l) => s + (l['amount'] as double));
         final advanceTotal = advanceMonth.isEmpty
             ? 0.0
             : (advance['total'] as num?)?.toDouble() ??
-                (advanceSavings + advanceFee + advanceFinesTotal);
+                (advanceSavings +
+                    advanceFee +
+                    advanceLoansTotal +
+                    advanceFinesTotal);
 
         // Nothing due: show the "all caught up" state rather than a card of
         // ₦0 rows, which reads like a broken screen. The green check plus the
@@ -359,6 +377,12 @@ class ObligationsCard extends ConsumerWidget {
                       {'type': 'savings', 'amount': advanceSavings},
                       if (advanceFee > 0)
                         {'type': 'fee', 'amount': advanceFee},
+                      for (final l in advanceLoans)
+                        {
+                          'type': 'loan_repayment',
+                          'amount': l['amount'],
+                          'loan_id': l['loan_id'],
+                        },
                       for (final f in advanceFines)
                         {
                           'type': 'fine',
@@ -389,6 +413,7 @@ class ObligationsCard extends ConsumerWidget {
                   _advanceCaption(
                     savings: advanceSavings,
                     fee: advanceFee,
+                    loansTotal: advanceLoansTotal,
                     finesTotal: advanceFinesTotal,
                     monthLabel: _monthLabel(advanceMonth),
                   ),
@@ -474,12 +499,14 @@ class ObligationsCard extends ConsumerWidget {
 String _advanceCaption({
   required double savings,
   required double fee,
+  required double loansTotal,
   required double finesTotal,
   required String monthLabel,
 }) {
   final parts = <String>[
     '₦${savings.formatNumber()} contribution',
     if (fee > 0) '₦${fee.formatNumber()} administrative fee',
+    if (loansTotal > 0) '₦${loansTotal.formatNumber()} loan repayment',
     if (finesTotal > 0) '₦${finesTotal.formatNumber()} in outstanding fines',
   ];
   final covered = parts.length == 1

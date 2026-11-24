@@ -1269,14 +1269,26 @@ disagreement between the two shows a member a month no payment can clear.
   so a member who already pre-paid is offered the next one rather than being
   charged twice. `current_month_paid` distinguishes the wallet-deposit flow
   (which writes no contribution row) from an explicit advance.
-- The offer is contribution + administrative fee + outstanding fines, with each
-  fine's `id` in `advance.fines`. A fine is owed now whatever month is being
+- The offer is contribution + administrative fee + loan instalment +
+  outstanding fines, with each fine's `id` in `advance.fines` and each loan's
+  UUID in `advance.loans[].loan_id`. A fine is owed now whatever month is being
   paid for, so leaving it out let a member clear a future month and still owe
-  money they already had. An exempt member's offer carries no fee leg at all —
-  see the exemption section above.
+  money they already had. The loan instalment recurs monthly like the
+  contribution: omitting it cleared the month while the loan fell further
+  behind, and arrears cost the member more than a late contribution. Each loan
+  leg is capped at that loan's `remaining_balance`, because a fixed instalment
+  would overpay the final month. An exempt member's offer carries no fee leg at
+  all — see the exemption section above; the loan leg is unaffected, since only
+  the fee is withheld from salary.
+- A loan allocation must carry the loan **UUID** (`loans.id`), never the
+  human-readable `loans.loan_id`. `applyAllocations` matches `loans.id`, so a
+  reference silently misses and falls through to "highest remaining balance" —
+  repaying a different loan than the member chose. `obligations.loans[]` exposes
+  both, and `advance.loans[].loan_id` is the UUID.
 - `DepositScreen._buildMixedAllocations` sends one allocation per known fee row
-  rather than one per type. Collapsing them settled only the first row and
-  marked it paid for the whole sum, so two fines lost one.
+  and per known loan rather than one per type. Collapsing them settled only the
+  first row and marked it paid for the whole sum, so two fines lost one; two
+  loans meant only the largest balance was repaid.
 - The monthly charge is part of **this month's** obligation even before the
   worker has billed it, so `administrative_fee_due` prices it from the catalogue
   and adds it to `total_due`. The worker writes one row per member per day-tick,

@@ -279,6 +279,10 @@ function applyPaidMonthRule(
   // in the same payment rather than discover it afterwards. Fines are never
   // waived by paying in advance — `applyAllocations` settles them by id.
   //
+  // The loan instalment is included for the same reason as the contribution:
+  // it recurs monthly. Leaving it out cleared the month while the loan fell
+  // further behind, and arrears are the more costly thing to miss.
+  //
   // An exempt member's employer withholds the administrative fee, so the offer
   // must not include it; charging it here would take it twice.
   //
@@ -304,13 +308,44 @@ function applyPaidMonthRule(
     amount: Number(f.amount) || 0,
   }));
   const advanceFinesTotal = advanceFines.reduce((s, f) => s + f.amount, 0);
+
+  // The loan instalment recurs monthly like the contribution, so a month paid
+  // ahead must include it: otherwise the member clears the month and is still
+  // in arrears on the loan, which is the more expensive thing to miss.
+  //
+  // Each leg is capped at that loan's outstanding balance. The instalment is a
+  // fixed figure, so the final month of a loan would otherwise ask for more
+  // than the member owes and overpay the balance.
+  const advanceLoans = (obligations.loans || [])
+    .map((l) => {
+      const instalment = Number(l.monthly_repayment) || 0;
+      const outstanding = Number(l.remaining_balance) || 0;
+      const amount = Math.max(0, Math.min(instalment, outstanding));
+      return {
+        // The UUID: `applyAllocations` matches `loans.id`, and targeting by the
+        // human-readable reference would silently fall back to another loan.
+        loan_id: l.id || l.loan_id || null,
+        reference: l.loan_id || null,
+        amount,
+        remaining_balance: outstanding,
+      };
+    })
+    .filter((l) => l.amount > 0);
+  const advanceLoansTotal = advanceLoans.reduce((s, l) => s + l.amount, 0);
+
   obligations.advance = {
     month: advanceMonth,
     savings: obligations.monthly_savings,
     administrative_fee: advanceFee,
+    loans: advanceLoans,
+    loans_total: advanceLoansTotal,
     fines: advanceFines,
     fines_total: advanceFinesTotal,
-    total: (obligations.monthly_savings || 0) + advanceFee + advanceFinesTotal,
+    total:
+      (obligations.monthly_savings || 0) +
+      advanceFee +
+      advanceLoansTotal +
+      advanceFinesTotal,
     // `paidThisMonth` covers the wallet-deposit flow, which never writes a
     // future-dated contribution row; the set covers explicit advance payments.
     current_month_paid: Boolean(paidThisMonth) || paid.has(current),
@@ -439,6 +474,11 @@ async function computeObligations(profileId) {
       .eq('profile_id', profileId)
       .in('status', ACTIVE_LOAN_STATUSES);
     obligations.loans = (loans || []).map((l) => ({
+      // The UUID, because that is what a repayment allocation must target:
+      // `applyAllocations` matches `loans.id`. `loan_id` is the human-readable
+      // reference and is not unique across tables, so it cannot be used for
+      // that lookup.
+      id: l.id,
       loan_id: l.loan_id || l.id,
       monthly_repayment: Number(l.monthly_repayment) || 0,
       remaining_balance: Number(l.remaining_balance ?? 0),
