@@ -32,6 +32,7 @@ const { ALLOWED_PAYMENT_TYPES, DB_PAYMENT_TYPE, normalizeAllocations } = require
 const { paystackFetch, secretKey, classifyFailure } = require('../lib/paystackCharge');
 const { resolveTargetMonth, monthKey } = require('../lib/billingMonth');
 const { recordFailedCharge, alertFailedCharge } = require('../lib/failedChargeAudit');
+const { findDuplicatePayment } = require('../lib/duplicatePaymentGuard');
 
 const MIN_AMOUNT_NGN = 100;
 
@@ -652,6 +653,41 @@ router.post(
       const dbPaymentType = (DB_PAYMENT_TYPE[paymentType] || 'other');
 
       const reference = `CVP-${req.user.id.slice(0, 8)}-${Date.now()}`;
+
+      // Refuse a second charge for the same intent. Checked before the gateway
+      // call so a double-tap costs the member nothing, and before the reference
+      // is used so no proof row is parked for a payment we will not start.
+      const { data: recentProofs } = await supabase
+        .from('payment_proofs')
+        .select('id, status, amount, payment_type, created_at, deleted_at, metadata, transaction_reference')
+        .eq('profile_id', req.user.id)
+        .in('status', ['pending', 'approved'])
+        .gte('created_at', new Date(Date.now() - 60 * 60 * 1000).toISOString())
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      const duplicate = findDuplicatePayment({
+        proofs: recentProofs || [],
+        paymentType: dbPaymentType,
+        amount: amountNgn,
+        targetMonth,
+      });
+      if (duplicate) {
+        logger.warn(
+          `paystack initialize: duplicate ${duplicate.status} payment refused for ${req.user.id} `
+          + `(₦${amountNgn}, ${targetMonth}) — existing proof ${duplicate.proof.id}`,
+        );
+        return res.status(409).json({
+          success: false,
+          code: duplicate.code,
+          // Say what is true: they have not been charged twice, and what to do
+          // next depends on whether the first payment completed.
+          error: duplicate.status === 'pending'
+            ? 'A payment for this is already in progress. Complete it in the checkout you already opened rather than starting another.'
+            : 'This has already been paid. If the app still shows it as due, pull to refresh — you have not been charged again.',
+          existing_reference: duplicate.proof.transaction_reference || null,
+        });
+      }
       const { ok, status, payload } = await paystackFetch('/transaction/initialize', {
         method: 'POST',
         body: JSON.stringify({
