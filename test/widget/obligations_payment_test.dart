@@ -121,4 +121,40 @@ void main() {
     expect(find.textContaining('caught up'), findsOneWidget);
     expect(find.text('Pay Now'), findsNothing);
   });
+
+  testWidgets('the monthly fee is charged before it has been billed',
+      (tester) async {
+    // The billing worker runs once a day, so early in a month there is no fee
+    // row yet. The charge is still owed, and the card priced it as zero.
+    await pumpCard(
+      tester,
+      {
+        ...base(monthlySavings: 5000),
+        'administrative_fee_due': 1500,
+      },
+    );
+
+    expect(
+      find.text('Monthly administrative fee'),
+      findsOneWidget,
+      reason: 'the fee must be visible so the total can be reconciled',
+    );
+    expect(find.text('₦6,500'), findsWidgets);
+    expect(find.textContaining('Pays ₦6,500'), findsOneWidget);
+  });
+
+  testWidgets('an exempt member is not charged the monthly fee',
+      (tester) async {
+    await pumpCard(
+      tester,
+      {
+        ...base(monthlySavings: 5000),
+        'administrative_fee_due': 0,
+        'administrative_fee_exempt': true,
+      },
+    );
+
+    expect(find.text('Monthly administrative fee'), findsNothing);
+    expect(find.textContaining('Pays ₦5,000'), findsOneWidget);
+  });
 }

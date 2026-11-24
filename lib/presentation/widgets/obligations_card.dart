@@ -62,9 +62,19 @@ class ObligationsCard extends ConsumerWidget {
             (nextMonthSavings > 0 ? nextMonthSavings : monthlyContribution) +
                 monthlyLoanRepayment;
 
+        // The monthly administrative fee, priced by the backend. It is part of
+        // this month's obligation even before the billing worker has written a
+        // `member_fees` row, so the card cannot derive it from the fee list.
+        final adminFeeDue =
+            (data['administrative_fee_due'] as num?)?.toDouble() ?? 0.0;
+
         // Recompute rather than trusting total_due: it must always equal the
         // rows rendered underneath it.
-        final totalDue = savingsDue + monthlyLoanRepayment + finesTotal + feesTotal;
+        final totalDue = savingsDue +
+            monthlyLoanRepayment +
+            finesTotal +
+            feesTotal +
+            adminFeeDue;
 
         final hasLoanObligation = loansData.isNotEmpty;
 
@@ -76,8 +86,11 @@ class ObligationsCard extends ConsumerWidget {
         // Still deliberately excludes this month's savings once it is paid or
         // when the member is new (`savingsDue` is already 0 in those cases) and
         // excludes the running loan balance, which is not payable this month.
-        final payableNow =
-            savingsDue + monthlyLoanRepayment + finesTotal + feesTotal;
+        final payableNow = savingsDue +
+            monthlyLoanRepayment +
+            finesTotal +
+            feesTotal +
+            adminFeeDue;
 
         // Paying a month ahead. `advance` is priced by the backend so the fee
         // and the contribution cannot drift apart between client and server.
@@ -232,6 +245,18 @@ class ObligationsCard extends ConsumerWidget {
                       ),
                     )),
               ],
+              // The recurring monthly charge, shown even before it has been
+              // billed as a row, so the total above is the sum of what is
+              // listed here rather than a figure the member cannot reconcile.
+              if (adminFeeDue > 0) ...[
+                const SizedBox(height: 8),
+                _obligationRow(
+                  context,
+                  'Monthly administrative fee',
+                  '\u20a6${adminFeeDue.formatNumber()}',
+                  CoopvestColors.pendingText,
+                ),
+              ],
               if (hasLoanObligation && loanRemaining > 0) ...[
                 const SizedBox(height: 8),
                 _obligationRow(
@@ -295,6 +320,10 @@ class ObligationsCard extends ConsumerWidget {
                             'amount': _entryAmount(f),
                             if ((f as Map)['id'] != null) 'fee_id': f['id'],
                           }),
+                      // The fee with no billed row yet has no id to point at;
+                      // the backend settles it by month on the same payment.
+                      if (adminFeeDue > 0)
+                        {'type': 'fee', 'amount': adminFeeDue},
                     ];
                     Navigator.push(
                       context,

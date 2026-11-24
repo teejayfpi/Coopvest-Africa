@@ -61,7 +61,8 @@ describe('amount due includes loans that still owe money', () => {
       },
       { paidThisMonth: false, joinedThisMonth: false },
     );
-    // 5000 savings + 2000 repayment + 3000 penalty + 1500 administrative fee
-    expect(obligations.total_due).toBe(11500);
+    // 5000 savings + 2000 repayment + 3000 penalty + 1500 administrative fee,
+    // plus this month's recurring charge which has no row of its own yet.
+    expect(obligations.total_due).toBe(13000);
   });
 });

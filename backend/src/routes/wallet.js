@@ -22,6 +22,7 @@ const notifyService = require('../services/notifyService');
 const alertService = require('../services/alertService');
 const { resolveMonthlyContribution } = require('../lib/monthlyContribution');
 const { isAdministrativeFeeExempt } = require('../lib/activationGate');
+const { administrativeFeeDue } = require('../lib/administrativeFeeDue');
 
 const newRef = (prefix) => `${prefix}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 
@@ -320,7 +321,31 @@ function applyPaidMonthRule(
   const finesTotal = obligations.fines.reduce((s, f) => s + (Number(f.amount) || 0), 0);
   const feesTotal = obligations.fees.reduce((s, f) => s + (Number(f.amount) || 0), 0);
 
-  obligations.total_due = savingsDue + loanMonthly + finesTotal + feesTotal;
+  // The monthly administrative fee belongs to this month's obligation before
+  // the billing worker has written a row for it, so it is priced from the
+  // catalogue and added here. `administrativeFeeDue` returns 0 once a row
+  // covers the month, so the catalogue amount never stacks on a real charge.
+  //
+  // `administrative_fee_rows` carries every admin-fee row whatever its status.
+  // A caller that supplies only the outstanding `fees` list falls back to it,
+  // matched by label - `fees` also holds unrelated charges like the levy.
+  const adminFeeRowsForDue =
+    obligations.administrative_fee_rows ||
+    (obligations.fees || [])
+      .filter((f) => String((f && f.label) || '').toLowerCase() === 'administrative fee')
+      // `fees` holds outstanding rows only, so each one is unsettled by
+      // definition; `administrativeFeeDue` needs that stated.
+      .map((f) => ({ ...f, status: 'outstanding' }));
+  const adminFeeDue = administrativeFeeDue({
+    exempt: obligations.administrative_fee_exempt,
+    month: obligations.current_month,
+    memberFeeRows: adminFeeRowsForDue,
+  });
+  obligations.administrative_fee_due = adminFeeDue;
+
+  obligations.total_due = savingsDue + loanMonthly + finesTotal + feesTotal + adminFeeDue;
+  // Internal working set - the raw rows are not part of the API contract.
+  delete obligations.administrative_fee_rows;
   return obligations;
 }
 
@@ -442,14 +467,19 @@ async function computeObligations(profileId) {
     if (adminFeeTypeId && mf.fee_type_id === adminFeeTypeId) return true;
     return String(mf.label || '').toLowerCase() === 'administrative fee';
   };
+  // Every administrative-fee row for this member, whatever its status. Used to
+  // tell "already billed this month" from "not billed yet" - see
+  // `administrativeFeeDue`.
+  let adminFeeRows = [];
   try {
     const { data: memberFees } = await supabase
       .from('member_fees')
-      .select('id, fee_type, fee_type_id, label, loan_id, amount, created_at, billing_month')
+      .select('id, fee_type, fee_type_id, label, loan_id, amount, status, created_at, billing_month')
       .eq('profile_id', profileId)
-      .eq('status', 'outstanding')
       .order('created_at', { ascending: false });
+    adminFeeRows = (memberFees || []).filter(isAdministrativeFeeRow);
     for (const mf of memberFees || []) {
+      if (mf.status !== 'outstanding') continue;
       const row = {
         id: mf.id,
         label: mf.label,
@@ -470,6 +500,9 @@ async function computeObligations(profileId) {
   } catch (fErr) {
     logger.warn('obligations: member_fees lookup failed:', fErr.message);
   }
+  // Carried for `administrativeFeeDue`, which needs visibility of rows in any
+  // status - a *paid* row for this month means the fee is settled, not owed.
+  obligations.administrative_fee_rows = adminFeeRows;
 
   // Has this month's savings contribution already been paid? A member who has
   // paid must not keep seeing "Total due this month" — they should be shown

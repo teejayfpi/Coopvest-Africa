@@ -123,6 +123,8 @@ describe('the fee is part of what is due now', () => {
       },
       { paidThisMonth: false, now: NOW },
     );
+    // 5000 savings + the 1500 fee row. The row is dated to the current month,
+    // so the catalogue price is not added on top of it.
     expect(o.total_due).toBe(6500);
   });
 

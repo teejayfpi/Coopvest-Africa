@@ -28,6 +28,11 @@ const { computeObligations } = require('../src/routes/wallet');
 
 const ADMIN_FEE_TYPE_ID = 'ft-admin-fee';
 
+// Dated to the month the tests run in. `computeObligations` prices this month's
+// recurring fee unless a row already covers it, so a hard-coded past month
+// would leave these fixtures owing both that month's arrears and this one's.
+const CURRENT_MONTH = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+
 const ADMIN_FEE_ROW = {
   id: 'mf-admin-fee',
   fee_type: 'fee',
@@ -35,6 +40,8 @@ const ADMIN_FEE_ROW = {
   label: 'Administrative Fee',
   loan_id: null,
   amount: 1500,
+  status: 'outstanding',
+  billing_month: CURRENT_MONTH,
   created_at: '2026-03-01T00:00:00Z',
 };
 
@@ -45,6 +52,7 @@ const FINE_ROW = {
   label: 'Late Loan Repayment Fine',
   loan_id: null,
   amount: 3000,
+  status: 'outstanding',
   created_at: '2026-03-01T00:00:00Z',
 };
 
@@ -55,6 +63,7 @@ const OTHER_FEE_ROW = {
   label: 'Development Levy',
   loan_id: null,
   amount: 500,
+  status: 'outstanding',
   created_at: '2026-03-01T00:00:00Z',
 };
 
