@@ -157,4 +157,68 @@ void main() {
     expect(find.text('Monthly administrative fee'), findsNothing);
     expect(find.textContaining('Pays ₦5,000'), findsOneWidget);
   });
+
+  testWidgets('the advance offer includes the loan instalment', (tester) async {
+    // Paying a month ahead used to settle only the contribution and the fee,
+    // leaving the loan to fall further behind.
+    await pumpCard(
+      tester,
+      {
+        ...base(monthlySavings: 5000),
+        'advance': {
+          'month': '2026-03',
+          'savings': 5000,
+          'administrative_fee': 1500,
+          'loans': [
+            {
+              'loan_id': 'loan-uuid-1',
+              'reference': 'LN-2026-001',
+              'amount': 12000,
+              'remaining_balance': 60000,
+            },
+          ],
+          'loans_total': 12000,
+          'fines': [],
+          'fines_total': 0,
+          'total': 18500,
+        },
+      },
+    );
+
+    expect(find.textContaining('in advance (₦18,500)'), findsOneWidget);
+    expect(
+      find.textContaining('₦12,000 loan repayment'),
+      findsOneWidget,
+      reason: 'the caption must name the loan leg so the total reconciles',
+    );
+  });
+
+  testWidgets('the advance offer is unchanged when there is no loan',
+      (tester) async {
+    await pumpCard(
+      tester,
+      {
+        ...base(monthlySavings: 5000),
+        'advance': {
+          'month': '2026-03',
+          'savings': 5000,
+          'administrative_fee': 1500,
+          'loans': [],
+          'loans_total': 0,
+          'fines': [],
+          'fines_total': 0,
+          'total': 6500,
+        },
+      },
+    );
+
+    expect(find.textContaining('in advance (₦6,500)'), findsOneWidget);
+    // Scoped to the advance caption: the Pay Now caption always names a loan,
+    // so a bare "loan repayment" search would match that instead.
+    expect(
+      find.textContaining(
+          'Covers your ₦5,000 contribution and ₦1,500 administrative fee'),
+      findsOneWidget,
+    );
+  });
 }

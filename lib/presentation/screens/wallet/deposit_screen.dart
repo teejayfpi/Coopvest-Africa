@@ -81,6 +81,11 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
   // one shown as due. The amount is kept per row so two fines of the same type
   // are sent as two allocations; collapsing them would settle only the first
   // and mark it paid for the whole sum.
+  /// Loan instalments the member was shown, so a split payment can target each
+  /// loan by UUID. Collapsing them into one allocation would repay only the
+  /// largest balance and leave the other due.
+  final List<KnownLoanRow> _pendingLoanRows = [];
+
   final Map<String, List<Map<String, dynamic>>> _pendingFeeRows = {
     'fine': [],
     'fee': [],
@@ -118,7 +123,7 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
       if (loan > 0) _splitLoanController.text = loan.toStringAsFixed(0);
       if (fine > 0) _splitFineController.text = fine.toStringAsFixed(0);
       if (fee > 0) _splitFeeController.text = fee.toStringAsFixed(0);
-      // Remember which exact fee rows these amounts correspond to.
+      // Remember which exact rows these amounts correspond to.
       for (final entry in initialAllocations) {
         final t = entry['type'];
         final id = entry['fee_id'];
@@ -127,6 +132,13 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
             'id': id.toString(),
             'amount': (entry['amount'] as num?)?.toDouble() ?? 0.0,
           });
+        }
+        final loanId = entry['loan_id'];
+        if (t == 'loan_repayment' && loanId != null) {
+          _pendingLoanRows.add(KnownLoanRow(
+            id: loanId.toString(),
+            amount: (entry['amount'] as num?)?.toDouble() ?? 0.0,
+          ));
         }
       }
 
@@ -934,7 +946,9 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
     }
 
     add('savings', typed(_splitSavingsController));
-    add('loan_repayment', typed(_splitLoanController));
+    allocations.addAll(
+      allocateLoanAmount(typed(_splitLoanController), _pendingLoanRows),
+    );
 
     for (final entry in {'fine': _splitFineController, 'fee': _splitFeeController}.entries) {
       final rows = _pendingFeeRows[entry.key]!

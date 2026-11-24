@@ -19,17 +19,52 @@ class KnownFeeRow {
   final double amount;
 }
 
+/// A known loan instalment: the loan UUID and the amount shown as due.
+///
+/// The id is the UUID, because the backend matches `loans.id`. Two active loans
+/// cannot share one untargeted allocation - that settles the largest balance
+/// only, leaving the other still due the next month.
+class KnownLoanRow {
+  const KnownLoanRow({required this.id, required this.amount});
+
+  final String id;
+  final double amount;
+}
+
 /// One entry of the `allocations` list sent to `POST /payments/initialize`.
 Map<String, dynamic> allocation(
   String type,
   double amount, {
   String? feeId,
+  String? loanId,
 }) {
   return {
     'type': type,
     'amount': amount,
     if (feeId != null && feeId.isNotEmpty) 'fee_id': feeId,
+    if (loanId != null && loanId.isNotEmpty) 'loan_id': loanId,
   };
+}
+
+/// Split a loan amount across the known instalments in order, then emit any
+/// remainder unlinked so a member can still pay extra.
+List<Map<String, dynamic>> allocateLoanAmount(
+  double amount,
+  List<KnownLoanRow> rows,
+) {
+  final allocations = <Map<String, dynamic>>[];
+  var remaining = amount;
+
+  for (final row in rows) {
+    if (remaining <= 0) break;
+    final applied = row.amount > remaining ? remaining : row.amount;
+    if (applied <= 0) continue;
+    allocations.add(allocation('loan_repayment', applied, loanId: row.id));
+    remaining -= applied;
+  }
+
+  if (remaining > 0) allocations.add(allocation('loan_repayment', remaining));
+  return allocations;
 }
 
 /// Split [amount] across [rows] in order, then emit any remainder unlinked.

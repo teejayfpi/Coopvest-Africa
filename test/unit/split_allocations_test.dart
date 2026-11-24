@@ -83,6 +83,51 @@ void main() {
     }
   });
 
+  test('two loans are sent as two targeted allocations', () {
+    // One untargeted allocation settles the largest balance only, so the other
+    // loan stays due and the member is asked again next month.
+    final allocations = allocateLoanAmount(15000, const [
+      KnownLoanRow(id: 'loan-uuid-1', amount: 12000),
+      KnownLoanRow(id: 'loan-uuid-2', amount: 3000),
+    ]);
+
+    expect(allocations, [
+      {'type': 'loan_repayment', 'amount': 12000.0, 'loan_id': 'loan-uuid-1'},
+      {'type': 'loan_repayment', 'amount': 3000.0, 'loan_id': 'loan-uuid-2'},
+    ]);
+  });
+
+  test('a loan amount smaller than the rows covers only the first', () {
+    final allocations = allocateLoanAmount(5000, const [
+      KnownLoanRow(id: 'loan-uuid-1', amount: 12000),
+      KnownLoanRow(id: 'loan-uuid-2', amount: 3000),
+    ]);
+
+    expect(allocations, [
+      {'type': 'loan_repayment', 'amount': 5000.0, 'loan_id': 'loan-uuid-1'},
+    ]);
+  });
+
+  test('an amount beyond the known loans is sent unlinked', () {
+    // Paying extra is still allowed; it simply has no row to target.
+    final allocations = allocateLoanAmount(20000, const [
+      KnownLoanRow(id: 'loan-uuid-1', amount: 12000),
+    ]);
+
+    expect(allocations, [
+      {'type': 'loan_repayment', 'amount': 12000.0, 'loan_id': 'loan-uuid-1'},
+      {'type': 'loan_repayment', 'amount': 8000.0},
+    ]);
+  });
+
+  test('no known loans sends a single unlinked allocation', () {
+    final allocations = allocateLoanAmount(4000, const []);
+
+    expect(allocations, [
+      {'type': 'loan_repayment', 'amount': 4000.0},
+    ]);
+  });
+
   test('an empty id is omitted rather than sent as null', () {
     final allocations = allocateFeeAmount('fine', 100, const [
       KnownFeeRow(id: '', amount: 100),

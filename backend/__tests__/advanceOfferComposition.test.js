@@ -73,6 +73,122 @@ describe('advance offer composition', () => {
     expect(out.advance.total).toBe(8000);
   });
 
+  test('includes the loan instalment', () => {
+    // The instalment recurs monthly, so a month paid ahead must clear it too;
+    // otherwise the member settles the month and the loan still falls behind.
+    const out = applyPaidMonthRule(
+      base({
+        loans: [
+          {
+            id: 'loan-uuid-1',
+            loan_id: 'LN-2026-001',
+            monthly_repayment: 12000,
+            remaining_balance: 60000,
+            status: 'active',
+          },
+        ],
+      }),
+      { paidThisMonth: true },
+    );
+    expect(out.advance.loans).toHaveLength(1);
+    expect(out.advance.loans[0].amount).toBe(12000);
+    expect(out.advance.loans_total).toBe(12000);
+    // ₦5,000 savings + ₦1,500 fee + ₦12,000 loan.
+    expect(out.advance.total).toBe(18500);
+  });
+
+  test('targets the loan by its UUID, not the human-readable reference', () => {
+    // `applyAllocations` matches `loans.id`. Sending the reference would fall
+    // through to "highest balance" and could repay a different loan.
+    const out = applyPaidMonthRule(
+      base({
+        loans: [
+          {
+            id: 'loan-uuid-1',
+            loan_id: 'LN-2026-001',
+            monthly_repayment: 12000,
+            remaining_balance: 60000,
+            status: 'active',
+          },
+        ],
+      }),
+      { paidThisMonth: true },
+    );
+    expect(out.advance.loans[0].loan_id).toBe('loan-uuid-1');
+    expect(out.advance.loans[0].reference).toBe('LN-2026-001');
+  });
+
+  test('caps the final instalment at the outstanding balance', () => {
+    // A fixed instalment would overpay the last month of a loan.
+    const out = applyPaidMonthRule(
+      base({
+        loans: [
+          {
+            id: 'loan-uuid-1',
+            loan_id: 'LN-2026-001',
+            monthly_repayment: 12000,
+            remaining_balance: 4000,
+            status: 'active',
+          },
+        ],
+      }),
+      { paidThisMonth: true },
+    );
+    expect(out.advance.loans[0].amount).toBe(4000);
+    expect(out.advance.loans_total).toBe(4000);
+  });
+
+  test('sums every active loan', () => {
+    const out = applyPaidMonthRule(
+      base({
+        loans: [
+          { id: 'l1', monthly_repayment: 12000, remaining_balance: 60000 },
+          { id: 'l2', monthly_repayment: 3000, remaining_balance: 9000 },
+        ],
+      }),
+      { paidThisMonth: true },
+    );
+    expect(out.advance.loans_total).toBe(15000);
+    expect(out.advance.total).toBe(21500);
+  });
+
+  test('omits a loan leg when the member has no loan', () => {
+    const out = applyPaidMonthRule(base(), { paidThisMonth: true });
+    expect(out.advance.loans).toEqual([]);
+    expect(out.advance.loans_total).toBe(0);
+    expect(out.advance.total).toBe(6500);
+  });
+
+  test('omits a loan that is already repaid', () => {
+    // A zero balance contributes nothing even if the row is still active.
+    const out = applyPaidMonthRule(
+      base({
+        loans: [
+          { id: 'l1', monthly_repayment: 12000, remaining_balance: 0 },
+        ],
+      }),
+      { paidThisMonth: true },
+    );
+    expect(out.advance.loans).toEqual([]);
+    expect(out.advance.total).toBe(6500);
+  });
+
+  test('a salary-deduction member still owes the loan instalment', () => {
+    // Only the fee is withheld from pay; the loan is not.
+    const out = applyPaidMonthRule(
+      base({
+        administrative_fee_exempt: true,
+        loans: [
+          { id: 'l1', monthly_repayment: 12000, remaining_balance: 60000 },
+        ],
+      }),
+      { paidThisMonth: true },
+    );
+    expect(out.advance.administrative_fee).toBe(0);
+    expect(out.advance.loans_total).toBe(12000);
+    expect(out.advance.total).toBe(17000);
+  });
+
   test('prices the first unpaid month, not blindly the next one', () => {
     const out = applyPaidMonthRule(base(), {
       paidThisMonth: true,
