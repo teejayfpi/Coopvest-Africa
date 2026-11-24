@@ -1866,3 +1866,28 @@ artifact rather than trusting a green check: download it and confirm symbols
 unique to the change appear in `lib/<abi>/libapp.so` for arm64-v8a, armeabi-v7a
 and x86_64. Strings that already existed in an earlier build (e.g. "loan
 repayment" from the Pay Now caption) do not prove a change shipped.
+
+### Fee settlement: check `{ error }`, and never write `member_fees.deposit_id`
+`member_fees.deposit_id` has a foreign key to `deposit_requests`, but the
+settlement code passes a `payment_proofs` id. A proof id is never a
+deposit-request id, so any write including that column fails with 23503 — and
+because the Supabase calls never read `{ error }`, the code logged "settled in
+advance" over a write that had failed. A member paid the NGN1,500 administrative
+fee twice while the card kept showing it due.
+
+Two rules follow:
+
+- A `supabase` write in a settlement path must destructure `{ error }` and log it.
+  An unchecked write plus a success log is worse than no log: it hides the
+  failure and the member pays again.
+- Do not write `deposit_id` when the id is a proof. The settling proof is already
+  recoverable from `payment_proofs` (amount, status, metadata.allocations).
+
+`administrativeFeeDue` prices the fee from the catalogue before the billing
+worker writes its row, so a member paying early in the month settles a charge
+with no row yet. Settlement must then *create* the row as `paid`
+(`createSettledFeeRow`), not skip it — otherwise the money is collected and the
+obligation stays open.
+
+`deposit_requests` is empty in production; nothing in the mobile Paystack flow
+writes to it. Treat `payment_proofs` as the payment record of truth.
