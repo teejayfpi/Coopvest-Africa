@@ -669,7 +669,7 @@ router.post(
       const duplicate = findDuplicatePayment({
         proofs: recentProofs || [],
         paymentType: dbPaymentType,
-        amount: amountNgn,
+        allocations,
         targetMonth,
       });
       if (duplicate) {

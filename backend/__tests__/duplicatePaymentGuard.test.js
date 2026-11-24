@@ -23,7 +23,10 @@ const proof = (overrides = {}) => ({
   created_at: minutesAgo(6),
   deleted_at: null,
   transaction_reference: 'CVP-abc-1',
-  metadata: { target_month: '2026-11' },
+  metadata: {
+    target_month: '2026-11',
+    allocations: [{ type: 'fee', amount: 1500 }],
+  },
   ...overrides,
 });
 
@@ -31,7 +34,7 @@ const check = (proofs, overrides = {}) =>
   findDuplicatePayment({
     proofs,
     paymentType: 'other',
-    amount: 1500,
+    allocations: [{ type: 'fee', amount: 1500 }],
     targetMonth: '2026-11',
     nowMs: NOW,
     ...overrides,
@@ -69,12 +72,47 @@ describe('duplicate payment guard', () => {
   });
 
   test('allows the same amount for a different month', () => {
-    const out = check([proof({ metadata: { target_month: '2026-12' } })]);
+    const out = check([
+      proof({ metadata: { target_month: '2026-12', allocations: [{ type: 'fee', amount: 1500 }] } }),
+    ]);
     expect(out).toBeNull();
   });
 
+  test('blocks a legacy proof that predates target_month', () => {
+    // Real rows from before the column existed carry null. Treating null as a
+    // mismatch would let the original double-charge straight through.
+    const out = check([proof({ metadata: { allocations: [{ type: 'fee', amount: 1500 }] } })]);
+    expect(out).not.toBeNull();
+    expect(out.code).toBe('ALREADY_PAID');
+  });
+
   test('allows a different amount', () => {
-    expect(check([proof({ amount: 5000 })])).toBeNull();
+    expect(check([proof({
+      amount: 5000,
+      metadata: { target_month: '2026-11', allocations: [{ type: 'fee', amount: 5000 }] },
+    })])).toBeNull();
+  });
+
+  test('allows a fine of the same amount as a fee', () => {
+    // fine, fee and mixed all persist as 'other'. Matching on type and amount
+    // alone would refuse a legitimate fine because a fee of equal size was paid.
+    const out = check([proof({
+      metadata: { target_month: '2026-11', allocations: [{ type: 'fine', amount: 1500 }] },
+    })]);
+    expect(out).toBeNull();
+  });
+
+  test('distinguishes a mixed payment from a single leg', () => {
+    const out = check([proof({
+      metadata: {
+        target_month: '2026-11',
+        allocations: [
+          { type: 'fee', amount: 1000 },
+          { type: 'savings', amount: 500 },
+        ],
+      },
+    })]);
+    expect(out).toBeNull();
   });
 
   test('allows a different payment type', () => {
@@ -90,7 +128,10 @@ describe('duplicate payment guard', () => {
   });
 
   test('compares amounts in kobo, so float dust does not defeat it', () => {
-    expect(check([proof({ amount: '1500.00' })])).not.toBeNull();
+    const out = check([
+      proof({ metadata: { target_month: '2026-11', allocations: [{ type: 'fee', amount: '1500.00' }] } }),
+    ]);
+    expect(out).not.toBeNull();
   });
 
   test('returns null when there is nothing recent', () => {
