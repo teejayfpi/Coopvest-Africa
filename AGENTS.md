@@ -1891,3 +1891,31 @@ obligation stays open.
 
 `deposit_requests` is empty in production; nothing in the mobile Paystack flow
 writes to it. Treat `payment_proofs` as the payment record of truth.
+
+### Duplicate charges: each tap mints its own reference
+`/payments/initialize` builds `CVP-<profile8>-<Date.now()>`, so a member who taps
+Pay Now twice gets two independent Paystack checkouts. Paystack cannot see them
+as the same intent, and nothing on the gateway side will refuse the second. The
+only place to stop it is the API, before the gateway call.
+
+`lib/duplicatePaymentGuard.js` refuses an intent already started in the last
+hour: `pending` within 2 min (`PAYMENT_IN_PROGRESS`), `approved` within 15 min
+(`ALREADY_PAID`). The windows differ because the retry shapes differ — a
+double-tap hits an open checkout in seconds, while a member who thinks the
+payment failed retries minutes later. Keep the pending window short: an
+abandoned checkout leaves a `pending` row forever, so a long window locks the
+member out of retrying.
+
+Two things that look like they should match but do not:
+
+- `payment_type` is not a payment kind. `fine`, `fee` and `mixed` all persist as
+  `'other'` via `DB_PAYMENT_TYPE`, so identity has to come from
+  `metadata.allocations` (see `intentOf`). Comparing type and amount alone
+  refuses a NGN3,000 fine because a NGN3,000 fee was paid.
+- Older proofs store `metadata.target_month = null` while every request now
+  resolves one. Compare months only when both sides state one, or the legacy
+  double-charges slip through.
+
+Verify against real rows, not just fixtures: pull the member's proofs and replay
+`findDuplicatePayment` at the timestamp of the second payment. That replay is
+what exposed both flaws above.
