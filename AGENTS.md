@@ -1850,13 +1850,19 @@ body - `{ enabled: true }` - silently zeroed the referral bonus and cap. It now
 sets only the keys present in the request. When adding a settings endpoint, treat
 an absent field as "leave it alone", not as "set it to zero".
 
-### CI is currently blocked by billing
-Every workflow fails within ~3s with zero steps executed:
-"The job was not started because recent account payments have failed or your
-spending limit needs to be increased." This is an account billing state, not a
-code or workflow problem - it affects all four workflows equally, including
-commits that were green before. Until it is fixed, CI cannot gate a push and
-`Build Flutter APK` cannot produce an artifact; run the suites locally instead
-(`npx jest` in `backend/`, `flutter test` at the root) and build the APK on a
-machine with a JDK and Android SDK. Render deploys are unaffected because they
-are triggered by Render's own GitHub integration, not Actions.
+### CI: billing block is per-account, so use the mirror
+On `coopvestafrica-ops/Latest-Coopvest` every workflow fails within ~3s with zero
+steps executed: "The job was not started because recent account payments have
+failed or your spending limit needs to be increased." That is an account billing
+state, not a code or workflow problem, and it hits all four workflows equally,
+including commits that were green before. Render deploys are unaffected there
+because Render's own GitHub integration triggers them, not Actions.
+
+`teejayfpi/Coopvest-Africa` is a different owner with its own Actions budget and
+runs the same four workflows successfully. So while the `coopvestafrica-ops`
+block persists, push to the mirror first and let it build the APK - do not
+conclude "the APK cannot be built" from a red run on the source repo. Verify the
+artifact rather than trusting a green check: download it and confirm symbols
+unique to the change appear in `lib/<abi>/libapp.so` for arm64-v8a, armeabi-v7a
+and x86_64. Strings that already existed in an earlier build (e.g. "loan
+repayment" from the Pay Now caption) do not prove a change shipped.
