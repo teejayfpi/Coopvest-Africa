@@ -30,10 +30,90 @@ const logger = require('../utils/logger');
 const notifyService = require('../services/notifyService');
 const { ALLOWED_PAYMENT_TYPES, DB_PAYMENT_TYPE, normalizeAllocations } = require('../lib/allocations');
 const { paystackFetch, secretKey, classifyFailure } = require('../lib/paystackCharge');
-const { resolveTargetMonth } = require('../lib/billingMonth');
+const { resolveTargetMonth, monthKey } = require('../lib/billingMonth');
 const { recordFailedCharge, alertFailedCharge } = require('../lib/failedChargeAudit');
 
 const MIN_AMOUNT_NGN = 100;
+
+/**
+ * `member_fees.deposit_id` has a foreign key to `deposit_requests`, but every
+ * settlement path in this file passes a `payment_proofs` id. A proof id is
+ * never a deposit-request id, so any write that included the column failed with
+ * 23503 — and because the error was never read, the caller logged success while
+ * the fee stayed outstanding. The member paid, the dot stayed orange, and they
+ * paid again.
+ *
+ * The column is therefore left alone: the proof that settled a fee is already
+ * recoverable from `payment_proofs` (amount, status, metadata.allocations), so
+ * writing an unverifiable reference into it bought nothing but the failure.
+ */
+async function settleFeeRow(rowId, proof) {
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from('member_fees')
+    .update({ status: 'paid', paid_at: now, updated_at: now })
+    .eq('id', rowId);
+  if (error) {
+    // Loud, because silence here is what let a paid fee read as unpaid.
+    logger.error(
+      `paystack settle: could not mark fee ${rowId} paid for proof ${proof && proof.id}: ${error.message}`,
+    );
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Record a fee the member has just paid but which was never billed as a row.
+ *
+ * The recurring administrative fee is priced from the catalogue before the
+ * billing worker writes its `member_fees` row, so a member paying early in the
+ * month settles a charge that has no row yet. Without this the payment was
+ * accepted and the obligation stayed open.
+ *
+ * Inserted already `paid`: the money has been collected, and the row must not
+ * appear as outstanding for even one read. Returns false on any failure so the
+ * caller can log a warning rather than claim a settlement that did not happen.
+ */
+async function createSettledFeeRow(proof, alloc, targetMonth) {
+  const feeTypeName = alloc.type === 'registration_fee' ? 'Registration Fee' : 'Administrative Fee';
+  const month = targetMonth || monthKey();
+  try {
+    const { data: feeType, error: typeErr } = await supabase
+      .from('fee_types')
+      .select('id')
+      .eq('name', feeTypeName)
+      .eq('category', alloc.type === 'registration_fee' ? 'registration_fee' : 'fee')
+      .maybeSingle();
+    if (typeErr || !feeType?.id) {
+      logger.warn(`paystack settle: fee type "${feeTypeName}" not found for proof ${proof.id}: ${typeErr?.message || 'no row'}`);
+      return false;
+    }
+    const now = new Date().toISOString();
+    const { error } = await supabase.from('member_fees').insert({
+      profile_id: proof.profile_id,
+      fee_type_id: feeType.id,
+      fee_type: alloc.type === 'registration_fee' ? 'registration_fee' : 'fee',
+      label: feeTypeName,
+      amount: Number(alloc.amount) || 0,
+      status: 'paid',
+      paid_at: now,
+      billing_month: month,
+    });
+    if (error) {
+      // 23505 = the row appeared between the lookup and this insert (the billing
+      // worker ticked). Not a failure: that row is outstanding and the caller
+      // will settle it on the next pass, so report false and let the warning show.
+      logger.warn(`paystack settle: could not create ${feeTypeName} row for ${month} (proof ${proof.id}): ${error.message}`);
+      return false;
+    }
+    logger.info(`paystack settle: ${feeTypeName} for ${month} recorded as paid, no prior row (proof ${proof.id})`);
+    return true;
+  } catch (err) {
+    logger.warn(`paystack settle: ${feeTypeName} row creation failed for proof ${proof.id}: ${err.message}`);
+    return false;
+  }
+}
 
 /**
  * Apply the allocations of an auto-approved Paystack charge (mirrors the
@@ -185,18 +265,21 @@ async function applyAllocations(proof, { recordedBy = null } = {}) {
         feeRow = data;
       }
       if (feeRow) {
-        await supabase
-          .from('member_fees')
-          .update({
-            status: 'paid',
-            paid_at: new Date().toISOString(),
-            deposit_id: proof.id,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', feeRow.id);
-        logger.info(`paystack settle: ${alloc.type} ₦${amt} paid → fee ${feeRow.id} (proof ${proof.id})`);
+        const settled = await settleFeeRow(feeRow.id, proof);
+        if (settled) {
+          logger.info(`paystack settle: ${alloc.type} ₦${amt} paid → fee ${feeRow.id} (proof ${proof.id})`);
+        }
       } else {
-        logger.warn(`paystack settle: ${alloc.type} ₦${amt} has no outstanding member_fees row to settle`);
+        // No row to settle: the billing worker has not run for this month yet.
+        // `administrativeFeeDue` already priced this charge into the total the
+        // member just paid, so dropping it here left the money collected and the
+        // obligation outstanding — the member paid and the fee still showed due.
+        // Create the settled row instead, which also stops `administrativeFeeDue`
+        // pricing the month again on the next read.
+        const created = await createSettledFeeRow(proof, alloc, metadata.target_month);
+        if (!created) {
+          logger.warn(`paystack settle: ${alloc.type} ₦${amt} has no outstanding member_fees row to settle`);
+        }
       }
     }
   } catch (applyErr) {
@@ -274,16 +357,13 @@ async function applyTargetMonth(proof) {
     const now = new Date().toISOString();
     if (existing) {
       if (existing.status !== 'paid') {
-        await supabase
-          .from('member_fees')
-          .update({ status: 'paid', paid_at: now, deposit_id: proof.id })
-          .eq('id', existing.id);
+        await settleFeeRow(existing.id, proof);
       }
       return;
     }
 
     const { ADMINISTRATIVE_FEE } = require('../config/feeDisclosure');
-    await supabase.from('member_fees').insert({
+    const { error: insertErr } = await supabase.from('member_fees').insert({
       profile_id: proof.profile_id,
       fee_type_id: feeType.id,
       fee_type: 'fee',
@@ -291,9 +371,12 @@ async function applyTargetMonth(proof) {
       amount: ADMINISTRATIVE_FEE.total,
       status: 'paid',
       paid_at: now,
-      deposit_id: proof.id,
       billing_month: targetMonth,
     });
+    if (insertErr) {
+      logger.warn(`paystack settle: advance fee insert failed for ${targetMonth} (proof ${proof.id}): ${insertErr.message}`);
+      return;
+    }
     logger.info(`paystack settle: administrative fee for ${targetMonth} settled in advance (proof ${proof.id})`);
   } catch (err) {
     logger.warn(`paystack settle: advance fee settlement failed for proof ${proof.id}: ${err.message}`);
@@ -349,7 +432,7 @@ async function settleSuccessfulCharge(reference) {
       .eq('id', proof.profile_id);
     await supabase
       .from('member_fees')
-      .update({ status: 'paid', paid_at: now, deposit_id: proof.id })
+      .update({ status: 'paid', paid_at: now, updated_at: now })
       .eq('profile_id', proof.profile_id)
       .eq('fee_type', 'registration_fee')
       .eq('status', 'outstanding');
@@ -759,3 +842,6 @@ router.post('/webhook', async (req, res) => {
 
 module.exports = router;
 module.exports.settleSuccessfulCharge = settleSuccessfulCharge;
+module.exports.applyAllocations = applyAllocations;
+module.exports.createSettledFeeRow = createSettledFeeRow;
+module.exports.applyTargetMonth = applyTargetMonth;
