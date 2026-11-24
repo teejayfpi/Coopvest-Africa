@@ -35,10 +35,27 @@ function toKobo(value) {
 }
 
 /**
+ * The intent a proof represents, as stored.
+ *
+ * `payment_type` alone is not enough: `fine`, `fee` and `mixed` all persist as
+ * `'other'` (see DB_PAYMENT_TYPE), so a NGN3,000 fine and a NGN3,000 fee payment
+ * are indistinguishable by type and amount. The allocation breakdown keeps the
+ * distinction, so it is folded into a stable signature — `fee:1500`, or
+ * `mixed:1000+2000` for a split.
+ */
+function intentOf({ paymentType, allocations = [] }) {
+  const legs = (Array.isArray(allocations) ? allocations : [])
+    .filter((a) => a && Number(a.amount) > 0)
+    .map((a) => `${a.type}:${toKobo(a.amount)}`)
+    .sort();
+  return `${paymentType}|${legs.join('+')}`;
+}
+
+/**
  * @param {object} args
  * @param {Array<object>} args.proofs  Recent proofs for this member, any status.
  * @param {string} args.paymentType    Stored payment type (e.g. 'other', 'monthly_contribution').
- * @param {number} args.amount         Amount in naira.
+ * @param {Array<{type: string, amount: number}>} args.allocations  Intended breakdown.
  * @param {string|null} args.targetMonth 'YYYY-MM' the payment settles.
  * @param {number} [args.nowMs]
  * @param {number} [args.pendingWindowMs]
@@ -48,25 +65,30 @@ function toKobo(value) {
 function findDuplicatePayment({
   proofs = [],
   paymentType,
-  amount,
+  allocations = [],
   targetMonth = null,
   nowMs = Date.now(),
   pendingWindowMs = DEFAULT_PENDING_WINDOW_MS,
   approvedWindowMs = DEFAULT_APPROVED_WINDOW_MS,
 } = {}) {
-  const wantedKobo = toKobo(amount);
-  if (!Number.isFinite(wantedKobo) || wantedKobo <= 0) return null;
+  const wanted = intentOf({ paymentType, allocations });
+  if (wanted.endsWith('|')) return null;
 
   for (const proof of proofs) {
     if (!proof || proof.deleted_at) continue;
     if (proof.payment_type !== paymentType) continue;
-    if (toKobo(proof.amount) !== wantedKobo) continue;
 
-    // A month-scoped intent must match the month. When the request names no
-    // month it is a current-month payment, which is stored with one, so compare
-    // the resolved value rather than treating "absent" as a wildcard.
+    const stored = intentOf({
+      paymentType: proof.payment_type,
+      allocations: proof.metadata?.allocations,
+    });
+    if (stored !== wanted) continue;
+
+    // Months are only compared when both sides state one. Proofs written before
+    // `target_month` existed carry null, and refusing to match them would let
+    // exactly the legacy double-charge this guard exists to stop through.
     const proofMonth = proof.metadata?.target_month ?? null;
-    if ((targetMonth ?? null) !== proofMonth) continue;
+    if (targetMonth && proofMonth && proofMonth !== targetMonth) continue;
 
     const createdAt = new Date(proof.created_at).getTime();
     if (!Number.isFinite(createdAt)) continue;
