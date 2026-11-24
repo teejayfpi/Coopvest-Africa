@@ -25,6 +25,7 @@ jest.mock('../src/config/supabase', () => ({
 }));
 
 const { computeObligations } = require('../src/routes/wallet');
+const { ADMINISTRATIVE_FEE } = require('../src/config/feeDisclosure');
 
 const ADMIN_FEE_TYPE_ID = 'ft-admin-fee';
 
@@ -159,6 +160,63 @@ describe('salary-deduction members do not pay the fee in-app', () => {
 
     const o = await computeObligations('p1');
     expect(o.administrative_fee_exempt).toBe(true);
+  });
+});
+
+describe('a payroll member with nothing billed yet is still exempt', () => {
+  // The regression this guards. Pricing the fee from the catalogue means an
+  // *absent* row no longer implies "no fee", so a payroll member whose employer
+  // had not been billed yet would be charged in-app as well as from salary.
+  test('no fee row does not make the payroll member liable', async () => {
+    resetTables({
+      profile: {
+        contribution_method: 'payroll',
+        contribution_type: 'salary_deduction',
+        organization_id: 'org-1',
+      },
+      memberFees: [],
+    });
+
+    const o = await computeObligations('p1');
+
+    expect(o.administrative_fee_exempt).toBe(true);
+    expect(o.administrative_fee_due).toBe(0);
+    // Savings only - the employer withholds the fee, so nothing is added.
+    expect(o.total_due).toBe(5000);
+  });
+
+  test('a pending employer inside the window with no row is exempt too', async () => {
+    resetTables({
+      profile: {
+        contribution_method: 'payroll',
+        organization_id: null,
+        pending_organization_name: 'Lagos State Ministry of Finance',
+        pending_organization_requested_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      memberFees: [],
+    });
+
+    const o = await computeObligations('p1');
+    expect(o.administrative_fee_due).toBe(0);
+    expect(o.total_due).toBe(5000);
+  });
+
+  test('a direct-deposit member with no row is charged', async () => {
+    // The mirror image, so the exemption is not simply switching the charge off
+    // for everyone.
+    resetTables({
+      profile: {
+        contribution_method: 'manual',
+        contribution_type: 'direct_deposit',
+        organization_id: 'org-1',
+      },
+      memberFees: [],
+    });
+
+    const o = await computeObligations('p1');
+    expect(o.administrative_fee_exempt).toBe(false);
+    expect(o.administrative_fee_due).toBe(ADMINISTRATIVE_FEE.total);
+    expect(o.total_due).toBe(5000 + ADMINISTRATIVE_FEE.total);
   });
 });
 
