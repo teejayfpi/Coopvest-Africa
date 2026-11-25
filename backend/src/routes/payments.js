@@ -29,6 +29,7 @@ const validate = require('../middleware/validate');
 const logger = require('../utils/logger');
 const notifyService = require('../services/notifyService');
 const { ALLOWED_PAYMENT_TYPES, DB_PAYMENT_TYPE, normalizeAllocations } = require('../lib/allocations');
+const { feePriceFor, findUnderpaidFees } = require('../lib/feePricing');
 const { paystackFetch, secretKey, classifyFailure } = require('../lib/paystackCharge');
 const { resolveTargetMonth, monthKey } = require('../lib/billingMonth');
 const { recordFailedCharge, alertFailedCharge } = require('../lib/failedChargeAudit');
@@ -600,6 +601,43 @@ async function handleFailedCharge(data, eventName) {
 }
 
 /**
+ * Price a fee allocation from the database.
+ *
+ * An explicit `fee_id` wins — it is the exact row the member was shown, so its
+ * amount is what they owe even if the catalogue has since changed. Otherwise
+ * price from `fee_types`, scoped to the member's own outstanding rows first so
+ * a per-member override is honoured.
+ *
+ * Returns null when the fee cannot be priced, which leaves the payment to the
+ * normal settlement path rather than blocking it on a lookup failure.
+ */
+async function resolveFeePrice(profileId, alloc) {
+  try {
+    if (alloc.fee_id) {
+      // Scoped to the member: an id alone must not let one member price their
+      // payment from another member's (smaller) row.
+      const { data } = await supabase
+        .from('member_fees')
+        .select('amount')
+        .eq('id', alloc.fee_id)
+        .eq('profile_id', profileId)
+        .maybeSingle();
+      if (data && data.amount != null) return Number(data.amount) || 0;
+      // Not this member's row — fall through to the catalogue rather than
+      // trusting an id we do not recognise.
+    }
+    const { data: catalogue } = await supabase
+      .from('fee_types')
+      .select('name, category, amount')
+      .eq('is_active', true);
+    return feePriceFor({ rows: [], catalogue: catalogue || [], type: alloc.type });
+  } catch (err) {
+    logger.warn(`fee pricing lookup failed (${alloc.type}): ${err.message}`);
+    return null;
+  }
+}
+
+/**
  * POST /api/v1/payments/initialize
  * Body: { amount, payment_type } → { authorization_url, reference }
  */
@@ -652,7 +690,61 @@ router.post(
       const allocationType = requestedAllocation;
       const dbPaymentType = (DB_PAYMENT_TYPE[paymentType] || 'other');
 
+      // A fee is a fixed obligation, so its price comes from the server. The
+      // settlement path marks a member_fees row paid on any positive amount, so
+      // a client that edited the split down (e.g. NGN1 against a NGN1,500 fee)
+      // would clear the whole charge. Refuse before the gateway call so the
+      // member is told what they owe and no money moves.
+      const prices = new Map();
+      for (const alloc of allocations) {
+        if (['fee', 'fine', 'registration_fee'].includes(alloc.type)) {
+          prices.set(alloc, await resolveFeePrice(req.user.id, alloc));
+        }
+      }
+      const shortFees = findUnderpaidFees({
+        allocations,
+        priceFor: (alloc) => prices.get(alloc),
+      });
+      if (shortFees.length > 0) {
+        const first = shortFees[0];
+        logger.warn(
+          `paystack initialize: underpaid fee refused for ${req.user.id} `
+          + `(sent NGN${first.sent}, requires NGN${first.required}, type ${first.type})`,
+        );
+        return res.status(400).json({
+          success: false,
+          code: 'FEE_UNDERPAID',
+          error: `The ${first.type === 'fine' ? 'fine' : 'fee'} is fixed at NGN${first.required.toLocaleString()}. `
+            + `You entered NGN${first.sent.toLocaleString()}. Fees cannot be part-paid.`,
+          required: first.required,
+          sent: first.sent,
+          underpaid: shortFees,
+        });
+      }
+
       const reference = `CVP-${req.user.id.slice(0, 8)}-${Date.now()}`;
+
+      // The allocation is what settlement credits, and the wallet credit is
+      // taken from it rather than from the amount charged. A split that summed
+      // to more than the total would credit money that was never paid, so the
+      // two must agree. The app already enforces this client-side; the server
+      // must not depend on that.
+      if (allocations.length > 0) {
+        const allocTotal = allocations.reduce((s, a) => s + (Number(a.amount) || 0), 0);
+        if (Math.abs(allocTotal - amountNgn) > 0.01) {
+          logger.warn(
+            `paystack initialize: allocation/amount mismatch for ${req.user.id} `
+            + `(allocations NGN${allocTotal}, amount NGN${amountNgn})`,
+          );
+          return res.status(400).json({
+            success: false,
+            code: 'ALLOCATION_MISMATCH',
+            error: `The split adds up to NGN${allocTotal.toLocaleString()} but the payment is NGN${amountNgn.toLocaleString()}. They must match.`,
+            allocations_total: allocTotal,
+            amount: amountNgn,
+          });
+        }
+      }
 
       // Refuse a second charge for the same intent. Checked before the gateway
       // call so a double-tap costs the member nothing, and before the reference
