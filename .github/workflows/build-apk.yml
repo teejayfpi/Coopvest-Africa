@@ -163,6 +163,20 @@ jobs:
           echo "key.properties written ($(wc -l < android/key.properties) lines)."
           echo "Contents withheld — it holds signing passwords."
 
+      # Without this, every run re-downloads the whole Gradle/Kotlin dependency
+      # graph, and Maven Central intermittently answers 429 Too Many Requests —
+      # which failed the release build twice on the same run. Caching the
+      # downloaded artifacts makes a rate-limited mirror a non-event.
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('android/**/*.gradle*', 'android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
       - name: Build debug APK
         if: ${{ github.event.inputs.build_type == 'debug' }}
         run: flutter build apk --debug --dart-define=ENV=prod --no-tree-shake-icons --android-skip-build-dependency-validation
@@ -177,13 +191,39 @@ jobs:
         #
         # versionCode comes from the CI run number so every build is a strictly
         # higher code than the last — Play rejects a re-upload at the same code.
-        run: flutter build apk --release --build-name=1.0.0 --build-number=${{ github.run_number }} --dart-define=ENV=prod --no-tree-shake-icons --android-skip-build-dependency-validation
+        #
+        # Retried because Maven Central rate-limits shared runner IPs (HTTP 429).
+        # Flutter retries once internally and then gives up, so a second attempt
+        # after a short pause is what actually gets the build through.
+        run: |
+          for attempt in 1 2 3; do
+            if flutter build apk --release --build-name=1.0.0 --build-number=${{ github.run_number }} --dart-define=ENV=prod --no-tree-shake-icons --android-skip-build-dependency-validation; then
+              exit 0
+            fi
+            echo "::warning::Release APK build failed on attempt ${attempt} of 3."
+            if [ "${attempt}" -lt 3 ]; then
+              sleep $((attempt * 30))
+            fi
+          done
+          echo "::error::Release APK build failed after 3 attempts."
+          exit 1
 
       - name: Build release App Bundle (Google Play)
         if: ${{ github.event.inputs.build_type != 'debug' }}
         # Google Play requires an .aab, not an .apk. Play then derives per-device
         # APKs and re-signs with its own upload key.
-        run: flutter build appbundle --release --build-name=1.0.0 --build-number=${{ github.run_number }} --dart-define=ENV=prod --no-tree-shake-icons
+        run: |
+          for attempt in 1 2 3; do
+            if flutter build appbundle --release --build-name=1.0.0 --build-number=${{ github.run_number }} --dart-define=ENV=prod --no-tree-shake-icons; then
+              exit 0
+            fi
+            echo "::warning::App Bundle build failed on attempt ${attempt} of 3."
+            if [ "${attempt}" -lt 3 ]; then
+              sleep $((attempt * 30))
+            fi
+          done
+          echo "::error::App Bundle build failed after 3 attempts."
+          exit 1
 
       - name: Locate built APK
         id: locate_apk
