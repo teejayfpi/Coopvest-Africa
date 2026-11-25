@@ -2094,3 +2094,40 @@ back to `'pending'`, so `/auth/me` reported `kycStatus: 'approved'` while the ap
 rendered "pending" for every signed-in member. Prefer the explicit status field,
 then the snake_case variant, then any boolean. Do not let a boolean that is
 merely absent override a status string that is present.
+
+## `/opt` is not writable in this container; install SDKs under `$HOME`
+`/opt` exists but is owned by root and is not writable by the `openhands` user,
+so the documented `sudo mkdir -p /opt/flutter` step fails and a background
+extraction into `/opt` dies with `Cannot mkdir`. It is also wiped between
+sessions. Extract Flutter under `$HOME` instead:
+
+```bash
+mkdir -p ~/flutter-sdk
+curl -sL -o /tmp/f.tar.xz https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.50.1-stable.tar.xz
+tar xf /tmp/f.tar.xz -C ~/flutter-sdk
+export PATH="$HOME/flutter-sdk/flutter/bin:$PATH"
+```
+
+`flutter analyze` reports deprecation `info`s for `package:flutter/material.dart`
+under 3.50.1; treat only `error`/`warning` counts as the gate.
+
+## `npm audit fix --omit=dev` prunes dev dependencies
+Running it with `--omit=dev` removes `supertest` and other dev packages from
+`node_modules`, and every route test then fails with
+`Cannot find module 'supertest'`. Run `npm install --include=dev` afterwards and
+re-run the suite before committing the lockfile.
+
+## Check the live database, not just the migration ledger
+Production applies migrations by hand, so `schema_migrations` can claim a file
+ran that the repository does not contain — 078 was live for two days before it
+existed in git. A rebuild from the repo would have silently reintroduced the
+money bugs it fixed. Confirm behaviour with
+`pg_get_functiondef` against the project before assuming repo state matches
+production:
+
+```bash
+curl -s -X POST "https://api.supabase.com/v1/projects/$REF/database/query" \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"query":"select pg_get_functiondef(p.oid) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='"'"'public'"'"' and p.proname='"'"'handle_payment_proof_approval'"'"';"}'
+```
