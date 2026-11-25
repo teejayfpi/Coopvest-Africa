@@ -600,9 +600,10 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-      final serverCode = e is DioException && e.response?.data is Map
-          ? (e.response!.data as Map)['code']
+      final serverData = e is DioException && e.response?.data is Map
+          ? e.response!.data as Map
           : null;
+      final serverCode = serverData?['code'];
       // A refused duplicate is not a failed payment. Say so plainly and refresh
       // the wallet, so the member sees the first payment that already landed
       // instead of retrying and being charged twice.
@@ -624,7 +625,7 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
       }
       if (serverCode == 'FEE_UNDERPAID') {
         // The server prices fees; retyping a split cannot part-pay one.
-        final msg = (e.response!.data as Map)['error']?.toString()
+        final msg = serverData?['error']?.toString()
             ?? 'A fee cannot be part-paid. Please pay the full amount.';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -637,7 +638,10 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
       }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Online payment failed: ${e is DioException ? (e.response?.data?['error'] ?? e.message) : e}'),
+          content: Text(
+            'Online payment failed: '
+            '${serverData?['error'] ?? (e is DioException ? e.message : e)}',
+          ),
           backgroundColor: CoopvestColors.error,
         ),
       );
