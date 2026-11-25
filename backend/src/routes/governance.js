@@ -79,9 +79,11 @@ function parseDevice(ua) {
 
 // Approximate location from a string. Real geo-IP requires a lookup service
 // (MaxMind/IPAPI); we keep it best-effort and let the frontend record GPS.
+// Unresolvable addresses return null so the UI omits the field rather than
+// showing a developer-facing placeholder.
 function approxLocation(ip) {
   if (!ip || ip === '::1' || ip.startsWith('127.') || ip.startsWith('10.')) return 'Local network';
-  return 'Unknown — configure a geo-IP provider for city/country';
+  return null;
 }
 
 async function profileById(id) {

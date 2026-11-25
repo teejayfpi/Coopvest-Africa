@@ -252,12 +252,13 @@ router.post('/calculate-interest', async (req, res) => {
 /**
  * GET /api/v1/referrals/:referralId/status
  */
-router.get('/:referralId/status', [param('referralId').notEmpty()], validate, async (req, res) => {
+router.get('/:referralId/status', [param('referralId').isUUID()], validate, async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('referral_events')
       .select('*, referred:profiles!referral_events_referred_id_fkey(id, kyc_verified)')
       .eq('id', req.params.referralId)
+      .eq('referrer_id', req.user.id)
       .maybeSingle();
     if (error) throw error;
     if (!data) return res.status(404).json({ success: false, error: 'Referral not found' });
@@ -275,14 +276,15 @@ router.get('/:referralId/status', [param('referralId').notEmpty()], validate, as
       confirmed: data.confirmed === true,
     });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    logger.error('referral status lookup failed:', err.message);
+    res.status(500).json({ success: false, error: 'Could not load referral status' });
   }
 });
 
 /**
  * GET /api/v1/referrals/:referralId — get a single referral event
  */
-router.get('/:referralId', [param('referralId').notEmpty()], validate, async (req, res) => {
+router.get('/:referralId', [param('referralId').isUUID()], validate, async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('referral_events')
@@ -294,7 +296,8 @@ router.get('/:referralId', [param('referralId').notEmpty()], validate, async (re
     if (!data) return res.status(404).json({ success: false, error: 'Referral not found' });
     res.json({ success: true, referral: data });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    logger.error('referral lookup failed:', err.message);
+    res.status(500).json({ success: false, error: 'Could not load referral' });
   }
 });
 
