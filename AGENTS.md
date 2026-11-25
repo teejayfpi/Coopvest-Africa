@@ -1919,3 +1919,33 @@ Two things that look like they should match but do not:
 Verify against real rows, not just fixtures: pull the member's proofs and replay
 `findDuplicatePayment` at the timestamp of the second payment. That replay is
 what exposed both flaws above.
+
+## Fees are priced by the server, never by the client
+
+The deposit screen lets a member edit how a "Pay Now" payment is split, and the
+split is what settlement acts on. Savings may be any amount — it is the
+member's own money — but a fee is a fixed obligation. `settleFeeRow` marks a
+`member_fees` row paid on *any* positive amount, so before this guard a request
+for `{ fee: 1, savings: 99 }` cleared the NGN1,500 administrative fee for NGN1.
+Reproduced against the live API, not inferred from the code.
+
+Two guards in `POST /payments/initialize`, both before the gateway call so a
+refused payment never moves money:
+
+- `findUnderpaidFees` (`src/lib/feePricing.js`) prices each fee leg from the
+  member's own row (when a `fee_id` is sent) or the `fee_types` catalogue and
+  returns 400 `FEE_UNDERPAID`. A fee the server cannot price is left to the
+  settlement path rather than blocking a legitimate payment.
+- Allocations must sum to the amount charged, else 400 `ALLOCATION_MISMATCH`.
+  The wallet credit is read from the allocation, not from `proof.amount`, so a
+  split summing above the total would credit money never collected.
+
+Two shapes that are *not* underpayments, and must not be rejected:
+
+- `allocateFeeAmount` covers a row, then emits the excess as a second leg with
+  no `fee_id`. That remainder is not a price; only untargeted legs that are the
+  sole leg of their type are priced against the catalogue.
+- An exempt member's advance payment sends no fee leg at all.
+
+`fee_id` lookups are scoped to `profile_id` — an id alone must not let a member
+price their payment from another member's smaller row.
