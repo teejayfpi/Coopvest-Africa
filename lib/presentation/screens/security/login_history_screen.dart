@@ -188,14 +188,16 @@ class _LoginHistoryScreenState extends ConsumerState<LoginHistoryScreen> {
                       ],
                     ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    record.location,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: context.textSecondary,
+                  if (record.location.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      record.location,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: context.textSecondary,
+                      ),
                     ),
-                  ),
+                  ],
                   const SizedBox(height: 4),
                   Text(
                     record.formattedDate,

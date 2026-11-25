@@ -2058,3 +2058,39 @@ environment: `android/gradle/wrapper` pins Gradle 8.11.1 and
 >= 9.3.1. Upgrading is a deliberate migration (Gradle 9, AGP 9, Kotlin plugin
 bump) and will break plugins that have not shipped Gradle 9 support. Get a
 device-tested build before merging it; do not bump it casually.
+## Approving a payment proof must actually post the money
+Approving a proof is supposed to write the contribution, the savings credit, a
+wallet transaction and the append-only ledger entry. Four separate defects meant
+the last three never happened, and every handler was `exception when others then
+null`, so approvals looked successful while the money vanished:
+
+1. Savings was credited with a bare `update ... where profile_id = ...`.
+   `savings` is created lazily by the API, so a first-time payer has no row and
+   the update matched zero rows. A zero-row UPDATE is not an error in SQL.
+2. `transactions.transaction_id` is NOT NULL with no default and the insert
+   never supplied it.
+3. `transactions` has CHECK constraints: `category` is credit|debit, `status` is
+   pending|processing|completed|failed|cancelled|reversed, and `type` comes from
+   a fixed list. The old row used `type='credit'`, `category='payment_proof'`,
+   `status='successful'` - all three invalid.
+4. The ledger insert compared `loan_repayments.reference` (text) to `new.id`
+   (uuid) with no cast: `operator does not exist: text = uuid`.
+
+On production this left `transactions` and `ledger_entries` completely empty for
+every approval ever made. Migration 078 fixes all four and raises a warning with
+the real message instead of discarding it.
+
+When a trigger credits an aggregate row, create the row first, check the column
+types and CHECK constraints you are inserting into, and never swallow the error.
+`__tests__/paymentProofApproval.test.js` pins each mistake; three of its five
+assertions fail against the pre-078 function.
+
+Back-posting existing drift is a separate, human-approved step. The
+reconciliation job's `savings_vs_contributions` check names affected members.
+
+## Parse the status string the API actually sends
+`User.fromJson` read `kycVerified` (a boolean the API no longer sends) and fell
+back to `'pending'`, so `/auth/me` reported `kycStatus: 'approved'` while the app
+rendered "pending" for every signed-in member. Prefer the explicit status field,
+then the snake_case variant, then any boolean. Do not let a boolean that is
+merely absent override a status string that is present.

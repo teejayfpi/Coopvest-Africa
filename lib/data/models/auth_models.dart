@@ -110,7 +110,12 @@ class User extends Equatable {
       dateOfBirth: json['date_of_birth'] as String?,
       gender: json['gender'] as String?,
       occupation: json['occupation'] as String?,
-      kycStatus: json['kycVerified'] == true ? 'approved' : (json['kyc_status'] as String? ?? 'pending'),
+      // The API reports the status string as camelCase `kycStatus`; the boolean
+      // `kycVerified` is a separate, older signal. Prefer the explicit status so
+      // an approved member is not shown as pending.
+      kycStatus: json['kycStatus'] as String? ??
+          json['kyc_status'] as String? ??
+          (json['kycVerified'] == true ? 'approved' : 'pending'),
       membershipStatus: json['membershipStatus'] as String? ?? json['membership_status'] as String? ?? 'active',
       idType: json['id_type'] as String?,
       idNumber: json['id_number'] as String?,
