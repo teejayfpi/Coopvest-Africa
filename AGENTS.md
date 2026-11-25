@@ -1949,3 +1949,41 @@ Two shapes that are *not* underpayments, and must not be rejected:
 
 `fee_id` lookups are scoped to `profile_id` — an id alone must not let a member
 price their payment from another member's smaller row.
+
+## Flutter toolchain
+
+Flutter is not on the image; install it once per session:
+
+```bash
+curl -sL -o /tmp/f.tar.xz https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.50.1-stable.tar.xz
+sudo tar -xJf /tmp/f.tar.xz -C /opt && sudo chown -R openhands:openhands /opt/flutter
+export PATH="/opt/flutter/bin:$PATH"   # also appended to ~/.bashrc
+```
+
+`flutter analyze` and `flutter test` both work; the project has only `android`
+and `ios` targets, so `flutter build` needs an Android SDK that is not present.
+`flutter test` is the real compile check — it caught a `e.response` access on an
+`Object`-typed catch variable that analyze alone would not have flagged as
+fatal in review.
+
+Expect one pre-existing `deprecated_member_use` info per file for
+`package:flutter/material.dart` (deprecated after 3.47). That is project-wide,
+not caused by your change — do not chase it.
+
+## Advance payment lives in the wallet, not the obligations card
+
+`ObligationsCard` returns an "all caught up" state via early return when
+`total_due <= 0`. Advance payment used to be rendered after that return, so the
+members most likely to pay ahead — the ones who already paid — never saw it.
+Confirmed live: `total_due: 0` alongside a valid ₦6,500 offer for the next
+month.
+
+`AdvancePaymentCard` (`lib/presentation/widgets/advance_payment_card.dart`) is
+the single implementation, rendered under Quick Actions in the wallet. It
+renders the backend's `obligations.advance` figures rather than recomputing
+them, and forwards `initialTargetMonth` — settlement credits the *current*
+month without it, so the member pays twice for one month.
+
+Members can no longer edit their own profile: the Edit Profile row, its tap
+handler and the import are gone from `profile_settings_screen.dart`.
+`edit_profile_screen.dart` is now orphaned but left in place.
