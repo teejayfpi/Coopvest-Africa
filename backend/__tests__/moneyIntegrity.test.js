@@ -50,8 +50,8 @@ describe('walletBalanceVsLedger', () => {
     const db = fakeDb({
       wallets: [{ id: 'w1', profile_id: 'p1', balance: 500, currency: 'NGN' }],
       transactions: [
-        { profile_id: 'p1', amount: 1000, category: 'credit', status: 'completed' },
-        { profile_id: 'p1', amount: 500, category: 'debit', status: 'completed' },
+        { profile_id: 'p1', type: 'deposit', amount: 1000, category: 'credit', status: 'completed' },
+        { profile_id: 'p1', type: 'withdrawal', amount: 500, category: 'debit', status: 'completed' },
       ],
     });
     const result = await walletBalanceVsLedger(db, { sampleLimit: 10 });
@@ -62,9 +62,9 @@ describe('walletBalanceVsLedger', () => {
     const db = fakeDb({
       wallets: [{ id: 'w1', profile_id: 'p1', balance: 1000, currency: 'NGN' }],
       transactions: [
-        { profile_id: 'p1', amount: 1000, category: 'credit', status: 'completed' },
+        { profile_id: 'p1', type: 'deposit', amount: 1000, category: 'credit', status: 'completed' },
         // A pending credit must NOT be counted, or this is a false positive.
-        { profile_id: 'p1', amount: 5000, category: 'credit', status: 'pending' },
+        { profile_id: 'p1', type: 'deposit', amount: 5000, category: 'credit', status: 'pending' },
       ],
     });
     const result = await walletBalanceVsLedger(db, { sampleLimit: 10 });
@@ -74,7 +74,7 @@ describe('walletBalanceVsLedger', () => {
   test('reports the difference when the stored balance is wrong', async () => {
     const db = fakeDb({
       wallets: [{ id: 'w1', profile_id: 'p1', balance: 1500, currency: 'NGN' }],
-      transactions: [{ profile_id: 'p1', amount: 1000, category: 'credit', status: 'completed' }],
+      transactions: [{ profile_id: 'p1', type: 'deposit', amount: 1000, category: 'credit', status: 'completed' }],
     });
     const result = await walletBalanceVsLedger(db, { sampleLimit: 10 });
     expect(result.count).toBe(1);
@@ -84,6 +84,37 @@ describe('walletBalanceVsLedger', () => {
       ledgerBalance: 1000,
       difference: 500,
     });
+  });
+
+  // Production case: a ₦6,500 mixed charge (₦5,000 savings + ₦1,500 admin fee)
+  // plus a ₦5,000 contribution. The trigger used to write a ₦6,500 `deposit` row
+  // for the gross charge, while only the ₦5,000 savings share reached the wallet
+  // — the fee is income. It also wrote a ₦5,000 `savings_deposit` row that
+  // credits `savings.total_saved`, never the wallet. Counting both reported
+  // ₦6,500 of drift that never existed and raised a CRITICAL alert every six
+  // hours. Migration 079 records only the wallet share in the `deposit` row.
+  test('ignores savings rows and does not count the fee share', async () => {
+    const db = fakeDb({
+      wallets: [{ id: 'w1', profile_id: 'p1', balance: 5000, currency: 'NGN' }],
+      transactions: [
+        { profile_id: 'p1', type: 'deposit', amount: 5000, category: 'credit', status: 'completed' },
+        { profile_id: 'p1', type: 'savings_deposit', amount: 5000, category: 'credit', status: 'completed' },
+      ],
+    });
+    const result = await walletBalanceVsLedger(db, { sampleLimit: 10 });
+    expect(result.count).toBe(0);
+  });
+
+  test('still catches a deposit that claims more than the wallet holds', async () => {
+    const db = fakeDb({
+      wallets: [{ id: 'w1', profile_id: 'p1', balance: 5000, currency: 'NGN' }],
+      transactions: [
+        { profile_id: 'p1', type: 'deposit', amount: 6500, category: 'credit', status: 'completed' },
+      ],
+    });
+    const result = await walletBalanceVsLedger(db, { sampleLimit: 10 });
+    expect(result.count).toBe(1);
+    expect(result.samples[0]).toMatchObject({ difference: -1500 });
   });
 });
 

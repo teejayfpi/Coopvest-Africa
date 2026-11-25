@@ -32,10 +32,40 @@ function money(n) {
 }
 
 /**
- * wallets.balance must equal the net of that member's completed transactions.
+ * Transaction types that move `wallets.balance`.
+ *
+ * `transactions` records three different kinds of money: the wallet, the
+ * savings pot, and cooperative income. Only some types touch the wallet, so
+ * comparing the wallet against every completed row reports drift that is not
+ * there. The payment-proof trigger writes `savings_deposit` for a contribution
+ * (credits `savings.total_saved`, never the wallet) and a `deposit` row for a
+ * mixed charge (only the savings share reaches the wallet, the fee share is
+ * income). Both produced a standing CRITICAL alert on production.
+ *
+ * Types outside this set are still compared against their own table by
+ * `savingsVsContributions`.
+ */
+const WALLET_TYPES = [
+  'deposit',
+  'withdrawal',
+  'transfer_in',
+  'transfer_out',
+  'investment',
+  'investment_return',
+  'loan_disbursement',
+  'referral_bonus',
+  'interest',
+  'refund',
+  'adjustment',
+];
+
+/**
+ * wallets.balance must equal the net of that member's completed wallet entries.
  *
  * Credits add, debits subtract. A pending or failed transaction has not moved
  * money yet, so it is excluded — including it is the classic false positive.
+ * Savings and fee rows are excluded for the same reason: they never reached the
+ * wallet, so counting them reports money that is not missing.
  */
 async function walletBalanceVsLedger(db, { sampleLimit }) {
   const { data: wallets, error: wErr } = await db
@@ -58,7 +88,8 @@ async function walletBalanceVsLedger(db, { sampleLimit }) {
       .from('transactions')
       .select('profile_id, amount, category, status')
       .in('profile_id', batch)
-      .eq('status', 'completed');
+      .eq('status', 'completed')
+      .in('type', WALLET_TYPES);
     if (tErr) return { error: tErr.message };
     for (const t of txns || []) {
       const delta = t.category === 'debit' ? -toNumber(t.amount) : toNumber(t.amount);
