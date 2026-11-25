@@ -50,8 +50,12 @@ jobs:
   # This replaces a step that was permanently green and deployed nothing:
   # `curl -s ... | jq` exits 0 on an empty (unauthorised) response, so a missing
   # token looked like success. Nothing verified that a deploy had happened.
+  # Render builds from the canonical repo, so only that repo can observe a
+  # deploy. The mirror would otherwise wait forever for a commit that Render
+  # never sees, turning a healthy mirror into a permanent red build.
   deploy:
     name: Verify Render deploy
+    if: github.repository == 'coopvestafrica-ops/Latest-Coopvest'
     needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 30
