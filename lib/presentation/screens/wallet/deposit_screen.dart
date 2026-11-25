@@ -90,6 +90,12 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
     'fine': [],
     'fee': [],
   };
+
+  /// Fee/fine legs pre-filled from the obligations card. Their amounts are a
+  /// fixed obligation, so the split fields are locked rather than offered for
+  /// editing (a member could otherwise part-pay a fee by retyping it).
+  bool _feeAmountFixed = false;
+  bool _fineAmountFixed = false;
   bool _isProcessing = false;
   // MANUAL DEPOSIT DISABLED — proof-of-payment upload removed.
   // File? _proofFile;
@@ -123,6 +129,8 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
       if (loan > 0) _splitLoanController.text = loan.toStringAsFixed(0);
       if (fine > 0) _splitFineController.text = fine.toStringAsFixed(0);
       if (fee > 0) _splitFeeController.text = fee.toStringAsFixed(0);
+      _fineAmountFixed = fine > 0;
+      _feeAmountFixed = fee > 0;
       // Remember which exact rows these amounts correspond to.
       for (final entry in initialAllocations) {
         final t = entry['type'];
@@ -432,13 +440,19 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
     );
   }
 
-  Widget _splitField(String label, TextEditingController controller) {
+  /// A fee or fine is a fixed obligation, so its split field is locked when it
+  /// was pre-filled from the obligations card. Letting the member retype it
+  /// invited a part-payment: the backend now refuses one, but the field should
+  /// not offer the edit in the first place.
+  Widget _splitField(String label, TextEditingController controller,
+      {bool locked = false}) {
     return AppTextField(
       label: label,
       controller: controller,
       keyboardType: TextInputType.number,
       prefixText: '₦ ',
-      hint: '0',
+      hint: locked ? 'Fixed — cannot be changed' : '0',
+      readOnly: locked,
     );
   }
 
@@ -603,6 +617,19 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
                   : 'A payment for this is already in progress. Finish it in the checkout you already opened.',
             ),
             backgroundColor: CoopvestColors.warning,
+            duration: const Duration(seconds: 6),
+          ),
+        );
+        return;
+      }
+      if (serverCode == 'FEE_UNDERPAID') {
+        // The server prices fees; retyping a split cannot part-pay one.
+        final msg = (e.response!.data as Map)['error']?.toString()
+            ?? 'A fee cannot be part-paid. Please pay the full amount.';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(msg),
+            backgroundColor: CoopvestColors.error,
             duration: const Duration(seconds: 6),
           ),
         );
@@ -1085,9 +1112,11 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
                   const SizedBox(height: 12),
                   _splitField('To Loan', _splitLoanController),
                   const SizedBox(height: 12),
-                  _splitField('To Fine/Penalty', _splitFineController),
+                  _splitField('To Fine/Penalty', _splitFineController,
+                      locked: _fineAmountFixed),
                   const SizedBox(height: 12),
-                  _splitField('To Fee', _splitFeeController),
+                  _splitField('To Fee', _splitFeeController,
+                      locked: _feeAmountFixed),
                 ],
 
                 const SizedBox(height: 24),
