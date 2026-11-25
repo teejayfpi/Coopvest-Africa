@@ -20,7 +20,6 @@ import '../../providers/terms_provider.dart';
 import '../../../data/models/terms_content.dart';
 import '../auth/terms_section_screen.dart';
 import 'package:share_plus/share_plus.dart';
-import 'edit_profile_screen.dart';
 import 'bank_accounts_screen.dart';
 import 'notifications_screen.dart';
 import '../transactions/statement_download_screen.dart';
@@ -57,11 +56,6 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
     {
       'title': 'Account',
       'items': [
-        {
-          'icon': Icons.person_outline,
-          'label': 'Edit Profile',
-          'subtitle': 'Personal information, contact details',
-        },
         {
           'icon': Icons.account_balance_outlined,
           'label': 'Membership',
@@ -554,11 +548,6 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
 
   void _handleSettingsTap(String label) {
     switch (label) {
-      case 'Edit Profile':
-        Navigator.of(context).push(
-          MaterialPageRoute(builder: (context) => const EditProfileScreen()),
-        );
-        break;
       case 'Complete KYC':
         Navigator.of(context).push(
           MaterialPageRoute(

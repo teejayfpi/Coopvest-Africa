@@ -10,6 +10,7 @@ import '../../../data/models/wallet_models.dart';
 import '../../../data/models/loan_models.dart';
 import '../../../presentation/providers/wallet_provider.dart';
 import '../../../presentation/providers/loan_provider.dart';
+import '../../../presentation/widgets/advance_payment_card.dart';
 import '../../../presentation/widgets/common/buttons.dart';
 import '../savings/savings_goals_screen.dart';
 import '../transactions/transactions_history_screen.dart';
@@ -159,6 +160,13 @@ class _WalletDashboardScreenState extends ConsumerState<WalletDashboardScreen> {
             // Quick Actions
             _buildQuickActions(context),
             
+            const SizedBox(height: 24),
+
+            // Pay a month ahead. Sits here rather than in the obligations card
+            // because that card shows "all caught up" when nothing is due —
+            // exactly the member most likely to want to pay in advance.
+            const AdvancePaymentCard(),
+
             const SizedBox(height: 24),
 
             // Savings Goals Section
