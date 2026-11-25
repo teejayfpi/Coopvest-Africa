@@ -2131,3 +2131,16 @@ curl -s -X POST "https://api.supabase.com/v1/projects/$REF/database/query" \
   -H "Content-Type: application/json" \
   -d '{"query":"select pg_get_functiondef(p.oid) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='"'"'public'"'"' and p.proname='"'"'handle_payment_proof_approval'"'"';"}'
 ```
+
+## `transactions` holds three kinds of money, not just the wallet
+`wallets.balance` is not the net of every completed `transactions` row. The
+table also records the savings pot (`savings_deposit`, credited to
+`savings.total_saved`) and cooperative income (`fee`, `fine`). Comparing the
+wallet against all rows reports drift that does not exist. Use the
+`WALLET_TYPES` list in `lib/moneyIntegrity.js` when reconciling.
+
+For an `other` payment the proof-approval trigger must record only the savings
+share as a wallet `deposit`; the fee/fine share is income and is already in
+`member_fees` and `ledger_entries`. Migration 079 does this by summing
+`metadata.allocations` where `type = 'savings'`. Recording the gross charge
+leaves a permanent discrepancy the size of the fee.
