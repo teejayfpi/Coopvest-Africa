@@ -2176,3 +2176,36 @@ output), turning a one-line change into a +7500/-7500 diff that buries the real
 edit. Make the change with npm, or `sed` on the single line. The lockfile has
 more than one `"node": ">=18.0.0"` — the first is this package's `engines`, the
 others belong to dependencies like `farmhash-modern` and must stay untouched.
+
+## The deploy workflow must verify, not trigger
+Render's `autoDeploy` is commit-triggered on `main`, so it already deploys every
+push. A workflow that also calls `POST /services/{id}/deploys` races that and
+builds twice. `deploy-backend.yml` therefore waits for a deploy of `github.sha`
+to reach `live` and fails if production never picks the commit up.
+
+It is gated with `if: github.repository == 'coopvestafrica-ops/Latest-Coopvest'`
+because Render builds from that repo only. Without the gate the mirror waits 20
+minutes for a deploy of a commit Render never sees, and fails on every push.
+
+Beware `curl -s ... | jq '.'`: it exits 0 on an empty response, so an
+unauthorised or missing-token request looks like success. That is exactly how
+this job stayed green while deploying nothing for months. Use
+`curl --fail-with-body` and check the response actually contains what you need.
+
+## Release publishing needs `contents: write` at the repo level too
+The APK workflow publishes the `latest-apk` release, which failed with
+`HTTP 403: Resource not accessible by integration` even though the job declared
+`permissions: contents: write`. The declared permission cannot exceed the
+repository default, and `teejayfpi/Coopvest-Africa` defaulted to `read` while
+`coopvestafrica-ops/Latest-Coopvest` defaults to `write`:
+
+```bash
+gh api repos/OWNER/REPO/actions/permissions/workflow   # default_workflow_permissions
+```
+
+## Maven Central rate-limits the Gradle build
+`Could not GET .../kotlin-stdlib-2.0.20.pom ... status code 429 Too Many
+Requests` failed the release build twice in one run. Nothing cached the Gradle
+dependency graph, so every run re-downloaded it from a shared runner IP. The
+APK workflow now caches `~/.gradle/caches` and retries both Gradle builds three
+times, which takes a rate-limited mirror from fatal to harmless.
