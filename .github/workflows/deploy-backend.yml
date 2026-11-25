@@ -42,26 +42,69 @@ jobs:
       - name: Run tests
         run: npm test
 
+  # Render's autoDeploy is commit-triggered on main, so this job must NOT
+  # trigger a second deploy — that would race the auto-deploy and waste a build.
+  # It verifies instead: wait for a deploy of THIS commit to reach live, and
+  # fail the workflow if production does not end up running the pushed code.
+  #
+  # This replaces a step that was permanently green and deployed nothing:
+  # `curl -s ... | jq` exits 0 on an empty (unauthorised) response, so a missing
+  # token looked like success. Nothing verified that a deploy had happened.
   deploy:
-    name: Deploy to Render
+    name: Verify Render deploy
     needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Trigger Render Deploy via API
+      - name: Wait for this commit to go live
         env:
           RENDER_API_TOKEN: ${{ secrets.RENDER_API_TOKEN }}
           RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+          EXPECTED_SHA: ${{ github.sha }}
         run: |
-          echo "Triggering Render deploy..."
-          
+          set -euo pipefail
+
           SERVICE_ID="${RENDER_SERVICE_ID:-srv-d735htpr0fns73996big}"
-          
-          curl -s -X POST "https://api.render.com/v1/services/${SERVICE_ID}/deploys" \
-            -H "Authorization: Bearer ${RENDER_API_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -H "Accept: application/json" | jq '.'
+
+          if [ -z "${RENDER_API_TOKEN}" ]; then
+            echo "::error::RENDER_API_TOKEN is not set for this repository, so the deploy cannot be verified."
+            echo "Add it under Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+
+          echo "Waiting for ${EXPECTED_SHA} to be live on ${SERVICE_ID}..."
+          echo "Render auto-deploys on push; this job only observes."
+
+          for attempt in $(seq 1 120); do
+            body=$(curl --fail-with-body -sS \
+              "https://api.render.com/v1/services/${SERVICE_ID}/deploys?limit=20" \
+              -H "Authorization: Bearer ${RENDER_API_TOKEN}" \
+              -H "Accept: application/json")
+
+            sha=$(echo "${body}" | jq -r --arg s "${EXPECTED_SHA}" \
+              '[.[] | (.deploy // .) | select(.commit.id == $s)][0].commit.id // empty')
+            status=$(echo "${body}" | jq -r --arg s "${EXPECTED_SHA}" \
+              '[.[] | (.deploy // .) | select(.commit.id == $s)][0].status // empty')
+
+            if [ -z "${sha}" ]; then
+              echo "attempt ${attempt}: no deploy found for ${EXPECTED_SHA} yet"
+            else
+              echo "attempt ${attempt}: ${status}"
+              case "${status}" in
+                live)
+                  echo "::notice::Production is live on ${EXPECTED_SHA}."
+                  exit 0
+                  ;;
+                build_failed|update_failed|canceled|deactivated)
+                  echo "::error::Deploy of ${EXPECTED_SHA} ended as '${status}'."
+                  exit 1
+                  ;;
+              esac
+            fi
+
+            sleep 10
+          done
+
+          echo "::error::No live deploy for ${EXPECTED_SHA} within 20 minutes (last status: ${status:-none})."
+          exit 1
