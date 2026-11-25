@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../config/theme_config.dart';
 import '../../config/theme_extension.dart';
 import '../../core/extensions/number_extensions.dart';
+import '../../core/utils/advance_offer.dart';
 import '../../presentation/providers/wallet_provider.dart';
 import '../screens/wallet/deposit_screen.dart';
 import 'common/cards.dart';
@@ -92,50 +93,12 @@ class ObligationsCard extends ConsumerWidget {
             feesTotal +
             adminFeeDue;
 
-        // Paying a month ahead. `advance` is priced by the backend so the fee
-        // and the contribution cannot drift apart between client and server.
-        final advance = (data['advance'] as Map?) ?? const {};
-        final advanceMonth = advance['month']?.toString() ?? '';
-        final advanceSavings =
-            (advance['savings'] as num?)?.toDouble() ?? 0.0;
-        final advanceFee =
-            (advance['administrative_fee'] as num?)?.toDouble() ?? 0.0;
-        // Fines are owed now whatever month is being paid for, so the backend
-        // folds them into the offer; the ids let each row settle exactly.
-        final advanceFines =
-            ((advance['fines'] as List?) ?? const [])
-                .whereType<Map>()
-                .map((f) => {
-                      'id': f['id']?.toString() ?? '',
-                      'label': f['label']?.toString() ?? 'Fine',
-                      'amount': (f['amount'] as num?)?.toDouble() ?? 0.0,
-                    })
-                .where((f) => (f['amount'] as double) > 0)
-                .toList();
-        final advanceFinesTotal = advanceFines.fold<double>(
-            0.0, (s, f) => s + (f['amount'] as double));
-        // The loan instalment recurs monthly, so the backend prices it into the
-        // advance offer. Each entry carries the loan UUID, which is what the
-        // allocation must target - the human-readable reference would fall back
-        // to whichever loan has the largest balance.
-        final advanceLoans = ((advance['loans'] as List?) ?? const [])
-            .whereType<Map>()
-            .map((l) => {
-                  'loan_id': l['loan_id']?.toString() ?? '',
-                  'reference': l['reference']?.toString() ?? 'Loan',
-                  'amount': (l['amount'] as num?)?.toDouble() ?? 0.0,
-                })
-            .where((l) => (l['amount'] as double) > 0)
-            .toList();
-        final advanceLoansTotal = advanceLoans.fold<double>(
-            0.0, (s, l) => s + (l['amount'] as double));
-        final advanceTotal = advanceMonth.isEmpty
-            ? 0.0
-            : (advance['total'] as num?)?.toDouble() ??
-                (advanceSavings +
-                    advanceFee +
-                    advanceLoansTotal +
-                    advanceFinesTotal);
+        // Paying a month ahead. Parsed and priced by the backend; this shared
+        // model is what keeps the card and the wallet's advance card sending
+        // identical allocations.
+        final advance = AdvanceOffer.fromObligations(data);
+        final advanceTotal = advance.total;
+        final advanceMonth = advance.month;
 
         // Nothing due: show the "all caught up" state rather than a card of
         // ₦0 rows, which reads like a broken screen. The green check plus the
@@ -373,23 +336,7 @@ class ObligationsCard extends ConsumerWidget {
                     // month while still owing the next.
                     // An exempt member's employer withholds the fee, so the
                     // backend prices it at zero and no fee leg is sent.
-                    final allocations = <Map<String, dynamic>>[
-                      {'type': 'savings', 'amount': advanceSavings},
-                      if (advanceFee > 0)
-                        {'type': 'fee', 'amount': advanceFee},
-                      for (final l in advanceLoans)
-                        {
-                          'type': 'loan_repayment',
-                          'amount': l['amount'],
-                          'loan_id': l['loan_id'],
-                        },
-                      for (final f in advanceFines)
-                        {
-                          'type': 'fine',
-                          'amount': f['amount'],
-                          'fee_id': f['id'],
-                        },
-                    ];
+                    final allocations = advance.toAllocations();
                     Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -404,19 +351,13 @@ class ObligationsCard extends ConsumerWidget {
                   },
                   icon: const Icon(Icons.event_repeat, size: 18),
                   label: Text(
-                    'Pay ${_monthLabel(advanceMonth)} in advance '
+                    'Pay ${advance.monthLabel} in advance '
                     '(₦${advanceTotal.formatNumber()})',
                   ),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  _advanceCaption(
-                    savings: advanceSavings,
-                    fee: advanceFee,
-                    loansTotal: advanceLoansTotal,
-                    finesTotal: advanceFinesTotal,
-                    monthLabel: _monthLabel(advanceMonth),
-                  ),
+                  advance.caption,
                   style: TextStyle(fontSize: 11, color: context.textSecondary),
                 ),
               ],
@@ -469,18 +410,7 @@ class ObligationsCard extends ConsumerWidget {
 
   /// '2026-09' → 'September 2026'. Falls back to the raw key so a malformed
   /// month never renders as blank.
-  static String _monthLabel(String yyyyMm) {
-    final parts = yyyyMm.split('-');
-    if (parts.length != 2) return yyyyMm;
-    final year = int.tryParse(parts[0]);
-    final month = int.tryParse(parts[1]);
-    if (year == null || month == null || month < 1 || month > 12) return yyyyMm;
-    const names = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December',
-    ];
-    return '${names[month - 1]} $year';
-  }
+  static String _monthLabel(String yyyyMm) => formatMonthKey(yyyyMm);
 
   static String _entryLabel(Object? entry) {
     if (entry is Map) return entry['label']?.toString() ?? '';
@@ -491,29 +421,4 @@ class ObligationsCard extends ConsumerWidget {
     if (entry is Map) return (entry['amount'] as num?)?.toDouble() ?? 0;
     return 0;
   }
-}
-
-/// What the advance offer covers, spelled out so a member never has to infer it
-/// from the total. An exempt member has no fee line at all — their employer
-/// withholds it — so saying "₦0 administrative fee" would be misleading.
-String _advanceCaption({
-  required double savings,
-  required double fee,
-  required double loansTotal,
-  required double finesTotal,
-  required String monthLabel,
-}) {
-  final parts = <String>[
-    '₦${savings.formatNumber()} contribution',
-    if (fee > 0) '₦${fee.formatNumber()} administrative fee',
-    if (loansTotal > 0) '₦${loansTotal.formatNumber()} loan repayment',
-    if (finesTotal > 0) '₦${finesTotal.formatNumber()} in outstanding fines',
-  ];
-  final covered = parts.length == 1
-      ? parts.single
-      : '${parts.sublist(0, parts.length - 1).join(', ')} and ${parts.last}';
-  final feeNote = fee > 0
-      ? ''
-      : ' Your administrative fee is deducted from salary, so it is not included.';
-  return 'Covers your $covered for $monthLabel.$feeNote';
 }
