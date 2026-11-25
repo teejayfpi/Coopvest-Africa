@@ -138,3 +138,53 @@ describe('duplicate payment guard', () => {
     expect(check([])).toBeNull();
   });
 });
+
+/**
+ * Advance payments go through the same endpoint as a normal one, with
+ * allocation_type 'mixed' and an explicit future month. The guard must not get
+ * in their way: pre-paying is the feature, not a duplicate.
+ */
+describe('advance payments are not mistaken for duplicates', () => {
+  const ADVANCE = [
+    { type: 'savings', amount: 5000 },
+    { type: 'fee', amount: 1500 },
+  ];
+  const advance = (month, proofs) => findDuplicatePayment({
+    proofs,
+    paymentType: 'other', // 'mixed' persists as 'other'
+    allocations: ADVANCE,
+    targetMonth: month,
+    nowMs: NOW,
+  });
+  const paidDec = [{
+    id: 'dec',
+    status: 'approved',
+    amount: 6500,
+    payment_type: 'other',
+    created_at: minutesAgo(0.5),
+    deleted_at: null,
+    metadata: { target_month: '2026-12', allocations: ADVANCE },
+  }];
+
+  test('a first advance payment is allowed', () => {
+    expect(advance('2026-12', [])).toBeNull();
+  });
+
+  test('several months ahead can each be bought once', () => {
+    for (const m of ['2026-12', '2027-01', '2027-02']) {
+      expect(advance(m, [])).toBeNull();
+    }
+  });
+
+  test('the month just pre-paid cannot be bought again', () => {
+    const out = advance('2026-12', paidDec);
+    expect(out).not.toBeNull();
+    expect(out.code).toBe('ALREADY_PAID');
+  });
+
+  test('the following month can be bought straight after', () => {
+    // Pre-paying two months in a row is legitimate; only the repeated month is
+    // a duplicate.
+    expect(advance('2027-01', paidDec)).toBeNull();
+  });
+});
