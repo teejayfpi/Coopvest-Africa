@@ -1987,3 +1987,29 @@ month without it, so the member pays twice for one month.
 Members can no longer edit their own profile: the Edit Profile row, its tap
 handler and the import are gone from `profile_settings_screen.dart`.
 `edit_profile_screen.dart` is now orphaned but left in place.
+
+## Syncing the mirror (Coopvest-Africa)
+
+`git checkout <ref> -- .` does **not** propagate deletions, so it silently keeps
+files the source has removed. That made a line-count check look clean
+(`diff lc/main HEAD | wc -l` → 0) while a 193-line deleted screen was still
+present. Use a tree-level sync and verify by tree hash:
+
+```bash
+cd /workspace/project/Coopvest-Africa
+git fetch lc main && git read-tree -u --reset lc/main
+git add -A && git commit -m "Sync with source: ..."
+git rev-parse HEAD^{tree} && git rev-parse lc/main^{tree}   # must be equal
+```
+
+Equal tree hashes mean identical content; a diff line count does not.
+
+## Advance payment: one shared model
+
+`lib/core/utils/advance_offer.dart` owns the parsing of `obligations.advance`,
+the allocation list sent to `/payments/initialize`, and the caption. Both
+`ObligationsCard` and `AdvancePaymentCard` read from it. Do not re-derive the
+allocation in a widget: a leg the backend priced but the client omitted
+undercharges the member. The fee leg is emitted only when the fee is above zero,
+because an exempt member's employer withholds it and sending it would charge
+twice.
