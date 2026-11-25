@@ -2144,3 +2144,35 @@ share as a wallet `deposit`; the fee/fine share is income and is already in
 `member_fees` and `ledger_entries`. Migration 079 does this by summing
 `metadata.allocations` where `type = 'savings'`. Recording the gross charge
 leaves a permanent discrepancy the size of the fee.
+
+## CI is not a gate: Actions is billing-blocked and Render deploys on merge
+Every workflow fails in 2-3 seconds without running a single step:
+
+    The job was not started because recent account payments have failed
+    or your spending limit needs to be increased.
+
+Read the failure reason from the check-run annotations, not the job log — the
+log is absent because the job never started:
+
+```bash
+gh api repos/OWNER/REPO/check-runs/<id>/annotations
+```
+
+Two consequences. No test or secret-scan gate has ever actually run here, so a
+green-looking PR proves nothing and the checks must be run by hand. And Render's
+`autoDeploy` is `commit`-triggered on `main`, so merging deploys immediately
+without waiting on `deploy-backend.yml`. Treat a merge to `main` as a production
+release and verify after deploying:
+
+```bash
+curl -X POST https://coopvest-api.onrender.com/api/admin/reconciliation-ops/run \
+  -H "Authorization: Bearer $ADMIN_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"trigger":"manual"}'
+```
+
+## Do not reformat package-lock.json with a JSON library
+`json.dump` rewrites the whole file (indent width and key order differ from npm's
+output), turning a one-line change into a +7500/-7500 diff that buries the real
+edit. Make the change with npm, or `sed` on the single line. The lockfile has
+more than one `"node": ">=18.0.0"` — the first is this package's `engines`, the
+others belong to dependencies like `farmhash-modern` and must stay untouched.
