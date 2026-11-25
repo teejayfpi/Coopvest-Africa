@@ -101,17 +101,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// Update user profile
-  Future<void> updateProfile({String? name, String? phone, String? address}) async {
-    try {
-      final user = await _authRepository.updateProfile(name: name, phone: phone, address: address);
-      state = state.copyWith(user: user);
-    } catch (e) {
-      logger.e('Update profile error: $e');
-      rethrow;
-    }
-  }
-
   /// Upload a new profile picture and refresh the signed-in user.
   Future<void> updateProfilePicture(String filePath) async {
     try {
