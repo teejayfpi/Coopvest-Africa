@@ -309,29 +309,6 @@ class AuthRepository {
     }
   }
 
-  /// Update user profile on the backend
-  Future<User> updateProfile({String? name, String? phone, String? address}) async {
-    try {
-      final data = <String, dynamic>{};
-      if (name != null) data['name'] = name;
-      if (phone != null) data['phone'] = phone;
-      if (address != null) data['address'] = address;
-
-      final response = await _apiClient.put('/user/profile', data: data);
-      final userData = response['user'] as Map<String, dynamic>;
-      final user = _cachedUser?.copyWith(
-        name: userData['name'] as String? ?? _cachedUser?.name,
-        phone: userData['phone'] as String? ?? _cachedUser?.phone,
-        address: userData['address'] as String? ?? _cachedUser?.address,
-      ) ?? User.fromJson(userData);
-      _cachedUser = user;
-      return user;
-    } catch (e) {
-      logger.e('Update profile error: $e');
-      rethrow;
-    }
-  }
-
   /// Upload a new profile picture and return the updated user.
   Future<User> uploadProfilePicture(String filePath) async {
     try {

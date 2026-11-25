@@ -29,6 +29,8 @@ const manualDeposit = require('../lib/manualDeposit');
 const { classifyChannels, normalizeAudience, AUDIENCE_TYPES } = require('../lib/notificationBroadcast');
 const rbac = require('../lib/permissions');
 const { auditFor } = require('../lib/auditLog');
+const { normalizePhone, phoneLookupKey } = require('../lib/phoneNumber');
+const { findPhoneOwner, PHONE_TAKEN_MESSAGE } = require('../lib/phoneRegistry');
 const {
   guarantorEligibility,
   contributionChannel,
@@ -769,6 +771,9 @@ router.patch(
     body('isActive').optional().isBoolean(),
     body('isFlagged').optional().isBoolean(),
     body('role').optional().isIn(['member', 'admin', 'super_admin']),
+    body('name').optional().isString().trim().isLength({ min: 2, max: 100 }),
+    body('phone').optional().isMobilePhone(),
+    body('address').optional().isString().isLength({ max: 500 }),
   ],
   validate,
   async (req, res) => {
@@ -777,6 +782,31 @@ router.patch(
       if (req.body.isActive !== undefined) update.is_active = !!req.body.isActive;
       if (req.body.isFlagged !== undefined) update.is_flagged = !!req.body.isFlagged;
       if (req.body.role !== undefined) update.role = req.body.role;
+      // Identity corrections. Staff are the only route to fixing a mistyped
+      // name or phone, because the member-facing PUT /user/profile no longer
+      // accepts these fields.
+      if (req.body.name !== undefined) update.name = req.body.name.trim();
+      if (req.body.address !== undefined) update.address = req.body.address;
+      if (req.body.phone !== undefined) {
+        const key = phoneLookupKey(req.body.phone);
+        const { data: current } = await supabase
+          .from('profiles')
+          .select('phone')
+          .eq('id', req.params.id)
+          .maybeSingle();
+        const currentKey = phoneLookupKey(current?.phone || '');
+        if (key && key !== currentKey) {
+          const owner = await findPhoneOwner(supabase, req.body.phone);
+          if (owner && owner.id !== req.params.id) {
+            return res.status(409).json({
+              success: false,
+              error: PHONE_TAKEN_MESSAGE,
+              code: 'PHONE_ALREADY_REGISTERED',
+            });
+          }
+        }
+        update.phone = normalizePhone(req.body.phone);
+      }
       if (Object.keys(update).length === 0) {
         return res.status(400).json({ success: false, error: 'No fields to update' });
       }

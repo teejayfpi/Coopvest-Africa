@@ -11,8 +11,6 @@ const multer = require('multer');
 const supabase = require('../config/supabase');
 const { authenticate, requireRegistrationPaid } = require('../middleware/auth');
 const logger = require('../utils/logger');
-const { normalizePhone, phoneLookupKey } = require('../lib/phoneNumber');
-const { findPhoneOwner, PHONE_TAKEN_MESSAGE } = require('../lib/phoneRegistry');
 
 const AVATAR_BUCKET = process.env.AVATAR_BUCKET || 'kyc-documents';
 const avatarUpload = multer({
@@ -92,37 +90,40 @@ router.get('/profile', authenticate, async (req, res) => {
 
 /**
  * PUT /api/v1/user/profile
- * Update user profile in Supabase
+ *
+ * Members may maintain their address and nothing else. Name, phone and email
+ * are identity fields used for KYC matching and payout records, so a member
+ * cannot rewrite them; staff correct them through PATCH /admin/members/:id,
+ * which is the only other writer.
+ *
+ * Identity fields sent here are rejected rather than silently ignored, so a
+ * client that still sends them fails loudly instead of believing it succeeded.
  */
 router.put('/profile', authenticate, [
-  body('name').optional().isLength({ min: 2, max: 100 }),
-  body('phone').optional().isMobilePhone(),
+  body('email').optional().custom(() => {
+    throw new Error('Email cannot be changed here. Contact support.');
+  }),
+  body('name').optional().custom(() => {
+    throw new Error('Name cannot be changed here. Contact support to correct it.');
+  }),
+  body('phone').optional().custom(() => {
+    throw new Error('Phone number cannot be changed here. Contact support to correct it.');
+  }),
   body('address').optional().isString().isLength({ max: 500 })
 ], validate, async (req, res) => {
   try {
-    const { name, phone, address } = req.body;
+    const { address } = req.body;
     const { userId } = req.user;
 
     const updateData = {};
-    if (name) updateData.name = name;
-    if (phone) {
-      // A member may correct their own number, but not adopt one that belongs
-      // to another account.
-      const key = phoneLookupKey(phone);
-      const currentKey = phoneLookupKey(req.user.phone || '');
-      if (key && key !== currentKey) {
-        const owner = await findPhoneOwner(supabase, phone);
-        if (owner && owner.id !== req.user.id) {
-          return res.status(409).json({
-            success: false,
-            error: PHONE_TAKEN_MESSAGE,
-            code: 'PHONE_ALREADY_REGISTERED',
-          });
-        }
-      }
-      updateData.phone = normalizePhone(phone);
-    }
     if (address !== undefined) updateData.address = address;
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No updatable fields. Contact support to change your name, phone or email.',
+      });
+    }
 
     const { data, error } = await supabase
       .from('profiles')
@@ -132,11 +133,6 @@ router.put('/profile', authenticate, [
       .single();
 
     if (error) throw error;
-
-    // Also update Supabase Auth metadata to keep them in sync
-    await supabase.auth.admin.updateUserById(req.user.id, {
-      user_metadata: { ...req.user.user_metadata, ...updateData }
-    });
 
     res.json({
       success: true,

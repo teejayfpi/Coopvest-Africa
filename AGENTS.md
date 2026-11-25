@@ -2013,3 +2013,48 @@ allocation in a widget: a leg the backend priced but the client omitted
 undercharges the member. The fee leg is emitted only when the fee is above zero,
 because an exempt member's employer withholds it and sending it would charge
 twice.
+
+## Who may change a member's identity fields
+
+Members cannot edit their own name, phone or email. These feed KYC matching and
+payout records, so the product treats them as staff-controlled.
+
+* `PUT /api/v1/user/profile` (`backend/src/routes/user.js`) accepts **only**
+  `address`. Name/phone/email are rejected with a 400 that tells the member to
+  contact support — rejected, not silently ignored, so an old client fails
+  loudly instead of believing it succeeded.
+* `PATCH /api/v1/admin/members/:id` (`backend/src/routes/adminApi.js`) is the
+  only writer for `name`, `phone` and `address`. It applies the same phone
+  ownership check as registration (`findPhoneOwner`) and stores E.164.
+* `auth_repository.updateProfile` and `AuthNotifier.updateProfile` were deleted
+  with the Edit Profile screen. Do not reinstate them; the endpoint they called
+  no longer accepts identity fields.
+* Coverage: `backend/__tests__/profileIdentityLockdown.test.js` asserts both
+  halves, including that a rejected request writes nothing to the database.
+
+Do not "fix" a member's name by re-opening the member route. Extend the admin
+route instead, or the dead end comes back.
+
+## Android builds in this environment
+
+The Android SDK lives at `/opt/android-sdk` (platform 36, build-tools 36.0.0)
+and Flutter at `/opt/flutter`. `/opt` is **wiped between sessions** — both must
+be reinstalled before any `flutter` command works. Steps that matter:
+
+```bash
+sudo apt-get install -y openjdk-21-jdk-headless unzip   # JDK 21; 17 is not in trixie
+sudo mkdir -p /opt/flutter && sudo chown openhands:root /opt/flutter
+tar xf flutter_linux_3.50.1-stable.tar.xz -C /opt          # /opt is root-owned: extract as root or chown first
+yes | sdkmanager --licenses && sdkmanager "platforms;android-36" "build-tools;36.0.0"
+flutter config --android-sdk /opt/android-sdk
+```
+
+`flutter test` and `flutter analyze` work without any of this — only APK builds
+need the SDK.
+
+**APK builds are currently blocked** by the project's own Gradle pin, not by the
+environment: `android/gradle/wrapper` pins Gradle 8.11.1 and
+`android/settings.gradle` pins AGP 8.9.1, while Flutter 3.50.1 requires Gradle
+>= 9.3.1. Upgrading is a deliberate migration (Gradle 9, AGP 9, Kotlin plugin
+bump) and will break plugins that have not shipped Gradle 9 support. Get a
+device-tested build before merging it; do not bump it casually.
